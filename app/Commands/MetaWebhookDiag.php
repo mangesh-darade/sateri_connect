@@ -22,7 +22,8 @@ class MetaWebhookDiag extends BaseCommand
         $api      = new MetaCloudAPI($settings);
         $waba     = (string) ($meta['waba_id'] ?? '');
         $base     = rtrim((string) $settings->get('webhook_public_base', ''), '/');
-        $callback = $base . '/whstapp/public/webhooks';
+        $localPath = parse_url(site_url('webhooks'), PHP_URL_PATH) ?: '/webhooks';
+        $callback = $base . $localPath;
         $verify   = (string) ($meta['verify_token'] ?? '');
 
         if ($waba === '' || $base === '' || $verify === '') {

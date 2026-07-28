@@ -518,7 +518,11 @@ class Webhooks extends Controller
             'content'             => $parsed['content'],
             'media_url'           => $mediaUrl,
             'media_id'            => $parsed['media_id'],
-            'payload'             => $message,
+            'payload'             => [
+                'message'  => $message,
+                'metadata' => $metadata,
+                'provider' => $sourceProvider,
+            ],
             'status'              => 'received',
             'is_read'             => 0,
         ]);

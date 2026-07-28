@@ -72,87 +72,117 @@ class Chat extends BaseController
             return $denied;
         }
 
-        $search = (string) ($this->request->getGet('q') ?? '');
-        $status = (string) ($this->request->getGet('status') ?? 'open');
-        $channel = strtolower(trim((string) ($this->request->getGet('channel') ?? 'all')));
-        if (! in_array($channel, ['all', 'whatsapp', 'instagram', 'messenger'], true)) {
-            $channel = 'all';
-        }
-        $unreadOnly = (int) ($this->request->getGet('unread_only') ?? 0) === 1;
-        $assignedToRaw = $this->request->getGet('assigned_to');
-        $assignedTo = null;
-        if ($assignedToRaw !== null && $assignedToRaw !== '') {
-            if ((string) $assignedToRaw === 'unassigned') {
-                $assignedTo = 'unassigned';
-            } else {
-                $assignedTo = (int) $assignedToRaw;
+        try {
+            $search = (string) ($this->request->getGet('q') ?? '');
+            $status = (string) ($this->request->getGet('status') ?? 'open');
+            $channel = strtolower(trim((string) ($this->request->getGet('channel') ?? 'all')));
+            if (! in_array($channel, ['all', 'whatsapp', 'instagram', 'messenger'], true)) {
+                $channel = 'all';
             }
-        }
-        $limit  = max(1, min(100, (int) ($this->request->getGet('limit') ?? 50)));
-        $offset = max(0, (int) ($this->request->getGet('offset') ?? 0));
+            $unreadOnly = (int) ($this->request->getGet('unread_only') ?? 0) === 1;
+            $assignedToRaw = $this->request->getGet('assigned_to');
+            $assignedTo = null;
+            if ($assignedToRaw !== null && $assignedToRaw !== '') {
+                if ((string) $assignedToRaw === 'unassigned') {
+                    $assignedTo = 'unassigned';
+                } else {
+                    $assignedTo = (int) $assignedToRaw;
+                }
+            }
+            $limit  = max(1, min(100, (int) ($this->request->getGet('limit') ?? 50)));
+            $offset = max(0, (int) ($this->request->getGet('offset') ?? 0));
 
-        $builder = db_connect()->table('conversations cv')
-            ->select('cv.*, c.name AS contact_name, c.mobile, c.channel AS contact_channel, c.external_id,
-                      c.last_reply_at, c.last_message_at AS contact_last_message_at,
-                      m.content AS last_message_content, m.direction AS last_message_direction, m.message_type AS last_message_type')
-            ->join('contacts c', 'c.id = cv.contact_id')
-            ->join('messages m', 'm.id = cv.last_message_id', 'left')
-            ->where('c.deleted_at', null);
+            $db = db_connect();
+            $hasConvChannel    = $db->fieldExists('channel', 'conversations');
+            $hasContactChannel = $db->fieldExists('channel', 'contacts');
+            $hasExternalId     = $db->fieldExists('external_id', 'contacts');
+            $hasDeletedAt      = $db->fieldExists('deleted_at', 'contacts');
 
-        if ($status !== '' && $status !== 'all') {
-            $builder->where('cv.status', $status);
-        }
-        if ($channel !== 'all') {
-            $builder->where('cv.channel', $channel);
-        }
-        if ($unreadOnly) {
-            $builder->where('cv.unread_count >', 0);
-        }
-        if ($assignedTo === 'unassigned') {
-            $builder->where('cv.assigned_to', null);
-        } elseif (is_int($assignedTo) && $assignedTo > 0) {
-            $builder->where('cv.assigned_to', $assignedTo);
-        }
+            $select = 'cv.*, c.name AS contact_name, c.mobile, c.last_reply_at,
+                       c.last_message_at AS contact_last_message_at,
+                       m.content AS last_message_content, m.direction AS last_message_direction,
+                       m.message_type AS last_message_type';
+            if ($hasContactChannel) {
+                $select .= ', c.channel AS contact_channel';
+            }
+            if ($hasExternalId) {
+                $select .= ', c.external_id';
+            }
 
-        if ($search !== '') {
-            $builder->groupStart()
-                ->like('c.name', $search)
-                ->orLike('c.mobile', $search)
-                ->orLike('c.external_id', $search)
-                ->groupEnd();
+            $builder = $db->table('conversations cv')
+                ->select($select)
+                ->join('contacts c', 'c.id = cv.contact_id')
+                ->join('messages m', 'm.id = cv.last_message_id', 'left');
+
+            if ($hasDeletedAt) {
+                $builder->where('c.deleted_at', null);
+            }
+
+            if ($status !== '' && $status !== 'all') {
+                $builder->where('cv.status', $status);
+            }
+            if ($channel !== 'all') {
+                if ($hasConvChannel) {
+                    $builder->where('cv.channel', $channel);
+                } elseif ($hasContactChannel) {
+                    $builder->where('c.channel', $channel);
+                }
+            }
+            if ($unreadOnly) {
+                $builder->where('cv.unread_count >', 0);
+            }
+            if ($assignedTo === 'unassigned') {
+                $builder->where('cv.assigned_to', null);
+            } elseif (is_int($assignedTo) && $assignedTo > 0) {
+                $builder->where('cv.assigned_to', $assignedTo);
+            }
+
+            if ($search !== '') {
+                $builder->groupStart()
+                    ->like('c.name', $search)
+                    ->orLike('c.mobile', $search);
+                if ($hasExternalId) {
+                    $builder->orLike('c.external_id', $search);
+                }
+                $builder->groupEnd();
+            }
+
+            $rows = $builder
+                ->orderBy('cv.last_message_at', 'DESC')
+                ->limit($limit, $offset)
+                ->get()
+                ->getResultArray();
+
+            $normalized = [];
+            foreach ($rows as $row) {
+                $rowChannel = (string) ($row['channel'] ?? $row['contact_channel'] ?? 'whatsapp');
+                $normalized[] = [
+                    'id'              => (int) ($row['id'] ?? 0),
+                    'contact_id'      => (int) ($row['contact_id'] ?? 0),
+                    'channel'         => $rowChannel,
+                    'name'            => (string) ($row['contact_name'] ?? ''),
+                    'contact_name'    => (string) ($row['contact_name'] ?? ''),
+                    'mobile'          => (string) ($row['mobile'] ?? $row['external_id'] ?? ''),
+                    'external_id'     => (string) ($row['external_id'] ?? ''),
+                    'status'          => (string) ($row['status'] ?? ''),
+                    'assigned_to'     => isset($row['assigned_to']) && $row['assigned_to'] !== null && $row['assigned_to'] !== ''
+                        ? (int) $row['assigned_to']
+                        : null,
+                    'unread_count'    => (int) ($row['unread_count'] ?? 0),
+                    'last_message_at' => $row['last_message_at'] ?? null,
+                    'last_message'    => (string) ($row['last_message_content'] ?? ''),
+                    'last_message_content' => (string) ($row['last_message_content'] ?? ''),
+                    'last_message_direction' => (string) ($row['last_message_direction'] ?? ''),
+                    'within_24h'      => is_within_24h_window($row['last_reply_at'] ?? null),
+                ];
+            }
+
+            return $this->jsonResponse(true, $normalized);
+        } catch (Throwable $e) {
+            log_message('error', 'Chat conversations failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return $this->jsonResponse(false, null, $e->getMessage(), [], 500);
         }
-
-        $rows = $builder
-            ->orderBy('cv.last_message_at', 'DESC')
-            ->limit($limit, $offset)
-            ->get()
-            ->getResultArray();
-
-        $normalized = [];
-        foreach ($rows as $row) {
-            $rowChannel = (string) ($row['channel'] ?? $row['contact_channel'] ?? 'whatsapp');
-            $normalized[] = [
-                'id'              => (int) ($row['id'] ?? 0),
-                'contact_id'      => (int) ($row['contact_id'] ?? 0),
-                'channel'         => $rowChannel,
-                'name'            => (string) ($row['contact_name'] ?? ''),
-                'contact_name'    => (string) ($row['contact_name'] ?? ''),
-                'mobile'          => (string) ($row['mobile'] ?? $row['external_id'] ?? ''),
-                'external_id'     => (string) ($row['external_id'] ?? ''),
-                'status'          => (string) ($row['status'] ?? ''),
-                'assigned_to'     => isset($row['assigned_to']) && $row['assigned_to'] !== null && $row['assigned_to'] !== ''
-                    ? (int) $row['assigned_to']
-                    : null,
-                'unread_count'    => (int) ($row['unread_count'] ?? 0),
-                'last_message_at' => $row['last_message_at'] ?? null,
-                'last_message'    => (string) ($row['last_message_content'] ?? ''),
-                'last_message_content' => (string) ($row['last_message_content'] ?? ''),
-                'last_message_direction' => (string) ($row['last_message_direction'] ?? ''),
-                'within_24h'      => is_within_24h_window($row['last_reply_at'] ?? null),
-            ];
-        }
-
-        return $this->jsonResponse(true, $normalized);
     }
 
     public function messages(int $contactId): ResponseInterface
@@ -161,64 +191,70 @@ class Chat extends BaseController
             return $denied;
         }
 
-        $contact = model(ContactModel::class)->find($contactId);
-        if ($contact === null) {
-            return $this->jsonResponse(false, null, 'Contact not found.', [], 404);
-        }
-
-        $channel = strtolower(trim((string) ($contact['channel'] ?? 'whatsapp'))) ?: 'whatsapp';
-        $conversation = model(ConversationModel::class)->findOrCreateForContact($contactId, $channel);
-        $limit        = max(1, min(200, (int) ($this->request->getGet('limit') ?? 50)));
-        $beforeId     = (int) ($this->request->getGet('before_id') ?? 0);
-        $afterId      = (int) ($this->request->getGet('after_id') ?? 0);
-
-        $model = model(MessageModel::class)->where('contact_id', $contactId);
-        if ($afterId > 0) {
-            $model->where('id >', $afterId);
-            $messages = $model->orderBy('id', 'ASC')->findAll($limit);
-        } else {
-            if ($beforeId > 0) {
-                $model->where('id <', $beforeId);
+        try {
+            $contact = model(ContactModel::class)->find($contactId);
+            if ($contact === null) {
+                return $this->jsonResponse(false, null, 'Contact not found.', [], 404);
             }
-            $messages = $model->orderBy('id', 'DESC')->findAll($limit);
-            $messages = array_reverse($messages);
+
+            $channel = strtolower(trim((string) ($contact['channel'] ?? 'whatsapp'))) ?: 'whatsapp';
+            $conversation = model(ConversationModel::class)->findOrCreateForContact($contactId, $channel);
+            $limit        = max(1, min(200, (int) ($this->request->getGet('limit') ?? 50)));
+            $beforeId     = (int) ($this->request->getGet('before_id') ?? 0);
+            $afterId      = (int) ($this->request->getGet('after_id') ?? 0);
+
+            $model = model(MessageModel::class)->where('contact_id', $contactId);
+            if ($afterId > 0) {
+                $model->where('id >', $afterId);
+                $messages = $model->orderBy('id', 'ASC')->findAll($limit);
+            } else {
+                if ($beforeId > 0) {
+                    $model->where('id <', $beforeId);
+                }
+                $messages = $model->orderBy('id', 'DESC')->findAll($limit);
+                $messages = array_reverse($messages);
+            }
+
+            $notes = $afterId > 0
+                ? []
+                : model(InternalNoteModel::class)->getForContact($contactId);
+
+            $statusUpdates = [];
+            if ($afterId > 0) {
+                // Silent poll: refresh delivery ticks (Cheerio often skips status webhooks)
+                $this->refreshCheerioOutboundStatuses($contactId, 10);
+                $statusUpdates = model(MessageModel::class)
+                    ->select('id, status')
+                    ->where('contact_id', $contactId)
+                    ->where('direction', 'outbound')
+                    ->orderBy('id', 'DESC')
+                    ->findAll(40);
+            } else {
+                // Opening thread — sync a few recent ticks once
+                $this->refreshCheerioOutboundStatuses($contactId, 6);
+                // Mark conversation read when opening (not on silent poll)
+                model(ConversationModel::class)->resetUnread((int) $conversation['id']);
+                model(MessageModel::class)
+                    ->where('contact_id', $contactId)
+                    ->where('direction', 'inbound')
+                    ->where('is_read', 0)
+                    ->set(['is_read' => 1])
+                    ->update();
+            }
+
+            return $this->jsonResponse(true, [
+                'contact'         => $contact,
+                'conversation'    => $conversation,
+                'messages'        => $messages,
+                'notes'           => $notes,
+                'within_24h'      => is_within_24h_window($contact['last_reply_at'] ?? null),
+                'status_updates'  => $statusUpdates,
+            ]);
+        } catch (Throwable $e) {
+            log_message('error', 'Chat messages failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return $this->jsonResponse(false, null, $e->getMessage(), [], 500);
         }
-
-        $notes = $afterId > 0
-            ? []
-            : model(InternalNoteModel::class)->getForContact($contactId);
-
-        $statusUpdates = [];
-        if ($afterId > 0) {
-            // Silent poll: refresh delivery ticks (Cheerio often skips status webhooks)
-            $this->refreshCheerioOutboundStatuses($contactId, 10);
-            $statusUpdates = model(MessageModel::class)
-                ->select('id, status')
-                ->where('contact_id', $contactId)
-                ->where('direction', 'outbound')
-                ->orderBy('id', 'DESC')
-                ->findAll(40);
-        } else {
-            // Opening thread — sync a few recent ticks once
-            $this->refreshCheerioOutboundStatuses($contactId, 6);
-            // Mark conversation read when opening (not on silent poll)
-            model(ConversationModel::class)->resetUnread((int) $conversation['id']);
-            model(MessageModel::class)
-                ->where('contact_id', $contactId)
-                ->where('direction', 'inbound')
-                ->where('is_read', 0)
-                ->set(['is_read' => 1])
-                ->update();
-        }
-
-        return $this->jsonResponse(true, [
-            'contact'         => $contact,
-            'conversation'    => $conversation,
-            'messages'        => $messages,
-            'notes'           => $notes,
-            'within_24h'      => is_within_24h_window($contact['last_reply_at'] ?? null),
-            'status_updates'  => $statusUpdates,
-        ]);
     }
 
     public function send(): ResponseInterface
@@ -296,7 +332,19 @@ class Chat extends BaseController
 
                 $file = $this->request->getFile('file') ?? $this->request->getFile('media');
                 if ($file !== null && $file->isValid()) {
+                    $allowedMimes = [
+                        'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+                        'application/pdf',
+                        'audio/mpeg', 'audio/ogg', 'audio/aac', 'audio/mp4',
+                        'video/mp4', 'video/3gpp',
+                        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                        'application/msword',
+                        'text/plain', 'text/csv',
+                    ];
                     $mime = $file->getMimeType() ?: 'application/octet-stream';
+                    if (! in_array($mime, $allowedMimes, true)) {
+                        return $this->jsonResponse(false, null, 'File type not allowed: ' . $mime, [], 422);
+                    }
                     if ($file->getSize() > 16 * 1024 * 1024) {
                         return $this->jsonResponse(false, null, 'File exceeds 16MB limit.', [], 422);
                     }
@@ -348,6 +396,39 @@ class Chat extends BaseController
 
                 $language   = (string) ($input['language'] ?? 'en_US');
                 $components = is_array($input['components'] ?? null) ? $input['components'] : [];
+
+                // Meta free-form only works on Meta's number session. Cheerio-inbound chats
+                // look "open" locally but Meta returns 131047 Re-engagement.
+                if ($messageType !== 'template') {
+                    $activeProvider = service('settingsService')->getWhatsAppProvider();
+                    $lastInboundProvider = model(MessageModel::class)->lastInboundProvider($contactId);
+                    if ($activeProvider === 'meta' && $lastInboundProvider === 'cheerio') {
+                        $metaPhone = preg_replace(
+                            '/\D+/',
+                            '',
+                            (string) (service('settingsService')->get('meta_display_phone', '') ?: '')
+                        ) ?: '';
+                        if ($metaPhone === '') {
+                            try {
+                                $info = $api->getPhoneNumberInfo();
+                                $metaPhone = preg_replace('/\D+/', '', (string) ($info['display_phone'] ?? '')) ?: '';
+                            } catch (Throwable $ignored) {
+                                $metaPhone = '';
+                            }
+                        }
+                        $metaHint = $metaPhone !== '' ? ('+' . $metaPhone) : 'your Meta WhatsApp number';
+
+                        return $this->jsonResponse(
+                            false,
+                            null,
+                            'This chat arrived on the Cheerio number, so Meta free-text fails (131047). '
+                            . 'Click Template to send a Meta template, or ask the customer to WhatsApp '
+                            . $metaHint . ' first.',
+                            [],
+                            422
+                        );
+                    }
+                }
 
                 if ($messageType === 'template') {
                     $templateId = (int) ($input['template_id'] ?? 0);

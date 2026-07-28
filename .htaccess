@@ -1,11 +1,22 @@
-# Deny web access to project root.
-# DocumentRoot must be `public/`. If misconfigured to project root, rewrite into public.
+# When DocumentRoot is the project root, send traffic into public/.
+# Prefer setting DocumentRoot to public/ (especially on nginx/Plesk).
 <IfModule mod_rewrite.c>
     RewriteEngine On
+
+    # Never expose secrets / app internals when DocumentRoot is project root.
+    RewriteRule ^(app|writable|vendor|tests|docs|tools|builds)(/|$) - [F,L,NC]
+    RewriteRule ^(\.env|\.git|composer\.(json|lock)|spark|preload\.php)(/|$) - [F,L,NC]
+    RewriteRule \.(sql|bak|md)$ - [F,L,NC]
+
+    # Keep real files/dirs at project root (e.g. published assets/, uploads/)
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Everything else is served from public/
     RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>
 
-# Fallback deny if rewrite unavailable
 <IfModule !mod_rewrite.c>
     Require all denied
 </IfModule>

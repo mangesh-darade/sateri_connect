@@ -27,11 +27,17 @@ Root `.htaccess` rewrites into `public/` if DocumentRoot is mis-set.
 | Exception traces | Hide password/token/secret fields |
 | Filters | `secureheaders` + `invalidchars` enabled |
 | Installer | `writable/install.lock` + DB flag; lock fails closed |
-| Webhooks | Invalid signature always **403** |
-| Chat uploads | MIME allowlist + 16MB limit (same as Media) |
+| Webhooks | Invalid signature **403 in production**; development may allow unsigned for local tunnels |
+| Chat uploads | MIME allowlist + 16MB (WhatsApp + Messenger/Instagram) |
+| Branding | Raster/ICO only (no new SVG — XSS); uploads `.htaccess` blocks PHP |
+| Secrets in Settings | Fully masked (no prefix/suffix leak); page access token masked |
+| baseURL | Production uses `.env` only (no Host-header auto-detect) |
+| CSRF | Session-based CSRF for panel forms |
+| JWT | `JWT_SECRET` required in production |
 | Media | Requires `chat.send` / `chat.view` |
 | API | JWT user loads role permissions; routes use `permission:*` |
-| `.gitignore` | Ignores `.env.*`, SQL dumps, `_unused/` |
+| Root docroot | Sensitive paths denied; `webroot:publish` for nginx assets |
+| `.gitignore` | Ignores `.env.*`, SQL dumps, `_unused/`, published `/assets` |
 | Cleanup | Junk moved to `_unused/` |
 
 ---
@@ -50,7 +56,7 @@ Production env template: `docs/deploy/env.production.yevle.example`
 
 ## Still required on the live server (ops)
 
-1. DocumentRoot = `public/`  
+1. DocumentRoot = `public/` (preferred). If project root: root `index.php` + `php spark webroot:publish` (or nginx aliases in `docs/deploy/nginx-plesk-additional.conf`)  
 2. `.env` with `CI_ENVIRONMENT=production`, HTTPS `baseURL`, strong `encryption.key` + `JWT_SECRET`  
 3. `app.forceGlobalSecureRequests = true`  
 4. Real DB user (not root)  
@@ -58,6 +64,7 @@ Production env template: `docs/deploy/env.production.yevle.example`
 6. Cron: `queue:process`, `campaigns:process`, `automations:process`  
 7. Cheerio: permanent API key, live number, webhook on HTTPS, app published  
 8. Do **not** upload `_unused/`, SQL dumps, or bak env files  
+9. After deploy verify `https://YOUR-HOST/assets/css/app.css` returns CSS (not 404)  
 9. Keep `writable/install.lock` after first install  
 10. Set Cloudflare/`proxyIPs` if behind a proxy  
 

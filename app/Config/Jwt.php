@@ -36,7 +36,7 @@ class Jwt extends BaseConfig
         $envSecret = env('JWT_SECRET', '');
         if (is_string($envSecret) && $envSecret !== '') {
             $this->secret = $envSecret;
-        } elseif ($this->secret === '') {
+        } elseif ($this->secret === '' && (! defined('ENVIRONMENT') || ENVIRONMENT !== 'production')) {
             $encryptionKey = config('Encryption')->key ?? '';
             $this->secret  = is_string($encryptionKey) ? $encryptionKey : '';
         }

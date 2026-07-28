@@ -53,8 +53,9 @@ class Settings extends BaseController
         $cheerioDisplay['webhook_secret'] = $this->maskSecret($cheerio['webhook_secret']);
 
         $metaDisplay = $meta;
-        $metaDisplay['access_token'] = $this->maskSecret($meta['access_token']);
-        $metaDisplay['app_secret']   = $this->maskSecret($meta['app_secret']);
+        $metaDisplay['access_token']      = $this->maskSecret($meta['access_token']);
+        $metaDisplay['app_secret']        = $this->maskSecret($meta['app_secret']);
+        $metaDisplay['page_access_token'] = $this->maskSecret((string) ($meta['page_access_token'] ?? ''));
 
         $localCallback  = site_url('webhooks');
         $publicBase     = rtrim((string) $settings->get('webhook_public_base', ''), '/');
@@ -272,10 +273,10 @@ class Settings extends BaseController
                 }
 
                 $this->saveBrandingUpload($settings, 'site_logo', [
-                    'image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', 'image/gif',
+                    'image/png', 'image/jpeg', 'image/webp', 'image/gif',
                 ], 2 * 1024 * 1024);
                 $this->saveBrandingUpload($settings, 'site_favicon', [
-                    'image/png', 'image/x-icon', 'image/vnd.microsoft.icon', 'image/jpeg', 'image/webp', 'image/svg+xml', 'image/gif',
+                    'image/png', 'image/x-icon', 'image/vnd.microsoft.icon', 'image/jpeg', 'image/webp', 'image/gif',
                 ], 512 * 1024);
             }
 
@@ -632,18 +633,16 @@ class Settings extends BaseController
         $config->fromName    = (string) $settings->get('smtp_from_name', '');
     }
 
+    /**
+     * Do not leak prefix/suffix of live secrets in HTML forms.
+     */
     protected function maskSecret(string $value): string
     {
         if ($value === '') {
             return '';
         }
 
-        $len = strlen($value);
-        if ($len <= 8) {
-            return str_repeat('•', $len);
-        }
-
-        return substr($value, 0, 4) . str_repeat('•', max(4, $len - 8)) . substr($value, -4);
+        return str_repeat('•', min(32, max(8, strlen($value))));
     }
 
     /**
@@ -660,9 +659,10 @@ class Settings extends BaseController
 
         $mime = (string) $file->getMimeType();
         $ext  = strtolower((string) $file->getExtension());
-        $extOk = in_array($ext, ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'ico'], true);
+        // Raster / ICO only — SVG can carry stored XSS when served from /uploads.
+        $extOk = in_array($ext, ['png', 'jpg', 'jpeg', 'webp', 'gif', 'ico'], true);
 
-        if (! in_array($mime, $allowedMimes, true) && ! $extOk) {
+        if (! in_array($mime, $allowedMimes, true) || ! $extOk) {
             throw new \RuntimeException(ucfirst(str_replace('_', ' ', $key)) . ' file type is not allowed.');
         }
 

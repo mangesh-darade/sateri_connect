@@ -439,7 +439,7 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Site Logo</label>
-                                    <input type="file" name="site_logo" class="form-control" accept=".png,.jpg,.jpeg,.webp,.gif,.svg,image/*">
+                                    <input type="file" name="site_logo" class="form-control" accept=".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif">
                                     <div class="form-text">PNG, JPG, WebP, SVG or GIF · max 2 MB. Used in sidebar and login.</div>
                                     <?php if ($logoUrl !== ''): ?>
                                         <div class="d-flex align-items-center gap-3 mt-2 branding-preview">
@@ -453,7 +453,7 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Favicon</label>
-                                    <input type="file" name="site_favicon" class="form-control" accept=".ico,.png,.jpg,.jpeg,.webp,.gif,.svg,image/*">
+                                    <input type="file" name="site_favicon" class="form-control" accept=".ico,.png,.jpg,.jpeg,.webp,.gif,image/png,image/x-icon,image/jpeg,image/webp,image/gif">
                                     <div class="form-text">ICO or PNG · max 512 KB. Browser tab icon.</div>
                                     <?php if ($faviconUrl !== ''): ?>
                                         <div class="d-flex align-items-center gap-3 mt-2 branding-preview">

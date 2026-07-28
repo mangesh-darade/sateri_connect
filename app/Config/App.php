@@ -19,17 +19,28 @@ class App extends BaseConfig
      * Auto-detected from the current request in __construct() (CI3-style).
      * Fallback used for CLI / when HTTP_HOST is unavailable.
      */
-    public string $baseURL = 'http://localhost/whstapp/public/';
+    public string $baseURL = 'http://localhost/sateri_connect/public/';
 
     public function __construct()
     {
         parent::__construct();
 
-        // Auto base_url from host + script path (works for local & production)
-        if (! empty($_SERVER['HTTP_HOST']) && ! empty($_SERVER['SCRIPT_NAME'])) {
+        // Prefer app.baseURL from .env. Auto-detect only outside production
+        // to avoid Host-header spoofing of password-reset / asset URLs.
+        $envBase = env('app.baseURL', '');
+        if (is_string($envBase) && $envBase !== '') {
+            $this->baseURL = rtrim($envBase, '/') . '/';
+
+            return;
+        }
+
+        if (
+            (! defined('ENVIRONMENT') || ENVIRONMENT !== 'production')
+            && ! empty($_SERVER['HTTP_HOST'])
+            && ! empty($_SERVER['SCRIPT_NAME'])
+        ) {
             $https = (! empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-                || (isset($_SERVER['SERVER_PORT']) && (string) $_SERVER['SERVER_PORT'] === '443')
-                || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+                || (isset($_SERVER['SERVER_PORT']) && (string) $_SERVER['SERVER_PORT'] === '443');
 
             $root  = ($https ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
             $root .= str_replace(basename($_SERVER['SCRIPT_NAME']), '', $_SERVER['SCRIPT_NAME']);

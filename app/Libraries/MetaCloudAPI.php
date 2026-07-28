@@ -547,10 +547,9 @@ class MetaCloudAPI
         $settings = $this->settings;
         $meta     = $settings->getMetaConfig();
         $base     = rtrim((string) $settings->get('webhook_public_base', ''), '/');
-        $callback = $callbackUrl ?: ($base !== '' ? $base . '/whstapp/public/webhooks' : '');
+        $localPath = parse_url(site_url('webhooks'), PHP_URL_PATH) ?: '/webhooks';
+        $callback  = $callbackUrl ?: ($base !== '' ? $base . $localPath : (string) site_url('webhooks'));
         if ($callback === '' || ! str_starts_with($callback, 'https://')) {
-            // Fall back to site_url path when base already includes full origin usage
-            $localPath = parse_url(site_url('webhooks'), PHP_URL_PATH) ?: '/webhooks';
             if ($base !== '') {
                 $callback = $base . $localPath;
             }

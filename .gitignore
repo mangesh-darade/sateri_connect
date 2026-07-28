@@ -67,6 +67,11 @@ tools/*.exe
 tools/cloudflared/
 tools/ngrok/
 
+# Published mirrors when DocumentRoot is project root (`php spark webroot:publish`)
+/assets/
+/uploads/
+/favicon.ico
+
 
 #-------------------------
 # Temporary Files

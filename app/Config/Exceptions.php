@@ -50,25 +50,13 @@ class Exceptions extends BaseConfig
      * --------------------------------------------------------------------------
      * HIDE FROM DEBUG TRACE
      * --------------------------------------------------------------------------
-     * Any data that you would like to hide from the debug trace.
-     * In order to specify 2 levels, use "/" to separate.
-     * ex. ['server', 'setup/password', 'secret_token']
+     * Keep EMPTY on hosts where PHP omits trace "args"
+     * (zend.exception_ignore_args=1). Non-empty lists trigger a CI4 bug:
+     * Undefined array key "args" in BaseExceptionHandler::maskSensitiveData().
      *
      * @var list<string>
      */
-    public array $sensitiveDataInTrace = [
-        'password',
-        'password_confirm',
-        'token',
-        'access_token',
-        'secret',
-        'app_secret',
-        'Authorization',
-        'cookie',
-        'csrf_token_name',
-        'JWT_SECRET',
-        'encryption',
-    ];
+    public array $sensitiveDataInTrace = [];
 
     /**
      * --------------------------------------------------------------------------

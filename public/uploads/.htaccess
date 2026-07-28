@@ -1,0 +1,15 @@
+# Deny script execution and directory listing under public uploads.
+<IfModule mod_authz_core.c>
+    Require all granted
+</IfModule>
+
+Options -Indexes
+
+<FilesMatch "\.(?i:php|phtml|phar|cgi|pl|py|asp|aspx|sh)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Deny from all
+    </IfModule>
+</FilesMatch>

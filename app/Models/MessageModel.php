@@ -145,4 +145,51 @@ class MessageModel extends Model
             ->orderBy('created_at', 'ASC')
             ->findAll($limit, $offset);
     }
+
+    /**
+     * Provider that received the contact's latest inbound WhatsApp message (cheerio|meta|null).
+     */
+    public function lastInboundProvider(int $contactId): ?string
+    {
+        if ($contactId <= 0) {
+            return null;
+        }
+
+        $row = $this->where('contact_id', $contactId)
+            ->where('direction', 'inbound')
+            ->where('channel', 'whatsapp')
+            ->orderBy('id', 'DESC')
+            ->first();
+
+        if (! is_array($row)) {
+            return null;
+        }
+
+        $payload = $row['payload'] ?? null;
+        if (is_string($payload)) {
+            $decoded = json_decode($payload, true);
+            $payload = is_array($decoded) ? $decoded : null;
+        }
+        if (! is_array($payload)) {
+            return null;
+        }
+
+        $provider = strtolower(trim((string) ($payload['provider'] ?? '')));
+        if (in_array($provider, ['cheerio', 'meta'], true)) {
+            return $provider;
+        }
+
+        $message = is_array($payload['message'] ?? null) ? $payload['message'] : $payload;
+        // Cheerio Direct API adds from_user_id; Meta Cloud API does not.
+        if (! empty($message['from_user_id'])) {
+            return 'cheerio';
+        }
+
+        $pnid = (string) ($payload['metadata']['phone_number_id'] ?? '');
+        if ($pnid !== '') {
+            return (new \App\Libraries\SettingsService())->resolveProviderFromPhoneNumberId($pnid);
+        }
+
+        return null;
+    }
 }

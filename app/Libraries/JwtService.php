@@ -104,12 +104,16 @@ class JwtService
             $secret = (string) env('JWT_SECRET', '');
         }
 
-        if ($secret === '') {
+        if ($secret === '' && (! defined('ENVIRONMENT') || ENVIRONMENT !== 'production')) {
             $secret = (string) (config('Encryption')->key ?? '');
         }
 
         if ($secret === '') {
-            throw new RuntimeException('JWT secret is not configured. Set JWT_SECRET or encryption.key.');
+            throw new RuntimeException(
+                defined('ENVIRONMENT') && ENVIRONMENT === 'production'
+                    ? 'JWT_SECRET must be set in production .env.'
+                    : 'JWT secret is not configured. Set JWT_SECRET or encryption.key.'
+            );
         }
 
         return $secret;
