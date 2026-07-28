@@ -45,13 +45,16 @@ class SyncTemplates extends BaseCommand
                 $language = (string) ($tpl['language'] ?? 'en');
                 $components = $tpl['components'] ?? [];
 
-                $parsed = $this->parseComponents(is_array($components) ? $components : []);
+                $componentsList = is_array($components) ? $components : [];
+                $parsed = $this->parseComponents($componentsList);
+                $templateType = $this->detectTemplateType($tpl, $componentsList);
 
                 $row = [
                     'meta_id'        => $metaId,
                     'name'           => $name,
                     'language'       => $language,
                     'category'       => $tpl['category'] ?? null,
+                    'template_type'  => $templateType,
                     'status'         => $tpl['status'] ?? null,
                     'header_type'    => $parsed['header_type'],
                     'header_content' => $parsed['header_content'],
@@ -118,7 +121,11 @@ class SyncTemplates extends BaseCommand
             switch ($type) {
                 case 'HEADER':
                     $result['header_type']    = strtolower((string) ($component['format'] ?? 'text'));
-                    $result['header_content'] = $component['text'] ?? ($component['example']['header_text'][0] ?? null);
+                    $result['header_content'] = $component['text']
+                        ?? ($component['example']['header_text'][0] ?? null)
+                        ?? ($component['example']['header_url'] ?? null)
+                        ?? ($component['example']['link'] ?? null)
+                        ?? ($component['example']['header_handle'][0] ?? null);
                     break;
 
                 case 'BODY':
@@ -135,6 +142,26 @@ class SyncTemplates extends BaseCommand
                 case 'BUTTONS':
                     $result['buttons'] = $component['buttons'] ?? null;
                     break;
+
+                case 'CAROUSEL':
+                    $cards = is_array($component['cards'] ?? null) ? $component['cards'] : [];
+                    $result['buttons'] = ['carousel_cards' => count($cards)];
+                    if ($result['header_type'] === null && isset($cards[0]['components']) && is_array($cards[0]['components'])) {
+                        foreach ($cards[0]['components'] as $cardComponent) {
+                            if (! is_array($cardComponent)) {
+                                continue;
+                            }
+                            if (strtoupper((string) ($cardComponent['type'] ?? '')) !== 'HEADER') {
+                                continue;
+                            }
+                            $result['header_type'] = strtolower((string) ($cardComponent['format'] ?? 'image'));
+                            $result['header_content'] = $cardComponent['example']['header_url']
+                                ?? $cardComponent['example']['link']
+                                ?? ($cardComponent['example']['header_handle'][0] ?? null);
+                            break;
+                        }
+                    }
+                    break;
             }
         }
 
@@ -143,5 +170,28 @@ class SyncTemplates extends BaseCommand
         }
 
         return $result;
+    }
+
+    /**
+     * @param array<string, mixed>       $tpl
+     * @param list<array<string, mixed>> $components
+     */
+    protected function detectTemplateType(array $tpl, array $components): string
+    {
+        $explicit = strtolower(trim((string) ($tpl['template_type'] ?? '')));
+        if (in_array($explicit, ['default', 'carousel'], true)) {
+            return $explicit;
+        }
+
+        foreach ($components as $component) {
+            if (! is_array($component)) {
+                continue;
+            }
+            if (strtoupper((string) ($component['type'] ?? '')) === 'CAROUSEL') {
+                return 'carousel';
+            }
+        }
+
+        return 'default';
     }
 }

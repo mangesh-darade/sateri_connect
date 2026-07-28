@@ -1,5 +1,9 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_actions') ?>
+<a href="<?= site_url('users') ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i> Back</a>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <?php
 $formUser = $user ?? $edit_user ?? $userRow ?? $editUser ?? $user_form ?? [];

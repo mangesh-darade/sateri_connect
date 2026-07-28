@@ -3,6 +3,7 @@
 namespace App\Commands;
 
 use App\Libraries\CampaignService;
+use App\Libraries\EmailCampaignService;
 use App\Libraries\QueueService;
 use App\Models\CampaignModel;
 use CodeIgniter\CLI\BaseCommand;
@@ -26,7 +27,12 @@ class ProcessCampaigns extends BaseCommand
         try {
             $campaignService = new CampaignService();
             $started         = $campaignService->processScheduled();
-            CLI::write("Started {$started} scheduled campaign(s).", 'green');
+            CLI::write("Started {$started} scheduled WhatsApp campaign(s).", 'green');
+
+            $emailStarted = (new EmailCampaignService())->processScheduled();
+            if ($emailStarted > 0) {
+                CLI::write("Processed {$emailStarted} scheduled email campaign(s).", 'green');
+            }
 
             // Mark completed campaigns that have no remaining pending/processing items
             $running = model(CampaignModel::class)->where('status', 'running')->findAll();

@@ -28,6 +28,9 @@ $routes->group('install', static function ($routes) {
  * --------------------------------------------------------------------
  */
 $routes->match(['get', 'post'], 'login', 'Auth::login', ['filter' => 'csrf']);
+$routes->match(['get', 'post'], 'signup', 'Auth::signup', ['filter' => 'csrf']);
+$routes->get('verify-email/(:segment)', 'Auth::verifyEmail/$1');
+$routes->match(['get', 'post'], 'resend-verification', 'Auth::resendVerification', ['filter' => 'csrf']);
 $routes->get('logout', 'Auth::logout');
 $routes->match(['get', 'post'], 'forgot-password', 'Auth::forgotPassword', ['filter' => 'csrf']);
 $routes->match(['get', 'post'], 'reset-password/(:segment)', 'Auth::resetPassword/$1', ['filter' => 'csrf']);
@@ -77,6 +80,16 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('contacts/(:num)', 'Contacts::update/$1', ['filter' => 'csrf']);
     $routes->post('contacts/(:num)/delete', 'Contacts::delete/$1', ['filter' => 'csrf']);
 
+    // Customer Groups (campaign audience lists — backed by tags)
+    $routes->get('customer-groups', 'CustomerGroups::index');
+    $routes->post('customer-groups', 'CustomerGroups::store', ['filter' => 'csrf']);
+    $routes->post('customer-groups/create', 'CustomerGroups::createGroup', ['filter' => 'csrf']);
+    $routes->get('customer-groups/export', 'CustomerGroups::export');
+    $routes->get('customer-groups/(:num)', 'CustomerGroups::show/$1');
+    $routes->get('customer-groups/(:num)/export', 'CustomerGroups::export/$1');
+    $routes->post('customer-groups/(:num)/delete', 'CustomerGroups::delete/$1', ['filter' => 'csrf']);
+    $routes->post('customer-groups/(:num)/contacts/(:num)/remove', 'CustomerGroups::removeContact/$1/$2', ['filter' => 'csrf']);
+
     // Email Manager (builder, drips, verifier, HTML campaigns, sender/domain)
     $routes->get('email-manager', 'EmailManager::index');
     $routes->post('email-manager/builders', 'EmailManager::saveBuilder', ['filter' => 'csrf']);
@@ -105,6 +118,12 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     // Campaigns
     $routes->get('campaigns', 'Campaigns::index');
     $routes->get('campaigns/create', 'Campaigns::create');
+    $routes->get('campaigns/wizard-data', 'Campaigns::wizardData');
+    $routes->post('campaigns/audience-preview', 'Campaigns::audiencePreview', ['filter' => 'csrf']);
+    $routes->post('campaigns/labels', 'Campaigns::createLabel', ['filter' => 'csrf']);
+    $routes->post('campaigns/wizard', 'Campaigns::wizardStore', ['filter' => 'csrf']);
+    $routes->post('campaigns/wizard/(:segment)/(:num)/run', 'Campaigns::wizardRun/$1/$2', ['filter' => 'csrf']);
+    $routes->post('campaigns/wizard/(:segment)/(:num)/schedule', 'Campaigns::wizardSchedule/$1/$2', ['filter' => 'csrf']);
     $routes->post('campaigns', 'Campaigns::store', ['filter' => 'csrf']);
     $routes->get('campaigns/(:num)', 'Campaigns::show/$1');
     $routes->get('campaigns/(:num)/edit', 'Campaigns::edit/$1');
@@ -123,6 +142,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->get('templates', 'Templates::index');
     $routes->get('templates/create', 'Templates::create');
     $routes->post('templates', 'Templates::store', ['filter' => 'csrf']);
+    $routes->post('templates/header-media', 'Templates::uploadHeaderMedia', ['filter' => 'csrf']);
     $routes->post('templates/sync', 'Templates::sync', ['filter' => 'csrf']);
     $routes->get('templates/(:num)', 'Templates::show/$1');
     $routes->get('templates/(:num)/preview', 'Templates::preview/$1');
@@ -216,6 +236,14 @@ $routes->group('api', ['namespace' => 'App\Controllers\Api'], static function ($
         $routes->get('contacts/(:num)', 'Contacts::show/$1', ['filter' => 'permission:contacts.view']);
         $routes->put('contacts/(:num)', 'Contacts::update/$1', ['filter' => 'permission:contacts.edit']);
         $routes->delete('contacts/(:num)', 'Contacts::delete/$1', ['filter' => 'permission:contacts.delete']);
+
+        $routes->get('customer-groups', 'CustomerGroups::index', ['filter' => 'permission:contacts.view']);
+        $routes->post('customer-groups', 'CustomerGroups::create', ['filter' => 'permission:contacts.create']);
+        $routes->get('customer-groups/(:num)', 'CustomerGroups::show/$1', ['filter' => 'permission:contacts.view']);
+        $routes->put('customer-groups/(:num)', 'CustomerGroups::update/$1', ['filter' => 'permission:contacts.edit']);
+        $routes->delete('customer-groups/(:num)', 'CustomerGroups::delete/$1', ['filter' => 'permission:contacts.delete']);
+        $routes->post('customer-groups/(:num)/contacts', 'CustomerGroups::addContact/$1', ['filter' => 'permission:contacts.create']);
+        $routes->delete('customer-groups/(:num)/contacts/(:num)', 'CustomerGroups::removeContact/$1/$2', ['filter' => 'permission:contacts.edit']);
 
         $routes->get('campaigns', 'Campaigns::index', ['filter' => 'permission:campaigns.view']);
         $routes->post('campaigns', 'Campaigns::create', ['filter' => 'permission:campaigns.create']);

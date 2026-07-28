@@ -1,5 +1,9 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_actions') ?>
+<a href="<?= site_url('emails') ?>" class="btn btn-sm btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i> Back</a>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <?php
 $provider = $provider ?? 'smtp';
@@ -10,10 +14,6 @@ $defaultCampaign = $defaultCampaign ?? 'app-direct';
 $campaigns = $campaigns ?? [];
 ?>
 <div class="form-shell form-shell-lg">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <a href="<?= site_url('emails') ?>" class="btn btn-sm btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i> Emails</a>
-    </div>
-
     <?= view('emails/_provider_banner', [
         'provider'       => $provider,
         'providerLabel'  => $providerLabel,

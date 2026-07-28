@@ -1,5 +1,11 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_actions') ?>
+<?php if (function_exists('can') && can('keywords.create')): ?>
+    <a href="<?= site_url('keywords/create') ?>" class="btn btn-wa btn-sm"><i class="fas fa-plus me-1"></i> Add keyword</a>
+<?php endif; ?>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <?php
 $provider = function_exists('whatsapp_provider') ? whatsapp_provider() : 'cheerio';
@@ -18,19 +24,10 @@ try {
 }
 ?>
 <div class="page-list">
-<div class="page-toolbar">
-    <div class="toolbar-actions">
-        <?php if (function_exists('can') && can('keywords.create')): ?>
-            <a href="<?= site_url('keywords/create') ?>" class="btn btn-wa btn-sm"><i class="fas fa-plus me-1"></i> Add keyword</a>
-        <?php endif; ?>
-    </div>
-</div>
-
-<div class="alert alert-light border mb-2 py-2 px-3 d-flex flex-wrap align-items-center gap-2" role="status">
-    <span class="badge badge-soft">
-        Active: <?= esc($providerShort) ?>
-    </span>
-    <span class="small text-muted mb-0">
+<div class="page-hint">
+    <i class="fas fa-info-circle" aria-hidden="true"></i>
+    <span>
+        <span class="badge badge-soft me-1">Active: <?= esc($providerShort) ?></span>
         <?php if ($provider === 'cheerio'): ?>
             Cheerio active — customer must message
             <?php if ($cheerioPhone !== ''): ?>
@@ -47,6 +44,9 @@ try {
 </div>
 
 <div class="card">
+    <div class="card-header">
+        <h2 class="card-title mb-0">Keywords</h2>
+    </div>
     <div class="card-body py-3">
         <?php if (! empty($keywords)): ?>
         <table class="table table-sm table-hover align-middle w-100" id="keywordsTable">

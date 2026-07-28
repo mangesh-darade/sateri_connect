@@ -8,8 +8,11 @@
     <?php
     $appName    = function_exists('setting') ? (string) setting('app_name', 'WhatsApp Automation') : 'WhatsApp Automation';
     $appTagline = function_exists('setting') ? (string) setting('app_tagline', 'Automation console') : 'Automation console';
-    $siteLogo   = function_exists('setting_asset_url') ? setting_asset_url('site_logo') : '';
+    $siteLogo    = function_exists('setting_asset_url') ? setting_asset_url('site_logo') : '';
     $siteFavicon = function_exists('setting_asset_url') ? setting_asset_url('site_favicon') : '';
+    if ($siteFavicon === '' && $siteLogo !== '') {
+        $siteFavicon = $siteLogo;
+    }
     ?>
     <title><?= esc($title ?? 'Dashboard') ?> | <?= esc($appName) ?></title>
     <?php if ($siteFavicon !== ''): ?>
@@ -25,7 +28,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2.0/dist/css/adminlte.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11.10.8/dist/sweetalert2.min.css">
-    <link rel="stylesheet" href="<?= base_url('assets/css/app.css') ?>?v=sidebar-saas1">
+    <link rel="stylesheet" href="<?= base_url('assets/css/app.css') ?>?v=sections2">
     <link rel="stylesheet" href="<?= base_url('assets/css/sidebar.css') ?>?v=stack1">
     <?= $this->renderSection('styles') ?>
 </head>
@@ -194,9 +197,10 @@
                     'label' => 'Contacts',
                     'icon' => 'users',
                     'url' => site_url('contacts'),
-                    'match' => ['contacts'],
+                    'match' => ['contacts', 'customer-groups'],
                     'children' => [
                         ['label' => 'All Contacts', 'icon' => 'users', 'url' => site_url('contacts'), 'match' => ['contacts']],
+                        ['label' => 'Customer Groups', 'icon' => 'tags', 'url' => site_url('customer-groups'), 'match' => ['customer-groups']],
                         ['label' => 'Import Contacts', 'icon' => 'file-up', 'url' => site_url('contacts/import'), 'match' => ['contacts/import']],
                         ['label' => 'Duplicate Check', 'icon' => 'copy', 'url' => site_url('contacts/duplicates'), 'match' => ['contacts/duplicates']],
                     ],
@@ -462,9 +466,27 @@
         <?php if (empty($fullBleed)): ?>
         <div class="content-header">
             <div class="container-fluid">
-                <div class="row align-items-center g-1 mb-0">
-                    <div class="col-md-8 min-w-0">
-                        <h1 class="text-truncate d-inline-flex align-items-center flex-wrap gap-2">
+                <?php
+                $headerActionsHtml = trim((string) $this->renderSection('header_actions'));
+                ?>
+                <?php /* Standard page header: breadcrumb left → title + provider chip left → actions right */ ?>
+                <ol class="breadcrumb mb-1 d-none d-md-flex">
+                    <li class="breadcrumb-item"><a href="<?= site_url('dashboard') ?>">Home</a></li>
+                    <?php if (! empty($breadcrumb) && is_array($breadcrumb)): ?>
+                        <?php foreach ($breadcrumb as $crumb): ?>
+                            <?php if (! empty($crumb['url'])): ?>
+                                <li class="breadcrumb-item"><a href="<?= esc($crumb['url']) ?>"><?= esc($crumb['label'] ?? '') ?></a></li>
+                            <?php else: ?>
+                                <li class="breadcrumb-item active"><?= esc($crumb['label'] ?? '') ?></li>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <li class="breadcrumb-item active"><?= esc($title ?? '') ?></li>
+                    <?php endif; ?>
+                </ol>
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-0">
+                    <div class="min-w-0">
+                        <h1 class="text-truncate d-inline-flex align-items-center flex-wrap gap-2 mb-0">
                             <?= esc($title ?? 'Dashboard') ?>
                             <?php if (function_exists('whatsapp_provider_short')): ?>
                                 <span class="provider-chip <?= function_exists('is_meta_provider') && is_meta_provider() ? 'is-meta' : 'is-cheerio' ?>" title="<?= esc(function_exists('whatsapp_provider_label') ? whatsapp_provider_label() : '') ?>">
@@ -477,22 +499,11 @@
                             <p class="page-subtitle mb-0 text-truncate d-none d-md-block"><?= esc($subtitle) ?></p>
                         <?php endif; ?>
                     </div>
-                    <div class="col-md-4 d-none d-md-block">
-                        <ol class="breadcrumb float-md-end justify-content-md-end mb-0">
-                            <li class="breadcrumb-item"><a href="<?= site_url('dashboard') ?>">Home</a></li>
-                            <?php if (! empty($breadcrumb) && is_array($breadcrumb)): ?>
-                                <?php foreach ($breadcrumb as $crumb): ?>
-                                    <?php if (! empty($crumb['url'])): ?>
-                                        <li class="breadcrumb-item"><a href="<?= esc($crumb['url']) ?>"><?= esc($crumb['label'] ?? '') ?></a></li>
-                                    <?php else: ?>
-                                        <li class="breadcrumb-item active"><?= esc($crumb['label'] ?? '') ?></li>
-                                    <?php endif; ?>
-                                <?php endforeach; ?>
-                            <?php else: ?>
-                                <li class="breadcrumb-item active"><?= esc($title ?? '') ?></li>
-                            <?php endif; ?>
-                        </ol>
-                    </div>
+                    <?php if ($headerActionsHtml !== ''): ?>
+                        <div class="ms-auto d-flex align-items-center justify-content-end gap-2 flex-wrap header-page-actions">
+                            <?= $headerActionsHtml ?>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>

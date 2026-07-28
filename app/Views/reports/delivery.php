@@ -1,15 +1,13 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_actions') ?>
+<a href="<?= site_url('reports') ?>" class="btn btn-outline-secondary btn-sm">
+    <i class="fas fa-arrow-left me-1"></i> All reports
+</a>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <div class="page-list">
-<div class="page-toolbar">
-    <div class="toolbar-actions">
-        <a href="<?= site_url('reports') ?>" class="btn btn-outline-secondary btn-sm">
-            <i class="fas fa-arrow-left me-1"></i> All reports
-        </a>
-    </div>
-</div>
-
 <div class="card mb-2">
     <div class="card-body py-3">
         <form method="get" class="filter-bar">

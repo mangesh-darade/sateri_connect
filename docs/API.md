@@ -192,6 +192,120 @@ Authorization: Bearer <token>
 
 ---
 
+## Customer Groups
+
+Audience lists for campaigns (stored as tags). Requires `contacts.*` permissions.
+
+### GET `/api/customer-groups`
+
+```http
+GET /api/customer-groups?q=expo HTTP/1.1
+Authorization: Bearer <token>
+```
+
+**Response**
+
+```json
+{
+  "success": true,
+  "message": "OK",
+  "data": {
+    "items": [
+      {
+        "id": 3,
+        "name": "Expo_Thane_1007",
+        "color": "#6B7280",
+        "contact_count": 269,
+        "created_at": "2026-07-13 18:54:18",
+        "updated_at": "2026-07-13 18:54:18"
+      }
+    ],
+    "meta": { "total": 1 }
+  },
+  "errors": null
+}
+```
+
+### POST `/api/customer-groups`
+
+Create an empty group.
+
+```json
+{
+  "name": "SCGT July 26",
+  "color": "#25D366"
+}
+```
+
+**Validation errors `422`**
+
+```json
+{
+  "success": false,
+  "message": "Validation failed.",
+  "data": null,
+  "errors": {
+    "name": "Group name is required."
+  }
+}
+```
+
+### GET `/api/customer-groups/{id}`
+
+Returns the group plus its contacts.
+
+### PUT `/api/customer-groups/{id}`
+
+```json
+{
+  "name": "SCGT July 26 Updated",
+  "color": "#667085"
+}
+```
+
+### DELETE `/api/customer-groups/{id}`
+
+Deletes the group (memberships removed; contacts remain).
+
+### POST `/api/customer-groups/{id}/contacts`
+
+Add by mobile (creates contact if needed) or by existing `contact_id`.
+
+```json
+{
+  "name": "Mangesh",
+  "mobile": "919876543210",
+  "email": "user@example.com"
+}
+```
+
+or
+
+```json
+{
+  "contact_id": 42
+}
+```
+
+**Validation errors `422`**
+
+```json
+{
+  "success": false,
+  "message": "Validation failed.",
+  "data": null,
+  "errors": {
+    "mobile": "Enter a valid mobile number (10–15 digits, with country code)."
+  }
+}
+```
+
+### DELETE `/api/customer-groups/{id}/contacts/{contactId}`
+
+Remove a contact from the group (contact itself is not deleted).
+
+---
+
 ## Campaigns
 
 ### GET `/api/campaigns`

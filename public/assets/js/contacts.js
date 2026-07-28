@@ -164,9 +164,9 @@
             APP.toast('Select tags to apply', 'warning');
             return;
         }
-        APP.post(base() + '/contacts/bulk-tags', { ids: ids, tag_ids: tagIds, action: $('#bulkTagAction').val() || 'add' })
+        APP.post(base() + '/contacts/bulk-tags', { ids: ids, tag_ids: tagIds, mode: $('#bulkTagAction').val() || 'add' })
             .done(function (res) {
-                APP.toast(res.message || 'Tags updated');
+                APP.toast(res.message || 'Groups updated');
                 if (window.bootstrap && bootstrap.Modal) {
                     var el = document.getElementById('bulkTagsModal');
                     if (el) bootstrap.Modal.getOrCreateInstance(el).hide();
@@ -176,7 +176,7 @@
                 if (Contacts.table) Contacts.table.ajax.reload(null, false);
             })
             .fail(function (xhr) {
-                APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Tag update failed', 'error');
+                APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Group update failed', 'error');
             });
     };
 

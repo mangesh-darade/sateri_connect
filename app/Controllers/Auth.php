@@ -35,6 +35,23 @@ class Auth extends BaseController
         ]);
     }
 
+    public function signup(): string|ResponseInterface
+    {
+        if ($this->session->get('user_id')) {
+            return redirect()->to('/dashboard');
+        }
+
+        if (strtolower($this->request->getMethod()) === 'post') {
+            return $this->attemptSignup();
+        }
+
+        return view('auth/signup', [
+            'pageTitle' => 'Sign Up',
+            'csrfName'  => csrf_token(),
+            'csrfToken' => csrf_hash(),
+        ]);
+    }
+
     protected function attemptLogin(): ResponseInterface
     {
         $ip  = $this->request->getIPAddress() ?: 'unknown';
@@ -72,6 +89,15 @@ class Auth extends BaseController
 
         if (($user['status'] ?? '') !== 'active') {
             return redirect()->back()->withInput()->with('error', 'Your account is inactive. Contact an administrator.');
+        }
+
+        if (! $this->isEmailVerified($user)) {
+            $this->maybeResendVerificationEmail($user);
+
+            return redirect()->to('/resend-verification?email=' . rawurlencode($email))->with(
+                'warning',
+                'Verify your email before signing in. We sent you a fresh verification link if needed.'
+            );
         }
 
         $this->clearAttempts($key);
@@ -118,6 +144,94 @@ class Auth extends BaseController
             'role_slug'   => $role['slug'] ?? null,
             'permissions' => $permissions,
             'logged_in'   => true,
+        ]);
+    }
+
+    protected function attemptSignup(): ResponseInterface
+    {
+        $rules = [
+            'name'             => 'required|min_length[2]|max_length[150]',
+            'email'            => 'required|valid_email|is_unique[users.email]',
+            'password'         => 'required|min_length[8]',
+            'password_confirm' => 'required|matches[password]',
+        ];
+
+        if (! $this->validate($rules)) {
+            return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
+        }
+
+        $role = $this->resolveSignupRole();
+        if ($role === null) {
+            return redirect()->back()->withInput()->with(
+                'error',
+                'Signup is not available right now. Please contact an administrator.'
+            );
+        }
+
+        $users = model(UserModel::class);
+        $token = bin2hex(random_bytes(32));
+        $id    = $users->insert([
+            'name'                    => (string) $this->request->getPost('name'),
+            'email'                   => (string) $this->request->getPost('email'),
+            'password'                => (string) $this->request->getPost('password'),
+            'role_id'                 => (int) $role['id'],
+            'status'                  => 'active',
+            'email_verification_token'=> $token,
+            'email_verification_sent_at' => date('Y-m-d H:i:s'),
+            'email_verified_at'       => null,
+        ]);
+
+        if (! $id) {
+            return redirect()->back()->withInput()->with('errors', $users->errors());
+        }
+
+        $user = $users->find((int) $id);
+        if (is_array($user)) {
+            $this->sendVerificationEmail($user);
+        }
+
+        (new ActivityLogger())->log('signup', 'auth', 'User self-registered', ['user_id' => $id]);
+
+        return redirect()->to('/login')->with(
+            'success',
+            'Account created successfully. Please verify your email before signing in.'
+        );
+    }
+
+    public function verifyEmail(string $token): ResponseInterface
+    {
+        $users = model(UserModel::class);
+        $user  = $users->findByVerificationToken($token);
+
+        if ($user === null) {
+            return redirect()->to('/login')->with('error', 'Invalid or expired verification link.');
+        }
+
+        if (! $this->isEmailVerified($user)) {
+            $users->update((int) $user['id'], [
+                'email_verified_at'        => date('Y-m-d H:i:s'),
+                'email_verification_token' => null,
+            ]);
+
+            (new ActivityLogger())->log('verify_email', 'auth', 'User verified email address', [
+                'user_id' => $user['id'],
+            ]);
+        }
+
+        return redirect()->to('/login')->with('success', 'Email verified successfully. You can now sign in.');
+    }
+
+    public function resendVerification(): string|ResponseInterface
+    {
+        if (strtolower($this->request->getMethod()) === 'post') {
+            return $this->processResendVerification();
+        }
+
+        return view('auth/resend_verification', [
+            'pageTitle' => 'Resend Verification',
+            'csrfName'  => csrf_token(),
+            'csrfToken' => csrf_hash(),
+            'email'     => (string) ($this->request->getGet('email') ?? ''),
         ]);
     }
 
@@ -245,6 +359,120 @@ class Auth extends BaseController
         } catch (\Throwable $e) {
             log_message('error', 'Password reset email exception: {msg}', ['msg' => $e->getMessage()]);
         }
+    }
+
+    /**
+     * @param array<string, mixed> $user
+     */
+    protected function sendVerificationEmail(array $user): void
+    {
+        $token = trim((string) ($user['email_verification_token'] ?? ''));
+        $email = trim((string) ($user['email'] ?? ''));
+
+        if ($token === '' || $email === '') {
+            return;
+        }
+
+        $name = trim((string) ($user['name'] ?? 'there'));
+        $link = site_url('verify-email/' . rawurlencode($token));
+
+        try {
+            $message = "Hello {$name},\n\n" .
+                "Thanks for signing up. Click the link below to verify your email address:\n\n" .
+                "{$link}\n\n" .
+                "After verification you can sign in to your account.\n";
+
+            $result = service('emailProvider')->send($email, 'Verify Your Email Address', $message);
+
+            if (! ($result['ok'] ?? false)) {
+                log_message('error', 'Verification email failed: {msg}', [
+                    'msg' => $result['message'] ?? 'unknown',
+                    'email' => $email,
+                ]);
+            }
+        } catch (\Throwable $e) {
+            log_message('error', 'Verification email exception: {msg}', ['msg' => $e->getMessage()]);
+        }
+    }
+
+    protected function processResendVerification(): ResponseInterface
+    {
+        if (! $this->validate(['email' => 'required|valid_email'])) {
+            return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
+        }
+
+        $users = model(UserModel::class);
+        $email = (string) $this->request->getPost('email');
+        $user  = $users->findByEmail($email);
+
+        if ($user === null) {
+            return redirect()->to('/login')->with('info', 'If that email exists, a verification link has been sent.');
+        }
+
+        if ($this->isEmailVerified($user)) {
+            return redirect()->to('/login')->with('success', 'This email is already verified. You can sign in.');
+        }
+
+        $token = bin2hex(random_bytes(32));
+        $users->update((int) $user['id'], [
+            'email_verification_token'   => $token,
+            'email_verification_sent_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        $freshUser = $users->find((int) $user['id']);
+        if (is_array($freshUser)) {
+            $this->sendVerificationEmail($freshUser);
+        }
+
+        return redirect()->to('/login')->with('success', 'Verification email sent. Please check your inbox.');
+    }
+
+    /**
+     * @param array<string, mixed> $user
+     */
+    protected function isEmailVerified(array $user): bool
+    {
+        return trim((string) ($user['email_verified_at'] ?? '')) !== '';
+    }
+
+    /**
+     * @param array<string, mixed> $user
+     */
+    protected function maybeResendVerificationEmail(array $user): void
+    {
+        $lastSent = trim((string) ($user['email_verification_sent_at'] ?? ''));
+        if ($lastSent !== '' && strtotime($lastSent) !== false && (time() - (int) strtotime($lastSent)) < 300) {
+            return;
+        }
+
+        $users = model(UserModel::class);
+        $token = trim((string) ($user['email_verification_token'] ?? ''));
+        if ($token === '') {
+            $token = bin2hex(random_bytes(32));
+        }
+
+        $users->update((int) $user['id'], [
+            'email_verification_token'   => $token,
+            'email_verification_sent_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        $freshUser = $users->find((int) $user['id']);
+        if (is_array($freshUser)) {
+            $this->sendVerificationEmail($freshUser);
+        }
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    protected function resolveSignupRole(): ?array
+    {
+        $roles = model(RoleModel::class);
+
+        return $roles->findBySlug('agent')
+            ?? $roles->findBySlug('manager')
+            ?? $roles->findBySlug('admin')
+            ?? $roles->first();
     }
 
     protected function isRateLimited(string $key): bool

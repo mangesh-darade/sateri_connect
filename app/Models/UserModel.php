@@ -19,6 +19,9 @@ class UserModel extends Model
         'name',
         'email',
         'password',
+        'email_verification_token',
+        'email_verification_sent_at',
+        'email_verified_at',
         'phone',
         'avatar',
         'status',
@@ -63,7 +66,7 @@ class UserModel extends Model
             return $data;
         }
 
-        if (password_get_info($data['data']['password'])['algo'] === 0) {
+        if (password_get_info($data['data']['password'])['algo'] === null) {
             $data['data']['password'] = password_hash($data['data']['password'], PASSWORD_DEFAULT);
         }
 
@@ -86,5 +89,15 @@ class UserModel extends Model
     public function getActiveUsers(): array
     {
         return $this->where('status', 'active')->orderBy('name', 'ASC')->findAll();
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function findByVerificationToken(string $token): ?array
+    {
+        $row = $this->where('email_verification_token', $token)->first();
+
+        return is_array($row) ? $row : null;
     }
 }

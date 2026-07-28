@@ -10,21 +10,21 @@ $email = $email ?? ['summary' => [], 'charts' => [], 'campaigns' => [], 'logs' =
 $waSum = $wa['summary'] ?? [];
 $emailSum = $email['summary'] ?? [];
 ?>
-<div class="page-list analytics-page" id="analyticsPage">
-    <div class="em-hero mb-3">
-        <div>
-            <h4 class="mb-1">Global Analytics</h4>
-            <p class="text-muted small mb-0">WhatsApp delivery + Email send performance in one place.</p>
+<div class="page-list analytics-page page-stack" id="analyticsPage">
+    <div class="card">
+        <div class="card-body py-3">
+            <form method="get" action="<?= site_url('analytics') ?>" class="filter-bar mb-0">
+                <input type="hidden" name="tab" value="<?= esc($activeTab) ?>">
+                <input type="date" name="from" class="form-control form-control-sm" style="max-width:150px" value="<?= $from ?>" title="From">
+                <input type="date" name="to" class="form-control form-control-sm" style="max-width:150px" value="<?= $to ?>" title="To">
+                <div class="filter-bar-actions">
+                    <button type="submit" class="btn btn-wa btn-sm"><i class="fas fa-filter me-1"></i> Apply</button>
+                </div>
+            </form>
         </div>
-        <form method="get" action="<?= site_url('analytics') ?>" class="filter-bar">
-            <input type="hidden" name="tab" value="<?= esc($activeTab) ?>">
-            <input type="date" name="from" class="form-control form-control-sm" style="max-width:150px" value="<?= $from ?>">
-            <input type="date" name="to" class="form-control form-control-sm" style="max-width:150px" value="<?= $to ?>">
-            <button type="submit" class="btn btn-wa btn-sm"><i class="fas fa-filter me-1"></i> Apply</button>
-        </form>
     </div>
 
-    <ul class="nav nav-tabs em-tabs mb-3">
+    <ul class="nav nav-tabs em-tabs">
         <li class="nav-item">
             <a class="nav-link <?= $activeTab === 'whatsapp' ? 'active' : '' ?>"
                href="<?= site_url('analytics?tab=whatsapp&from=' . urlencode($from) . '&to=' . urlencode($to)) ?>">
@@ -40,7 +40,11 @@ $emailSum = $email['summary'] ?? [];
     </ul>
 
     <?php if ($activeTab === 'whatsapp'): ?>
-        <div class="row g-2 mb-2">
+        <div class="page-section">
+            <div class="page-section-head">
+                <h2 class="page-section-title">Delivery snapshot</h2>
+            </div>
+            <div class="row g-2">
             <?php
             $cards = [
                 ['Sent', $waSum['sent'] ?? 0, 'kpi-accent-teal'],
@@ -58,9 +62,10 @@ $emailSum = $email['summary'] ?? [];
                 </div>
             </div>
             <?php endforeach; ?>
+            </div>
         </div>
 
-        <div class="row g-2 mb-2">
+        <div class="row g-2">
             <div class="col-lg-8">
                 <div class="dash-panel">
                     <div class="panel-head"><h3>WhatsApp delivery trend</h3></div>
@@ -132,7 +137,11 @@ $emailSum = $email['summary'] ?? [];
         </div>
 
     <?php else: ?>
-        <div class="row g-2 mb-2">
+        <div class="page-section">
+            <div class="page-section-head">
+                <h2 class="page-section-title">Email snapshot</h2>
+            </div>
+            <div class="row g-2">
             <?php
             $cards = [
                 ['Total logs', $emailSum['total'] ?? 0, 'kpi-accent-teal'],
@@ -149,9 +158,10 @@ $emailSum = $email['summary'] ?? [];
                 </div>
             </div>
             <?php endforeach; ?>
+            </div>
         </div>
 
-        <div class="row g-2 mb-2">
+        <div class="row g-2">
             <div class="col-lg-8">
                 <div class="dash-panel">
                     <div class="panel-head"><h3>Email send trend</h3></div>

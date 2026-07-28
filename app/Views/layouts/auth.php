@@ -10,6 +10,9 @@
     $appTagline  = function_exists('setting') ? (string) setting('app_tagline', 'Automation console') : 'Automation console';
     $siteLogo    = function_exists('setting_asset_url') ? setting_asset_url('site_logo') : '';
     $siteFavicon = function_exists('setting_asset_url') ? setting_asset_url('site_favicon') : '';
+    if ($siteFavicon === '' && $siteLogo !== '') {
+        $siteFavicon = $siteLogo;
+    }
     ?>
     <title><?= esc($title ?? 'Login') ?> | <?= esc($appName) ?></title>
     <?php if ($siteFavicon !== ''): ?>
@@ -58,6 +61,29 @@
     };
 </script>
 <script src="<?= base_url('assets/js/app.js') ?>"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-password-toggle]').forEach(function (button) {
+        var target = document.querySelector(button.getAttribute('data-password-toggle'));
+        if (!target) {
+            return;
+        }
+
+        var icon = button.querySelector('i');
+        button.addEventListener('click', function () {
+            var isHidden = target.type === 'password';
+            target.type = isHidden ? 'text' : 'password';
+            button.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+            button.setAttribute('aria-pressed', isHidden ? 'true' : 'false');
+
+            if (icon) {
+                icon.classList.toggle('fa-eye', !isHidden);
+                icon.classList.toggle('fa-eye-slash', isHidden);
+            }
+        });
+    });
+});
+</script>
 <?= $this->renderSection('scripts') ?>
 </body>
 </html>

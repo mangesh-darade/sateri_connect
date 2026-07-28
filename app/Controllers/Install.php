@@ -142,14 +142,11 @@ class Install extends Controller
             $baseURL .= '/';
         }
 
+        // Strip legacy database.default.* — credentials belong in Config\Database only.
+        $content = preg_replace('/^#?\s*database\.default\.[A-Za-z0-9_]+\s*=.*\R?/m', '', $content) ?? $content;
+
         $replacements = [
-            'database.default.hostname' => $hostname,
-            'database.default.database' => $database,
-            'database.default.username' => $username,
-            'database.default.password' => $password,
-            'database.default.DBDriver' => $driver,
-            'database.default.port'     => $port,
-            'app.baseURL'               => $baseURL,
+            'app.baseURL' => $baseURL,
         ];
 
         foreach ($replacements as $key => $value) {
@@ -176,9 +173,52 @@ class Install extends Controller
             return redirect()->back()->withInput()->with('error', 'Unable to write .env file. Check permissions.');
         }
 
+        if (! $this->writeLocalDatabaseConfig($hostname, $username, $password, $database, $driver, (int) $port)) {
+            return redirect()->back()->withInput()->with('error', 'Unable to write app/Config/Database.php. Check permissions.');
+        }
+
         session()->set('install_db_ok', true);
 
         return redirect()->to('/install/migrate')->with('success', 'Database configuration saved.');
+    }
+
+    /**
+     * Persist install DB credentials into Config\Database::applyBySubdomain localhost case.
+     */
+    protected function writeLocalDatabaseConfig(
+        string $hostname,
+        string $username,
+        string $password,
+        string $database,
+        string $driver,
+        int $port,
+    ): bool {
+        $path = APPPATH . 'Config' . DIRECTORY_SEPARATOR . 'Database.php';
+        if (! is_file($path) || ! is_writable($path)) {
+            return false;
+        }
+
+        $source = (string) file_get_contents($path);
+        $block  = "            case 'localhost':\n"
+            . "                \$this->default['hostname'] = " . var_export($hostname, true) . ";\n"
+            . "                \$this->default['username'] = " . var_export($username, true) . ";\n"
+            . "                \$this->default['password'] = " . var_export($password, true) . ";\n"
+            . "                \$this->default['database'] = " . var_export($database, true) . ";\n"
+            . "                \$this->default['DBDriver'] = " . var_export($driver, true) . ";\n"
+            . "                \$this->default['port']     = " . $port . ";\n"
+            . '                break;';
+
+        $pattern = "/case\\s+'localhost'\\s*:.*?break\\s*;/s";
+        if (! preg_match($pattern, $source)) {
+            return false;
+        }
+
+        $updated = preg_replace($pattern, $block, $source, 1);
+        if (! is_string($updated) || $updated === '') {
+            return false;
+        }
+
+        return file_put_contents($path, $updated) !== false;
     }
 
     public function migrate(): string|ResponseInterface
@@ -267,11 +307,12 @@ class Install extends Controller
             $existing = $users->findByEmail($email);
 
             $data = [
-                'name'     => $this->request->getPost('name'),
-                'email'    => $email,
-                'password' => $this->request->getPost('password'),
-                'role_id'  => (int) $role['id'],
-                'status'   => 'active',
+                'name'              => $this->request->getPost('name'),
+                'email'             => $email,
+                'password'          => $this->request->getPost('password'),
+                'role_id'           => (int) $role['id'],
+                'status'            => 'active',
+                'email_verified_at' => date('Y-m-d H:i:s'),
             ];
 
             if ($existing !== null) {

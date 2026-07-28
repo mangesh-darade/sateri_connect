@@ -810,11 +810,25 @@ class MetaCloudAPI
      */
     protected function extractApiError(array $decoded): string
     {
-        if (isset($decoded['error']['message'])) {
-            return (string) $decoded['error']['message'];
+        if (isset($decoded['error']) && is_array($decoded['error'])) {
+            $error = $decoded['error'];
+            $parts = array_filter([
+                isset($error['message']) ? (string) $error['message'] : null,
+                isset($error['error_user_title']) ? (string) $error['error_user_title'] : null,
+                isset($error['error_user_msg']) ? (string) $error['error_user_msg'] : null,
+                isset($error['error_data']['details']) ? (string) $error['error_data']['details'] : null,
+            ]);
+
+            return implode(' | ', $parts) ?: 'Unknown error';
         }
-        if (isset($decoded['message'])) {
-            return (string) $decoded['message'];
+
+        $flatParts = array_filter([
+            isset($decoded['message']) && is_string($decoded['message']) ? $decoded['message'] : null,
+            isset($decoded['error_user_title']) && is_string($decoded['error_user_title']) ? $decoded['error_user_title'] : null,
+            isset($decoded['error_user_msg']) && is_string($decoded['error_user_msg']) ? $decoded['error_user_msg'] : null,
+        ]);
+        if ($flatParts !== []) {
+            return implode(' | ', $flatParts);
         }
 
         return 'Unknown error';

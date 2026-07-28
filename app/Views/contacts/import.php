@@ -1,12 +1,10 @@
 <?= $this->extend('layouts/main') ?>
 
-<?= $this->section('content') ?>
-<div class="page-toolbar">
-    <div class="toolbar-actions">
-        <a href="<?= site_url('contacts') ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i> Back</a>
-    </div>
-</div>
+<?= $this->section('header_actions') ?>
+<a href="<?= site_url('contacts') ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i> Back</a>
+<?= $this->endSection() ?>
 
+<?= $this->section('content') ?>
 <div class="card">
     <div class="card-header">
         <h3 class="card-title">Import contacts</h3>

@@ -21,10 +21,9 @@ $val = static function (array $source, string $key, string $default = '') {
 $providerLabel = $isMeta ? 'Meta Cloud API' : 'Cheerio Direct API';
 $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheerio Email API' : 'SMTP');
 ?>
-<div class="settings-shell">
+<div class="settings-shell page-stack">
     <div class="settings-intro">
-        <p class="settings-intro-lead mb-0">Messaging, email, branding, and inbound webhooks — pick a tab above.</p>
-        <div class="settings-intro-meta">
+        <div class="settings-intro-meta mb-0">
             <span class="settings-pill">
                 <span class="settings-pill-dot"></span>
                 WhatsApp: <strong><?= esc($isMeta ? 'Meta' : 'Cheerio') ?></strong>
@@ -32,6 +31,7 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
             <span class="settings-pill settings-pill-muted">
                 Email: <strong><?= esc($emailProviderLabel) ?></strong>
             </span>
+            <span class="small text-muted ms-md-1">Pick a section on the left to edit.</span>
         </div>
     </div>
 
@@ -423,6 +423,7 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                         <?php
                         $logoUrl    = ! empty($app['site_logo']) ? base_url(ltrim((string) $app['site_logo'], '/')) : '';
                         $faviconUrl = ! empty($app['site_favicon']) ? base_url(ltrim((string) $app['site_favicon'], '/')) : '';
+                        $effectiveFaviconUrl = $faviconUrl !== '' ? $faviconUrl : $logoUrl;
                         ?>
                         <div class="settings-panel mb-3">
                             <h6 class="settings-panel-label">Branding</h6>
@@ -454,14 +455,18 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Favicon</label>
                                     <input type="file" name="site_favicon" class="form-control" accept=".ico,.png,.jpg,.jpeg,.webp,.gif,image/png,image/x-icon,image/jpeg,image/webp,image/gif">
-                                    <div class="form-text">ICO or PNG · max 512 KB. Browser tab icon.</div>
-                                    <?php if ($faviconUrl !== ''): ?>
+                                    <div class="form-text">ICO or PNG · max 512 KB. Browser tab icon. If empty, site logo will be used automatically.</div>
+                                    <?php if ($effectiveFaviconUrl !== ''): ?>
                                         <div class="d-flex align-items-center gap-3 mt-2 branding-preview">
-                                            <img src="<?= esc($faviconUrl) ?>" alt="Favicon preview" class="branding-preview-favicon">
-                                            <div class="form-check mb-0">
-                                                <input class="form-check-input" type="checkbox" name="remove_site_favicon" value="1" id="removeSiteFavicon">
-                                                <label class="form-check-label" for="removeSiteFavicon">Remove favicon</label>
-                                            </div>
+                                            <img src="<?= esc($effectiveFaviconUrl) ?>" alt="Favicon preview" class="branding-preview-favicon">
+                                            <?php if ($faviconUrl !== ''): ?>
+                                                <div class="form-check mb-0">
+                                                    <input class="form-check-input" type="checkbox" name="remove_site_favicon" value="1" id="removeSiteFavicon">
+                                                    <label class="form-check-label" for="removeSiteFavicon">Remove favicon</label>
+                                                </div>
+                                            <?php else: ?>
+                                                <span class="form-text mb-0">Using site logo as favicon.</span>
+                                            <?php endif; ?>
                                         </div>
                                     <?php endif; ?>
                                 </div>

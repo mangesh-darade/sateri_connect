@@ -19,6 +19,9 @@
         <div class="auth-field">
             <i class="fas fa-lock" aria-hidden="true"></i>
             <input type="password" id="password" name="password" class="form-control" placeholder="••••••••" required>
+            <button type="button" class="auth-password-toggle" data-password-toggle="#password" aria-label="Show password" aria-pressed="false">
+                <i class="fas fa-eye" aria-hidden="true"></i>
+            </button>
         </div>
     </div>
     <div class="auth-form-row">
@@ -30,4 +33,7 @@
     </div>
     <button type="submit" class="btn btn-wa auth-submit"><i class="fas fa-arrow-right-to-bracket me-1"></i> Sign in</button>
 </form>
+<div class="auth-links">
+    <a href="<?= site_url('signup') ?>">Create a new account</a>
+</div>
 <?= $this->endSection() ?>

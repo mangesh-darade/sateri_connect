@@ -1,5 +1,18 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_actions') ?>
+<?php
+$automation = $automation ?? [];
+$isEdit = ! empty($automation['id']);
+?>
+<?php if ($isEdit): ?>
+    <a href="<?= site_url('automations/' . (int) $automation['id'] . '/builder') ?>" class="btn btn-sm btn-wa">
+        <i class="fas fa-project-diagram me-1"></i> Open builder
+    </a>
+<?php endif; ?>
+<a href="<?= site_url('automations') ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i> Back</a>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <?php
 $automation = $automation ?? [];
@@ -18,20 +31,6 @@ $triggerValue  = $hasFormErrors && old('trigger_type') !== null
 ?>
 <div class="form-shell form-shell-lg">
 <div class="card form-card" id="automationBuilder">
-    <div class="card-header">
-        <h3 class="card-title mb-0"><?php
-            if ($isEdit) {
-                echo 'Edit: ' . esc($automation['name'] ?? 'automation');
-            } else {
-                echo 'Create automation';
-            }
-        ?></h3>
-        <?php if ($isEdit): ?>
-            <a href="<?= site_url('automations/' . (int) $automation['id'] . '/builder') ?>" class="btn btn-sm btn-wa">
-                <i class="fas fa-project-diagram me-1"></i> Open builder
-            </a>
-        <?php endif; ?>
-    </div>
     <form action="<?= $action ?>" method="post">
         <?= csrf_field() ?>
         <div class="card-body">

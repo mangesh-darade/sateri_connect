@@ -19,6 +19,7 @@ class TemplateModel extends Model
         'name',
         'language',
         'category',
+        'template_type',
         'status',
         'header_type',
         'header_content',
@@ -39,9 +40,10 @@ class TemplateModel extends Model
     protected $updatedField  = 'updated_at';
 
     protected $validationRules = [
-        'name'     => 'required|max_length[191]',
-        'language' => 'permit_empty|max_length[20]',
-        'status'   => 'permit_empty|max_length[50]',
+        'name'          => 'required|max_length[191]',
+        'language'      => 'permit_empty|max_length[20]',
+        'template_type' => 'permit_empty|in_list[default,carousel]',
+        'status'        => 'permit_empty|max_length[50]',
     ];
 
     protected $validationMessages   = [];

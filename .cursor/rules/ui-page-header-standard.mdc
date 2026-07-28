@@ -1,0 +1,58 @@
+---
+description: Standard page header + section body layout for all app screens
+globs: app/Views/**/*.php
+alwaysApply: false
+---
+
+# Page Header Standard
+
+Use one header format on every non-fullBleed screen (`layouts/main.php`):
+
+1. **Left top:** breadcrumb `Home / {Page}`
+2. **Left:** page title + provider chip (Cheerio/Meta)
+3. **Right:** primary page actions (`header_actions` section)
+
+## Body sections (below the header)
+
+Wrap page content in `.page-list` (or `.page-stack`). Stack blocks with consistent gap (`--section-gap`):
+
+1. **Filters** — one `.card` with `.filter-bar` (placeholders/`title`, not field labels)
+2. **Hints** — slim `.page-hint` when needed (never a second toolbar)
+3. **Main content** — `.card` with optional `.card-header` title, or `.dash-panel` for charts
+4. **Named groups** — `.page-section` + `.page-section-title` for KPI/chart groups
+
+## Do
+
+- Put Create / Sync / Export / Refresh / New buttons in `<?= $this->section('header_actions') ?>`
+- Keep filters, search, and secondary controls in the page body (card/filter bar)
+- Keep one title only — never duplicate the page `h1` inside content
+- Prefer `.page-list` gap over ad-hoc `mb-2` / `mb-3` between sections
+
+## Don't
+
+- Do not put primary actions in a separate `page-toolbar` under the title
+- Do not right-align the breadcrumb
+- Do not invent a second page title row
+- Do not mix Bootstrap filter rows with `.filter-bar` on the same screen type
+
+## Example
+
+```php
+<?= $this->extend('layouts/main') ?>
+
+<?= $this->section('header_actions') ?>
+<a href="<?= site_url('contacts/create') ?>" class="btn btn-wa btn-sm">Add contact</a>
+<?= $this->endSection() ?>
+
+<?= $this->section('content') ?>
+<div class="page-list">
+  <div class="card">
+    <div class="card-header"><h2 class="card-title mb-0">All contacts</h2></div>
+    <div class="card-body py-3">
+      <div class="filter-bar">...</div>
+      <table>...</table>
+    </div>
+  </div>
+</div>
+<?= $this->endSection() ?>
+```

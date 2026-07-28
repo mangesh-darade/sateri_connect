@@ -72,12 +72,13 @@ class Users extends BaseController
         }
 
         $id = model(UserModel::class)->insert([
-            'name'     => $this->request->getPost('name'),
-            'email'    => $this->request->getPost('email'),
-            'password' => $this->request->getPost('password'),
-            'phone'    => $this->request->getPost('phone') ?: null,
-            'role_id'  => $roleId,
-            'status'   => $this->request->getPost('status') ?: 'active',
+            'name'              => $this->request->getPost('name'),
+            'email'             => $this->request->getPost('email'),
+            'password'          => $this->request->getPost('password'),
+            'phone'             => $this->request->getPost('phone') ?: null,
+            'role_id'           => $roleId,
+            'status'            => $this->request->getPost('status') ?: 'active',
+            'email_verified_at' => date('Y-m-d H:i:s'),
         ]);
 
         if (! $id) {

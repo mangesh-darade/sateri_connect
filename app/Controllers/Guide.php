@@ -54,6 +54,7 @@ class Guide extends BaseController
         if (! is_file($path)) {
             return $this->render('guide/index', [
                 'pageTitle'  => $meta['title'],
+                'subtitle'   => $meta['subtitle'],
                 'guideType'  => $type,
                 'guideTitle' => $meta['title'],
                 'guideSub'   => $meta['subtitle'],
@@ -80,6 +81,7 @@ class Guide extends BaseController
 
         return $this->render('guide/index', [
             'pageTitle'  => $meta['title'],
+            'subtitle'   => $meta['subtitle'],
             'guideType'  => $type,
             'guideTitle' => $meta['title'],
             'guideSub'   => $meta['subtitle'],
@@ -125,6 +127,7 @@ class Guide extends BaseController
 
         return $this->render('guide/automations', [
             'pageTitle'     => 'Automation Flows Guide',
+            'subtitle'      => $this->guides['automations']['subtitle'],
             'provider'      => $provider,
             'providerLabel' => $provider === 'meta' ? 'Meta Cloud API' : 'Cheerio Direct API',
             'flows'         => $flows,

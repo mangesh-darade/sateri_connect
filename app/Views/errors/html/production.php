@@ -1,25 +1,16 @@
-<!doctype html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="robots" content="noindex">
+<?php
 
-    <title><?= lang('Errors.whoops') ?></title>
+use App\Libraries\ErrorPresenter;
 
-    <style>
-        <?= preg_replace('#[\r\n\t ]+#', ' ', file_get_contents(__DIR__ . DIRECTORY_SEPARATOR . 'debug.css')) ?>
-    </style>
-</head>
-<body>
+$error = ErrorPresenter::manual([
+    'kind'     => 'generic',
+    'title'    => 'Something went wrong',
+    'headline' => 'We hit a snag',
+    'message'  => 'An unexpected error stopped this page from loading. Please try again in a moment.',
+    'hint'     => 'If this keeps happening, contact your administrator.',
+    'icon'     => 'fa-triangle-exclamation',
+    'code'     => (int) ($code ?? 500),
+    'show_details' => false,
+]);
 
-    <div class="container text-center">
-
-        <h1 class="headline"><?= lang('Errors.whoops') ?></h1>
-
-        <p class="lead"><?= lang('Errors.weHitASnag') ?></p>
-
-    </div>
-
-</body>
-
-</html>
+include __DIR__ . DIRECTORY_SEPARATOR . 'app_error.php';

@@ -1,5 +1,16 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_actions') ?>
+<?php
+$canSend = function_exists('can') && can('emails.send');
+?>
+<?php if ($canSend): ?>
+    <a href="<?= site_url('emails/send') ?>" class="btn btn-sm btn-outline-secondary"><i class="fas fa-paper-plane me-1"></i> Quick single</a>
+    <a href="<?= site_url('emails/bulk') ?>" class="btn btn-sm btn-outline-secondary"><i class="fas fa-mail-bulk me-1"></i> Quick bulk</a>
+<?php endif; ?>
+<a href="<?= site_url('analytics?tab=email') ?>" class="btn btn-sm btn-wa"><i class="fas fa-chart-pie me-1"></i> Email analytics</a>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <?php
 $activeTab = $activeTab ?? 'builder';
@@ -17,28 +28,19 @@ $tabUrl = static fn (string $t): string => site_url('email-manager?tab=' . $t);
      data-can-send="<?= $canSend ? '1' : '0' ?>"
      data-is-cheerio="<?= $isCheerio ? '1' : '0' ?>">
 
-    <div class="em-hero mb-3">
-        <div>
-            <h4 class="mb-1">Email Manager</h4>
-            <p class="text-muted small mb-0">
-                Builder · Drips · Verifier · HTML campaigns · Sender &amp; Domain IDs
-                · via <strong><?= esc($providerLabel) ?></strong>
-                <?php if ($isCheerio): ?>
-                    <span class="badge text-bg-success ms-1">Cheerio</span>
-                <?php endif; ?>
-            </p>
-        </div>
-        <div class="d-flex gap-2 flex-wrap">
-            <?php if ($canSend): ?>
-                <a href="<?= site_url('emails/send') ?>" class="btn btn-sm btn-outline-secondary"><i class="fas fa-paper-plane me-1"></i> Quick single</a>
-                <a href="<?= site_url('emails/bulk') ?>" class="btn btn-sm btn-outline-secondary"><i class="fas fa-mail-bulk me-1"></i> Quick bulk</a>
+    <div class="page-hint">
+        <i class="fas fa-info-circle" aria-hidden="true"></i>
+        <span>
+            Builder · Drips · Verifier · HTML campaigns · Sender &amp; Domain IDs
+            · via <strong><?= esc($providerLabel) ?></strong>
+            <?php if ($isCheerio): ?>
+                <span class="badge text-bg-success ms-1">Cheerio</span>
             <?php endif; ?>
-            <a href="<?= site_url('analytics?tab=email') ?>" class="btn btn-sm btn-wa"><i class="fas fa-chart-pie me-1"></i> Email analytics</a>
-        </div>
+        </span>
     </div>
 
     <?php if ($isCheerio): ?>
-    <div class="alert alert-light border mb-3 py-2 small">
+    <div class="alert alert-light border py-2 small mb-0">
         <i class="fas fa-info-circle text-success me-1"></i>
         Cheerio sends use <code>single-email/send</code> &amp; <code>label-email/send</code>.
         Sender ID must be <strong>verified in Cheerio Dashboard</strong> for inbox delivery.

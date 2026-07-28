@@ -34,6 +34,19 @@ class CreateUsers extends Migration
                 'type'       => 'VARCHAR',
                 'constraint' => 255,
             ],
+            'email_verification_token' => [
+                'type'       => 'VARCHAR',
+                'constraint' => 64,
+                'null'       => true,
+            ],
+            'email_verification_sent_at' => [
+                'type' => 'DATETIME',
+                'null' => true,
+            ],
+            'email_verified_at' => [
+                'type' => 'DATETIME',
+                'null' => true,
+            ],
             'phone' => [
                 'type'       => 'VARCHAR',
                 'constraint' => 30,
@@ -74,8 +87,10 @@ class CreateUsers extends Migration
 
         $this->forge->addKey('id', true);
         $this->forge->addUniqueKey('email');
+        $this->forge->addUniqueKey('email_verification_token');
         $this->forge->addKey('role_id');
         $this->forge->addKey('status');
+        $this->forge->addKey('email_verified_at');
         $this->forge->addKey('deleted_at');
         $this->forge->addForeignKey('role_id', 'roles', 'id', 'RESTRICT', 'CASCADE');
         $this->forge->createTable('users', true);

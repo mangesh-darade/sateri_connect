@@ -9,7 +9,7 @@ use CodeIgniter\CLI\CLI;
 use Throwable;
 
 /**
- * Idempotent: add missing omnichannel/live-chat columns (channel, etc.).
+ * Idempotent: add missing omnichannel/live-chat and template columns.
  * Safe to run on production when migrate history is behind.
  *
  *   php spark whatsapp:ensure-schema
@@ -18,7 +18,7 @@ class EnsureWhatsAppSchema extends BaseCommand
 {
     protected $group       = 'WhatsApp';
     protected $name        = 'whatsapp:ensure-schema';
-    protected $description = 'Add missing channel/external_id columns for Live Chat (safe to re-run).';
+    protected $description = 'Add missing channel/external_id and template_type columns (safe to re-run).';
     protected $usage       = 'whatsapp:ensure-schema';
 
     public function run(array $params)
@@ -39,6 +39,9 @@ class EnsureWhatsAppSchema extends BaseCommand
                 'channel' => "VARCHAR(20) NOT NULL DEFAULT 'whatsapp'",
                 'external_message_id' => 'VARCHAR(191) NULL DEFAULT NULL',
             ],
+            'templates' => [
+                'template_type' => "VARCHAR(30) NOT NULL DEFAULT 'default'",
+            ],
         ];
 
         $after = [
@@ -48,6 +51,7 @@ class EnsureWhatsAppSchema extends BaseCommand
             'conversations.page_id'         => 'channel',
             'messages.channel'              => 'conversation_id',
             'messages.external_message_id'  => 'wamid',
+            'templates.template_type'       => 'category',
         ];
 
         foreach ($columns as $table => $defs) {
@@ -89,6 +93,9 @@ class EnsureWhatsAppSchema extends BaseCommand
             );
             $db->query("UPDATE `conversations` SET `channel` = 'whatsapp' WHERE `channel` IS NULL OR `channel` = ''");
             $db->query("UPDATE `messages` SET `channel` = 'whatsapp' WHERE `channel` IS NULL OR `channel` = ''");
+            if ($db->fieldExists('template_type', 'templates')) {
+                $db->query("UPDATE `templates` SET `template_type` = 'default' WHERE `template_type` IS NULL OR `template_type` = ''");
+            }
             if ($db->fieldExists('external_message_id', 'messages')) {
                 $db->query(
                     "UPDATE `messages`

@@ -1,8 +1,17 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_actions') ?>
+<button type="button" class="btn btn-sm btn-outline-secondary" id="btnRefreshQueue"><i class="fas fa-sync me-1"></i> Refresh</button>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <div class="page-list">
-<div class="row g-2 mb-2" id="queueStats">
+<div class="page-section">
+    <div class="page-section-head">
+        <h2 class="page-section-title">Queue health</h2>
+        <p class="page-section-sub">Live counts by status</p>
+    </div>
+    <div class="row g-2" id="queueStats">
     <?php
     $qs = $stats ?? [];
     $map = [
@@ -23,14 +32,12 @@
     </div>
     <?php endforeach; ?>
 </div>
-
-<div class="page-toolbar">
-    <div class="toolbar-actions ms-auto">
-        <button type="button" class="btn btn-sm btn-outline-secondary" id="btnRefreshQueue"><i class="fas fa-sync me-1"></i> Refresh</button>
-    </div>
 </div>
 
 <div class="card">
+    <div class="card-header">
+        <h2 class="card-title mb-0">Queue jobs</h2>
+    </div>
     <div class="card-body py-3">
         <div class="filter-bar">
             <select id="queueStatusFilter" class="form-select form-select-sm" style="max-width:160px">

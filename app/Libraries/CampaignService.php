@@ -302,6 +302,141 @@ class CampaignService
     }
 
     /**
+     * Resolve tag/contact audience and apply optional attribute filters.
+     *
+     * @param list<int> $tagIds
+     * @param list<int> $contactIds
+     * @param list<array{name?:string,condition?:string,value?:string}> $attributes
+     *
+     * @return array{
+     *     contacts: list<array<string,mixed>>,
+     *     contact_ids: list<int>,
+     *     phone_count: int,
+     *     email_count: int,
+     *     total: int,
+     *     sample: list<array<string,mixed>>
+     * }
+     */
+    public function previewAudience(array $tagIds = [], array $contactIds = [], array $attributes = [], bool $allActive = false): array
+    {
+        $contacts = $this->resolveContacts(
+            $contactIds !== [] ? $contactIds : null,
+            $tagIds !== [] ? $tagIds : null,
+            $allActive
+        );
+        $contacts = $this->filterContactsByAttributes($contacts, $attributes);
+
+        $phoneCount = 0;
+        $emailCount = 0;
+        $ids        = [];
+        foreach ($contacts as $contact) {
+            $ids[] = (int) $contact['id'];
+            if (trim((string) ($contact['mobile'] ?? '')) !== '') {
+                $phoneCount++;
+            }
+            if (trim((string) ($contact['email'] ?? '')) !== '' && filter_var((string) $contact['email'], FILTER_VALIDATE_EMAIL)) {
+                $emailCount++;
+            }
+        }
+
+        $sample = array_slice(array_map(static fn (array $c): array => [
+            'id'     => (int) ($c['id'] ?? 0),
+            'name'   => (string) ($c['name'] ?? ''),
+            'mobile' => (string) ($c['mobile'] ?? ''),
+            'email'  => (string) ($c['email'] ?? ''),
+        ], $contacts), 0, 10);
+
+        return [
+            'contacts'     => $contacts,
+            'contact_ids'  => $ids,
+            'phone_count'  => $phoneCount,
+            'email_count'  => $emailCount,
+            'total'        => count($contacts),
+            'sample'       => $sample,
+        ];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $contacts
+     * @param list<array{name?:string,condition?:string,value?:string}> $attributes
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function filterContactsByAttributes(array $contacts, array $attributes): array
+    {
+        $rules = [];
+        foreach ($attributes as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $name = strtolower(trim((string) ($row['name'] ?? $row['attribute'] ?? '')));
+            $value = trim((string) ($row['value'] ?? ''));
+            $condition = strtolower(trim((string) ($row['condition'] ?? 'equals')));
+            if ($name === '' || $value === '') {
+                continue;
+            }
+            if (! in_array($condition, ['equals', 'contains', 'not_equals', 'starts_with'], true)) {
+                $condition = 'equals';
+            }
+            $rules[] = compact('name', 'value', 'condition');
+        }
+
+        if ($rules === []) {
+            return array_values($contacts);
+        }
+
+        $out = [];
+        foreach ($contacts as $contact) {
+            if ($this->contactMatchesAttributes($contact, $rules)) {
+                $out[] = $contact;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param array<string, mixed> $contact
+     * @param list<array{name:string,value:string,condition:string}> $rules
+     */
+    protected function contactMatchesAttributes(array $contact, array $rules): bool
+    {
+        $custom = $contact['custom_fields'] ?? [];
+        if (is_string($custom)) {
+            $decoded = json_decode($custom, true);
+            $custom  = is_array($decoded) ? $decoded : [];
+        }
+        if (! is_array($custom)) {
+            $custom = [];
+        }
+
+        foreach ($rules as $rule) {
+            $field = $rule['name'];
+            $haystack = match ($field) {
+                'name'   => (string) ($contact['name'] ?? ''),
+                'mobile', 'phone' => (string) ($contact['mobile'] ?? ''),
+                'email'  => (string) ($contact['email'] ?? ''),
+                'status' => (string) ($contact['status'] ?? ''),
+                default  => (string) ($custom[$field] ?? $contact[$field] ?? ''),
+            };
+
+            $needle = $rule['value'];
+            $ok     = match ($rule['condition']) {
+                'contains'    => stripos($haystack, $needle) !== false,
+                'starts_with' => stripos($haystack, $needle) === 0,
+                'not_equals'  => strcasecmp($haystack, $needle) !== 0,
+                default       => strcasecmp($haystack, $needle) === 0,
+            };
+
+            if (! $ok) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Preview campaign recipient count and sample payload.
      *
      * @param list<int>|null $contactIds

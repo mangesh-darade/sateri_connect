@@ -17,9 +17,6 @@ if (is_array($first) && array_is_list($permissions) && isset($first['slug'])) {
 }
 ?>
 <div class="card">
-    <div class="card-header">
-        <h3 class="card-title mb-0">Roles & permissions</h3>
-    </div>
     <form action="<?= site_url('roles/update') ?>" method="post">
         <?= csrf_field() ?>
         <div class="card-body p-0">

@@ -71,14 +71,53 @@ class CheerioDirectAPI
                 if ($isMultipart && $data !== null) {
                     $multipart = [];
                     foreach ($data as $name => $value) {
-                        if (is_array($value) && isset($value['contents'])) {
-                            $multipart[] = array_merge(['name' => $name], $value);
-                        } else {
-                            $multipart[] = [
-                                'name'     => $name,
-                                'contents' => is_scalar($value) ? (string) $value : json_encode($value),
-                            ];
+                        if ($value instanceof \CURLFile) {
+                            $multipart[$name] = $value;
+                            continue;
                         }
+
+                        // Guzzle-style part: ['contents' => ..., 'filename' => ..., 'headers' => ...]
+                        if (is_array($value) && array_key_exists('contents', $value)) {
+                            $contents = $value['contents'];
+                            $filename = (string) ($value['filename'] ?? $name);
+                            $mime     = 'application/octet-stream';
+                            if (isset($value['headers']['Content-Type']) && is_string($value['headers']['Content-Type'])) {
+                                $mime = $value['headers']['Content-Type'];
+                            }
+
+                            if (is_resource($contents)) {
+                                $meta = stream_get_meta_data($contents);
+                                $uri  = is_string($meta['uri'] ?? null) ? $meta['uri'] : '';
+                                if ($uri !== '' && is_file($uri)) {
+                                    $multipart[$name] = new \CURLFile($uri, $mime, $filename);
+                                } else {
+                                    $tmp = tempnam(sys_get_temp_dir(), 'wa_up_');
+                                    if ($tmp === false) {
+                                        throw new RuntimeException('Unable to create temp file for media upload.');
+                                    }
+                                    $out = fopen($tmp, 'wb');
+                                    if ($out === false) {
+                                        throw new RuntimeException('Unable to open temp file for media upload.');
+                                    }
+                                    stream_copy_to_stream($contents, $out);
+                                    fclose($out);
+                                    $multipart[$name] = new \CURLFile($tmp, $mime, $filename);
+                                }
+                            } elseif (is_string($contents) && is_file($contents)) {
+                                $multipart[$name] = new \CURLFile($contents, $mime, $filename);
+                            } elseif (is_string($contents)) {
+                                $tmp = tempnam(sys_get_temp_dir(), 'wa_up_');
+                                if ($tmp === false || file_put_contents($tmp, $contents) === false) {
+                                    throw new RuntimeException('Unable to stage media upload contents.');
+                                }
+                                $multipart[$name] = new \CURLFile($tmp, $mime, $filename);
+                            } else {
+                                throw new RuntimeException('Unsupported multipart file contents for field: ' . $name);
+                            }
+                            continue;
+                        }
+
+                        $multipart[$name] = is_scalar($value) ? (string) $value : (string) json_encode($value);
                     }
                     $options['multipart'] = $multipart;
                 } elseif ($data !== null) {
@@ -215,12 +254,14 @@ class CheerioDirectAPI
             return $components;
         }
 
-        if (! $this->componentsHaveMediaHeader($components)) {
+        $templateType = strtolower((string) ($tpl['template_type'] ?? 'default'));
+
+        // Carousel media lives on cards; do not inject a top-level IMAGE header.
+        if ($templateType !== 'carousel' && ! $this->componentsHaveMediaHeader($components)) {
             $headerType = strtolower((string) ($tpl['header_type'] ?? ''));
             $mediaUrl   = $this->extractTemplateHeaderMediaUrl($tpl);
 
             if (in_array($headerType, ['image', 'video', 'document'], true) && $mediaUrl !== '') {
-                // Template header component (Cheerio follows WhatsApp template object shape).
                 array_unshift($components, [
                     'type'       => 'header',
                     'parameters' => [[
@@ -231,12 +272,209 @@ class CheerioDirectAPI
             }
         }
 
+        if (! $this->componentsHaveBody($components)) {
+            $bodyComponent = $this->buildBodyComponentFromTemplate($tpl);
+            if ($bodyComponent !== null) {
+                $components[] = $bodyComponent;
+            }
+        }
+
+        if ($templateType === 'carousel' && ! $this->componentsHaveCarousel($components)) {
+            $carouselComponent = $this->buildCarouselSendComponent($tpl);
+            if ($carouselComponent !== null) {
+                $components[] = $carouselComponent;
+            }
+        }
+
         // Dynamic URL buttons require a button component with the {{1}} value.
         foreach ($this->extractMissingUrlButtonComponents($tpl, $components) as $buttonComponent) {
             $components[] = $buttonComponent;
         }
 
         return array_values($components);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $components
+     */
+    protected function componentsHaveCarousel(array $components): bool
+    {
+        foreach ($components as $component) {
+            if (strtolower((string) ($component['type'] ?? '')) === 'carousel') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Build send-time CAROUSEL component from stored template definition.
+     *
+     * @param array<string, mixed> $tpl
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function buildCarouselSendComponent(array $tpl): ?array
+    {
+        $raw = $tpl['raw_payload'] ?? null;
+        if (is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            $raw     = is_array($decoded) ? $decoded : null;
+        }
+        if (! is_array($raw)) {
+            return null;
+        }
+
+        $cards = [];
+        foreach ($raw['components'] ?? [] as $component) {
+            if (! is_array($component) || strtoupper((string) ($component['type'] ?? '')) !== 'CAROUSEL') {
+                continue;
+            }
+            foreach ($component['cards'] ?? [] as $index => $card) {
+                if (! is_array($card)) {
+                    continue;
+                }
+                $cardComponents = [];
+                foreach ($card['components'] ?? [] as $cardComponent) {
+                    if (! is_array($cardComponent)) {
+                        continue;
+                    }
+                    if (strtoupper((string) ($cardComponent['type'] ?? '')) !== 'HEADER') {
+                        continue;
+                    }
+                    $format = strtolower((string) ($cardComponent['format'] ?? 'image'));
+                    if (! in_array($format, ['image', 'video'], true)) {
+                        continue;
+                    }
+                    $mediaUrl = (string) ($cardComponent['example']['header_handle'][0]
+                        ?? $cardComponent['example']['header_url']
+                        ?? $cardComponent['example']['link']
+                        ?? '');
+                    if ($mediaUrl === '') {
+                        continue;
+                    }
+                    $cardComponents[] = [
+                        'type'       => 'header',
+                        'parameters' => [[
+                            'type'  => $format,
+                            $format => ['link' => $mediaUrl],
+                        ]],
+                    ];
+                }
+                if ($cardComponents === []) {
+                    continue;
+                }
+                $cards[] = [
+                    'card_index' => (int) $index,
+                    'components' => $cardComponents,
+                ];
+            }
+        }
+
+        if (count($cards) < 2) {
+            return null;
+        }
+
+        return [
+            'type'  => 'carousel',
+            'cards' => $cards,
+        ];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $components
+     */
+    protected function componentsHaveBody(array $components): bool
+    {
+        foreach ($components as $component) {
+            if (strtolower((string) ($component['type'] ?? '')) === 'body') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<string, mixed> $tpl
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function buildBodyComponentFromTemplate(array $tpl): ?array
+    {
+        $body = (string) ($tpl['body'] ?? '');
+        if ($body === '' || ! preg_match_all('/\{\{\s*(\d+)\s*\}\}/', $body, $matches)) {
+            return null;
+        }
+
+        $nums = array_map('intval', $matches[1]);
+        sort($nums);
+        $nums = array_values(array_unique($nums));
+        if ($nums === []) {
+            return null;
+        }
+
+        $examples = $this->extractBodyExamples($tpl);
+        $parameters = [];
+        foreach ($nums as $i => $num) {
+            $value = $examples[$i] ?? ('Sample' . $num);
+            $parameters[] = [
+                'type' => 'text',
+                'text' => (string) $value,
+            ];
+        }
+
+        return [
+            'type'       => 'body',
+            'parameters' => $parameters,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $tpl
+     *
+     * @return list<string>
+     */
+    protected function extractBodyExamples(array $tpl): array
+    {
+        $variables = $tpl['variables'] ?? null;
+        if (is_string($variables) && $variables !== '') {
+            $decoded = json_decode($variables, true);
+            $variables = is_array($decoded) ? $decoded : null;
+        }
+        if (is_array($variables) && $variables !== []) {
+            $out = [];
+            foreach ($variables as $value) {
+                if (is_scalar($value) && (string) $value !== '' && ! preg_match('/^\d+$/', (string) $value)) {
+                    $out[] = (string) $value;
+                }
+            }
+            if ($out !== []) {
+                return $out;
+            }
+        }
+
+        $raw = $tpl['raw_payload'] ?? null;
+        if (is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            $raw     = is_array($decoded) ? $decoded : null;
+        }
+        if (! is_array($raw)) {
+            return [];
+        }
+
+        foreach ($raw['components'] ?? [] as $component) {
+            if (! is_array($component) || strtoupper((string) ($component['type'] ?? '')) !== 'BODY') {
+                continue;
+            }
+            $bodyText = $component['example']['body_text'][0] ?? null;
+            if (is_array($bodyText)) {
+                return array_map(static fn ($v) => (string) $v, array_values($bodyText));
+            }
+        }
+
+        return [];
     }
 
     /**
@@ -637,24 +875,9 @@ class CheerioDirectAPI
             throw new RuntimeException('Media file not found or unreadable: ' . $filePath);
         }
 
-        $handle = fopen($filePath, 'rb');
-        if ($handle === false) {
-            throw new RuntimeException('Unable to open media file: ' . $filePath);
-        }
-
-        try {
-            $result = $this->request('POST', 'v1/whatsapp/media-id', [
-                'file' => [
-                    'contents' => $handle,
-                    'filename' => basename($filePath),
-                    'headers'  => ['Content-Type' => $mimeType],
-                ],
-            ], true);
-        } finally {
-            if (is_resource($handle)) {
-                fclose($handle);
-            }
-        }
+        $result = $this->request('POST', 'v1/whatsapp/media-id', [
+            'file' => new \CURLFile($filePath, $mimeType, basename($filePath)),
+        ], true);
 
         $mediaId = $this->extractMediaId($result);
         if ($mediaId === '') {
@@ -1267,12 +1490,32 @@ class CheerioDirectAPI
      */
     protected function extractApiError(array $decoded): string
     {
+        // Some gateways return a bare string encoded as a char list: ["B","a","d",...].
+        if ($decoded !== [] && array_is_list($decoded)) {
+            $allSingleChars = true;
+            foreach ($decoded as $part) {
+                if (! is_string($part) || strlen($part) !== 1) {
+                    $allSingleChars = false;
+                    break;
+                }
+            }
+            if ($allSingleChars) {
+                return implode('', $decoded);
+            }
+
+            $stringParts = array_values(array_filter($decoded, static fn ($v) => is_string($v) && $v !== ''));
+            if ($stringParts !== []) {
+                return implode(' | ', $stringParts);
+            }
+        }
+
         if (isset($decoded['error']) && is_array($decoded['error'])) {
             $error = $decoded['error'];
             $parts = array_filter([
-                $error['message'] ?? null,
+                $this->stringifyErrorPart($error['message'] ?? null),
+                isset($error['error_user_title']) ? (string) $error['error_user_title'] : null,
                 isset($error['error_user_msg']) ? (string) $error['error_user_msg'] : null,
-                isset($error['error_data']['details']) ? (string) $error['error_data']['details'] : null,
+                isset($error['error_data']['details']) ? $this->stringifyErrorPart($error['error_data']['details']) : null,
                 isset($error['type']) ? 'type=' . $error['type'] : null,
                 isset($error['code']) ? 'code=' . $error['code'] : null,
             ]);
@@ -1280,9 +1523,21 @@ class CheerioDirectAPI
             return implode(' | ', $parts) ?: 'API error object';
         }
 
-        foreach (['message', 'Message', 'error_message', 'msg', 'error'] as $key) {
-            if (! empty($decoded[$key]) && is_string($decoded[$key])) {
-                return $decoded[$key];
+        // Cheerio sometimes returns WhatsApp Graph errors flattened at the top level.
+        $flatParts = array_filter([
+            $this->stringifyErrorPart($decoded['message'] ?? null),
+            isset($decoded['error_user_title']) && is_string($decoded['error_user_title']) ? $decoded['error_user_title'] : null,
+            isset($decoded['error_user_msg']) && is_string($decoded['error_user_msg']) ? $decoded['error_user_msg'] : null,
+            isset($decoded['error_data']['details']) ? $this->stringifyErrorPart($decoded['error_data']['details']) : null,
+        ]);
+        if ($flatParts !== []) {
+            return implode(' | ', $flatParts);
+        }
+
+        foreach (['Message', 'error_message', 'msg', 'error', 'raw'] as $key) {
+            $value = $this->stringifyErrorPart($decoded[$key] ?? null);
+            if ($value !== null && $value !== '') {
+                return $value;
             }
         }
 
@@ -1293,11 +1548,45 @@ class CheerioDirectAPI
             }
         }
 
-        if (isset($decoded['flag']) && $decoded['flag'] === false && ! empty($decoded['message'])) {
-            return (string) $decoded['message'];
+        if (isset($decoded['flag']) && $decoded['flag'] === false) {
+            $flagMessage = $this->stringifyErrorPart($decoded['message'] ?? null);
+            if ($flagMessage !== null && $flagMessage !== '') {
+                return $flagMessage;
+            }
         }
 
         return json_encode($decoded) ?: 'Unparseable Cheerio error response';
+    }
+
+    protected function stringifyErrorPart(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        if (is_string($value)) {
+            return $value !== '' ? $value : null;
+        }
+        if (is_scalar($value)) {
+            return (string) $value;
+        }
+        if (is_array($value)) {
+            if ($value !== [] && array_is_list($value)) {
+                $allSingleChars = true;
+                foreach ($value as $part) {
+                    if (! is_string($part) || strlen($part) !== 1) {
+                        $allSingleChars = false;
+                        break;
+                    }
+                }
+                if ($allSingleChars) {
+                    return implode('', $value);
+                }
+            }
+
+            return json_encode($value) ?: null;
+        }
+
+        return null;
     }
 
     /**

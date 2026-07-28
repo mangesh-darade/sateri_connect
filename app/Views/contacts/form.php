@@ -1,5 +1,9 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_actions') ?>
+<a href="<?= site_url('contacts') ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i> Back</a>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <?php
 $contact = $contact ?? [];
@@ -57,12 +61,13 @@ if (! is_array($selectedTags)) {
                     </select>
                 </div>
                 <div class="col-12">
-                    <label class="form-label">Tags</label>
+                    <label class="form-label">Customer Groups</label>
                     <select name="tag_ids[]" class="form-select" multiple size="4">
                         <?php foreach (($tags ?? []) as $tag): ?>
                             <option value="<?= (int) $tag['id'] ?>" <?= in_array($tag['id'], $selectedTags, false) ? 'selected' : '' ?>><?= esc($tag['name']) ?></option>
                         <?php endforeach; ?>
                     </select>
+                    <div class="form-text">Hold Ctrl to select multiple groups for campaigns.</div>
                 </div>
                 <div class="col-12">
                     <label class="form-label">Notes</label>

@@ -1,5 +1,10 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_actions') ?>
+<a href="<?= site_url('automations') ?>" class="btn btn-sm btn-wa">Open Automations</a>
+<a href="<?= site_url('guide/local') ?>" class="btn btn-sm btn-outline-secondary">Local guide</a>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <?php
 $provider = $provider ?? 'meta';
@@ -8,19 +13,10 @@ $flows = $flows ?? [];
 $stats = $stats ?? ['total' => 0, 'active' => 0, 'triggers' => 0, 'conditions' => 0, 'actions' => 0];
 ?>
 <div class="page-list">
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
-        <div>
-            <h4 class="mb-1">Automation flows guide</h4>
-            <p class="text-muted small mb-0">
-                Catalog flows seeded by trigger / condition / action.
-                Active WhatsApp provider: <strong><?= esc($providerLabel) ?></strong>.
-            </p>
-        </div>
-        <div class="d-flex flex-wrap gap-2">
-            <a href="<?= site_url('automations') ?>" class="btn btn-sm btn-wa">Open Automations</a>
-            <a href="<?= site_url('guide/local') ?>" class="btn btn-sm btn-outline-secondary">Local guide</a>
-        </div>
-    </div>
+    <p class="text-muted small mb-3">
+        Catalog flows seeded by trigger / condition / action.
+        Active WhatsApp provider: <strong><?= esc($providerLabel) ?></strong>.
+    </p>
 
     <div class="row g-2 mb-3">
         <div class="col-6 col-md"><div class="card form-card"><div class="card-body py-2"><div class="small text-muted">Total catalog</div><div class="fs-5 fw-semibold"><?= (int) $stats['total'] ?></div></div></div></div>

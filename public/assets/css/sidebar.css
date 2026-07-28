@@ -190,27 +190,27 @@ body.sidebar-mini.sidebar-collapse .main-header {
     font-weight: 700;
     letter-spacing: 1.6px;
     color: var(--elint-heading);
-    margin: 14px 0 4px;
-    padding: 0 16px;
+    margin: 14px 0 6px;
+    padding: 0 12px;
     text-transform: uppercase;
 }
-.elint-sidebar .app-sidebar-list { margin: 0; padding: 0 6px; }
+.elint-sidebar .app-sidebar-list { margin: 0; padding: 0; }
 
 /* Parent row — icon column layout */
 .elint-sidebar .nav-sidebar > .nav-item > .nav-link,
 .elint-sidebar .sidebar-footer-links .nav-link {
-    height: 36px !important;
-    min-height: 36px !important;
-    margin: 1px 0 !important;
-    padding: 0 10px 0 8px !important;
-    border-radius: 8px !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    margin: 0 !important;
+    padding: 0 12px !important;
+    border-radius: 0 !important;
     border: 0 !important;
     background: transparent !important;
     color: var(--elint-text) !important;
     display: grid !important;
-    grid-template-columns: 28px minmax(0, 1fr) 16px;
+    grid-template-columns: 28px minmax(0, 1fr) 18px;
     align-items: center !important;
-    column-gap: 8px !important;
+    column-gap: 10px !important;
     box-shadow: none !important;
     transition: background .18s ease, color .18s ease !important;
 }
@@ -307,11 +307,14 @@ body.sidebar-mini.sidebar-collapse .main-header {
 .elint-sidebar .app-sidebar-tree {
     display: none;
     list-style: none;
-    margin: 2px 0 8px 36px !important;
-    padding: 4px !important;
+    position: relative;
+    margin: 0 !important;
+    padding: 0 !important;
     border: 0 !important;
-    border-radius: 10px !important;
-    background: #F9FAFB !important;
+    border-left: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
     text-align: left !important;
     float: none !important;
 }
@@ -325,71 +328,57 @@ body.sidebar-mini.sidebar-collapse .main-header {
 }
 .elint-sidebar .app-sidebar-tree > .nav-item > .nav-link {
     width: 100% !important;
-    height: 32px !important;
-    min-height: 32px !important;
-    margin: 1px 0 !important;
-    padding: 0 10px !important;
-    border-radius: 7px !important;
+    min-height: 38px !important;
+    margin: 0 !important;
+    padding: 8px 12px 8px 28px !important;
+    border-radius: 0 !important;
     border: 0 !important;
     background: transparent !important;
-    color: #374151 !important;
+    color: inherit !important;
     display: flex !important;
     align-items: center !important;
     justify-content: flex-start !important;
-    gap: 8px !important;
+    gap: 9px !important;
     text-align: left !important;
     float: none !important;
     box-shadow: none !important;
-    transition: background .18s ease, color .18s ease !important;
+    transition: padding-left .18s ease !important;
 }
 .elint-sidebar .app-sidebar-tree > .nav-item > .nav-link p {
-    flex: 0 1 auto !important;
+    flex: 1 1 auto !important;
     margin: 0 !important;
     width: auto !important;
     float: none !important;
-    display: block !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 1px;
     text-align: left !important;
     font-size: 13px !important;
     font-weight: 500 !important;
+    line-height: 1.2 !important;
     color: inherit !important;
 }
 .elint-sidebar .app-sidebar-tree > .nav-item > .nav-link .nav-icon,
 .elint-sidebar .app-sidebar-tree > .nav-item > .nav-link .nav-icon svg {
-    width: 15px !important;
-    height: 15px !important;
-    min-width: 15px;
+    width: 14px !important;
+    height: 14px !important;
+    min-width: 14px;
     margin: 0 !important;
     float: none !important;
-    color: #6B7280 !important;
-    stroke: #6B7280 !important;
+    color: inherit !important;
+    stroke: currentColor !important;
 }
-.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link:hover {
-    background: #EEF2F7 !important;
-    color: #111827 !important;
-}
-
-/* Active submenu */
-.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link.active,
-.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link.active:hover {
-    background: var(--elint-primary) !important;
-    color: #fff !important;
-    justify-content: flex-start !important;
-}
-.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link.active p,
-.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link.active .flyout-hint {
-    color: #fff !important;
-    text-align: left !important;
-}
-.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link.active .nav-icon,
-.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link.active .nav-icon svg {
-    color: #fff !important;
-    stroke: #fff !important;
+.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link:hover,
+.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link.active {
+    padding-left: 32px !important;
 }
 .elint-sidebar .flyout-hint {
     display: block;
     font-size: 10px;
-    margin-top: 1px;
-    opacity: .9;
+    font-weight: 500;
+    margin-top: 0;
+    opacity: .85;
+    color: inherit;
 }
 
 /* Footer */

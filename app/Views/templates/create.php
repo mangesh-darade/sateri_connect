@@ -1,5 +1,11 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_actions') ?>
+<a href="<?= site_url('templates') ?>" class="btn btn-outline-secondary btn-sm">
+    <i class="fas fa-arrow-left me-1"></i> Back
+</a>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <?php
 $providerShort = function_exists('whatsapp_provider_short') ? whatsapp_provider_short() : 'Cheerio';
@@ -8,91 +14,1263 @@ $dashUrl       = function_exists('whatsapp_provider_dashboard_url') ? whatsapp_p
 $dashLabel     = function_exists('whatsapp_provider_dashboard_label') ? whatsapp_provider_dashboard_label() : 'provider dashboard';
 $syncLabel     = function_exists('whatsapp_sync_label') ? whatsapp_sync_label() : 'Sync templates';
 $isMeta        = function_exists('is_meta_provider') && is_meta_provider();
+$selectedCategory = strtoupper((string) (old('category') ?? 'MARKETING'));
+$selectedType = strtolower((string) (old('template_type') ?? 'default'));
+$selectedLanguage = (string) (old('language') ?? 'en_US');
+$languages = [
+    'en_US' => 'English',
+    'hi' => 'Hindi',
+    'mr' => 'Marathi',
+    'gu' => 'Gujarati',
+    'kn' => 'Kannada',
+    'ta' => 'Tamil',
+    'te' => 'Telugu',
+    'ml' => 'Malayalam',
+    'bn' => 'Bengali',
+];
+$categories = [
+    'MARKETING' => [
+        'label' => 'Marketing',
+        'icon' => 'fa-bullhorn',
+        'copy' => 'Promotional or informational messages about your business, products or services.',
+    ],
+    'UTILITY' => [
+        'label' => 'Utility',
+        'icon' => 'fa-dollar-sign',
+        'copy' => 'Messages about a particular account, transaction, order or customer request.',
+    ],
+    'AUTHENTICATION' => [
+        'label' => 'Authentication',
+        'icon' => 'fa-shield-halved',
+        'copy' => 'One time passwords that your customers use to authenticate a transaction or login.',
+    ],
+];
 ?>
-<div class="page-toolbar">
-    <div class="toolbar-actions">
-        <a href="<?= site_url('templates') ?>" class="btn btn-outline-secondary btn-sm">
-            <i class="fas fa-arrow-left me-1"></i> Back
-        </a>
-    </div>
-</div>
-
 <div class="row g-3">
-    <div class="col-lg-8">
-        <div class="card">
-            <div class="card-header"><h3 class="card-title">Submit to <?= esc($providerLabel) ?></h3></div>
-            <div class="card-body">
-                <form action="<?= site_url('templates') ?>" method="post">
+    <div class="col-xl-8">
+        <div class="card template-create-card border-0">
+            <div class="card-body p-4 p-lg-5">
+                <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+                    <p class="text-muted mb-0">Set up the basics first, then build the message and preview it before submitting.</p>
+                    <div class="template-stepper" aria-label="Template steps">
+                        <span class="template-step-pill is-active" data-step-pill="1">1. Basics</span>
+                        <span class="template-step-pill" data-step-pill="2">2. Content</span>
+                    </div>
+                </div>
+
+                <form action="<?= site_url('templates') ?>" method="post" id="templateCreateForm">
                     <?= csrf_field() ?>
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Template name</label>
-                            <input type="text" name="name" class="form-control" required
-                                   pattern="[a-z0-9_]+" value="<?= esc(old('name') ?? '') ?>"
-                                   placeholder="order_ready">
-                            <div class="form-text">Lowercase letters, numbers, underscores only.</div>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label">Language</label>
-                            <input type="text" name="language" class="form-control"
-                                   value="<?= esc(old('language') ?? 'en_US') ?>" placeholder="en_US">
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label">Category</label>
-                            <select name="category" class="form-select">
-                                <?php
-                                $cat = old('category') ?? 'UTILITY';
-                                foreach (['UTILITY' => 'Utility', 'MARKETING' => 'Marketing', 'AUTHENTICATION' => 'Authentication'] as $value => $label):
-                                ?>
-                                    <option value="<?= $value ?>" <?= $cat === $value ? 'selected' : '' ?>><?= $label ?></option>
+                    <div class="template-step-panel" data-step-panel="1">
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold d-block">Category</label>
+                            <div class="row g-3">
+                                <?php foreach ($categories as $value => $meta): ?>
+                                    <div class="col-md-4">
+                                        <button type="button"
+                                                class="template-category-card<?= $selectedCategory === $value ? ' is-selected' : '' ?>"
+                                                data-category-card
+                                                data-value="<?= esc($value, 'attr') ?>">
+                                            <span class="template-category-icon"><i class="fas <?= esc($meta['icon']) ?>"></i></span>
+                                            <span class="template-category-title"><?= esc($meta['label']) ?></span>
+                                            <span class="template-category-copy"><?= esc($meta['copy']) ?></span>
+                                            <span class="template-category-check"><i class="fas fa-circle-check"></i></span>
+                                        </button>
+                                    </div>
                                 <?php endforeach; ?>
-                            </select>
+                            </div>
+                            <input type="hidden" name="category" id="templateCategoryInput" value="<?= esc($selectedCategory, 'attr') ?>">
                         </div>
-                        <div class="col-12">
-                            <label class="form-label">Header (optional)</label>
-                            <input type="text" name="header" class="form-control" maxlength="60"
-                                   value="<?= esc(old('header') ?? '') ?>" placeholder="Order update">
+
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label">Template Name</label>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="small text-muted">Lowercase letters, numbers and underscores only.</span>
+                                    <span class="small text-muted"><span id="templateNameCount">0</span>/512</span>
+                                </div>
+                                <input type="text" name="name" id="templateNameInput" class="form-control mt-2" required
+                                       pattern="[a-z0-9_]+" maxlength="512" autocomplete="off"
+                                       value="<?= esc(old('name') ?? '') ?>" placeholder="order_ready_update">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Template Type</label>
+                                <select name="template_type" id="templateTypeInput" class="form-select">
+                                    <option value="">Select template type</option>
+                                    <option value="default" <?= $selectedType === 'default' ? 'selected' : '' ?>>Default</option>
+                                    <option value="carousel" <?= $selectedType === 'carousel' ? 'selected' : '' ?>>Carousel</option>
+                                </select>
+                                <div class="form-text" id="templateTypeHelp">Use <strong>Default</strong> for standard templates, or <strong>Carousel</strong> for marketing media cards (2–10).</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Language</label>
+                                <select name="language" id="templateLanguageInput" class="form-select">
+                                    <option value="">Select language</option>
+                                    <?php foreach ($languages as $code => $label): ?>
+                                        <option value="<?= esc($code, 'attr') ?>" <?= $selectedLanguage === $code ? 'selected' : '' ?>><?= esc($label) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
                         </div>
-                        <div class="col-12">
-                            <label class="form-label">Body</label>
-                            <textarea name="body" class="form-control" rows="5" required
-                                      placeholder="Hello {{1}}, your order {{2}} is ready."><?= esc(old('body') ?? '') ?></textarea>
-                            <div class="form-text">Use {{1}}, {{2}} for variables. <?= esc($providerShort) ?> / WABA must approve before you can send.</div>
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Variable examples (comma-separated)</label>
-                            <input type="text" name="body_examples" class="form-control"
-                                   value="<?= esc(old('body_examples') ?? '') ?>"
-                                   placeholder="Vipin, ORD-1001">
-                            <div class="form-text">Required when the body has variables.</div>
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Footer (optional)</label>
-                            <input type="text" name="footer" class="form-control" maxlength="60"
-                                   value="<?= esc(old('footer') ?? '') ?>" placeholder="Thank you">
+
+                        <div class="d-flex justify-content-end mt-4">
+                            <button type="button" class="btn btn-wa px-4" id="templateNextBtn" disabled>Next</button>
                         </div>
                     </div>
-                    <button type="submit" class="btn btn-wa mt-3"><i class="fas fa-paper-plane me-1"></i> Submit to <?= esc($providerLabel) ?></button>
+
+                    <div class="template-step-panel d-none" data-step-panel="2">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <div class="template-basics-summary mb-3">
+                                    <div><span class="text-muted">Category:</span> <strong id="templateSummaryCategory">Marketing</strong></div>
+                                    <div><span class="text-muted">Type:</span> <strong id="templateSummaryType">Default</strong></div>
+                                    <div><span class="text-muted">Language:</span> <strong id="templateSummaryLanguage">English</strong></div>
+                                </div>
+                            </div>
+                            <div class="col-md-4" id="templateDefaultHeaderTypeWrap">
+                                <label class="form-label">Header Type</label>
+                                <select name="header_type" id="templateHeaderTypeInput" class="form-select">
+                                    <option value="none" <?= (old('header_type') ?? 'text') === 'none' ? 'selected' : '' ?>>None</option>
+                                    <option value="text" <?= (old('header_type') ?? 'text') === 'text' ? 'selected' : '' ?>>Text</option>
+                                    <option value="image" <?= (old('header_type') ?? '') === 'image' ? 'selected' : '' ?>>Image</option>
+                                    <option value="video" <?= (old('header_type') ?? '') === 'video' ? 'selected' : '' ?>>Video</option>
+                                    <option value="document" <?= (old('header_type') ?? '') === 'document' ? 'selected' : '' ?>>Document</option>
+                                </select>
+                            </div>
+                            <div class="col-md-8" id="templateHeaderTextWrap">
+                                <label class="form-label">Header Text</label>
+                                <input type="text" name="header" id="templateHeaderInput" class="form-control" maxlength="60"
+                                       value="<?= esc(old('header') ?? '') ?>" placeholder="Order update">
+                            </div>
+                            <div class="col-12 d-none" id="templateHeaderMediaWrap">
+                                <label class="form-label">Header Media</label>
+                                <input type="hidden" name="header_media_source" id="templateHeaderMediaSourceInput" value="<?= esc(old('header_media_source') ?? '', 'attr') ?>">
+                                <input type="hidden" name="header_media_preview_url" id="templateHeaderMediaPreviewUrlInput" value="<?= esc(old('header_media_preview_url') ?? '', 'attr') ?>">
+                                <div class="template-upload-box" id="templateHeaderUploadBox">
+                                    <input type="file" id="templateHeaderMediaFileInput" class="d-none" accept="image/*,video/*,.pdf">
+                                    <div class="template-upload-icon"><i class="fas fa-upload"></i></div>
+                                    <div class="fw-semibold">Upload <?= esc((old('header_type') ?? '') !== '' ? (string) old('header_type') : 'media') ?> here</div>
+                                    <div class="small text-muted mb-2" id="templateHeaderUploadHelp">Media size limit 16MB.</div>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="templateHeaderChooseFileBtn">Choose File</button>
+                                    <button type="button" class="btn btn-link btn-sm" id="templateHeaderToggleManualBtn">Use media URL instead</button>
+                                    <div class="small text-success mt-2 d-none" id="templateHeaderUploadStatus"></div>
+                                </div>
+                                <div class="mt-3 d-none" id="templateHeaderManualUrlWrap">
+                                    <label class="form-label">Sample Media URL</label>
+                                    <input type="url" id="templateHeaderMediaManualUrlInput" class="form-control"
+                                           value="<?= esc(old('header_media_preview_url') ?? '') ?>" placeholder="https://example.com/sample-image.jpg">
+                                    <div class="form-text">Use a public URL if you do not want to upload a file now.</div>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap mb-2">
+                                    <label class="form-label mb-0">Body</label>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="templateAddVariableBtn">Add variable</button>
+                                </div>
+                                <div class="template-body-editor">
+                                    <textarea name="body" id="templateBodyInput" class="form-control border-0 shadow-none" rows="5" required maxlength="1024"
+                                              placeholder="Your body text goes here…"><?= esc(old('body') ?? '') ?></textarea>
+                                    <div class="template-body-toolbar">
+                                        <div class="d-flex align-items-center gap-1">
+                                            <button type="button" class="btn btn-sm btn-light js-body-format" data-format="bold" title="Bold">B</button>
+                                            <button type="button" class="btn btn-sm btn-light js-body-format" data-format="italic" title="Italic"><em>I</em></button>
+                                            <button type="button" class="btn btn-sm btn-light js-body-format" data-format="strike" title="Strikethrough"><s>S</s></button>
+                                        </div>
+                                        <div class="small text-muted"><span id="templateBodyCount">0</span>/1024</div>
+                                    </div>
+                                </div>
+                                <div class="form-text mt-2">
+                                    Use <code>{{1}}</code>, <code>{{2}}</code> for variables. <?= esc($providerShort) ?> must approve before you can send.
+                                    Keep enough normal words around variables — WhatsApp rejects templates with too many variables for short body text.
+                                </div>
+                                <div class="alert alert-warning py-2 px-3 small mt-2 mb-0 d-none" id="templateVarRatioWarning">
+                                    Too many variables for this body length. Add more text or reduce variables before submitting.
+                                </div>
+                            </div>
+                            <div class="col-12 d-none" id="templateExamplesWrap">
+                                <input type="hidden" name="body_examples" id="templateExamplesInput" value="<?= esc(old('body_examples') ?? '', 'attr') ?>">
+                                <div class="template-var-examples" id="templateVarExamplesList"></div>
+                                <div class="form-text mt-2">Provide sample values for each variable so Meta/WABA can review the template.</div>
+                            </div>
+                            <div class="col-12" id="templateDefaultFooterWrap">
+                                <div class="d-flex align-items-center justify-content-between gap-2">
+                                    <label class="form-label mb-0">Footer</label>
+                                    <div class="small text-muted"><span id="templateFooterCount">0</span>/60</div>
+                                </div>
+                                <input type="text" name="footer" id="templateFooterInput" class="form-control" maxlength="60"
+                                       value="<?= esc(old('footer') ?? '') ?>" placeholder="Thank you">
+                            </div>
+                            <div class="col-12" id="templateDefaultCtaWrap">
+                                <hr class="my-1">
+                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                    <div>
+                                        <label class="form-label mb-0">CTA Button</label>
+                                        <div class="small text-muted">Add one call-to-action button to the template.</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12" id="templateDefaultCtaBuilderWrap">
+                                <input type="hidden" name="cta_type" id="templateCtaTypeInput" value="<?= esc(old('cta_type') ?? '', 'attr') ?>">
+                                <div class="d-flex flex-wrap gap-2 align-items-center" id="templateCtaActions">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="templateAddButtonBtn">Add Button</button>
+                                    <span class="small text-muted">Add one website or phone CTA button.</span>
+                                </div>
+                                <div class="template-cta-card d-none mt-3" id="templateCtaBuilder">
+                                    <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+                                        <strong>Call to Action Button</strong>
+                                        <button type="button" class="btn btn-link btn-sm text-danger p-0" id="templateRemoveButtonBtn">Remove</button>
+                                    </div>
+                                    <div class="row g-3">
+                                        <div class="col-md-4">
+                                            <label class="form-label">Button Type</label>
+                                            <select id="templateCtaTypeSelect" class="form-select">
+                                                <option value="url" <?= (old('cta_type') ?? '') === 'url' ? 'selected' : '' ?>>Visit Website</option>
+                                                <option value="phone_number" <?= (old('cta_type') ?? '') === 'phone_number' ? 'selected' : '' ?>>Call Phone Number</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-8">
+                                            <label class="form-label">Button Text</label>
+                                            <input type="text" name="cta_button_text" id="templateCtaButtonTextInput" class="form-control" maxlength="25"
+                                                   value="<?= esc(old('cta_button_text') ?? '') ?>" placeholder="Track order">
+                                        </div>
+                                    </div>
+                                    <div class="mt-3" id="templateCtaUrlWrap">
+                                        <label class="form-label">CTA URL</label>
+                                        <input type="text" name="cta_url" id="templateCtaUrlInput" class="form-control"
+                                               value="<?= esc(old('cta_url') ?? '') ?>" placeholder="https://example.com/orders/{{1}}">
+                                        <div class="form-text">You can use one dynamic placeholder like <code>{{1}}</code> in the URL.</div>
+                                    </div>
+                                    <div class="mt-3 d-none" id="templateCtaUrlExampleWrap">
+                                        <label class="form-label">CTA URL Example</label>
+                                        <input type="url" name="cta_url_example" id="templateCtaUrlExampleInput" class="form-control"
+                                               value="<?= esc(old('cta_url_example') ?? '') ?>" placeholder="https://example.com/orders/ORD-1001">
+                                        <div class="form-text">Required when CTA URL contains a placeholder.</div>
+                                    </div>
+                                    <div class="mt-3 d-none" id="templateCtaPhoneWrap">
+                                        <label class="form-label">CTA Phone Number</label>
+                                        <input type="text" name="cta_phone_number" id="templateCtaPhoneInput" class="form-control"
+                                               value="<?= esc(old('cta_phone_number') ?? '') ?>" placeholder="+919876543210">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-12 d-none" id="templateCarouselWrap">
+                                <hr class="my-1">
+                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                                    <div>
+                                        <label class="form-label mb-0">Carousel Cards</label>
+                                        <div class="small text-muted">Add 2–10 cards. All cards must use the same media type and CTA structure.</div>
+                                    </div>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="templateAddCarouselCardBtn">Add Card</button>
+                                </div>
+                                <input type="hidden" name="carousel_cards" id="templateCarouselCardsInput" value="">
+                                <div id="templateCarouselCardsList" class="d-grid gap-3"></div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex flex-wrap justify-content-between gap-2 mt-4">
+                            <button type="button" class="btn btn-outline-secondary" id="templateBackBtn">Back</button>
+                            <button type="submit" class="btn btn-wa" id="templateSubmitBtn">
+                                <i class="fas fa-paper-plane me-1"></i> Submit to <?= esc($providerLabel) ?>
+                            </button>
+                        </div>
+                    </div>
                 </form>
             </div>
         </div>
     </div>
-    <div class="col-lg-4">
-        <div class="dash-panel">
-            <div class="panel-head"><h3>How this works</h3></div>
+
+    <div class="col-xl-4">
+        <div class="dash-panel h-100 template-preview-panel">
+            <div class="panel-head d-flex align-items-center justify-content-between">
+                <h3 class="mb-0">Message Preview</h3>
+                <span class="template-live-pill">Live</span>
+            </div>
             <div class="panel-body">
-                <ol class="small ps-3 mb-3" style="color:var(--text-muted)">
+                <div class="template-phone-frame">
+                    <div class="template-phone-status">
+                        <span>9:41</span>
+                        <span><i class="fas fa-signal"></i> <i class="fas fa-wifi"></i> <i class="fas fa-battery-full"></i></span>
+                    </div>
+                    <div class="template-phone-header">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="template-phone-avatar">YB</div>
+                            <div>
+                                <div class="fw-semibold">Your Business</div>
+                                <div class="small text-muted">Business Account</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="template-preview-shell">
+                        <div class="template-preview-bubble">
+                            <div class="small text-muted mb-2 d-none" id="templatePreviewHeaderMeta"></div>
+                            <div class="fw-semibold mb-1" id="templatePreviewHeader"></div>
+                            <div id="templatePreviewBody" style="white-space:pre-wrap">Your message preview will appear here.</div>
+                            <div class="small text-muted mt-2" id="templatePreviewFooter"></div>
+                            <div class="d-flex flex-wrap gap-2 mt-3 d-none" id="templatePreviewButtons"></div>
+                            <div class="template-preview-time">10:15 <i class="fas fa-check-double"></i></div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr>
+
+                <ol class="small ps-3 mb-3 text-muted">
                     <li class="mb-2">Template is submitted to <?= esc($providerShort) ?> for review.</li>
                     <li class="mb-2">Status starts as <em>PENDING</em>.</li>
                     <li class="mb-2">After approval, click <strong><?= esc($syncLabel) ?></strong>.</li>
                     <li>Use it in Live Chat or Campaigns.</li>
                 </ol>
                 <p class="small mb-0 text-muted">
-                    WABA / business verification is done in the <a href="<?= esc($dashUrl) ?>" target="_blank" rel="noopener"><?= esc($dashLabel) ?></a>.
-                    This app creates templates via <?= esc($providerLabel) ?> and sends them after approval<?= $isMeta ? ' (needs WABA ID in Settings)' : '' ?>.
+                    WABA / business verification is handled in the <a href="<?= esc($dashUrl) ?>" target="_blank" rel="noopener"><?= esc($dashLabel) ?></a>.
+                    This app submits the template through <?= esc($providerLabel) ?><?= $isMeta ? ' and needs a valid WABA ID in Settings.' : '.' ?>
                 </p>
             </div>
         </div>
     </div>
 </div>
+<?= $this->endSection() ?>
+
+<?= $this->section('styles') ?>
+<style>
+.template-create-card {
+    border-radius: 1.5rem;
+    box-shadow: 0 20px 60px rgba(36, 39, 46, .08);
+}
+.template-stepper {
+    display: inline-flex;
+    gap: .75rem;
+    flex-wrap: wrap;
+}
+.template-step-pill {
+    border-radius: 999px;
+    padding: .45rem .85rem;
+    background: #f3f1fb;
+    color: #6f64a7;
+    font-size: .85rem;
+    font-weight: 700;
+}
+.template-step-pill.is-active {
+    background: rgba(116, 82, 211, .14);
+    color: #6a44d3;
+}
+.template-category-card {
+    width: 100%;
+    height: 100%;
+    border: 1px solid #e3dcf8;
+    border-radius: 1.1rem;
+    background: #fff;
+    padding: 1.1rem;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: .7rem;
+    position: relative;
+    transition: .18s ease;
+}
+.template-category-card:hover,
+.template-category-card:focus {
+    border-color: #8f6bf0;
+    box-shadow: 0 12px 30px rgba(106, 68, 211, .08);
+    outline: none;
+}
+.template-category-card.is-selected {
+    border-color: #8f6bf0;
+    box-shadow: 0 14px 32px rgba(106, 68, 211, .12);
+}
+.template-category-icon {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: .75rem;
+    background: #f3efff;
+    color: #7d5ce0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.template-category-title {
+    font-weight: 700;
+    color: #251f41;
+}
+.template-category-copy {
+    font-size: .92rem;
+    color: #6b7280;
+    line-height: 1.5;
+}
+.template-category-check {
+    position: absolute;
+    top: .9rem;
+    right: .9rem;
+    color: #6a44d3;
+    opacity: 0;
+}
+.template-category-card.is-selected .template-category-check {
+    opacity: 1;
+}
+.template-basics-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .75rem;
+    background: #f8f8fc;
+    border: 1px solid #ece8fb;
+    border-radius: 1rem;
+    padding: .95rem 1rem;
+}
+.template-body-editor {
+    border: 1px solid #e5e0f5;
+    border-radius: 1rem;
+    background: #fff;
+    overflow: hidden;
+}
+.template-body-editor textarea {
+    resize: vertical;
+    min-height: 140px;
+}
+.template-body-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .55rem .85rem;
+    border-top: 1px solid #efeafb;
+    background: #fbfaff;
+}
+.template-body-toolbar .js-body-format {
+    width: 2rem;
+    height: 2rem;
+    font-weight: 700;
+}
+.template-var-examples {
+    display: grid;
+    gap: .65rem;
+}
+.template-var-row {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: .65rem;
+    align-items: center;
+}
+.template-var-chip {
+    min-width: 2.6rem;
+    height: 2.2rem;
+    border-radius: 999px;
+    background: #f1edfb;
+    color: #6a44d3;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .85rem;
+    font-weight: 700;
+}
+.template-live-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: .2rem .65rem;
+    background: rgba(116, 82, 211, .12);
+    color: #6a44d3;
+    font-size: .75rem;
+    font-weight: 700;
+}
+.template-phone-frame {
+    border: 1px solid #d9d3ea;
+    border-radius: 1.4rem;
+    overflow: hidden;
+    background: #f7f4ee;
+}
+.template-phone-status,
+.template-phone-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .65rem .9rem;
+    background: #fff;
+}
+.template-phone-status {
+    font-size: .75rem;
+    color: #6b7280;
+}
+.template-phone-avatar {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    background: #6a44d3;
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .75rem;
+    font-weight: 700;
+}
+.template-preview-shell {
+    background: #ece5dd;
+    padding: 1rem;
+    min-height: 220px;
+}
+.template-preview-bubble {
+    background: #dcf8c6;
+    border-radius: 1rem 1rem .35rem 1rem;
+    padding: .9rem 1rem 1.35rem;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, .06);
+    position: relative;
+}
+.template-preview-time {
+    position: absolute;
+    right: .75rem;
+    bottom: .35rem;
+    font-size: .7rem;
+    color: #667781;
+}
+.template-preview-button {
+    border: 1px solid rgba(106, 68, 211, .18);
+    background: rgba(255, 255, 255, .7);
+    color: #5b43b4;
+    border-radius: 999px;
+    padding: .35rem .75rem;
+    font-size: .85rem;
+    font-weight: 600;
+}
+.template-upload-box {
+    border: 1px dashed #c9b8f5;
+    border-radius: 1rem;
+    padding: 1.25rem;
+    text-align: center;
+    background: #faf8ff;
+}
+.template-upload-icon {
+    width: 3rem;
+    height: 3rem;
+    border-radius: 999px;
+    background: #f0e9ff;
+    color: #6a44d3;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto .75rem;
+    font-size: 1.1rem;
+}
+.template-cta-card {
+    border: 1px solid #ece8fb;
+    border-radius: 1rem;
+    padding: 1rem;
+    background: #fbfbfe;
+}
+@media (max-width: 767.98px) {
+    .template-basics-summary {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+<?= $this->endSection() ?>
+
+<?= $this->section('scripts') ?>
+<script>
+$(function () {
+    var $form = $('#templateCreateForm');
+    var $name = $('#templateNameInput');
+    var $category = $('#templateCategoryInput');
+    var $type = $('#templateTypeInput');
+    var $language = $('#templateLanguageInput');
+    var $body = $('#templateBodyInput');
+    var $headerType = $('#templateHeaderTypeInput');
+    var $header = $('#templateHeaderInput');
+    var $headerMediaSource = $('#templateHeaderMediaSourceInput');
+    var $headerMediaPreviewUrl = $('#templateHeaderMediaPreviewUrlInput');
+    var $headerMediaManualUrl = $('#templateHeaderMediaManualUrlInput');
+    var $footer = $('#templateFooterInput');
+    var $examples = $('#templateExamplesInput');
+    var $ctaType = $('#templateCtaTypeInput');
+    var $ctaTypeSelect = $('#templateCtaTypeSelect');
+    var $ctaText = $('#templateCtaButtonTextInput');
+    var $ctaUrl = $('#templateCtaUrlInput');
+    var $ctaUrlExample = $('#templateCtaUrlExampleInput');
+    var $ctaPhone = $('#templateCtaPhoneInput');
+    var $carouselCardsInput = $('#templateCarouselCardsInput');
+    var $carouselList = $('#templateCarouselCardsList');
+    var currentStep = 1;
+    var carouselCards = [
+        emptyCarouselCard(),
+        emptyCarouselCard()
+    ];
+    var activeCardUploadIndex = null;
+
+    var languageLabels = <?= json_encode($languages) ?>;
+    var categoryLabels = {
+        MARKETING: 'Marketing',
+        UTILITY: 'Utility',
+        AUTHENTICATION: 'Authentication'
+    };
+
+    function emptyCarouselCard() {
+        return {
+            media_type: 'image',
+            media_source: '',
+            media_preview_url: '',
+            body: '',
+            body_examples: '',
+            cta_type: 'url',
+            cta_button_text: '',
+            cta_url: '',
+            cta_url_example: '',
+            cta_phone_number: ''
+        };
+    }
+
+    function isCarousel() {
+        return $type.val() === 'carousel';
+    }
+
+    function setStep(step) {
+        currentStep = step === 2 ? 2 : 1;
+        $('[data-step-panel]').addClass('d-none');
+        $('[data-step-panel="' + currentStep + '"]').removeClass('d-none');
+        $('[data-step-pill]').removeClass('is-active');
+        $('[data-step-pill="' + currentStep + '"]').addClass('is-active');
+        if (currentStep === 2) {
+            updateModeUi();
+            updateSummary();
+            updatePreview();
+        }
+    }
+
+    // Live typing must keep trailing `_` (e.g. "order_" while typing "order_ready").
+    // Edge trimming only on blur / submit / init.
+    function sanitizeName(value, trimEdges) {
+        var cleaned = String(value || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9_]+/g, '_')
+            .replace(/_+/g, '_');
+        if (trimEdges) {
+            cleaned = cleaned.replace(/^_+|_+$/g, '');
+        }
+        return cleaned;
+    }
+
+    function hasBodyVariables() {
+        return getBodyPlaceholders().length > 0;
+    }
+
+    function getBodyPlaceholders() {
+        var body = String($body.val() || '');
+        var matches = body.match(/\{\{\s*(\d+)\s*\}\}/g) || [];
+        var nums = [];
+        matches.forEach(function (token) {
+            var match = token.match(/\d+/);
+            if (match) {
+                var n = parseInt(match[0], 10);
+                if (nums.indexOf(n) === -1) {
+                    nums.push(n);
+                }
+            }
+        });
+        nums.sort(function (a, b) { return a - b; });
+        return nums;
+    }
+
+    function isBodyVariableRatioTooHigh() {
+        var placeholders = getBodyPlaceholders();
+        if (!placeholders.length) {
+            return false;
+        }
+        var plain = String($body.val() || '').replace(/\{\{\s*\d+\s*\}\}/g, ' ').replace(/\s+/g, ' ').trim();
+        var words = plain ? plain.split(' ') : [];
+        return words.length < (placeholders.length * 3);
+    }
+
+    function updateVarRatioWarning() {
+        var $warn = $('#templateVarRatioWarning');
+        if (!$warn.length) {
+            return;
+        }
+        if (isBodyVariableRatioTooHigh()) {
+            $warn.removeClass('d-none');
+        } else {
+            $warn.addClass('d-none');
+        }
+    }
+
+    function getExampleMap() {
+        var map = {};
+        $('#templateVarExamplesList .js-var-example').each(function () {
+            var num = parseInt($(this).attr('data-var'), 10);
+            map[num] = String($(this).val() || '').trim();
+        });
+        return map;
+    }
+
+    var lastPlaceholderKey = '';
+
+    function syncExamplesCsv() {
+        var placeholders = getBodyPlaceholders();
+        var map = getExampleMap();
+        var values = placeholders.map(function (n) {
+            return map[n] || '';
+        });
+        $examples.val(values.join(', '));
+    }
+
+    function renderVarExamples(force) {
+        var placeholders = getBodyPlaceholders();
+        var key = placeholders.join(',');
+        if (!force && key === lastPlaceholderKey) {
+            syncExamplesCsv();
+            return;
+        }
+        lastPlaceholderKey = key;
+
+        var existing = getExampleMap();
+        if (Object.keys(existing).length === 0) {
+            var seed = String($examples.val() || '').split(',').map(function (v) { return v.trim(); });
+            placeholders.forEach(function (n, idx) {
+                if (seed[idx]) {
+                    existing[n] = seed[idx];
+                }
+            });
+        }
+
+        if (!placeholders.length) {
+            $('#templateVarExamplesList').empty();
+            $('#templateExamplesWrap').addClass('d-none');
+            $examples.val('');
+            return;
+        }
+
+        var html = placeholders.map(function (n) {
+            var value = existing[n] || '';
+            return ''
+                + '<div class="template-var-row">'
+                +   '<span class="template-var-chip">{{' + n + '}}</span>'
+                +   '<input type="text" class="form-control js-var-example" data-var="' + n + '" maxlength="60" placeholder="Enter text" value="' + $('<div>').text(value).html() + '">'
+                + '</div>';
+        }).join('');
+
+        $('#templateVarExamplesList').html(html);
+        $('#templateExamplesWrap').removeClass('d-none');
+        syncExamplesCsv();
+    }
+
+    function updateExamplesVisibility() {
+        renderVarExamples(false);
+    }
+
+    function getExampleValues() {
+        var map = getExampleMap();
+        return getBodyPlaceholders().map(function (n) {
+            return map[n] || '';
+        });
+    }
+
+    function applyBodyFormat(format) {
+        var el = $body.get(0);
+        if (!el) {
+            return;
+        }
+        var start = el.selectionStart || 0;
+        var end = el.selectionEnd || 0;
+        var value = String($body.val() || '');
+        var selected = value.substring(start, end) || 'text';
+        var wrapped = selected;
+        if (format === 'bold') {
+            wrapped = '*' + selected + '*';
+        } else if (format === 'italic') {
+            wrapped = '_' + selected + '_';
+        } else if (format === 'strike') {
+            wrapped = '~' + selected + '~';
+        }
+        $body.val(value.substring(0, start) + wrapped + value.substring(end));
+        $body.trigger('input');
+        el.focus();
+        var cursor = start + wrapped.length;
+        el.setSelectionRange(cursor, cursor);
+    }
+
+    function updateHeaderFields() {
+        var type = $headerType.val() || 'none';
+        var isText = type === 'text';
+        var isMedia = ['image', 'video', 'document'].indexOf(type) !== -1;
+
+        $('#templateHeaderTextWrap').toggleClass('d-none', !isText || isCarousel());
+        $('#templateHeaderMediaWrap').toggleClass('d-none', !isMedia || isCarousel());
+        $('#templateHeaderUploadHelp').text('Upload ' + type + ' here. Media size limit 16MB.');
+    }
+
+    function updateCtaFields() {
+        var type = $ctaType.val() || '';
+        var isUrl = type === 'url';
+        var isPhone = type === 'phone_number';
+        var needsUrlExample = /\{\{\s*\d+\s*\}\}/.test($ctaUrl.val() || '');
+
+        $('#templateCtaUrlWrap').toggleClass('d-none', !isUrl);
+        $('#templateCtaPhoneWrap').toggleClass('d-none', !isPhone);
+        $('#templateCtaUrlExampleWrap').toggleClass('d-none', !(isUrl && needsUrlExample));
+        $('#templateCtaBuilder').toggleClass('d-none', type === '');
+    }
+
+    function syncCarouselCardsInput() {
+        $carouselCardsInput.val(JSON.stringify(carouselCards));
+    }
+
+    function renderCarouselCards() {
+        var html = '';
+        carouselCards.forEach(function (card, index) {
+            var needsExample = /\{\{\s*\d+\s*\}\}/.test(card.cta_url || '');
+            html += ''
+                + '<div class="template-cta-card" data-card-index="' + index + '">'
+                +   '<div class="d-flex justify-content-between align-items-center gap-2 mb-3">'
+                +     '<strong>Card ' + (index + 1) + '</strong>'
+                +     '<button type="button" class="btn btn-link btn-sm text-danger p-0 js-remove-carousel-card"' + (carouselCards.length <= 2 ? ' disabled' : '') + '>Remove</button>'
+                +   '</div>'
+                +   '<div class="row g-3">'
+                +     '<div class="col-md-4"><label class="form-label">Media Type</label>'
+                +       '<select class="form-select js-card-media-type">'
+                +         '<option value="image"' + (card.media_type === 'image' ? ' selected' : '') + '>Image</option>'
+                +         '<option value="video"' + (card.media_type === 'video' ? ' selected' : '') + '>Video</option>'
+                +       '</select></div>'
+                +     '<div class="col-md-8"><label class="form-label">Media Sample</label>'
+                +       '<div class="input-group">'
+                +         '<input type="text" class="form-control js-card-media-url" value="' + $('<div>').text(card.media_preview_url || card.media_source || '').html() + '" placeholder="https://example.com/product.jpg">'
+                +         '<button type="button" class="btn btn-outline-secondary js-card-upload-btn">Upload</button>'
+                +         '<input type="file" class="d-none js-card-file" accept="image/*,video/*">'
+                +       '</div>'
+                +       '<div class="small text-muted mt-1">Public URL or uploaded sample for review.</div></div>'
+                +     '<div class="col-12"><label class="form-label">Card Body (optional)</label>'
+                +       '<input type="text" class="form-control js-card-body" maxlength="160" value="' + $('<div>').text(card.body || '').html() + '" placeholder="Product title or offer text">'
+                +     '</div>'
+                +     '<div class="col-md-4"><label class="form-label">CTA Type</label>'
+                +       '<select class="form-select js-card-cta-type">'
+                +         '<option value=""' + (!card.cta_type ? ' selected' : '') + '>No CTA</option>'
+                +         '<option value="url"' + (card.cta_type === 'url' ? ' selected' : '') + '>Visit Website</option>'
+                +         '<option value="phone_number"' + (card.cta_type === 'phone_number' ? ' selected' : '') + '>Call Phone</option>'
+                +       '</select></div>'
+                +     '<div class="col-md-8"><label class="form-label">CTA Text</label>'
+                +       '<input type="text" class="form-control js-card-cta-text" maxlength="25" value="' + $('<div>').text(card.cta_button_text || '').html() + '" placeholder="Buy now"></div>'
+                +     '<div class="col-12' + (card.cta_type === 'url' ? '' : ' d-none') + ' js-card-url-wrap"><label class="form-label">CTA URL</label>'
+                +       '<input type="text" class="form-control js-card-cta-url" value="' + $('<div>').text(card.cta_url || '').html() + '" placeholder="https://example.com/p/{{1}}"></div>'
+                +     '<div class="col-12' + (card.cta_type === 'url' && needsExample ? '' : ' d-none') + ' js-card-url-example-wrap"><label class="form-label">CTA URL Example</label>'
+                +       '<input type="url" class="form-control js-card-cta-url-example" value="' + $('<div>').text(card.cta_url_example || '').html() + '" placeholder="https://example.com/p/123"></div>'
+                +     '<div class="col-12' + (card.cta_type === 'phone_number' ? '' : ' d-none') + ' js-card-phone-wrap"><label class="form-label">CTA Phone</label>'
+                +       '<input type="text" class="form-control js-card-cta-phone" value="' + $('<div>').text(card.cta_phone_number || '').html() + '" placeholder="+919876543210"></div>'
+                +   '</div>'
+                + '</div>';
+        });
+        $carouselList.html(html);
+        syncCarouselCardsInput();
+        $('#templateAddCarouselCardBtn').prop('disabled', carouselCards.length >= 10);
+    }
+
+    function readCarouselCardsFromDom() {
+        $carouselList.find('[data-card-index]').each(function () {
+            var index = parseInt($(this).attr('data-card-index'), 10);
+            if (!carouselCards[index]) {
+                return;
+            }
+            carouselCards[index].media_type = $(this).find('.js-card-media-type').val() || 'image';
+            carouselCards[index].media_preview_url = ($(this).find('.js-card-media-url').val() || '').trim();
+            if (!carouselCards[index].media_source) {
+                carouselCards[index].media_source = carouselCards[index].media_preview_url;
+            } else if (carouselCards[index].media_preview_url) {
+                // keep provider handle if already uploaded and URL still matches preview
+                if (carouselCards[index].media_source.indexOf('http') === 0) {
+                    carouselCards[index].media_source = carouselCards[index].media_preview_url;
+                }
+            }
+            carouselCards[index].body = ($(this).find('.js-card-body').val() || '').trim();
+            carouselCards[index].cta_type = $(this).find('.js-card-cta-type').val() || '';
+            carouselCards[index].cta_button_text = ($(this).find('.js-card-cta-text').val() || '').trim();
+            carouselCards[index].cta_url = ($(this).find('.js-card-cta-url').val() || '').trim();
+            carouselCards[index].cta_url_example = ($(this).find('.js-card-cta-url-example').val() || '').trim();
+            carouselCards[index].cta_phone_number = ($(this).find('.js-card-cta-phone').val() || '').trim();
+        });
+        syncCarouselCardsInput();
+    }
+
+    function updateModeUi() {
+        var carousel = isCarousel();
+        $('#templateDefaultHeaderTypeWrap, #templateHeaderTextWrap, #templateHeaderMediaWrap, #templateDefaultFooterWrap, #templateDefaultCtaWrap, #templateDefaultCtaBuilderWrap')
+            .toggleClass('d-none', carousel);
+        $('#templateCarouselWrap').toggleClass('d-none', !carousel);
+        if (carousel) {
+            $category.val('MARKETING');
+            $('[data-category-card]').removeClass('is-selected');
+            $('[data-category-card][data-value="MARKETING"]').addClass('is-selected');
+            renderCarouselCards();
+        } else {
+            updateHeaderFields();
+            updateCtaFields();
+        }
+    }
+
+    function updatePreview() {
+        var previewBody = String($body.val() || '').trim();
+        var exampleMap = getExampleMap();
+        var $previewHeader = $('#templatePreviewHeader');
+        var $previewHeaderMeta = $('#templatePreviewHeaderMeta');
+        var $previewButtons = $('#templatePreviewButtons');
+
+        previewBody = previewBody.replace(/\{\{\s*(\d+)\s*\}\}/g, function (match, num) {
+            var key = parseInt(num, 10);
+            var replacement = (exampleMap[key] || '').trim();
+            return replacement !== '' ? replacement : ('{{' + key + '}}');
+        });
+
+        // Convert simple WA formatting markers for preview readability.
+        var previewHtml = $('<div>').text(previewBody || 'Your message preview will appear here.').html()
+            .replace(/\*(.*?)\*/g, '<strong>$1</strong>')
+            .replace(/_(.*?)_/g, '<em>$1</em>')
+            .replace(/~(.*?)~/g, '<s>$1</s>');
+        $('#templatePreviewBody').html(previewHtml.replace(/\n/g, '<br>'));
+
+        if (isCarousel()) {
+            readCarouselCardsFromDom();
+            $previewHeader.text('');
+            $previewHeaderMeta
+                .text('Carousel · ' + carouselCards.length + ' cards')
+                .removeClass('d-none');
+            $('#templatePreviewFooter').text('');
+            var buttonsHtml = carouselCards.map(function (card, i) {
+                var label = card.cta_button_text || ('Card ' + (i + 1));
+                return '<span class="template-preview-button">' + $('<div>').text(label).html() + '</span>';
+            }).join('');
+            $previewButtons.html(buttonsHtml).toggleClass('d-none', buttonsHtml === '');
+            return;
+        }
+
+        var headerType = $headerType.val() || 'none';
+        var ctaType = $ctaType.val() || '';
+        if (headerType === 'text') {
+            $previewHeader.text(($header.val() || '').trim());
+            $previewHeaderMeta.text('').addClass('d-none');
+        } else if (['image', 'video', 'document'].indexOf(headerType) !== -1) {
+            $previewHeader.text('');
+            $previewHeaderMeta
+                .text(headerType.charAt(0).toUpperCase() + headerType.slice(1) + ' header sample: ' + (($headerMediaPreviewUrl.val() || '').trim() || ($headerMediaManualUrl.val() || '').trim() || 'Not set'))
+                .removeClass('d-none');
+        } else {
+            $previewHeader.text('');
+            $previewHeaderMeta.text('').addClass('d-none');
+        }
+
+        $('#templatePreviewFooter').text(($footer.val() || '').trim());
+        if (ctaType === 'url' && ($ctaText.val() || '').trim()) {
+            $previewButtons.html('<span class="template-preview-button"><i class="fas fa-arrow-up-right-from-square me-1"></i>' + $('<div>').text($ctaText.val()).html() + '</span>').removeClass('d-none');
+        } else if (ctaType === 'phone_number' && ($ctaText.val() || '').trim()) {
+            $previewButtons.html('<span class="template-preview-button"><i class="fas fa-phone me-1"></i>' + $('<div>').text($ctaText.val()).html() + '</span>').removeClass('d-none');
+        } else {
+            $previewButtons.html('').addClass('d-none');
+        }
+    }
+
+    function updateSummary() {
+        $('#templateSummaryCategory').text(categoryLabels[$category.val()] || '-');
+        $('#templateSummaryType').text(($type.val() || '').replace(/^./, function (m) { return m.toUpperCase(); }) || '-');
+        $('#templateSummaryLanguage').text(languageLabels[$language.val()] || $language.val() || '-');
+    }
+
+    function updateNextButton() {
+        var nameValue = sanitizeName($name.val(), true);
+        var isValid = Boolean($category.val() && nameValue && $type.val() && $language.val());
+        if (isCarousel() && $category.val() !== 'MARKETING') {
+            isValid = false;
+        }
+        $('#templateNextBtn').prop('disabled', !isValid);
+
+        if (isCarousel()) {
+            $('#templateTypeHelp').html('Carousel is for <strong>Marketing</strong> templates with 2–10 media cards.');
+        } else {
+            $('#templateTypeHelp').html('Use <strong>Default</strong> for standard templates, or <strong>Carousel</strong> for marketing media cards (2–10).');
+        }
+    }
+
+    function uploadMediaFile(file, onDone) {
+        var formData = new FormData();
+        formData.append('file', file);
+        return $.ajax({
+            url: APP.baseUrl + '/templates/header-media',
+            method: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            dataType: 'json'
+        }).done(function (response) {
+            var data = response && response.data ? response.data : null;
+            if (!response || response.success === false || !data) {
+                APP.toast((response && response.message) || 'Media upload failed.', 'error');
+                return;
+            }
+            onDone(data, file);
+        }).fail(function (xhr) {
+            var message = 'Media upload failed.';
+            if (xhr.responseJSON && xhr.responseJSON.message) {
+                message = xhr.responseJSON.message;
+            }
+            APP.toast(message, 'error');
+        });
+    }
+
+    $('[data-category-card]').on('click', function () {
+        if (isCarousel() && $(this).data('value') !== 'MARKETING') {
+            APP.toast('Carousel templates must use Marketing category.', 'info');
+            return;
+        }
+        var value = $(this).data('value');
+        $category.val(value);
+        $('[data-category-card]').removeClass('is-selected');
+        $(this).addClass('is-selected');
+        updateNextButton();
+        updateSummary();
+    });
+
+    $name.on('input', function () {
+        var cleaned = sanitizeName($(this).val());
+        $(this).val(cleaned);
+        $('#templateNameCount').text(cleaned.length);
+        updateNextButton();
+    });
+
+    $name.on('blur', function () {
+        var cleaned = sanitizeName($(this).val(), true);
+        $(this).val(cleaned);
+        $('#templateNameCount').text(cleaned.length);
+        updateNextButton();
+    });
+
+    $type.add($language).on('change', function () {
+        if (isCarousel()) {
+            $category.val('MARKETING');
+            $('[data-category-card]').removeClass('is-selected');
+            $('[data-category-card][data-value="MARKETING"]').addClass('is-selected');
+        }
+        updateModeUi();
+        updateNextButton();
+        updateSummary();
+        updatePreview();
+    });
+
+    $('#templateNextBtn').on('click', function () {
+        if (isCarousel() && $category.val() !== 'MARKETING') {
+            APP.toast('Carousel templates must use Marketing category.', 'info');
+            return;
+        }
+        setStep(2);
+    });
+
+    $('#templateBackBtn').on('click', function () {
+        setStep(1);
+    });
+
+    $headerType.on('change', function () {
+        updateHeaderFields();
+        updatePreview();
+    });
+
+    $ctaTypeSelect.on('change', function () {
+        $ctaType.val($(this).val());
+        updateCtaFields();
+        updatePreview();
+    });
+
+    $('#templateAddVariableBtn').on('click', function () {
+        var current = String($body.val() || '');
+        var placeholders = getBodyPlaceholders();
+        var nextNumber = placeholders.length ? (placeholders[placeholders.length - 1] + 1) : 1;
+        var addition = (current && !/\s$/.test(current) ? ' ' : '') + '{{' + nextNumber + '}}';
+        $body.val(current + addition).trigger('input');
+    });
+
+    $(document).on('click', '.js-body-format', function () {
+        applyBodyFormat($(this).data('format'));
+    });
+
+    $(document).on('input', '.js-var-example', function () {
+        syncExamplesCsv();
+        updatePreview();
+    });
+
+    $('#templateAddButtonBtn').on('click', function () {
+        if (!$ctaType.val()) {
+            $ctaType.val('url');
+            $ctaTypeSelect.val('url');
+        }
+        updateCtaFields();
+        updatePreview();
+    });
+
+    $('#templateRemoveButtonBtn').on('click', function () {
+        $ctaType.val('');
+        $ctaText.val('');
+        $ctaUrl.val('');
+        $ctaUrlExample.val('');
+        $ctaPhone.val('');
+        updateCtaFields();
+        updatePreview();
+    });
+
+    $('#templateAddCarouselCardBtn').on('click', function () {
+        if (carouselCards.length >= 10) {
+            return;
+        }
+        readCarouselCardsFromDom();
+        carouselCards.push(emptyCarouselCard());
+        renderCarouselCards();
+        updatePreview();
+    });
+
+    $carouselList.on('click', '.js-remove-carousel-card', function () {
+        if (carouselCards.length <= 2) {
+            return;
+        }
+        readCarouselCardsFromDom();
+        var index = parseInt($(this).closest('[data-card-index]').attr('data-card-index'), 10);
+        carouselCards.splice(index, 1);
+        renderCarouselCards();
+        updatePreview();
+    });
+
+    $carouselList.on('input change', 'input, select', function () {
+        var $card = $(this).closest('[data-card-index]');
+        readCarouselCardsFromDom();
+        var card = carouselCards[parseInt($card.attr('data-card-index'), 10)] || {};
+        var needsExample = /\{\{\s*\d+\s*\}\}/.test(card.cta_url || '');
+        $card.find('.js-card-url-wrap').toggleClass('d-none', card.cta_type !== 'url');
+        $card.find('.js-card-url-example-wrap').toggleClass('d-none', !(card.cta_type === 'url' && needsExample));
+        $card.find('.js-card-phone-wrap').toggleClass('d-none', card.cta_type !== 'phone_number');
+        updatePreview();
+    });
+
+    $carouselList.on('click', '.js-card-upload-btn', function () {
+        activeCardUploadIndex = parseInt($(this).closest('[data-card-index]').attr('data-card-index'), 10);
+        $(this).closest('[data-card-index]').find('.js-card-file').trigger('click');
+    });
+
+    $carouselList.on('change', '.js-card-file', function () {
+        var file = this.files && this.files[0] ? this.files[0] : null;
+        var index = activeCardUploadIndex;
+        if (!file || index === null || !carouselCards[index]) {
+            return;
+        }
+        uploadMediaFile(file, function (data) {
+            carouselCards[index].media_source = data.source || data.url || '';
+            carouselCards[index].media_preview_url = data.preview_url || data.url || '';
+            renderCarouselCards();
+            updatePreview();
+            APP.toast('Card media uploaded.');
+        });
+    });
+
+    $('#templateHeaderChooseFileBtn, #templateHeaderUploadBox').on('click', function (e) {
+        if ($(e.target).is('#templateHeaderToggleManualBtn')) {
+            return;
+        }
+        $('#templateHeaderMediaFileInput').trigger('click');
+    });
+
+    $('#templateHeaderToggleManualBtn').on('click', function () {
+        $('#templateHeaderManualUrlWrap').toggleClass('d-none');
+    });
+
+    $headerMediaManualUrl.on('input', function () {
+        var url = ($(this).val() || '').trim();
+        $headerMediaSource.val(url);
+        $headerMediaPreviewUrl.val(url);
+        $('#templateHeaderUploadStatus').toggleClass('d-none', url === '').text(url === '' ? '' : 'Using manual media URL.');
+        updatePreview();
+    });
+
+    $('#templateHeaderMediaFileInput').on('change', function () {
+        var file = this.files && this.files[0] ? this.files[0] : null;
+        if (!file) {
+            return;
+        }
+        var $status = $('#templateHeaderUploadStatus');
+        $status.removeClass('d-none text-success').addClass('text-muted').text('Uploading ' + file.name + '...');
+        uploadMediaFile(file, function (data) {
+            $headerMediaSource.val(data.source || data.url || '');
+            $headerMediaPreviewUrl.val(data.preview_url || data.url || '');
+            $headerMediaManualUrl.val(data.preview_url || data.url || '');
+            $status.removeClass('text-muted').addClass('text-success').text('Uploaded: ' + (data.filename || file.name));
+            updatePreview();
+        }).fail(function () {
+            $status.addClass('d-none').text('');
+        });
+    });
+
+    $header.add($body).add($footer).add($examples).add($ctaText).add($ctaUrl).add($ctaUrlExample).add($ctaPhone).on('input', function () {
+        updateExamplesVisibility();
+        updateCtaFields();
+        $('#templateBodyCount').text(String($body.val() || '').length);
+        $('#templateFooterCount').text(String($footer.val() || '').length);
+        updateVarRatioWarning();
+        updatePreview();
+    });
+
+    $form.on('submit', function (e) {
+        e.preventDefault();
+        $name.val(sanitizeName($name.val(), true));
+        $('#templateNameCount').text($name.val().length);
+        syncExamplesCsv();
+        if (isCarousel()) {
+            readCarouselCardsFromDom();
+            syncCarouselCardsInput();
+        }
+
+        var placeholders = getBodyPlaceholders();
+        if (placeholders.length) {
+            var map = getExampleMap();
+            for (var i = 0; i < placeholders.length; i++) {
+                if (!map[placeholders[i]]) {
+                    APP.toast('Please enter sample text for {{' + placeholders[i] + '}}.', 'error');
+                    return;
+                }
+            }
+            if (isBodyVariableRatioTooHigh()) {
+                updateVarRatioWarning();
+                APP.toast('Too many variables for this body length. Add more text or reduce variables.', 'error');
+                return;
+            }
+        }
+
+        var $submit = $('#templateSubmitBtn');
+        var originalHtml = $submit.html();
+        $submit.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i>Submitting...');
+
+        APP.post($form.attr('action'), $form.serialize())
+            .done(function (response) {
+                if (!response || response.success === false || response.status === false) {
+                    APP.toast((response && response.message) || 'Template could not be created.', 'error');
+                    return;
+                }
+                APP.toast(response.message || 'Template created successfully.');
+                var redirect = response.data && response.data.redirect ? response.data.redirect : null;
+                if (redirect) {
+                    window.location.href = redirect;
+                }
+            })
+            .fail(function (xhr) {
+                var message = 'Template could not be created.';
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    message = xhr.responseJSON.message;
+                }
+                APP.toast(message, 'error');
+            })
+            .always(function () {
+                $submit.prop('disabled', false).html(originalHtml);
+            });
+    });
+
+    $name.val(sanitizeName($name.val(), true));
+    $('#templateNameCount').text($name.val().length);
+    $('#templateBodyCount').text(String($body.val() || '').length);
+    $('#templateFooterCount').text(String($footer.val() || '').length);
+    if ($ctaType.val()) {
+        $ctaTypeSelect.val($ctaType.val());
+    }
+    updateNextButton();
+    updateSummary();
+    updateModeUi();
+    updateHeaderFields();
+    updateExamplesVisibility();
+    updateCtaFields();
+    updateVarRatioWarning();
+    updatePreview();
+});
+</script>
 <?= $this->endSection() ?>

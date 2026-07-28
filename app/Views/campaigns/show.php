@@ -1,5 +1,9 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_actions') ?>
+<a href="<?= site_url('campaigns') ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i> Back</a>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <?php
 $campaign = $campaign ?? [];
@@ -8,12 +12,6 @@ $total = max(1, (int) ($campaign['total_contacts'] ?? 1));
 $sent = (int) ($campaign['sent_count'] ?? 0);
 $pct = min(100, round(($sent / $total) * 100));
 ?>
-<div class="page-toolbar">
-    <div class="toolbar-actions">
-        <a href="<?= site_url('campaigns') ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i> Back</a>
-    </div>
-</div>
-
 <div class="row g-3 mb-3">
     <div class="col-lg-8">
         <div class="dash-panel">

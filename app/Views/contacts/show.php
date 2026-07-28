@@ -1,19 +1,18 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_actions') ?>
+<?php $contact = $contact ?? []; ?>
+<a href="<?= site_url('contacts') ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i> Back</a>
+<?php if (function_exists('can') && can('contacts.edit')): ?>
+    <a href="<?= site_url('contacts/' . (int) ($contact['id'] ?? 0) . '/edit') ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-edit me-1"></i> Edit</a>
+<?php endif; ?>
+<?php if (function_exists('can') && can('chat.view')): ?>
+    <a href="<?= site_url('chat?contact_id=' . (int) ($contact['id'] ?? 0)) ?>" class="btn btn-wa btn-sm"><i class="fab fa-whatsapp me-1"></i> Chat</a>
+<?php endif; ?>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <?php $contact = $contact ?? []; ?>
-<div class="page-toolbar">
-    <div class="toolbar-actions">
-        <a href="<?= site_url('contacts') ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i> Back</a>
-        <?php if (function_exists('can') && can('contacts.edit')): ?>
-            <a href="<?= site_url('contacts/' . (int) ($contact['id'] ?? 0) . '/edit') ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-edit me-1"></i> Edit</a>
-        <?php endif; ?>
-        <?php if (function_exists('can') && can('chat.view')): ?>
-            <a href="<?= site_url('chat?contact_id=' . (int) ($contact['id'] ?? 0)) ?>" class="btn btn-wa btn-sm"><i class="fab fa-whatsapp me-1"></i> Chat</a>
-        <?php endif; ?>
-    </div>
-</div>
-
 <div class="row g-2">
     <div class="col-lg-4">
         <div class="dash-panel text-center">
@@ -32,14 +31,14 @@
         </div>
 
         <div class="dash-panel mt-3">
-            <div class="panel-head"><h3>Tags</h3></div>
+            <div class="panel-head"><h3>Customer Groups</h3></div>
             <div class="panel-body">
                 <?php if (! empty($contact['tags'])): ?>
                     <?php foreach ($contact['tags'] as $tag): ?>
                         <span class="badge me-1 mb-1 rounded-pill" style="background:<?= esc($tag['color'] ?? '#25D366'); ?>;color:#042f2a"><?= esc($tag['name'] ?? $tag) ?></span>
                     <?php endforeach; ?>
                 <?php else: ?>
-                    <span class="text-muted">No tags</span>
+                    <span class="text-muted">No groups</span>
                 <?php endif; ?>
             </div>
         </div>

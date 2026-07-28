@@ -3,7 +3,6 @@
 namespace Config;
 
 use CodeIgniter\Config\BaseConfig;
-use CodeIgniter\Debug\ExceptionHandler;
 use CodeIgniter\Debug\ExceptionHandlerInterface;
 use Psr\Log\LogLevel;
 use Throwable;
@@ -101,6 +100,7 @@ class Exceptions extends BaseConfig
      */
     public function handler(int $statusCode, Throwable $exception): ExceptionHandlerInterface
     {
-        return new ExceptionHandler($this);
+        // Always use the branded reusable error screen (never CI debug dump UI).
+        return new \App\Libraries\AppExceptionHandler($this);
     }
 }

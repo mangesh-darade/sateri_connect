@@ -1,5 +1,9 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_actions') ?>
+<a href="<?= site_url('campaigns') ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i> Back</a>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <?php
 $campaign = $campaign ?? [];
@@ -64,7 +68,7 @@ if (is_string($variablesJson)) {
                     </select>
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label">Tags</label>
+                    <label class="form-label">Customer Groups</label>
                     <select name="tag_ids[]" id="tagIds" class="form-select" multiple size="8">
                         <?php
                         $selectedTags = old('tag_ids') ?? ($campaign['tag_ids'] ?? []);
@@ -74,6 +78,7 @@ if (is_string($variablesJson)) {
                             <option value="<?= (int) $tag['id'] ?>" <?= in_array($tag['id'], $selectedTags, false) ? 'selected' : '' ?>><?= esc($tag['name']) ?></option>
                         <?php endforeach; ?>
                     </select>
+                    <div class="form-text">Select groups created under Contacts → Customer Groups.</div>
                 </div>
             </div>
 

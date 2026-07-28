@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Libraries\ActivityLogger;
+use App\Models\MediaModel;
 use App\Models\TemplateModel;
 use CodeIgniter\HTTP\ResponseInterface;
 use Throwable;
@@ -14,6 +15,8 @@ use Throwable;
  */
 class Templates extends BaseController
 {
+    protected string $uploadPath = WRITEPATH . 'uploads/media/';
+
     public function index(): string|ResponseInterface
     {
         if ($denied = $this->requirePermission('templates.view')) {
@@ -60,16 +63,19 @@ class Templates extends BaseController
                     continue;
                 }
 
-                $parsed   = $this->parseComponents(is_array($tpl['components'] ?? null) ? $tpl['components'] : []);
+                $componentsList = is_array($tpl['components'] ?? null) ? $tpl['components'] : [];
+                $parsed   = $this->parseComponents($componentsList);
                 $metaId   = (string) ($tpl['id'] ?? '');
                 $name     = (string) $tpl['name'];
                 $language = (string) ($tpl['language'] ?? 'en');
+                $templateType = $this->detectTemplateTypeFromComponents($tpl, $componentsList);
 
                 $row = [
                     'meta_id'        => $metaId !== '' ? $metaId : null,
                     'name'           => $name,
                     'language'       => $language,
                     'category'       => $tpl['category'] ?? null,
+                    'template_type'  => $templateType,
                     'status'         => $tpl['status'] ?? null,
                     'header_type'    => $parsed['header_type'],
                     'header_content' => $parsed['header_content'],
@@ -149,46 +155,38 @@ class Templates extends BaseController
             return $denied;
         }
 
-        $name     = strtolower(trim((string) $this->request->getPost('name')));
-        $language = trim((string) ($this->request->getPost('language') ?: 'en_US'));
-        $category = strtoupper(trim((string) ($this->request->getPost('category') ?: 'UTILITY')));
-        $header   = trim((string) $this->request->getPost('header'));
-        $body     = trim((string) $this->request->getPost('body'));
-        $footer   = trim((string) $this->request->getPost('footer'));
-        $examples = trim((string) $this->request->getPost('body_examples'));
-
-        if ($name === '' || $body === '') {
-            return redirect()->back()->withInput()->with('error', 'Name and body are required.');
-        }
-
-        if (! preg_match('/^[a-z0-9_]+$/', $name)) {
-            return redirect()->back()->withInput()->with('error', 'Name must be lowercase letters, numbers, and underscores only.');
-        }
-
-        if (! in_array($category, ['UTILITY', 'MARKETING', 'AUTHENTICATION'], true)) {
-            return redirect()->back()->withInput()->with('error', 'Invalid category.');
+        $input = $this->normalizeTemplateInput();
+        if ($input['error'] !== null) {
+            return $this->templateCreateErrorResponse($input['error']);
         }
 
         try {
-            $components = $this->buildSubmitComponents($header, $body, $footer, $examples);
+            $components = $this->buildSubmitComponents($input);
             $api        = service('whatsApp');
             $response   = $api->createTemplate([
-                'name'                   => $name,
-                'language'               => $language,
-                'category'               => $category,
-                'components'             => $components,
-                'allow_category_change'  => true,
+                'name'                  => $input['name'],
+                'language'              => $input['language'],
+                'category'              => $input['category'],
+                'components'            => $components,
+                'allow_category_change' => true,
             ]);
 
-            $metaId = (string) ($response['id'] ?? '');
-            $status = strtoupper((string) ($response['status'] ?? 'PENDING'));
+            $responseData = is_array($response['data'] ?? null) ? $response['data'] : $response;
+            $metaId = (string) ($responseData['id'] ?? '');
+            $status = strtoupper((string) ($responseData['status'] ?? $response['status'] ?? 'PENDING'));
             $parsed = $this->parseComponents($components);
+            $storedPayload = is_array($responseData) ? $responseData : [];
+            $storedPayload['name'] = $input['name'];
+            $storedPayload['language'] = $input['language'];
+            $storedPayload['category'] = $input['category'];
+            $storedPayload['components'] = $components;
 
             model(TemplateModel::class)->insert([
                 'meta_id'        => $metaId !== '' ? $metaId : null,
-                'name'           => $name,
-                'language'       => $language,
-                'category'       => $category,
+                'name'           => $input['name'],
+                'language'       => $input['language'],
+                'category'       => $input['category'],
+                'template_type'  => $input['template_type'],
                 'status'         => $status !== '' ? $status : 'PENDING',
                 'header_type'    => $parsed['header_type'],
                 'header_content' => $parsed['header_content'],
@@ -196,23 +194,29 @@ class Templates extends BaseController
                 'footer'         => $parsed['footer'],
                 'buttons'        => $parsed['buttons'],
                 'variables'      => $parsed['variables'],
-                'raw_payload'    => $response,
+                'raw_payload'    => $storedPayload,
                 'synced_at'      => date('Y-m-d H:i:s'),
             ]);
 
-            (new ActivityLogger())->log('create', 'templates', "Submitted template {$name} to Cheerio", [
+            (new ActivityLogger())->log('create', 'templates', "Submitted template {$input['name']} to Cheerio", [
                 'meta_id' => $metaId,
                 'status'  => $status,
             ]);
 
-            return redirect()->to('/templates')->with(
-                'success',
-                "Template \"{$name}\" submitted to Cheerio ({$status}). Sync again after Cheerio approves it."
-            );
+            $message = "Template \"{$input['name']}\" submitted to Cheerio ({$status}). Sync again after Cheerio approves it.";
+            if ($this->request->isAJAX()) {
+                return $this->jsonResponse(true, [
+                    'redirect' => site_url('templates'),
+                    'status'   => $status,
+                    'name'     => $input['name'],
+                ], $message);
+            }
+
+            return redirect()->to('/templates')->with('success', $message);
         } catch (Throwable $e) {
             log_message('error', 'Template create failed: {msg}', ['msg' => $e->getMessage()]);
 
-            return redirect()->back()->withInput()->with('error', $e->getMessage());
+            return $this->templateCreateErrorResponse($e->getMessage());
         }
     }
 
@@ -293,27 +297,102 @@ class Templates extends BaseController
         ]);
     }
 
+    public function uploadHeaderMedia(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('templates.create')) {
+            return $denied;
+        }
+
+        $file = $this->request->getFile('file') ?? $this->request->getFile('media');
+        if ($file === null || ! $file->isValid()) {
+            return $this->jsonResponse(false, null, 'No valid media file uploaded.', [], 422);
+        }
+
+        $mime = (string) $file->getMimeType();
+        $allowed = [
+            'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+            'application/pdf',
+            'video/mp4', 'video/3gpp',
+        ];
+        if (! in_array($mime, $allowed, true)) {
+            return $this->jsonResponse(false, null, 'Unsupported file type for template header: ' . $mime, [], 422);
+        }
+
+        if ($file->getSize() > 16 * 1024 * 1024) {
+            return $this->jsonResponse(false, null, 'File exceeds 16MB limit.', [], 422);
+        }
+
+        if (! is_dir($this->uploadPath)) {
+            mkdir($this->uploadPath, 0755, true);
+        }
+
+        $newName = $file->getRandomName();
+        try {
+            $file->move($this->uploadPath, $newName);
+        } catch (Throwable $e) {
+            return $this->jsonResponse(false, null, 'Upload failed: ' . $e->getMessage(), [], 500);
+        }
+
+        $fullPath  = $this->uploadPath . $newName;
+        $publicUrl = site_url('media/serve/' . $newName);
+        $waMediaId = '';
+
+        try {
+            $uploaded = service('whatsApp')->uploadMedia($fullPath, $mime);
+            $waMediaId = trim((string) ($uploaded['id'] ?? $uploaded['media_id'] ?? ''));
+        } catch (Throwable $e) {
+            log_message('warning', 'Template header media provider upload failed: {msg}', ['msg' => $e->getMessage()]);
+        }
+
+        $id = model(MediaModel::class)->insert([
+            'filename'      => $newName,
+            'original_name' => $file->getClientName(),
+            'mime_type'     => $mime,
+            'size'          => $file->getSize(),
+            'path'          => 'uploads/media/' . $newName,
+            'wa_media_id'   => $waMediaId !== '' ? $waMediaId : null,
+            'url'           => $publicUrl,
+            'uploaded_by'   => $this->userId(),
+        ]);
+
+        if (! $id) {
+            return $this->jsonResponse(false, null, 'Failed to save uploaded media.', [], 500);
+        }
+
+        return $this->jsonResponse(true, [
+            'id'          => (int) $id,
+            'url'         => $publicUrl,
+            'mime_type'   => $mime,
+            // Prefer public HTTPS URL for template samples; media IDs fail on Cheerio create.
+            'source'      => $this->resolveUploadedTemplateSource($waMediaId, $publicUrl),
+            'preview_url' => $publicUrl,
+            'wa_media_id' => $waMediaId !== '' ? $waMediaId : null,
+            'filename'    => $file->getClientName(),
+        ], 'Header media uploaded.');
+    }
+
+    protected function resolveUploadedTemplateSource(string $waMediaId, string $publicUrl): string
+    {
+        if ($publicUrl !== ''
+            && preg_match('#^https?://#i', $publicUrl)
+            && ! preg_match('#^https?://(localhost|127\.0\.0\.1)(:|/|$)#i', $publicUrl)
+        ) {
+            return $publicUrl;
+        }
+
+        return $waMediaId !== '' ? $waMediaId : $publicUrl;
+    }
+
     /**
+     * @param array<string, mixed> $input
+     *
      * @return list<array<string, mixed>>
      */
-    protected function buildSubmitComponents(string $header, string $body, string $footer, string $examplesCsv): array
+    protected function buildSubmitComponents(array $input): array
     {
-        $components = [];
-
-        if ($header !== '') {
-            $headerComponent = [
-                'type'   => 'HEADER',
-                'format' => 'TEXT',
-                'text'   => $header,
-            ];
-            $headerVars = $this->extractPlaceholders($header);
-            if ($headerVars !== []) {
-                $headerComponent['example'] = [
-                    'header_text' => array_map(static fn ($n) => 'Sample' . $n, $headerVars),
-                ];
-            }
-            $components[] = $headerComponent;
-        }
+        $templateType = (string) ($input['template_type'] ?? 'default');
+        $body         = (string) ($input['body'] ?? '');
+        $examplesCsv  = (string) ($input['body_examples'] ?? '');
 
         $bodyComponent = [
             'type' => 'BODY',
@@ -333,6 +412,50 @@ class Templates extends BaseController
                 'body_text' => [array_slice($exampleValues, 0, count($bodyVars))],
             ];
         }
+
+        if ($templateType === 'carousel') {
+            return [
+                $bodyComponent,
+                [
+                    'type'  => 'CAROUSEL',
+                    'cards' => $this->buildCarouselCards(is_array($input['carousel_cards'] ?? null) ? $input['carousel_cards'] : []),
+                ],
+            ];
+        }
+
+        $components = [];
+        $headerType = (string) ($input['header_type'] ?? 'none');
+        $header     = (string) ($input['header'] ?? '');
+        $headerMediaSource = (string) ($input['header_media_source'] ?? '');
+        $headerMediaPreviewUrl = (string) ($input['header_media_preview_url'] ?? '');
+        $footer = (string) ($input['footer'] ?? '');
+
+        if ($headerType === 'text' && $header !== '') {
+            $headerComponent = [
+                'type'   => 'HEADER',
+                'format' => 'TEXT',
+                'text'   => $header,
+            ];
+            $headerVars = $this->extractPlaceholders($header);
+            if ($headerVars !== []) {
+                $headerComponent['example'] = [
+                    'header_text' => array_map(static fn ($n) => 'Sample' . $n, $headerVars),
+                ];
+            }
+            $components[] = $headerComponent;
+        } elseif (in_array($headerType, ['image', 'video', 'document'], true) && $headerMediaSource !== '') {
+            $handle = $this->resolveTemplateMediaHandle($headerMediaSource, $headerMediaPreviewUrl);
+            $components[] = [
+                'type'    => 'HEADER',
+                'format'  => strtoupper($headerType),
+                'example' => [
+                    'header_handle' => [$handle],
+                    'header_url'    => $headerMediaPreviewUrl !== '' ? $headerMediaPreviewUrl : $handle,
+                    'link'          => $headerMediaPreviewUrl !== '' ? $headerMediaPreviewUrl : $handle,
+                ],
+            ];
+        }
+
         $components[] = $bodyComponent;
 
         if ($footer !== '') {
@@ -342,7 +465,472 @@ class Templates extends BaseController
             ];
         }
 
+        $buttons = $this->buildCtaButtons(
+            (string) ($input['cta_type'] ?? ''),
+            (string) ($input['cta_button_text'] ?? ''),
+            (string) ($input['cta_url'] ?? ''),
+            (string) ($input['cta_url_example'] ?? ''),
+            (string) ($input['cta_phone_number'] ?? '')
+        );
+        if ($buttons !== []) {
+            $components[] = [
+                'type'    => 'BUTTONS',
+                'buttons' => $buttons,
+            ];
+        }
+
         return $components;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $cards
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function buildCarouselCards(array $cards): array
+    {
+        $out = [];
+
+        foreach ($cards as $card) {
+            if (! is_array($card)) {
+                continue;
+            }
+
+            $mediaType = strtolower(trim((string) ($card['media_type'] ?? 'image')));
+            $mediaSource = trim((string) ($card['media_source'] ?? ''));
+            $mediaPreview = trim((string) ($card['media_preview_url'] ?? $mediaSource));
+            $cardBody = trim((string) ($card['body'] ?? ''));
+            $handle = $this->resolveTemplateMediaHandle($mediaSource, $mediaPreview);
+
+            $cardComponents = [[
+                'type'    => 'HEADER',
+                'format'  => strtoupper($mediaType),
+                'example' => [
+                    'header_handle' => [$handle],
+                    'header_url'    => $mediaPreview !== '' ? $mediaPreview : $handle,
+                    'link'          => $mediaPreview !== '' ? $mediaPreview : $handle,
+                ],
+            ]];
+
+            if ($cardBody !== '') {
+                $cardBodyComponent = [
+                    'type' => 'BODY',
+                    'text' => $cardBody,
+                ];
+                $cardVars = $this->extractPlaceholders($cardBody);
+                if ($cardVars !== []) {
+                    $examples = array_values(array_filter(array_map('trim', explode(',', (string) ($card['body_examples'] ?? ''))), static fn ($v) => $v !== ''));
+                    foreach ($cardVars as $idx => $num) {
+                        if (! isset($examples[$idx])) {
+                            $examples[$idx] = 'Sample' . $num;
+                        }
+                    }
+                    $cardBodyComponent['example'] = [
+                        'body_text' => [array_slice($examples, 0, count($cardVars))],
+                    ];
+                }
+                $cardComponents[] = $cardBodyComponent;
+            }
+
+            $buttons = $this->buildCtaButtons(
+                strtolower(trim((string) ($card['cta_type'] ?? ''))),
+                trim((string) ($card['cta_button_text'] ?? '')),
+                trim((string) ($card['cta_url'] ?? '')),
+                trim((string) ($card['cta_url_example'] ?? '')),
+                trim((string) ($card['cta_phone_number'] ?? ''))
+            );
+            if ($buttons !== []) {
+                $cardComponents[] = [
+                    'type'    => 'BUTTONS',
+                    'buttons' => $buttons,
+                ];
+            }
+
+            $out[] = ['components' => $cardComponents];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    protected function buildCtaButtons(
+        string $ctaType,
+        string $ctaButtonText,
+        string $ctaUrl,
+        string $ctaUrlExample,
+        string $ctaPhoneNumber
+    ): array {
+        if ($ctaType === '' || $ctaButtonText === '') {
+            return [];
+        }
+
+        if ($ctaType === 'url') {
+            $button = [
+                'type' => 'URL',
+                'text' => $ctaButtonText,
+                'url'  => $ctaUrl,
+            ];
+            if ($ctaUrlExample !== '') {
+                $button['example'] = [$ctaUrlExample];
+            }
+
+            return [$button];
+        }
+
+        if ($ctaType === 'phone_number') {
+            return [[
+                'type'         => 'PHONE_NUMBER',
+                'text'         => $ctaButtonText,
+                'phone_number' => $ctaPhoneNumber,
+            ]];
+        }
+
+        return [];
+    }
+
+    /**
+     * @return array{
+     *     error: ?string,
+     *     name: string,
+     *     language: string,
+     *     category: string,
+     *     template_type: string,
+     *     header_type: string,
+     *     header: string,
+     *     header_media_source: string,
+     *     header_media_preview_url: string,
+     *     body: string,
+     *     footer: string,
+     *     body_examples: string,
+     *     cta_type: string,
+     *     cta_button_text: string,
+     *     cta_url: string,
+     *     cta_url_example: string,
+     *     cta_phone_number: string,
+     *     carousel_cards: list<array<string, mixed>>
+     * }
+     */
+    protected function normalizeTemplateInput(): array
+    {
+        $name         = strtolower(trim((string) $this->request->getPost('name')));
+        $language     = trim((string) ($this->request->getPost('language') ?: 'en_US'));
+        $category     = strtoupper(trim((string) ($this->request->getPost('category') ?: 'UTILITY')));
+        $templateType = strtolower(trim((string) ($this->request->getPost('template_type') ?: 'default')));
+        $headerType   = strtolower(trim((string) ($this->request->getPost('header_type') ?: 'text')));
+        $header       = trim((string) $this->request->getPost('header'));
+        $headerMediaSource = trim((string) $this->request->getPost('header_media_source'));
+        $headerMediaPreviewUrl = trim((string) $this->request->getPost('header_media_preview_url'));
+        $body         = trim((string) $this->request->getPost('body'));
+        $footer       = trim((string) $this->request->getPost('footer'));
+        $examples     = trim((string) $this->request->getPost('body_examples'));
+        $ctaType      = strtolower(trim((string) $this->request->getPost('cta_type')));
+        $ctaButtonText = trim((string) $this->request->getPost('cta_button_text'));
+        $ctaUrl       = trim((string) $this->request->getPost('cta_url'));
+        $ctaUrlExample = trim((string) $this->request->getPost('cta_url_example'));
+        $ctaPhoneNumber = trim((string) $this->request->getPost('cta_phone_number'));
+        $carouselCards = $this->parseCarouselCardsInput($this->request->getPost('carousel_cards'));
+
+        if ($name === '' || $body === '') {
+            return $this->invalidTemplateInput('Name and body are required.');
+        }
+
+        if (! preg_match('/^[a-z0-9_]+$/', $name)) {
+            return $this->invalidTemplateInput('Name must be lowercase letters, numbers, and underscores only.');
+        }
+
+        if (! preg_match('/^[a-z]{2}(?:_[A-Z]{2})?$/', $language)) {
+            return $this->invalidTemplateInput('Language must be in `en` or `en_US` format.');
+        }
+
+        $bodyPlaceholders = $this->extractPlaceholders($body);
+        if ($bodyPlaceholders !== []) {
+            $exampleValues = array_values(array_map('trim', explode(',', $examples)));
+            foreach ($bodyPlaceholders as $idx => $placeholder) {
+                if (! isset($exampleValues[$idx]) || $exampleValues[$idx] === '') {
+                    return $this->invalidTemplateInput('Please enter sample text for variable {{' . $placeholder . '}}.');
+                }
+            }
+
+            $ratioError = $this->validateBodyVariableRatio($body);
+            if ($ratioError !== null) {
+                return $this->invalidTemplateInput($ratioError);
+            }
+        }
+
+        if (! in_array($category, ['UTILITY', 'MARKETING', 'AUTHENTICATION'], true)) {
+            return $this->invalidTemplateInput('Invalid category.');
+        }
+
+        if (! in_array($templateType, ['default', 'carousel'], true)) {
+            return $this->invalidTemplateInput('Invalid template type.');
+        }
+
+        if ($templateType === 'carousel') {
+            if ($category !== 'MARKETING') {
+                return $this->invalidTemplateInput('Carousel templates must use the Marketing category.');
+            }
+
+            $cardError = $this->validateCarouselCards($carouselCards);
+            if ($cardError !== null) {
+                return $this->invalidTemplateInput($cardError);
+            }
+
+            // Carousel templates use message body + card media; top-level header/footer/CTA are not used.
+            $headerType = 'none';
+            $header = '';
+            $headerMediaSource = '';
+            $headerMediaPreviewUrl = '';
+            $footer = '';
+            $ctaType = '';
+            $ctaButtonText = '';
+            $ctaUrl = '';
+            $ctaUrlExample = '';
+            $ctaPhoneNumber = '';
+        } else {
+            $carouselCards = [];
+
+            if (! in_array($headerType, ['none', 'text', 'image', 'video', 'document'], true)) {
+                return $this->invalidTemplateInput('Invalid header type.');
+            }
+
+            if ($headerType === 'text' && $header === '') {
+                return $this->invalidTemplateInput('Header text is required when text header is selected.');
+            }
+
+            if (in_array($headerType, ['image', 'video', 'document'], true)) {
+                if ($headerMediaSource === '') {
+                    return $this->invalidTemplateInput('Upload a media file or provide a sample media URL for the header.');
+                }
+                $header = '';
+            }
+
+            if ($headerType === 'none') {
+                $header = '';
+                $headerMediaSource = '';
+                $headerMediaPreviewUrl = '';
+            }
+
+            if ($ctaType !== '' && ! in_array($ctaType, ['url', 'phone_number'], true)) {
+                return $this->invalidTemplateInput('Invalid CTA type.');
+            }
+
+            if ($ctaType !== '' && $ctaButtonText === '') {
+                return $this->invalidTemplateInput('CTA button text is required.');
+            }
+
+            if ($ctaType === 'url') {
+                if ($ctaUrl === '' || ! filter_var(str_replace('{{1}}', 'sample', $ctaUrl), FILTER_VALIDATE_URL)) {
+                    return $this->invalidTemplateInput('A valid CTA URL is required.');
+                }
+                if (preg_match('/\{\{\s*\d+\s*\}\}/', $ctaUrl) && $ctaUrlExample === '') {
+                    return $this->invalidTemplateInput('CTA URL example is required when the URL has a placeholder.');
+                }
+                $ctaPhoneNumber = '';
+            }
+
+            if ($ctaType === 'phone_number') {
+                if ($ctaPhoneNumber === '' || ! preg_match('/^\+?[0-9]{7,15}$/', $ctaPhoneNumber)) {
+                    return $this->invalidTemplateInput('A valid CTA phone number is required.');
+                }
+                $ctaUrl = '';
+                $ctaUrlExample = '';
+            }
+        }
+
+        return [
+            'error'         => null,
+            'name'          => $name,
+            'language'      => $language,
+            'category'      => $category,
+            'template_type' => $templateType,
+            'header_type'   => $headerType,
+            'header'        => $header,
+            'header_media_source' => $headerMediaSource,
+            'header_media_preview_url' => $headerMediaPreviewUrl,
+            'body'          => $body,
+            'footer'        => $footer,
+            'body_examples' => $examples,
+            'cta_type'      => $ctaType,
+            'cta_button_text' => $ctaButtonText,
+            'cta_url'       => $ctaUrl,
+            'cta_url_example' => $ctaUrlExample,
+            'cta_phone_number' => $ctaPhoneNumber,
+            'carousel_cards' => $carouselCards,
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    protected function parseCarouselCardsInput(mixed $raw): array
+    {
+        if (is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            $raw = is_array($decoded) ? $decoded : [];
+        }
+
+        if (! is_array($raw)) {
+            return [];
+        }
+
+        $cards = [];
+        foreach ($raw as $card) {
+            if (! is_array($card)) {
+                continue;
+            }
+            $cards[] = [
+                'media_type' => strtolower(trim((string) ($card['media_type'] ?? 'image'))),
+                'media_source' => trim((string) ($card['media_source'] ?? '')),
+                'media_preview_url' => trim((string) ($card['media_preview_url'] ?? '')),
+                'body' => trim((string) ($card['body'] ?? '')),
+                'body_examples' => trim((string) ($card['body_examples'] ?? '')),
+                'cta_type' => strtolower(trim((string) ($card['cta_type'] ?? ''))),
+                'cta_button_text' => trim((string) ($card['cta_button_text'] ?? '')),
+                'cta_url' => trim((string) ($card['cta_url'] ?? '')),
+                'cta_url_example' => trim((string) ($card['cta_url_example'] ?? '')),
+                'cta_phone_number' => trim((string) ($card['cta_phone_number'] ?? '')),
+            ];
+        }
+
+        return $cards;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $cards
+     */
+    protected function validateCarouselCards(array $cards): ?string
+    {
+        $count = count($cards);
+        if ($count < 2 || $count > 10) {
+            return 'Carousel templates need between 2 and 10 cards.';
+        }
+
+        $hasBody = null;
+        $hasButton = null;
+        $mediaType = null;
+
+        foreach ($cards as $index => $card) {
+            $cardNo = $index + 1;
+            $type = (string) ($card['media_type'] ?? '');
+            if (! in_array($type, ['image', 'video'], true)) {
+                return "Card {$cardNo}: media type must be image or video.";
+            }
+            if (trim((string) ($card['media_source'] ?? '')) === '') {
+                return "Card {$cardNo}: upload media or provide a sample media URL.";
+            }
+
+            $cardHasBody = trim((string) ($card['body'] ?? '')) !== '';
+            $ctaType = (string) ($card['cta_type'] ?? '');
+            $cardHasButton = $ctaType !== '';
+
+            if ($mediaType === null) {
+                $mediaType = $type;
+            } elseif ($mediaType !== $type) {
+                return 'All carousel cards must use the same media type.';
+            }
+
+            if ($hasBody === null) {
+                $hasBody = $cardHasBody;
+            } elseif ($hasBody !== $cardHasBody) {
+                return 'All carousel cards must either include body text or omit it.';
+            }
+
+            if ($hasButton === null) {
+                $hasButton = $cardHasButton;
+            } elseif ($hasButton !== $cardHasButton) {
+                return 'All carousel cards must either include a CTA button or omit it.';
+            }
+
+            if ($cardHasButton) {
+                if (! in_array($ctaType, ['url', 'phone_number'], true)) {
+                    return "Card {$cardNo}: invalid CTA type.";
+                }
+                if (trim((string) ($card['cta_button_text'] ?? '')) === '') {
+                    return "Card {$cardNo}: CTA button text is required.";
+                }
+            }
+        }
+
+        foreach ($cards as $index => $card) {
+            $cardNo = $index + 1;
+            $ctaType = (string) ($card['cta_type'] ?? '');
+            if ($ctaType === '') {
+                continue;
+            }
+            if ($ctaType === 'url') {
+                $ctaUrl = (string) ($card['cta_url'] ?? '');
+                if ($ctaUrl === '' || ! filter_var(str_replace('{{1}}', 'sample', $ctaUrl), FILTER_VALIDATE_URL)) {
+                    return "Card {$cardNo}: a valid CTA URL is required.";
+                }
+                if (preg_match('/\{\{\s*\d+\s*\}\}/', $ctaUrl) && trim((string) ($card['cta_url_example'] ?? '')) === '') {
+                    return "Card {$cardNo}: CTA URL example is required when the URL has a placeholder.";
+                }
+            }
+            if ($ctaType === 'phone_number') {
+                $phone = (string) ($card['cta_phone_number'] ?? '');
+                if ($phone === '' || ! preg_match('/^\+?[0-9]{7,15}$/', $phone)) {
+                    return "Card {$cardNo}: a valid CTA phone number is required.";
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{
+     *     error: string,
+     *     name: string,
+     *     language: string,
+     *     category: string,
+     *     template_type: string,
+     *     header_type: string,
+     *     header: string,
+     *     header_media_source: string,
+     *     header_media_preview_url: string,
+     *     body: string,
+     *     footer: string,
+     *     body_examples: string,
+     *     cta_type: string,
+     *     cta_button_text: string,
+     *     cta_url: string,
+     *     cta_url_example: string,
+     *     cta_phone_number: string
+     * }
+     */
+    protected function invalidTemplateInput(string $message): array
+    {
+        return [
+            'error'         => $message,
+            'name'          => '',
+            'language'      => '',
+            'category'      => '',
+            'template_type' => 'default',
+            'header_type'   => 'text',
+            'header'        => '',
+            'header_media_source' => '',
+            'header_media_preview_url' => '',
+            'body'          => '',
+            'footer'        => '',
+            'body_examples' => '',
+            'cta_type'      => '',
+            'cta_button_text' => '',
+            'cta_url'       => '',
+            'cta_url_example' => '',
+            'cta_phone_number' => '',
+            'carousel_cards' => [],
+        ];
+    }
+
+    protected function templateCreateErrorResponse(string $message): ResponseInterface
+    {
+        if ($this->request->isAJAX()) {
+            return $this->jsonResponse(false, null, $message, [], 422);
+        }
+
+        return redirect()->back()->withInput()->with('error', $message);
     }
 
     /**
@@ -362,6 +950,31 @@ class Templates extends BaseController
         }
 
         return $out;
+    }
+
+    /**
+     * WhatsApp rejects bodies where variables are too dense vs fixed words
+     * (error_subcode 2388293 / "Parameters words ratio exceeds limit").
+     */
+    protected function validateBodyVariableRatio(string $body): ?string
+    {
+        $placeholders = $this->extractPlaceholders($body);
+        $varCount     = count($placeholders);
+        if ($varCount === 0) {
+            return null;
+        }
+
+        $plain = trim(preg_replace('/\{\{\s*\d+\s*\}\}/', ' ', $body) ?? $body);
+        $plain = preg_replace('/\s+/', ' ', $plain) ?? $plain;
+        $words = $plain === '' ? [] : preg_split('/\s+/', $plain, -1, PREG_SPLIT_NO_EMPTY);
+        $wordCount = is_array($words) ? count($words) : 0;
+
+        // Require at least ~3 fixed words per variable (Meta/Cheerio ratio rule).
+        if ($wordCount < ($varCount * 3)) {
+            return 'This template has too many variables for its length. Add more body text or reduce variables (WhatsApp requires enough normal words around each {{n}}).';
+        }
+
+        return null;
     }
 
     /**
@@ -393,7 +1006,11 @@ class Templates extends BaseController
             switch ($type) {
                 case 'HEADER':
                     $result['header_type']    = strtolower((string) ($component['format'] ?? 'text'));
-                    $result['header_content'] = $component['text'] ?? ($component['example']['header_text'][0] ?? null);
+                    $result['header_content'] = $component['text']
+                        ?? ($component['example']['header_text'][0] ?? null)
+                        ?? ($component['example']['header_url'] ?? null)
+                        ?? ($component['example']['link'] ?? null)
+                        ?? ($component['example']['header_handle'][0] ?? null);
                     break;
                 case 'BODY':
                     $result['body'] = $component['text'] ?? null;
@@ -411,6 +1028,25 @@ class Templates extends BaseController
                 case 'BUTTONS':
                     $result['buttons'] = $component['buttons'] ?? null;
                     break;
+                case 'CAROUSEL':
+                    $cards = is_array($component['cards'] ?? null) ? $component['cards'] : [];
+                    $result['buttons'] = ['carousel_cards' => count($cards)];
+                    if ($result['header_type'] === null && isset($cards[0]['components']) && is_array($cards[0]['components'])) {
+                        foreach ($cards[0]['components'] as $cardComponent) {
+                            if (! is_array($cardComponent)) {
+                                continue;
+                            }
+                            if (strtoupper((string) ($cardComponent['type'] ?? '')) !== 'HEADER') {
+                                continue;
+                            }
+                            $result['header_type'] = strtolower((string) ($cardComponent['format'] ?? 'image'));
+                            $result['header_content'] = $cardComponent['example']['header_url']
+                                ?? $cardComponent['example']['link']
+                                ?? ($cardComponent['example']['header_handle'][0] ?? null);
+                            break;
+                        }
+                    }
+                    break;
             }
         }
 
@@ -419,5 +1055,56 @@ class Templates extends BaseController
         }
 
         return $result;
+    }
+
+    /**
+     * @param array<string, mixed>       $tpl
+     * @param list<array<string, mixed>> $components
+     */
+    protected function detectTemplateTypeFromComponents(array $tpl, array $components): string
+    {
+        $explicit = strtolower(trim((string) ($tpl['template_type'] ?? '')));
+        if (in_array($explicit, ['default', 'carousel'], true)) {
+            return $explicit;
+        }
+
+        foreach ($components as $component) {
+            if (! is_array($component)) {
+                continue;
+            }
+            if (strtoupper((string) ($component['type'] ?? '')) === 'CAROUSEL') {
+                return 'carousel';
+            }
+        }
+
+        return 'default';
+    }
+
+    /**
+     * Cheerio rejects messaging media IDs as template header_handle samples.
+     * Prefer a public HTTPS preview URL when available.
+     */
+    protected function resolveTemplateMediaHandle(string $source, string $previewUrl = ''): string
+    {
+        $source = trim($source);
+        $previewUrl = trim($previewUrl);
+
+        $isPublicHttp = static function (string $url): bool {
+            if (! preg_match('#^https?://#i', $url)) {
+                return false;
+            }
+
+            return ! preg_match('#^https?://(localhost|127\.0\.0\.1)(:|/|$)#i', $url);
+        };
+
+        if ($previewUrl !== '' && $isPublicHttp($previewUrl)) {
+            return $previewUrl;
+        }
+
+        if ($source !== '' && $isPublicHttp($source)) {
+            return $source;
+        }
+
+        return $source !== '' ? $source : $previewUrl;
     }
 }

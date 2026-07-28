@@ -1,5 +1,19 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_actions') ?>
+<?php if (function_exists('can') && can('templates.create')): ?>
+    <a href="<?= site_url('templates/create') ?>" class="btn btn-wa btn-sm">
+        <i class="fas fa-plus me-1"></i> Create template
+    </a>
+<?php endif; ?>
+<?php if (function_exists('can') && can('templates.sync')): ?>
+    <form action="<?= site_url('templates/sync') ?>" method="post" class="d-inline">
+        <?= csrf_field() ?>
+        <button type="submit" class="btn btn-outline-secondary btn-sm" id="btnSyncTemplates"><i class="fas fa-sync me-1"></i> <?= esc(function_exists('whatsapp_sync_label') ? whatsapp_sync_label() : 'Sync templates') ?></button>
+    </form>
+<?php endif; ?>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <?php
 $templateStatuses = [];
@@ -44,26 +58,11 @@ sort($templateCategories);
 sort($templateLanguages);
 ?>
 <div class="page-list">
-<div class="page-toolbar">
-    <div class="toolbar-actions">
-        <?php if (function_exists('can') && can('templates.create')): ?>
-            <a href="<?= site_url('templates/create') ?>" class="btn btn-wa btn-sm">
-                <i class="fas fa-plus me-1"></i> Create template
-            </a>
-        <?php endif; ?>
-        <?php if (function_exists('can') && can('templates.sync')): ?>
-            <form action="<?= site_url('templates/sync') ?>" method="post" class="d-inline">
-                <?= csrf_field() ?>
-                <button type="submit" class="btn btn-outline-secondary btn-sm" id="btnSyncTemplates"><i class="fas fa-sync me-1"></i> <?= esc(function_exists('whatsapp_sync_label') ? whatsapp_sync_label() : 'Sync templates') ?></button>
-            </form>
-        <?php endif; ?>
-    </div>
-</div>
 
 <?php if (! empty($templates)): ?>
-<div class="dash-panel mb-2">
-    <div class="panel-body py-2">
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+<div class="card">
+    <div class="card-body py-3">
+        <div class="section-toolbar">
             <div class="btn-group btn-group-sm template-tab-group" role="tablist" aria-label="Template view switcher">
                 <button type="button" class="btn btn-wa template-view-toggle active" data-view="card">
                     <i class="fas fa-id-card me-1"></i> Card
@@ -72,52 +71,43 @@ sort($templateLanguages);
                     <i class="fas fa-table-cells-large me-1"></i> Grid
                 </button>
             </div>
-            <div class="small text-muted">
+            <div class="section-meta">
                 Showing <span class="fw-semibold text-dark" id="templateVisibleCount"><?= count($templates) ?></span> of
                 <span class="fw-semibold text-dark"><?= count($templates) ?></span> templates
             </div>
         </div>
 
-        <div class="row g-2 align-items-center">
-            <div class="col-12 col-lg-5">
-                <input type="search" id="templateSearch" class="form-control form-control-sm" placeholder="Search template name/body/footer">
-            </div>
-            <div class="col-6 col-lg-2">
-                <select id="templateStatusFilter" class="form-select form-select-sm">
-                    <option value="">Status</option>
-                    <?php foreach ($templateStatuses as $status): ?>
-                        <option value="<?= esc($normalizeStatus($status), 'attr') ?>"><?= esc($statusLabel($status)) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col-6 col-lg-2">
-                <select id="templateCategoryFilter" class="form-select form-select-sm">
-                    <option value="">Category</option>
-                    <?php foreach ($templateCategories as $category): ?>
-                        <option value="<?= esc(strtolower($category), 'attr') ?>"><?= esc($category) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col-6 col-lg-2">
-                <select id="templateLanguageFilter" class="form-select form-select-sm">
-                    <option value="">Language</option>
-                    <?php foreach ($templateLanguages as $language): ?>
-                        <option value="<?= esc(strtolower($language), 'attr') ?>"><?= esc($language) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col-6 col-lg-1 d-grid">
+        <div class="filter-bar mb-0">
+            <input type="search" id="templateSearch" class="form-control form-control-sm" placeholder="Search name, body, footer">
+            <select id="templateStatusFilter" class="form-select form-select-sm" title="Status">
+                <option value="">Status</option>
+                <?php foreach ($templateStatuses as $status): ?>
+                    <option value="<?= esc($normalizeStatus($status), 'attr') ?>"><?= esc($statusLabel($status)) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <select id="templateCategoryFilter" class="form-select form-select-sm" title="Category">
+                <option value="">Category</option>
+                <?php foreach ($templateCategories as $category): ?>
+                    <option value="<?= esc(strtolower($category), 'attr') ?>"><?= esc($category) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <select id="templateLanguageFilter" class="form-select form-select-sm" title="Language">
+                <option value="">Language</option>
+                <?php foreach ($templateLanguages as $language): ?>
+                    <option value="<?= esc(strtolower($language), 'attr') ?>"><?= esc($language) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <div class="filter-bar-actions">
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="templateResetFilters" title="Reset filters">
-                    <i class="fas fa-rotate-left"></i>
+                    <i class="fas fa-rotate-left me-1"></i> Reset
                 </button>
             </div>
         </div>
         <div id="templateActiveFilters" class="d-flex flex-wrap gap-2 mt-2"></div>
     </div>
 </div>
-<div class="mb-1"></div>
 
-<div id="templateCardView" class="template-view-panel">
+<div id="templateCardView" class="template-view-panel page-section">
     <div class="row g-2">
         <?php foreach ($templates as $tpl): ?>
             <?php
@@ -171,11 +161,11 @@ sort($templateLanguages);
 </div>
 
 <div id="templateGridView" class="template-view-panel d-none">
-    <div class="card mt-2">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title mb-0">All templates</h2>
+        </div>
         <div class="card-body py-3">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-                <h2 class="h6 mb-0">All templates</h2>
-            </div>
             <div class="table-responsive">
                 <table class="table table-sm table-hover align-middle w-100" id="templatesTable">
                     <thead>

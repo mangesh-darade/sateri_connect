@@ -89,49 +89,25 @@
 .guide-checklist input { margin-right: .4rem; }
 .guide-hr { border-top: 1px dashed var(--border); margin: 1.5rem 0; }
 .guide-table th { background: var(--surface-2); white-space: nowrap; }
-.guide-hero {
-    position: relative;
-    overflow: hidden;
-    color: #fff;
-    border-radius: var(--radius);
-    padding: 1.35rem 1.5rem;
-    margin-bottom: 1.15rem;
-    background:
-        radial-gradient(600px 300px at 10% 0%, rgba(37, 211, 102, 0.35), transparent 55%),
-        linear-gradient(145deg, var(--wa-ink) 0%, var(--wa-teal) 55%, var(--wa-green-dark) 100%);
-}
-.guide-hero.guide-hero-prod {
-    background:
-        radial-gradient(600px 300px at 90% 0%, rgba(52, 183, 241, 0.25), transparent 55%),
-        linear-gradient(145deg, var(--wa-ink) 0%, var(--wa-teal) 50%, var(--wa-green-dark) 100%);
-}
-.guide-hero h1 {
-    font-family: var(--font-display);
-    font-size: 1.4rem;
-    font-weight: 700;
-    letter-spacing: -0.03em;
-    margin: 0 0 .35rem;
-}
-.guide-hero p { margin: 0; opacity: .85; font-size: .92rem; max-width: 52ch; }
-.guide-hero .guide-switch {
+.guide-switch-header {
     display: inline-flex;
-    gap: .4rem;
-    margin-top: .9rem;
-    padding: .25rem;
-    background: rgba(0,0,0,.2);
+    gap: .35rem;
+    padding: .2rem;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
     border-radius: 999px;
 }
-.guide-hero .guide-switch a {
+.guide-switch-header a {
     border-radius: 999px;
-    padding: .35rem .9rem;
-    font-size: .82rem;
+    padding: .3rem .85rem;
+    font-size: .8rem;
     font-weight: 600;
     text-decoration: none;
-    color: rgba(255,255,255,.75);
+    color: var(--text-muted);
 }
-.guide-hero .guide-switch a.active {
-    background: #fff;
-    color: var(--wa-ink);
+.guide-switch-header a.active {
+    background: var(--wa-green);
+    color: #fff;
 }
 @media (max-width: 991px) {
     .guide-layout { flex-direction: column; }
@@ -140,27 +116,24 @@
 </style>
 <?= $this->endSection() ?>
 
+<?= $this->section('header_actions') ?>
+<?php
+$guideType = $guideType ?? 'local';
+$isProd = $guideType === 'production';
+?>
+<div class="guide-switch guide-switch-header">
+    <a href="<?= site_url('guide/local') ?>" class="<?= ! $isProd ? 'active' : '' ?>">Local</a>
+    <a href="<?= site_url('guide/production') ?>" class="<?= $isProd ? 'active' : '' ?>">Production</a>
+</div>
+<a href="<?= site_url('guide/automations') ?>" class="btn btn-sm btn-outline-secondary">Automations guide</a>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <?php
 $toc = $toc ?? [];
 $guideHtml = $guideHtml ?? '';
 $guideType = $guideType ?? 'local';
-$guideTitle = $guideTitle ?? 'Guide';
-$guideSub = $guideSub ?? '';
-$isProd = $guideType === 'production';
 ?>
-<div class="guide-hero<?= $isProd ? ' guide-hero-prod' : '' ?>">
-    <h1>
-        <i class="fas <?= $isProd ? 'fa-server' : 'fa-laptop' ?> me-2"></i>
-        <?= esc($guideTitle) ?>
-    </h1>
-    <p><?= esc($guideSub) ?></p>
-    <div class="guide-switch">
-        <a href="<?= site_url('guide/local') ?>" class="<?= ! $isProd ? 'active' : '' ?>">Local</a>
-        <a href="<?= site_url('guide/production') ?>" class="<?= $isProd ? 'active' : '' ?>">Production</a>
-    </div>
-</div>
-
 <div class="guide-layout">
     <aside class="guide-toc d-none d-md-block">
         <h6>On this page</h6>

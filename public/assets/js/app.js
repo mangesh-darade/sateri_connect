@@ -36,6 +36,20 @@
         }
     });
 
+    $(document).ajaxError(function (_event, xhr) {
+        if (!xhr) return;
+
+        refreshCsrfFromResponse(xhr);
+
+        if (xhr.status === 403) {
+            var message = 'Your form/session security token expired or is invalid. Refresh the page and try again.';
+            if (xhr.responseJSON && xhr.responseJSON.message) {
+                message = xhr.responseJSON.message;
+            }
+            APP.toast(message, 'error');
+        }
+    });
+
     // Append CSRF to forms that omit csrf_field (safety net for dynamic forms)
     $(document).on('submit', 'form[method="post"], form[method="POST"]', function () {
         var $form = $(this);

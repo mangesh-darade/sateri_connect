@@ -1,16 +1,18 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_actions') ?>
+<?php if (function_exists('can') && can('users.create')): ?>
+    <a href="<?= site_url('users/create') ?>" class="btn btn-wa btn-sm"><i class="fas fa-plus me-1"></i> Add user</a>
+<?php endif; ?>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <div class="page-list">
-<div class="page-toolbar">
-    <div class="toolbar-actions">
-        <?php if (function_exists('can') && can('users.create')): ?>
-            <a href="<?= site_url('users/create') ?>" class="btn btn-wa btn-sm"><i class="fas fa-plus me-1"></i> Add user</a>
-        <?php endif; ?>
-    </div>
-</div>
 
 <div class="card">
+    <div class="card-header">
+        <h2 class="card-title mb-0">Team users</h2>
+    </div>
     <div class="card-body py-3">
         <table class="table table-sm table-hover align-middle w-100" id="usersTable">
             <thead>

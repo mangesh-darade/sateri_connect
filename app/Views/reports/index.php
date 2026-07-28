@@ -1,5 +1,23 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_actions') ?>
+<?php
+$filters = $filters ?? [];
+$fromVal = (string) ($filters['from'] ?? $from ?? date('Y-m-01'));
+$toVal   = (string) ($filters['to'] ?? $to ?? date('Y-m-d'));
+$campaignFilter = $filters['campaign_id'] ?? '';
+$exportQs = http_build_query(array_filter([
+    'from'        => $fromVal,
+    'to'          => $toVal,
+    'campaign_id' => $campaignFilter !== null && $campaignFilter !== '' ? $campaignFilter : null,
+]));
+?>
+<?php if (function_exists('can') && can('reports.export')): ?>
+    <a href="<?= site_url('reports/export-excel?' . $exportQs) ?>" class="btn btn-sm btn-outline-secondary" title="Excel"><i class="fas fa-file-csv me-1"></i> Excel</a>
+    <a href="<?= site_url('reports/export-pdf?' . $exportQs) ?>" class="btn btn-sm btn-outline-secondary" title="Print / HTML report"><i class="fas fa-print me-1"></i> Print</a>
+<?php endif; ?>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <?php
 $filters = $filters ?? [];
@@ -9,16 +27,11 @@ $from    = esc($fromVal);
 $to      = esc($toVal);
 $campaignFilter = $filters['campaign_id'] ?? '';
 $summary = $summary ?? $stats ?? $overview ?? [];
-$exportQs = http_build_query(array_filter([
-    'from'        => $fromVal,
-    'to'          => $toVal,
-    'campaign_id' => $campaignFilter !== null && $campaignFilter !== '' ? $campaignFilter : null,
-]));
 ?>
 <div class="page-list">
-<div class="card mb-2">
+<div class="card">
     <div class="card-body py-3">
-        <form method="get" action="<?= site_url('reports') ?>" class="filter-bar">
+        <form method="get" action="<?= site_url('reports') ?>" class="filter-bar mb-0">
             <input type="date" name="from" class="form-control form-control-sm" style="max-width:150px" value="<?= $from ?>" title="From">
             <input type="date" name="to" class="form-control form-control-sm" style="max-width:150px" value="<?= $to ?>" title="To">
             <select name="campaign_id" class="form-select form-select-sm" style="max-width:180px">
@@ -27,18 +40,18 @@ $exportQs = http_build_query(array_filter([
                     <option value="<?= (int) $c['id'] ?>" <?= (string) $campaignFilter === (string) $c['id'] ? 'selected' : '' ?>><?= esc($c['name']) ?></option>
                 <?php endforeach; ?>
             </select>
-            <button type="submit" class="btn btn-wa btn-sm"><i class="fas fa-filter me-1"></i> Apply</button>
             <div class="filter-bar-actions">
-                <?php if (function_exists('can') && can('reports.export')): ?>
-                    <a href="<?= site_url('reports/export-excel?' . $exportQs) ?>" class="btn btn-sm btn-outline-secondary" title="Excel"><i class="fas fa-file-csv me-1"></i> Excel</a>
-                    <a href="<?= site_url('reports/export-pdf?' . $exportQs) ?>" class="btn btn-sm btn-outline-secondary" title="Print / HTML report"><i class="fas fa-print me-1"></i> Print</a>
-                <?php endif; ?>
+                <button type="submit" class="btn btn-wa btn-sm"><i class="fas fa-filter me-1"></i> Apply</button>
             </div>
         </form>
     </div>
 </div>
 
-<div class="row g-2 mb-2">
+<div class="page-section">
+    <div class="page-section-head">
+        <h2 class="page-section-title">Summary</h2>
+    </div>
+    <div class="row g-2">
     <?php
     $cards = [
         ['Sent', $summary['sent'] ?? 0, 'kpi-accent-teal'],
@@ -56,9 +69,10 @@ $exportQs = http_build_query(array_filter([
         </div>
     </div>
     <?php endforeach; ?>
+    </div>
 </div>
 
-<div class="row g-2 mb-2">
+<div class="row g-2">
     <div class="col-lg-8">
         <div class="dash-panel">
             <div class="panel-head"><h3>Delivery over time</h3></div>

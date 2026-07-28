@@ -10,7 +10,13 @@ $recentCampaigns = $recentCampaigns ?? [];
 $activityRows = $recentActivity ?? $recent_activity ?? [];
 $failedCount = (int) $get($stats, 'failed');
 ?>
-<div class="row g-2 mb-3 kpi-grid">
+<div class="page-stack dashboard-page">
+<div class="page-section">
+    <div class="page-section-head">
+        <h2 class="page-section-title">Overview</h2>
+        <p class="page-section-sub">Jump into the main workspaces</p>
+    </div>
+    <div class="row g-2 kpi-grid">
     <div class="col-lg-3 col-6">
         <a href="<?= site_url('contacts') ?>" class="kpi-card kpi-hero">
             <span class="kpi-icon"><i class="fas fa-address-book"></i></span>
@@ -44,8 +50,14 @@ $failedCount = (int) $get($stats, 'failed');
         </a>
     </div>
 </div>
+</div>
 
-<div class="row g-2 mb-3 kpi-grid kpi-grid-metrics">
+<div class="page-section">
+    <div class="page-section-head">
+        <h2 class="page-section-title">Delivery metrics</h2>
+        <p class="page-section-sub">All-time performance pulse</p>
+    </div>
+    <div class="row g-2 kpi-grid kpi-grid-metrics">
     <div class="col-6 col-md-4 col-xl-2">
         <a href="<?= site_url('reports') ?>" class="kpi-card kpi-compact kpi-accent-teal">
             <span class="kpi-label">Sent</span>
@@ -89,8 +101,9 @@ $failedCount = (int) $get($stats, 'failed');
         </div>
     </div>
 </div>
+</div>
 
-<div class="row g-2 mb-3">
+<div class="row g-2">
     <div class="col-lg-8">
         <div class="dash-panel">
             <div class="panel-head">
@@ -127,7 +140,7 @@ $failedCount = (int) $get($stats, 'failed');
     </div>
 </div>
 
-<div class="row g-2 mb-2">
+<div class="row g-2">
     <div class="col-lg-5">
         <div class="dash-panel">
             <div class="panel-head">
@@ -223,6 +236,7 @@ $failedCount = (int) $get($stats, 'failed');
             </div>
         </div>
     </div>
+</div>
 </div>
 <?= $this->endSection() ?>
 

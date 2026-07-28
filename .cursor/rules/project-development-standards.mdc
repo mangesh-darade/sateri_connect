@@ -1,0 +1,25 @@
+---
+description: Senior development standards for this project
+alwaysApply: true
+---
+
+# Project Development Standards
+
+- Prefer simple, maintainable solutions. Avoid over-engineering unless complexity is clearly justified.
+- Follow proper MVC separation: keep controllers thin, move business logic to the right layer, and avoid mixing query/UI logic carelessly.
+- Prefer reusable helpers/services over duplicated one-off functions (see reusable-functions rule).
+- Keep page chrome consistent: breadcrumb left, title + provider chip left, primary actions right via `header_actions` (see ui-page-header-standard rule).
+- Use AJAX for interactions that should feel fast and avoid unnecessary full page reloads.
+- When adding or changing a database table or column, also add or update the matching schema or migration in the same task. Do not leave schema drift behind.
+- Write syntactically correct, production-safe code and keep naming, structure, and formatting clean.
+- Act like a senior developer: understand the feature end-to-end before editing, protect existing behavior, and prefer clear trade-offs over clever code.
+- Design with UI/UX in mind. Code for a business user experience: simple flows, clear labels, practical validation, and polished feedback states.
+- Use subagents when they materially improve research, debugging, review, or parallel exploration.
+- After coding, test the changed functions and the affected flow. Prefer focused verification over assumptions.
+- Keep commits module-wise and reviewable.
+- Never create a git commit unless the user explicitly asks for it, and always ask permission before committing.
+
+## Examples
+
+- If a feature needs a new `status` column, add the column and the related schema or migration in the same change.
+- If controller code starts handling too much domain logic, move that logic to the appropriate model, service, or helper layer.

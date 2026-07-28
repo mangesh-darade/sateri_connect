@@ -1,0 +1,22 @@
+---
+description: Prefer reusable helpers/services over duplicated one-off functions
+alwaysApply: true
+---
+
+# Reusable Function Standard
+
+- Extract shared logic into reusable helpers, libraries, or services instead of copy-pasting the same function in controllers/views/JS.
+- Controllers stay thin: validate input, call a service/helper, return response/view.
+- Put domain logic in `app/Libraries/` (or models when it is clearly data-owned).
+- Put shared view/UI snippets in `app/Views/partials/` and shared JS helpers in `public/assets/js/` (e.g. `APP.*`), not inline duplicates.
+- Name functions by behavior (`previewAudience`, `dispatchEmailCampaign`), not by page (`campaignsPageStuff`).
+- Keep functions focused: one responsibility, clear inputs/outputs, explicit error handling.
+- Before adding a new helper, check whether an existing service/helper already covers it; extend that instead of creating a parallel function.
+- When the same validation/error pattern appears in UI + API, share the rule in backend and mirror only UX messaging in JS.
+
+## Examples
+
+- Audience filtering for campaigns belongs in `CampaignService`, not duplicated in the controller and JS.
+- Email send/schedule dispatch belongs in `EmailCampaignService`, reusable by wizard UI and `campaigns:process`.
+- Toast/API error parsing should reuse `APP.toast` / shared JS helpers, not a new copy per page.
+- User-facing crashes use `ErrorPresenter` + `errors/html/app_error.php` (via `AppExceptionHandler` / `render_app_error()`), never a one-off debug dump page.

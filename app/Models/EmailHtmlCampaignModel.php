@@ -27,6 +27,7 @@ class EmailHtmlCampaignModel extends Model
         'failed_count',
         'last_error',
         'sent_at',
+        'scheduled_at',
         'created_by',
     ];
     protected $useTimestamps = true;

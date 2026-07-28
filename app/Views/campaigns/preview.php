@@ -1,11 +1,13 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_actions') ?>
+<?php $campaign = $campaign ?? []; ?>
+<a href="<?= site_url('campaigns/' . (int) ($campaign['id'] ?? 0)) ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i> Back</a>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <?php $campaign = $campaign ?? []; $preview = $preview ?? []; ?>
 <div class="card card-wa">
-    <div class="card-header">
-        <h3 class="card-title">Preview — <?= esc($campaign['name'] ?? 'Campaign') ?></h3>
-    </div>
     <div class="card-body">
         <div class="row">
             <div class="col-md-6">
@@ -34,9 +36,6 @@
                 <?php endif; ?>
             </div>
         </div>
-    </div>
-    <div class="card-footer">
-        <a href="<?= site_url('campaigns/' . (int) ($campaign['id'] ?? 0)) ?>" class="btn btn-secondary">Back</a>
     </div>
 </div>
 <?= $this->endSection() ?>

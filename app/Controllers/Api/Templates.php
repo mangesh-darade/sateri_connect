@@ -117,7 +117,11 @@ class Templates extends BaseApiController
             switch ($type) {
                 case 'HEADER':
                     $result['header_type']    = strtolower((string) ($component['format'] ?? 'text'));
-                    $result['header_content'] = $component['text'] ?? ($component['example']['header_text'][0] ?? null);
+                    $result['header_content'] = $component['text']
+                        ?? ($component['example']['header_text'][0] ?? null)
+                        ?? ($component['example']['header_url'] ?? null)
+                        ?? ($component['example']['link'] ?? null)
+                        ?? ($component['example']['header_handle'][0] ?? null);
                     break;
                 case 'BODY':
                     $result['body'] = $component['text'] ?? null;

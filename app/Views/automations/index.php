@@ -1,25 +1,27 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_actions') ?>
+<?php if (function_exists('can') && can('automations.create')): ?>
+    <a href="<?= site_url('automations/create') ?>" class="btn btn-wa btn-sm"><i class="fas fa-plus me-1"></i> New workflow</a>
+<?php endif; ?>
+<?php if (function_exists('can') && (can('automations.create') || can('automations.edit'))): ?>
+    <form action="<?= site_url('automations/sync-cheerio') ?>" method="post" class="d-inline" id="formSyncCheerioWorkflows">
+        <?= csrf_field() ?>
+        <button type="submit" class="btn btn-outline-secondary btn-sm" id="btnSyncCheerioWorkflows"
+                title="Sync workflows for the active WhatsApp provider">
+            <i class="fas fa-cloud-download-alt me-1"></i> <?= esc(function_exists('whatsapp_sync_label') ? whatsapp_sync_label() : 'Sync workflows') ?>
+        </button>
+    </form>
+<?php endif; ?>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <div class="page-list">
-<div class="page-toolbar">
-    <div class="toolbar-actions">
-        <?php if (function_exists('can') && can('automations.create')): ?>
-            <a href="<?= site_url('automations/create') ?>" class="btn btn-wa btn-sm"><i class="fas fa-plus me-1"></i> New workflow</a>
-        <?php endif; ?>
-        <?php if (function_exists('can') && (can('automations.create') || can('automations.edit'))): ?>
-            <form action="<?= site_url('automations/sync-cheerio') ?>" method="post" class="d-inline" id="formSyncCheerioWorkflows">
-                <?= csrf_field() ?>
-                <button type="submit" class="btn btn-outline-secondary btn-sm" id="btnSyncCheerioWorkflows"
-                        title="Sync workflows for the active WhatsApp provider">
-                    <i class="fas fa-cloud-download-alt me-1"></i> <?= esc(function_exists('whatsapp_sync_label') ? whatsapp_sync_label() : 'Sync workflows') ?>
-                </button>
-            </form>
-        <?php endif; ?>
-    </div>
-</div>
-
 <div class="card">
+    <div class="card-header d-flex align-items-center justify-content-between gap-2">
+        <h2 class="card-title mb-0">Workflows</h2>
+        <span class="small text-muted">Trigger → condition → action</span>
+    </div>
     <div class="card-body py-3">
         <?php if (! empty($automations)): ?>
         <table class="table table-sm table-hover align-middle w-100" id="automationsTable">
