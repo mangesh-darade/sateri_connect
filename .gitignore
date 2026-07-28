@@ -49,6 +49,7 @@ Vagrantfile
 *.sql
 !docs/schema.sql
 !apiwa_database.sql
+!docs/deploy/fix-channel-columns.sql
 _unused/
 
 # Lab / tunnel junk
