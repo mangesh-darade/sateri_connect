@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 120" role="img" aria-label="ElintOm">
+  <defs>
+    <linearGradient id="eoGrad" x1="0%" y1="20%" x2="100%" y2="80%">
+      <stop offset="0%" stop-color="#14b8c6"/>
+      <stop offset="55%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#ec4899"/>
+    </linearGradient>
+  </defs>
+  <!-- Infinity / EO mark -->
+  <g fill="none" stroke="url(#eoGrad)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M58 60c0-22 16-36 36-36 14 0 24 7 32 18 8-11 18-18 32-18 20 0 36 14 36 36s-16 36-36 36c-14 0-24-7-32-18-8 11-18 18-32 18-20 0-36-14-36-36z"/>
+  </g>
+  <!-- Wordmark -->
+  <text x="210" y="78" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="56" font-weight="700" letter-spacing="-1.5">
+    <tspan fill="#0e9aab">Elint</tspan><tspan fill="#e11d8a">Om</tspan>
+  </text>
+</svg>

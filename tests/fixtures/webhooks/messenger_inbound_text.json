@@ -1,0 +1,20 @@
+{
+  "object": "page",
+  "entry": [
+    {
+      "id": "PAGE_ID_EXAMPLE",
+      "time": 1722000100,
+      "messaging": [
+        {
+          "sender": { "id": "PSID_FIXTURE_001" },
+          "recipient": { "id": "PAGE_ID_EXAMPLE" },
+          "timestamp": 1722000100000,
+          "message": {
+            "mid": "m_FIXTURE_MESSENGER_001",
+            "text": "Hello from Messenger fixture"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,155 @@
+<?= $this->extend('layouts/main') ?>
+
+<?= $this->section('content') ?>
+<?php
+$filters = $filters ?? [];
+$fromVal = (string) ($filters['from'] ?? $from ?? date('Y-m-01'));
+$toVal   = (string) ($filters['to'] ?? $to ?? date('Y-m-d'));
+$from    = esc($fromVal);
+$to      = esc($toVal);
+$campaignFilter = $filters['campaign_id'] ?? '';
+$summary = $summary ?? $stats ?? $overview ?? [];
+$exportQs = http_build_query(array_filter([
+    'from'        => $fromVal,
+    'to'          => $toVal,
+    'campaign_id' => $campaignFilter !== null && $campaignFilter !== '' ? $campaignFilter : null,
+]));
+?>
+<div class="page-list">
+<div class="card mb-2">
+    <div class="card-body py-3">
+        <form method="get" action="<?= site_url('reports') ?>" class="filter-bar">
+            <input type="date" name="from" class="form-control form-control-sm" style="max-width:150px" value="<?= $from ?>" title="From">
+            <input type="date" name="to" class="form-control form-control-sm" style="max-width:150px" value="<?= $to ?>" title="To">
+            <select name="campaign_id" class="form-select form-select-sm" style="max-width:180px">
+                <option value="">All campaigns</option>
+                <?php foreach (($campaigns ?? []) as $c): ?>
+                    <option value="<?= (int) $c['id'] ?>" <?= (string) $campaignFilter === (string) $c['id'] ? 'selected' : '' ?>><?= esc($c['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <button type="submit" class="btn btn-wa btn-sm"><i class="fas fa-filter me-1"></i> Apply</button>
+            <div class="filter-bar-actions">
+                <?php if (function_exists('can') && can('reports.export')): ?>
+                    <a href="<?= site_url('reports/export-excel?' . $exportQs) ?>" class="btn btn-sm btn-outline-secondary" title="Excel"><i class="fas fa-file-csv me-1"></i> Excel</a>
+                    <a href="<?= site_url('reports/export-pdf?' . $exportQs) ?>" class="btn btn-sm btn-outline-secondary" title="Print / HTML report"><i class="fas fa-print me-1"></i> Print</a>
+                <?php endif; ?>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row g-2 mb-2">
+    <?php
+    $cards = [
+        ['Sent', $summary['sent'] ?? 0, 'kpi-accent-teal'],
+        ['Delivered', $summary['delivered'] ?? 0, 'kpi-accent-green'],
+        ['Read', $summary['read'] ?? 0, 'kpi-accent-sky'],
+        ['Failed', $summary['failed'] ?? 0, 'kpi-accent-danger'],
+        ['Replies', $summary['replies'] ?? 0, 'kpi-accent-amber'],
+    ];
+    foreach ($cards as [$label, $num, $accent]):
+    ?>
+    <div class="col-6 col-md">
+        <div class="kpi-card <?= $accent ?>">
+            <span class="kpi-label"><?= esc($label) ?></span>
+            <span class="kpi-value"><?= esc(number_format((int) $num)) ?></span>
+        </div>
+    </div>
+    <?php endforeach; ?>
+</div>
+
+<div class="row g-2 mb-2">
+    <div class="col-lg-8">
+        <div class="dash-panel">
+            <div class="panel-head"><h3>Delivery over time</h3></div>
+            <div class="panel-body" style="height:320px">
+                <?php $trend = $charts['trends'] ?? $trend ?? []; ?>
+                <canvas id="reportTrendChart"
+                    data-labels='<?= json_encode($trend['labels'] ?? []) ?>'
+                    data-sent='<?= json_encode($trend['sent'] ?? []) ?>'
+                    data-delivered='<?= json_encode($trend['delivered'] ?? []) ?>'
+                    data-failed='<?= json_encode($trend['failed'] ?? []) ?>'></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="dash-panel">
+            <div class="panel-head"><h3>Status mix</h3></div>
+            <div class="panel-body" style="height:320px">
+                <canvas id="reportMixChart"
+                    data-labels='<?= json_encode(['Delivered','Read','Failed','Replies']) ?>'
+                    data-values='<?= json_encode([
+                        (int) ($summary['delivered'] ?? 0),
+                        (int) ($summary['read'] ?? 0),
+                        (int) ($summary['failed'] ?? 0),
+                        (int) ($summary['replies'] ?? 0),
+                    ]) ?>'></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body py-3">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+            <h2 class="h6 mb-0">Campaign breakdown</h2>
+            <div class="d-flex gap-2">
+                <a href="<?= site_url('reports/campaigns') ?>" class="btn btn-sm btn-outline-secondary">Campaigns</a>
+                <a href="<?= site_url('reports/delivery') ?>" class="btn btn-sm btn-outline-secondary">Delivery</a>
+            </div>
+        </div>
+        <table class="table table-sm table-hover align-middle w-100" id="reportCampaignsTable">
+            <thead>
+                <tr><th>Campaign</th><th>Sent</th><th>Delivered</th><th>Read</th><th>Failed</th><th>Replies</th></tr>
+            </thead>
+            <tbody>
+                <?php foreach (($campaign_stats ?? []) as $row): ?>
+                    <tr>
+                        <td class="fw-semibold"><?= esc($row['name'] ?? '') ?></td>
+                        <td><?= esc((string) ($row['sent_count'] ?? 0)) ?></td>
+                        <td><?= esc((string) ($row['delivered_count'] ?? 0)) ?></td>
+                        <td><?= esc((string) ($row['read_count'] ?? 0)) ?></td>
+                        <td><?= esc((string) ($row['failed_count'] ?? 0)) ?></td>
+                        <td><?= esc((string) ($row['reply_count'] ?? 0)) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+</div>
+<?= $this->endSection() ?>
+
+<?= $this->section('scripts') ?>
+<script>
+$(function () {
+    var t = document.getElementById('reportTrendChart');
+    if (t && window.Chart) {
+        new Chart(t.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: JSON.parse(t.getAttribute('data-labels') || '[]'),
+                datasets: [
+                    { label: 'Sent', data: JSON.parse(t.getAttribute('data-sent') || '[]'), borderColor: '#128C7E', tension: .3 },
+                    { label: 'Delivered', data: JSON.parse(t.getAttribute('data-delivered') || '[]'), borderColor: '#25D366', tension: .3 },
+                    { label: 'Failed', data: JSON.parse(t.getAttribute('data-failed') || '[]'), borderColor: '#e25555', tension: .3 }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+        });
+    }
+    var m = document.getElementById('reportMixChart');
+    if (m && window.Chart) {
+        new Chart(m.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: JSON.parse(m.getAttribute('data-labels') || '[]'),
+                datasets: [{ data: JSON.parse(m.getAttribute('data-values') || '[]'), backgroundColor: ['#25D366','#34B7F1','#e25555','#f0a202'], borderWidth: 0 }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+        });
+    }
+    if ($.fn.DataTable) { $('#reportCampaignsTable').DataTable(); }
+});
+</script>
+<?= $this->endSection() ?>

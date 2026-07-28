@@ -1,0 +1,11 @@
+# Deny web access to project root.
+# DocumentRoot must be `public/`. If misconfigured to project root, rewrite into public.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+# Fallback deny if rewrite unavailable
+<IfModule !mod_rewrite.c>
+    Require all denied
+</IfModule>

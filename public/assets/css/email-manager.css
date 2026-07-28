@@ -1,0 +1,76 @@
+/* Email Manager + Analytics shared chrome */
+.em-hero {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.em-tabs .nav-link {
+    color: #475569;
+    font-size: 0.9rem;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 0.65rem 0.9rem;
+}
+
+.em-tabs .nav-link.active {
+    color: #0f172a;
+    font-weight: 600;
+    background: transparent;
+    border-bottom-color: #25d366;
+}
+
+.em-table th {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #64748b;
+}
+
+.btn-xs {
+    padding: 0.15rem 0.45rem;
+    font-size: 0.75rem;
+    line-height: 1.4;
+}
+
+.em-msg.ok { color: #15803d; }
+.em-msg.err { color: #b91c1c; }
+
+.em-drip-card {
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    background: #fff;
+}
+
+.em-status-valid,
+.em-status-verified,
+.em-status-sent,
+.em-status-active { background: #dcfce7; color: #166534; }
+.em-status-invalid,
+.em-status-failed { background: #fee2e2; color: #991b1b; }
+.em-status-risky,
+.em-status-pending,
+.em-status-queued { background: #fef3c7; color: #92400e; }
+.em-status-unknown,
+.em-status-draft,
+.em-status-disabled { background: #e2e8f0; color: #334155; }
+
+.em-step-row {
+    border: 1px dashed rgba(15, 23, 42, 0.12);
+    border-radius: 8px;
+    padding: 0.6rem;
+    margin-bottom: 0.5rem;
+    background: #f8fafc;
+}
+
+@media (max-width: 768px) {
+    .em-tabs {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+}

@@ -1,0 +1,20 @@
+{
+  "object": "instagram",
+  "entry": [
+    {
+      "id": "IG_ACCOUNT_OR_PAGE_ID",
+      "time": 1722000200,
+      "messaging": [
+        {
+          "sender": { "id": "IGSID_FIXTURE_001" },
+          "recipient": { "id": "IG_ACCOUNT_OR_PAGE_ID" },
+          "timestamp": 1722000200000,
+          "message": {
+            "mid": "m_FIXTURE_INSTAGRAM_001",
+            "text": "Hello from Instagram fixture"
+          }
+        }
+      ]
+    }
+  ]
+}

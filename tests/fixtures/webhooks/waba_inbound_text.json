@@ -1,0 +1,35 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WABA_ID_EXAMPLE",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "15550001111",
+              "phone_number_id": "PHONE_NUMBER_ID_EXAMPLE"
+            },
+            "contacts": [
+              {
+                "profile": { "name": "WA Fixture User" },
+                "wa_id": "919876543210"
+              }
+            ],
+            "messages": [
+              {
+                "from": "919876543210",
+                "id": "wamid.FIXTURE_WA_001",
+                "timestamp": "1722000000",
+                "type": "text",
+                "text": { "body": "Hello from WhatsApp fixture" }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
