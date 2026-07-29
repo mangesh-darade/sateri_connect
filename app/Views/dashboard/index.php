@@ -244,5 +244,5 @@ $failedCount = (int) $get($stats, 'failed');
 <script>
 window.dashboardCharts = <?= json_encode($charts ?? []) ?>;
 </script>
-<script src="<?= base_url('assets/js/dashboard.js') ?>?v=2"></script>
+<script src="<?= asset_url('assets/js/dashboard.js') ?>"></script>
 <?= $this->endSection() ?>

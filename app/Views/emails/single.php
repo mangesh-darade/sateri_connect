@@ -76,9 +76,9 @@ $campaigns = $campaigns ?? [];
 <?= $this->endSection() ?>
 
 <?= $this->section('styles') ?>
-<link rel="stylesheet" href="<?= base_url('assets/css/emails.css') ?>?v=2">
+<link rel="stylesheet" href="<?= asset_url('assets/css/emails.css') ?>">
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
-<script src="<?= base_url('assets/js/emails.js') ?>?v=2"></script>
+<script src="<?= asset_url('assets/js/emails.js') ?>"></script>
 <?= $this->endSection() ?>

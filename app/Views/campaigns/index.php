@@ -223,5 +223,5 @@ $campaigns = $campaigns ?? [];
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
-<script src="<?= base_url('assets/js/campaigns.js') ?>?v=<?= @filemtime(FCPATH . 'assets/js/campaigns.js') ?: time() ?>"></script>
+<script src="<?= asset_url('assets/js/campaigns.js') ?>"></script>
 <?= $this->endSection() ?>

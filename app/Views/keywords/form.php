@@ -151,5 +151,5 @@ $providerShort = function_exists('whatsapp_provider_short') ? whatsapp_provider_
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
-<script src="<?= base_url('assets/js/keywords-form.js') ?>?v=3"></script>
+<script src="<?= asset_url('assets/js/keywords-form.js') ?>"></script>
 <?= $this->endSection() ?>

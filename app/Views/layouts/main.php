@@ -28,8 +28,8 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2.0/dist/css/adminlte.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11.10.8/dist/sweetalert2.min.css">
-    <link rel="stylesheet" href="<?= base_url('assets/css/app.css') ?>?v=brand4">
-    <link rel="stylesheet" href="<?= base_url('assets/css/sidebar.css') ?>?v=brand5">
+    <link rel="stylesheet" href="<?= asset_url('assets/css/app.css') ?>">
+    <link rel="stylesheet" href="<?= asset_url('assets/css/sidebar.css') ?>">
     <?= $this->renderSection('styles') ?>
 </head>
 <body class="hold-transition sidebar-mini layout-fixed<?= ! empty($fullBleed) ? ' flow-builder-page' : '' ?><?= ! empty($chatPage) ? ' chat-page-active' : '' ?>">
@@ -570,7 +570,7 @@
         whatsappProviderLabel: <?= json_encode(function_exists('whatsapp_provider_label') ? whatsapp_provider_label() : 'Cheerio Direct API') ?>
     };
 </script>
-<script src="<?= base_url('assets/js/app.js') ?>"></script>
+<script src="<?= asset_url('assets/js/app.js') ?>"></script>
 <?= $this->renderSection('scripts') ?>
 </body>
 </html>

@@ -60,5 +60,5 @@ $isCheerio = ! empty($isCheerio);
 <?= $this->endSection() ?>
 
 <?= $this->section('styles') ?>
-<link rel="stylesheet" href="<?= base_url('assets/css/emails.css') ?>?v=2">
+<link rel="stylesheet" href="<?= asset_url('assets/css/emails.css') ?>">
 <?= $this->endSection() ?>

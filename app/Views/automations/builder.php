@@ -1,7 +1,7 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('styles') ?>
-<link rel="stylesheet" href="<?= base_url('assets/css/automations-flow.css') ?>?v=5">
+<link rel="stylesheet" href="<?= asset_url('assets/css/automations-flow.css') ?>">
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
@@ -216,5 +216,5 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
-<script src="<?= base_url('assets/js/automations-flow.js') ?>?v=9"></script>
+<script src="<?= asset_url('assets/js/automations-flow.js') ?>"></script>
 <?= $this->endSection() ?>

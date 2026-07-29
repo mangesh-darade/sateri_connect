@@ -260,9 +260,9 @@ $emailSum = $email['summary'] ?? [];
 <?= $this->endSection() ?>
 
 <?= $this->section('styles') ?>
-<link rel="stylesheet" href="<?= base_url('assets/css/email-manager.css') ?>?v=1">
+<link rel="stylesheet" href="<?= asset_url('assets/css/email-manager.css') ?>">
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
-<script src="<?= base_url('assets/js/analytics.js') ?>?v=1"></script>
+<script src="<?= asset_url('assets/js/analytics.js') ?>"></script>
 <?= $this->endSection() ?>

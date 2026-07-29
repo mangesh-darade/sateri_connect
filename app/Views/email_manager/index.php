@@ -84,9 +84,9 @@ $tabUrl = static fn (string $t): string => site_url('email-manager?tab=' . $t);
 <?= $this->endSection() ?>
 
 <?= $this->section('styles') ?>
-<link rel="stylesheet" href="<?= base_url('assets/css/email-manager.css') ?>?v=1">
+<link rel="stylesheet" href="<?= asset_url('assets/css/email-manager.css') ?>">
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
-<script src="<?= base_url('assets/js/email-manager.js') ?>?v=1"></script>
+<script src="<?= asset_url('assets/js/email-manager.js') ?>"></script>
 <?= $this->endSection() ?>

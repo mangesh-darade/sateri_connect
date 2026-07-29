@@ -287,5 +287,5 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
-<script src="<?= base_url('assets/js/chat.js') ?>?v=inbox2"></script>
+<script src="<?= asset_url('assets/js/chat.js') ?>"></script>
 <?= $this->endSection() ?>
