@@ -26,23 +26,26 @@
     font-family: var(--elint-sidebar-font);
 }
 
-/* Open: body offset matches full sidebar */
-html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .content-wrapper,
-html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-footer,
-html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-header {
-    margin-left: var(--sidebar-w) !important;
-    transition: margin-left .3s ease;
-}
+/* Desktop only — never reserve sidebar gutter on tablet/phone (was causing mobile half-width flash) */
+@media (min-width: 992px) {
+    /* Open: body offset matches full sidebar */
+    html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .content-wrapper,
+    html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-footer,
+    html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-header {
+        margin-left: var(--sidebar-w) !important;
+        transition: margin-left .3s ease;
+    }
 
-/* Collapsed: body must shrink with the rail (wins over AdminLTE + older copies) */
-html body.sidebar-mini.sidebar-collapse .main-sidebar {
-    width: var(--sidebar-collapsed-w) !important;
-}
-html body.sidebar-mini.sidebar-collapse .content-wrapper,
-html body.sidebar-mini.sidebar-collapse .main-footer,
-html body.sidebar-mini.sidebar-collapse .main-header {
-    margin-left: var(--sidebar-collapsed-w) !important;
-    transition: margin-left .3s ease;
+    /* Collapsed: body must shrink with the rail (wins over AdminLTE + older copies) */
+    html body.sidebar-mini.sidebar-collapse .main-sidebar {
+        width: var(--sidebar-collapsed-w) !important;
+    }
+    html body.sidebar-mini.sidebar-collapse .content-wrapper,
+    html body.sidebar-mini.sidebar-collapse .main-footer,
+    html body.sidebar-mini.sidebar-collapse .main-header {
+        margin-left: var(--sidebar-collapsed-w) !important;
+        transition: margin-left .3s ease;
+    }
 }
 
 /* Brand */
@@ -434,7 +437,10 @@ body.sidebar-mini.sidebar-collapse .elint-sidebar .sidebar-footer-links .nav-lin
 @media (max-width: 991.98px) {
     :root { --sidebar-w: 240px; }
 
-    /* Overlay sidebar — never reserve desktop margin on tablet/phone */
+    /*
+     * Overlay sidebar on tablet/phone — match desktop selector specificity
+     * so margin-left: 256px never wins and flashes a half-width layout.
+     */
     html body.sidebar-mini .content-wrapper,
     html body.sidebar-mini .main-footer,
     html body.sidebar-mini .main-header,
@@ -443,8 +449,15 @@ body.sidebar-mini.sidebar-collapse .elint-sidebar .sidebar-footer-links .nav-lin
     html body.sidebar-mini.sidebar-collapse .main-header,
     html body.sidebar-mini:not(.sidebar-collapse) .content-wrapper,
     html body.sidebar-mini:not(.sidebar-collapse) .main-footer,
-    html body.sidebar-mini:not(.sidebar-collapse) .main-header {
+    html body.sidebar-mini:not(.sidebar-collapse) .main-header,
+    html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .content-wrapper,
+    html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-footer,
+    html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-header,
+    html body.sidebar-open .content-wrapper,
+    html body.sidebar-open .main-footer,
+    html body.sidebar-open .main-header {
         margin-left: 0 !important;
+        transition: none !important;
     }
 
     html body.sidebar-mini .main-sidebar,

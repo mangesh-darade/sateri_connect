@@ -3328,17 +3328,21 @@ body.chat-page-active .content-wrapper {
         --bottom-nav-h: 4rem;
     }
 
+    /* Belt-and-suspenders with sidebar.css — never leave a desktop gutter on phones */
     html body.sidebar-mini .content-wrapper,
     html body.sidebar-mini .main-footer,
     html body.sidebar-mini .main-header,
     html body.sidebar-mini.sidebar-collapse .content-wrapper,
     html body.sidebar-mini.sidebar-collapse .main-footer,
     html body.sidebar-mini.sidebar-collapse .main-header,
-    body.sidebar-mini.sidebar-collapse .content-wrapper,
-    body.sidebar-mini.sidebar-collapse .main-footer,
-    body:not(.sidebar-open) .content-wrapper,
-    body:not(.sidebar-open) .main-footer {
+    html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .content-wrapper,
+    html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-footer,
+    html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-header,
+    html body.sidebar-open .content-wrapper,
+    html body.sidebar-open .main-footer,
+    html body.sidebar-open .main-header {
         margin-left: 0 !important;
+        transition: none !important;
     }
 
     /* Room for app-style bottom tabs */
@@ -3349,16 +3353,19 @@ body.chat-page-active .content-wrapper {
         display: none !important;
     }
 
-    .content-header { padding-top: 0.55rem; padding-bottom: 0; }
+    .content-header { padding-top: 0.55rem; padding-bottom: 0.15rem; }
     .content-header .row { flex-direction: column; align-items: flex-start !important; gap: 0 !important; }
     .content-header .breadcrumb { display: none !important; }
     .content-header h1 { font-size: 1.05rem; }
 
-    /* Title on its own row; actions full-width below (avoids staggered wrap) */
-    .content-header .d-flex.flex-wrap {
+    /*
+     * Only the title/actions shell — NOT .header-page-actions itself
+     * (that also has d-flex flex-wrap; column+stretch made every button full-width).
+     */
+    .content-header > .container-fluid > .d-flex.flex-wrap {
         flex-direction: column;
         align-items: stretch !important;
-        gap: 0.65rem !important;
+        gap: 0.5rem !important;
     }
     .content-header .provider-chip {
         font-size: 0.65rem;
@@ -3366,44 +3373,85 @@ body.chat-page-active .content-wrapper {
     }
 
     /*
-     * Header actions: primary CTA first (full width), then secondary in one equal row.
-     * Fixes icon Refresh + Export + dropdown New Campaign stacking unevenly.
+     * Mobile header actions — single scrolling chip row.
+     * This avoids ugly wrapping/overlap when a page has 3-5 actions.
      */
-    .header-page-actions {
+    .content-header .header-page-actions,
+    .content-header .header-page-actions.d-flex.flex-wrap {
         width: 100%;
         margin-left: 0 !important;
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: stretch !important;
-        gap: 0.4rem !important;
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        gap: 0.35rem !important;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding-bottom: 0.1rem;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .content-header .header-page-actions::-webkit-scrollbar {
+        display: none;
+    }
+    .header-page-actions > .btn,
+    .header-page-actions > .dropdown,
+    .header-page-actions > form,
+    .header-page-actions > .btn-group {
+        flex: 0 0 auto !important;
+        width: auto !important;
+        max-width: 100%;
+        margin: 0 !important;
+    }
+    .header-page-actions > form.d-inline,
+    .header-page-actions > form {
+        display: inline-flex !important;
+        align-items: center;
+        width: auto !important;
     }
     .header-page-actions .dropdown {
-        order: -1;
-        flex: 1 1 100%;
-        display: flex;
-        min-width: 0;
+        display: inline-flex !important;
     }
-    .header-page-actions .dropdown > .btn {
-        width: 100%;
-        flex: 1 1 auto;
-    }
-    .header-page-actions > .btn {
-        flex: 1 1 0;
-        min-width: 0;
+    .header-page-actions .dropdown > .btn,
+    .header-page-actions form .btn {
+        width: auto !important;
     }
     .header-page-actions .btn {
-        min-height: 2.35rem;
-        border-radius: 0.75rem;
+        display: inline-flex !important;
+        align-items: center;
         justify-content: center;
+        gap: 0.3rem;
+        min-height: 2rem;
+        width: auto !important;
+        border-radius: 0.7rem;
         font-weight: 600;
-        padding-left: 0.75rem;
-        padding-right: 0.75rem;
+        font-size: 0.76rem;
+        line-height: 1.1;
+        padding: 0.32rem 0.68rem;
+        white-space: nowrap;
+        box-shadow: none;
+    }
+    .header-page-actions .btn.btn-sm {
+        min-height: 2rem;
+        padding: 0.32rem 0.68rem;
+        font-size: 0.76rem;
+    }
+    .header-page-actions > .btn:has(> i:only-child) {
+        width: 2.15rem !important;
+        min-width: 2.15rem;
+        padding-left: 0;
+        padding-right: 0;
     }
     .header-page-actions .btn-wa {
-        box-shadow: 0 4px 14px rgba(142, 83, 247, 0.28);
+        box-shadow: 0 2px 8px rgba(142, 83, 247, 0.22);
+    }
+    .header-page-actions .btn i,
+    .header-page-actions .btn svg {
+        flex: 0 0 auto;
     }
 
-    /* Filters: drop nested chrome so fields use the full phone width */
+    /* Filters: ignore inline max-width from views; tidy mobile grid */
     .page-list > .card > .card-body {
         padding: 0.55rem;
     }
@@ -3416,25 +3464,62 @@ body.chat-page-active .content-wrapper {
         background: transparent;
         border: 0;
         border-radius: 0;
+        align-items: stretch;
     }
     .filter-bar .form-select,
     .filter-bar .form-control {
-        flex: 1 1 100%;
-        max-width: none;
-        min-height: 2.5rem;
-        border-radius: 0.75rem;
+        flex: 1 1 calc(50% - 0.2rem) !important;
+        max-width: none !important;
+        width: auto !important;
+        min-width: 0 !important;
+        min-height: 2.35rem;
+        border-radius: 0.7rem;
     }
+    .filter-bar .form-control[type="search"],
+    .filter-bar .form-control[type="text"] {
+        flex: 1 1 100% !important;
+    }
+    .filter-bar > .btn,
     .filter-bar-actions {
-        width: 100%;
+        flex: 1 1 auto;
         display: flex;
-        gap: 0.5rem;
-        margin-left: 0;
-        margin-top: 0.15rem;
+        gap: 0.4rem;
+        align-items: center;
+        margin-left: 0 !important;
+        width: 100%;
+        margin-top: 0.05rem;
+    }
+    .filter-bar > .btn {
+        width: auto !important;
+        flex: 0 0 auto;
+        min-height: 2.15rem;
+        border-radius: 0.7rem;
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
     }
     .filter-bar-actions .btn {
-        flex: 1 1 auto;
-        min-height: 2.5rem;
-        border-radius: 0.75rem;
+        flex: 0 0 auto;
+        min-height: 2.15rem;
+        border-radius: 0.7rem;
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+    .filter-bar-actions .btn-link {
+        flex: 0 0 auto;
+        min-height: auto;
+        padding-left: 0.35rem;
+        padding-right: 0.35rem;
+    }
+
+    .bulk-bar {
+        gap: 0.35rem;
+    }
+    .bulk-bar .btn {
+        flex: 0 1 auto;
+        min-height: 2.1rem;
+        border-radius: 0.7rem;
+        font-size: 0.78rem;
+        white-space: nowrap;
     }
 
     .page-toolbar {
@@ -3467,6 +3552,31 @@ body.chat-page-active .content-wrapper {
 
     .card-body { padding: 0.7rem; }
     .card-header, .card-footer { padding: 0.55rem 0.7rem; }
+    .page-list .card > .card-header {
+        flex-wrap: wrap;
+        gap: 0.25rem 0.5rem;
+    }
+    .page-list .card > .card-header .small,
+    .page-list .card > .card-header .text-muted {
+        font-size: 0.7rem;
+        width: 100%;
+    }
+    .dt-toolbar {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    .dt-toolbar .dt-length,
+    .dt-toolbar .dt-search {
+        width: auto;
+        flex: 1 1 auto;
+        margin-bottom: 0;
+    }
+    .dt-toolbar .dt-search input {
+        width: 100% !important;
+        min-width: 0;
+    }
     .dash-panel .panel-head { padding: 0.6rem 0.7rem 0.3rem; }
     .dash-panel .panel-body { padding: 0.3rem 0.7rem 0.7rem; }
 
@@ -3556,8 +3666,9 @@ body.chat-page-active .content-wrapper {
     .main-footer { font-size: 0.7rem; padding: 0.5rem var(--page-pad-x); }
     .main-footer .float-end { display: none !important; }
     .dash-panel .panel-body > div[style*="height"] { height: 210px !important; }
-    .filter-bar .form-select,
-    .filter-bar .form-control { flex: 1 1 100%; }
+    .filter-bar .form-select { flex: 1 1 calc(50% - 0.2rem) !important; }
+    .filter-bar .form-control[type="search"],
+    .filter-bar .form-control[type="text"] { flex: 1 1 100% !important; }
     .kpi-card .kpi-icon { display: none; }
     .auth-card h2 { font-size: 1.2rem; }
     .user-panel .info { display: none; }

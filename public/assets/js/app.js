@@ -550,6 +550,22 @@
         }
         refreshLucideIcons();
 
+        /** AdminLTE sometimes writes inline margin-left; strip it on tablet/phone. */
+        function clearMobileSidebarOffset() {
+            if (window.innerWidth > 991) return;
+            document.querySelectorAll('.content-wrapper, .main-header, .main-footer').forEach(function (el) {
+                if (el.style && el.style.marginLeft) {
+                    el.style.marginLeft = '';
+                }
+            });
+        }
+        clearMobileSidebarOffset();
+        $(window).on('resize.mobileSidebar', clearMobileSidebarOffset);
+        $(document).on('click', '[data-widget="pushmenu"]', function () {
+            window.setTimeout(clearMobileSidebarOffset, 0);
+            window.setTimeout(clearMobileSidebarOffset, 220);
+        });
+
         // Sidebar: click parent to expand/collapse submenu (Team Inbox, Contacts, …)
         $(document).on('click', '.app-sidebar-item.has-tree > .nav-link.app-sidebar-toggle', function (e) {
             var $link = $(this);
