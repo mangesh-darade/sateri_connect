@@ -52,6 +52,7 @@
     --page-pad-y: 0.75rem;
     --control-h: 2.125rem;
     --header-h: 3rem;
+    --bottom-nav-h: 0px;
     --sidebar-w: 256px;
 }
 
@@ -3107,7 +3108,7 @@ body.chat-page-active .content {
 body.chat-page-active .content > .container-fluid {
     max-width: none !important;
     padding: 0 !important;
-    height: calc(100dvh - var(--header-h));
+    height: calc(100dvh - var(--header-h) - var(--bottom-nav-h));
     min-height: 0;
 }
 body.chat-page-active .chat-page {
@@ -3324,8 +3325,15 @@ body.chat-page-active .content-wrapper {
         --page-pad-x: 0.6rem;
         --page-pad-y: 0.5rem;
         --header-h: 2.75rem;
+        --bottom-nav-h: 4rem;
     }
 
+    html body.sidebar-mini .content-wrapper,
+    html body.sidebar-mini .main-footer,
+    html body.sidebar-mini .main-header,
+    html body.sidebar-mini.sidebar-collapse .content-wrapper,
+    html body.sidebar-mini.sidebar-collapse .main-footer,
+    html body.sidebar-mini.sidebar-collapse .main-header,
     body.sidebar-mini.sidebar-collapse .content-wrapper,
     body.sidebar-mini.sidebar-collapse .main-footer,
     body:not(.sidebar-open) .content-wrapper,
@@ -3333,10 +3341,101 @@ body.chat-page-active .content-wrapper {
         margin-left: 0 !important;
     }
 
+    /* Room for app-style bottom tabs */
+    body.sidebar-mini .content-wrapper {
+        padding-bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px)) !important;
+    }
+    body.sidebar-mini .main-footer {
+        display: none !important;
+    }
+
     .content-header { padding-top: 0.55rem; padding-bottom: 0; }
     .content-header .row { flex-direction: column; align-items: flex-start !important; gap: 0 !important; }
     .content-header .breadcrumb { display: none !important; }
     .content-header h1 { font-size: 1.05rem; }
+
+    /* Title on its own row; actions full-width below (avoids staggered wrap) */
+    .content-header .d-flex.flex-wrap {
+        flex-direction: column;
+        align-items: stretch !important;
+        gap: 0.65rem !important;
+    }
+    .content-header .provider-chip {
+        font-size: 0.65rem;
+        padding: 0.15rem 0.45rem;
+    }
+
+    /*
+     * Header actions: primary CTA first (full width), then secondary in one equal row.
+     * Fixes icon Refresh + Export + dropdown New Campaign stacking unevenly.
+     */
+    .header-page-actions {
+        width: 100%;
+        margin-left: 0 !important;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: stretch !important;
+        gap: 0.4rem !important;
+    }
+    .header-page-actions .dropdown {
+        order: -1;
+        flex: 1 1 100%;
+        display: flex;
+        min-width: 0;
+    }
+    .header-page-actions .dropdown > .btn {
+        width: 100%;
+        flex: 1 1 auto;
+    }
+    .header-page-actions > .btn {
+        flex: 1 1 0;
+        min-width: 0;
+    }
+    .header-page-actions .btn {
+        min-height: 2.35rem;
+        border-radius: 0.75rem;
+        justify-content: center;
+        font-weight: 600;
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+    .header-page-actions .btn-wa {
+        box-shadow: 0 4px 14px rgba(142, 83, 247, 0.28);
+    }
+
+    /* Filters: drop nested chrome so fields use the full phone width */
+    .page-list > .card > .card-body {
+        padding: 0.55rem;
+    }
+    .filter-bar {
+        display: flex;
+        flex-wrap: wrap;
+        width: 100%;
+        padding: 0;
+        gap: 0.4rem;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+    }
+    .filter-bar .form-select,
+    .filter-bar .form-control {
+        flex: 1 1 100%;
+        max-width: none;
+        min-height: 2.5rem;
+        border-radius: 0.75rem;
+    }
+    .filter-bar-actions {
+        width: 100%;
+        display: flex;
+        gap: 0.5rem;
+        margin-left: 0;
+        margin-top: 0.15rem;
+    }
+    .filter-bar-actions .btn {
+        flex: 1 1 auto;
+        min-height: 2.5rem;
+        border-radius: 0.75rem;
+    }
 
     .page-toolbar {
         margin-bottom: 0.5rem;
@@ -3357,19 +3456,9 @@ body.chat-page-active .content-wrapper {
         flex: 1 1 auto;
         justify-content: center;
         white-space: nowrap;
+        min-height: 2.35rem;
+        border-radius: 0.75rem;
     }
-
-    .filter-bar {
-        padding: 0.45rem;
-        gap: 0.35rem;
-    }
-    .filter-bar .form-select,
-    .filter-bar .form-control {
-        max-width: none;
-        flex: 1 1 calc(50% - 0.35rem);
-        min-width: 0;
-    }
-    .filter-bar .btn { flex: 1 1 auto; }
 
     .kpi-card { padding: 0.7rem 0.7rem 0.65rem; }
     .kpi-card .kpi-value { font-size: 1.2rem; }
@@ -3418,7 +3507,7 @@ body.chat-page-active .content-wrapper {
 
     /* Chat: list OR thread (WhatsApp-style) */
     .chat-layout {
-        height: calc(100dvh - var(--header-h));
+        height: calc(100dvh - var(--header-h) - var(--bottom-nav-h));
         min-height: 0;
         border-radius: 0;
         border-left: 0;
@@ -3480,7 +3569,115 @@ body.chat-page-active .content-wrapper {
     }
 }
 
+/* ---------- Mobile bottom app bar ---------- */
+.mobile-bottom-nav {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .mobile-bottom-nav {
+        display: flex;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1040;
+        align-items: stretch;
+        justify-content: space-around;
+        gap: 0.15rem;
+        min-height: var(--bottom-nav-h);
+        padding: 0.35rem 0.4rem calc(0.35rem + env(safe-area-inset-bottom, 0px));
+        background: rgba(255, 255, 255, 0.96);
+        border-top: 1px solid var(--border, #e5e7eb);
+        box-shadow: 0 -8px 24px rgba(26, 18, 40, 0.06);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+    }
+
+    .mobile-bottom-nav__item {
+        flex: 1 1 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.15rem;
+        min-width: 0;
+        padding: 0.35rem 0.2rem;
+        border-radius: 0.85rem;
+        color: #6b7280;
+        text-decoration: none;
+        font-weight: 600;
+        line-height: 1.1;
+        transition: background-color .15s ease, color .15s ease, transform .12s ease;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .mobile-bottom-nav__item:hover,
+    .mobile-bottom-nav__item:focus {
+        color: var(--brand-500, #8e53f7);
+        text-decoration: none;
+        background: rgba(142, 83, 247, 0.06);
+    }
+
+    .mobile-bottom-nav__item.is-active {
+        color: var(--brand-500, #8e53f7);
+        background: rgba(142, 83, 247, 0.1);
+    }
+
+    .mobile-bottom-nav__item:active {
+        transform: scale(0.96);
+    }
+
+    .mobile-bottom-nav__icon-wrap {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.55rem;
+        height: 1.55rem;
+    }
+
+    .mobile-bottom-nav__item .nav-icon,
+    .mobile-bottom-nav__item i[data-lucide],
+    .mobile-bottom-nav__item svg {
+        width: 1.2rem;
+        height: 1.2rem;
+        stroke-width: 2.1;
+    }
+
+    .mobile-bottom-nav__label {
+        font-size: 0.62rem;
+        letter-spacing: 0.01em;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .mobile-bottom-nav__badge {
+        position: absolute;
+        top: -0.35rem;
+        right: -0.55rem;
+        min-width: 1rem;
+        height: 1rem;
+        padding: 0 0.25rem;
+        border-radius: 999px;
+        background: var(--brand-500, #8e53f7);
+        color: #fff;
+        font-size: 0.58rem;
+        font-weight: 700;
+        line-height: 1rem;
+        text-align: center;
+        box-shadow: 0 0 0 2px #fff;
+    }
+
+    body.flow-builder-page .mobile-bottom-nav {
+        display: none !important;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .content > .container-fluid > *,
     .chat-main { animation: none !important; transition: none !important; }
+    .mobile-bottom-nav__item { transition: none !important; }
 }

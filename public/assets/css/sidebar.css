@@ -433,4 +433,22 @@ body.sidebar-mini.sidebar-collapse .elint-sidebar .sidebar-footer-links .nav-lin
 
 @media (max-width: 991.98px) {
     :root { --sidebar-w: 240px; }
+
+    /* Overlay sidebar — never reserve desktop margin on tablet/phone */
+    html body.sidebar-mini .content-wrapper,
+    html body.sidebar-mini .main-footer,
+    html body.sidebar-mini .main-header,
+    html body.sidebar-mini.sidebar-collapse .content-wrapper,
+    html body.sidebar-mini.sidebar-collapse .main-footer,
+    html body.sidebar-mini.sidebar-collapse .main-header,
+    html body.sidebar-mini:not(.sidebar-collapse) .content-wrapper,
+    html body.sidebar-mini:not(.sidebar-collapse) .main-footer,
+    html body.sidebar-mini:not(.sidebar-collapse) .main-header {
+        margin-left: 0 !important;
+    }
+
+    html body.sidebar-mini .main-sidebar,
+    html body.sidebar-mini.sidebar-collapse .main-sidebar {
+        width: var(--sidebar-w) !important;
+    }
 }

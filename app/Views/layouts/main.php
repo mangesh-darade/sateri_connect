@@ -121,6 +121,7 @@
             $userEmail = (string) ($user['email'] ?? session('user_email') ?? '');
             $userAvatar = (string) ($user['avatar'] ?? base_url('assets/img/avatar.png'));
             $inboxBadge = (int) ($notifCount ?? 0);
+            $mobileNavTabs = [];
             ?>
             <div class="elint-user-strip">
                 <img src="<?= esc($userAvatar) ?>" class="elint-user-avatar" alt="<?= esc($userName) ?>">
@@ -389,6 +390,47 @@
 
                 return '<i class="nav-icon" data-lucide="' . esc($name, 'attr') . '" aria-hidden="true"></i>';
             };
+
+            // Mobile app-style bottom tabs (desktop uses sidebar only).
+            $mobileNavTabs = [];
+            $addMobileTab = static function (
+                array &$tabs,
+                string $label,
+                string $icon,
+                string $url,
+                array $match,
+                ?int $badge = null,
+                ?string $action = null
+            ): void {
+                $tabs[] = [
+                    'label'  => $label,
+                    'icon'   => $icon,
+                    'url'    => $url,
+                    'match'  => $match,
+                    'badge'  => $badge,
+                    'action' => $action,
+                ];
+            };
+            if (function_exists('can') && can('dashboard.view')) {
+                $addMobileTab($mobileNavTabs, 'Home', 'layout-dashboard', site_url('dashboard'), ['dashboard']);
+            }
+            if (function_exists('can') && can('chat.view')) {
+                $addMobileTab(
+                    $mobileNavTabs,
+                    'Inbox',
+                    'message-circle',
+                    site_url('chat?channel=whatsapp'),
+                    ['chat'],
+                    $inboxBadge > 0 ? $inboxBadge : null
+                );
+            }
+            if (function_exists('can') && can('contacts.view')) {
+                $addMobileTab($mobileNavTabs, 'Contacts', 'users', site_url('contacts'), ['contacts', 'customer-groups']);
+            }
+            if (function_exists('can') && can('campaigns.view')) {
+                $addMobileTab($mobileNavTabs, 'Broadcasts', 'megaphone', site_url('campaigns'), ['campaigns']);
+            }
+            $addMobileTab($mobileNavTabs, 'More', 'menu', '#', [], null, 'pushmenu');
             ?>
             <div class="elint-menu-search">
                 <i data-lucide="search" class="elint-menu-search-icon" aria-hidden="true"></i>
@@ -538,6 +580,56 @@
             </div>
         </section>
     </div>
+
+    <?php if (empty($fullBleed) && ! empty($mobileNavTabs)): ?>
+    <nav class="mobile-bottom-nav" aria-label="Primary mobile navigation">
+        <?php foreach ($mobileNavTabs as $tab): ?>
+            <?php
+            $tabActive = false;
+            $tabAction = (string) ($tab['action'] ?? '');
+            if ($tabAction === '') {
+                foreach (($tab['match'] ?? []) as $pattern) {
+                    if (! is_string($pattern)) {
+                        continue;
+                    }
+                    if ($navUriMatches($currentUri, $pattern)) {
+                        $tabActive = true;
+                        break;
+                    }
+                }
+                if (! $tabActive && ($tab['label'] ?? '') === 'Home' && ($currentUri === '' || $currentUri === '/')) {
+                    $tabActive = true;
+                }
+            }
+            $tabBadge = (int) ($tab['badge'] ?? 0);
+            $isMore = $tabAction === 'pushmenu';
+            ?>
+            <?php if ($isMore): ?>
+                <a href="#"
+                   class="mobile-bottom-nav__item"
+                   data-widget="pushmenu"
+                   role="button"
+                   aria-label="Open menu">
+                    <?= $renderIcon((string) ($tab['icon'] ?? 'menu')) ?>
+                    <span class="mobile-bottom-nav__label"><?= esc($tab['label']) ?></span>
+                </a>
+            <?php else: ?>
+                <a href="<?= esc($tab['url']) ?>"
+                   class="mobile-bottom-nav__item<?= $tabActive ? ' is-active' : '' ?>"
+                   aria-label="<?= esc($tab['label']) ?>"
+                   aria-current="<?= $tabActive ? 'page' : 'false' ?>">
+                    <span class="mobile-bottom-nav__icon-wrap">
+                        <?= $renderIcon((string) ($tab['icon'] ?? 'circle')) ?>
+                        <?php if ($tabBadge > 0): ?>
+                            <span class="mobile-bottom-nav__badge"><?= $tabBadge > 99 ? '99+' : $tabBadge ?></span>
+                        <?php endif; ?>
+                    </span>
+                    <span class="mobile-bottom-nav__label"><?= esc($tab['label']) ?></span>
+                </a>
+            <?php endif; ?>
+        <?php endforeach; ?>
+    </nav>
+    <?php endif; ?>
 
     <?php if (empty($fullBleed)): ?>
     <footer class="main-footer">
