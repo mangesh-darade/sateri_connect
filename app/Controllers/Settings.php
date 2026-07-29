@@ -684,7 +684,9 @@ class Settings extends BaseController
         $this->deleteBrandingFile((string) $settings->get($key, ''));
 
         $file->move($dir, $newName);
-        $settings->set($key, 'uploads/branding/' . $newName, 'general');
+        $relative = 'uploads/branding/' . $newName;
+        $settings->set($key, $relative, 'general');
+        $this->mirrorBrandingToWebroot($relative);
     }
 
     protected function deleteBrandingFile(string $relativePath): void
@@ -699,5 +701,50 @@ class Settings extends BaseController
         if (is_file($full)) {
             @unlink($full);
         }
+
+        // Plesk/nginx project-root docroot may serve a copied /uploads tree.
+        $mirror = rtrim(ROOTPATH, '\\/') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+        $publicReal = realpath(FCPATH . 'uploads');
+        $rootUploads = realpath(rtrim(ROOTPATH, '\\/') . DIRECTORY_SEPARATOR . 'uploads');
+        if (
+            is_file($mirror)
+            && ($publicReal === false || $rootUploads === false || $publicReal !== $rootUploads)
+        ) {
+            @unlink($mirror);
+        }
+    }
+
+    /**
+     * When DocumentRoot is project root (not public/), nginx serves /uploads from ROOT/uploads.
+     * Uploads are written to public/uploads — mirror new branding files so live URLs work.
+     */
+    protected function mirrorBrandingToWebroot(string $relativePath): void
+    {
+        $relativePath = ltrim(str_replace('\\', '/', $relativePath), '/');
+        if ($relativePath === '' || ! str_starts_with($relativePath, 'uploads/branding/')) {
+            return;
+        }
+
+        $src = FCPATH . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+        if (! is_file($src)) {
+            return;
+        }
+
+        $publicUploads = realpath(FCPATH . 'uploads');
+        $rootUploads   = rtrim(ROOTPATH, '\\/') . DIRECTORY_SEPARATOR . 'uploads';
+        $rootReal      = realpath($rootUploads);
+
+        // Same path / symlink already points at public — nothing to copy.
+        if ($publicUploads !== false && $rootReal !== false && $publicUploads === $rootReal) {
+            return;
+        }
+
+        $dest = rtrim(ROOTPATH, '\\/') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+        $destDir = dirname($dest);
+        if (! is_dir($destDir) && ! @mkdir($destDir, 0755, true) && ! is_dir($destDir)) {
+            return;
+        }
+
+        @copy($src, $dest);
     }
 }

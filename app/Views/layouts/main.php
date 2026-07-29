@@ -29,7 +29,7 @@
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11.10.8/dist/sweetalert2.min.css">
     <link rel="stylesheet" href="<?= base_url('assets/css/app.css') ?>?v=brand4">
-    <link rel="stylesheet" href="<?= base_url('assets/css/sidebar.css') ?>?v=brand4">
+    <link rel="stylesheet" href="<?= base_url('assets/css/sidebar.css') ?>?v=brand5">
     <?= $this->renderSection('styles') ?>
 </head>
 <body class="hold-transition sidebar-mini layout-fixed<?= ! empty($fullBleed) ? ' flow-builder-page' : '' ?><?= ! empty($chatPage) ? ' chat-page-active' : '' ?>">

@@ -35,9 +35,10 @@ body:not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-head
 body.sidebar-mini.sidebar-collapse .main-sidebar {
     width: var(--sidebar-collapsed-w) !important;
 }
-body.sidebar-mini.sidebar-collapse .content-wrapper,
-body.sidebar-mini.sidebar-collapse .main-footer,
-body.sidebar-mini.sidebar-collapse .main-header {
+/* Match open-state specificity so collapse margin actually wins */
+body.sidebar-mini.sidebar-collapse:not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .content-wrapper,
+body.sidebar-mini.sidebar-collapse:not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-footer,
+body.sidebar-mini.sidebar-collapse:not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-header {
     margin-left: var(--sidebar-collapsed-w) !important;
 }
 

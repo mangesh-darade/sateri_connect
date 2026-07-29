@@ -111,8 +111,46 @@ define('FCPATH', __DIR__ . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR)
             continue;
         }
 
+        // uploads: first-time copy, then refresh when public branding is newer/missing.
         if (! is_dir($linkPath)) {
             $copyTree($target, $linkPath);
+            continue;
+        }
+
+        $brandingPublic = $target . DIRECTORY_SEPARATOR . 'branding';
+        $brandingRoot   = $linkPath . DIRECTORY_SEPARATOR . 'branding';
+        if (! is_dir($brandingPublic)) {
+            continue;
+        }
+        if (! is_dir($brandingRoot)) {
+            $copyTree($brandingPublic, $brandingRoot);
+            continue;
+        }
+
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($brandingPublic, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::SELF_FIRST,
+        );
+        /** @var SplFileInfo $item */
+        foreach ($iterator as $item) {
+            $relative = substr($item->getPathname(), strlen($brandingPublic) + 1);
+            $destItem = $brandingRoot . DIRECTORY_SEPARATOR . $relative;
+            if ($item->isDir()) {
+                if (! is_dir($destItem)) {
+                    @mkdir($destItem, 0755, true);
+                }
+                continue;
+            }
+            $needsCopy = ! is_file($destItem)
+                || filemtime($item->getPathname()) > filemtime($destItem)
+                || filesize($item->getPathname()) !== filesize($destItem);
+            if ($needsCopy) {
+                $parent = dirname($destItem);
+                if (! is_dir($parent)) {
+                    @mkdir($parent, 0755, true);
+                }
+                @copy($item->getPathname(), $destItem);
+            }
         }
     }
 
