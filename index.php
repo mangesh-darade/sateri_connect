@@ -97,13 +97,31 @@ define('FCPATH', __DIR__ . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR)
         }
 
         // No symlink support: publish (or refresh) a real copy under the docroot.
-        // Refresh when public CSS is newer/missing so deploys don't leave broken styles.
+        // Sync when any watched public asset is newer/missing (not only app.css).
         if ($name === 'assets') {
-            $sentinelPublic = $target . DIRECTORY_SEPARATOR . 'css' . DIRECTORY_SEPARATOR . 'app.css';
-            $sentinelRoot   = $linkPath . DIRECTORY_SEPARATOR . 'css' . DIRECTORY_SEPARATOR . 'app.css';
-            $needsPublish   = ! is_file($sentinelRoot)
-                || (is_file($sentinelPublic) && filemtime($sentinelPublic) > filemtime($sentinelRoot))
-                || (is_file($sentinelPublic) && filesize($sentinelPublic) !== filesize($sentinelRoot));
+            $watch = [
+                'css' . DIRECTORY_SEPARATOR . 'app.css',
+                'css' . DIRECTORY_SEPARATOR . 'sidebar.css',
+                'js' . DIRECTORY_SEPARATOR . 'app.js',
+            ];
+            $needsPublish = ! is_dir($linkPath);
+            if (! $needsPublish) {
+                foreach ($watch as $rel) {
+                    $pub = $target . DIRECTORY_SEPARATOR . $rel;
+                    $rootFile = $linkPath . DIRECTORY_SEPARATOR . $rel;
+                    if (! is_file($pub)) {
+                        continue;
+                    }
+                    if (
+                        ! is_file($rootFile)
+                        || filemtime($pub) > filemtime($rootFile)
+                        || filesize($pub) !== filesize($rootFile)
+                    ) {
+                        $needsPublish = true;
+                        break;
+                    }
+                }
+            }
 
             if ($needsPublish) {
                 $copyTree($target, $linkPath);

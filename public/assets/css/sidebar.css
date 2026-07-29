@@ -26,20 +26,23 @@
     font-family: var(--elint-sidebar-font);
 }
 
-body:not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .content-wrapper,
-body:not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-footer,
-body:not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-header {
+/* Open: body offset matches full sidebar */
+html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .content-wrapper,
+html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-footer,
+html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-header {
     margin-left: var(--sidebar-w) !important;
     transition: margin-left .3s ease;
 }
-body.sidebar-mini.sidebar-collapse .main-sidebar {
+
+/* Collapsed: body must shrink with the rail (wins over AdminLTE + older copies) */
+html body.sidebar-mini.sidebar-collapse .main-sidebar {
     width: var(--sidebar-collapsed-w) !important;
 }
-/* Match open-state specificity so collapse margin actually wins */
-body.sidebar-mini.sidebar-collapse:not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .content-wrapper,
-body.sidebar-mini.sidebar-collapse:not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-footer,
-body.sidebar-mini.sidebar-collapse:not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-header {
+html body.sidebar-mini.sidebar-collapse .content-wrapper,
+html body.sidebar-mini.sidebar-collapse .main-footer,
+html body.sidebar-mini.sidebar-collapse .main-header {
     margin-left: var(--sidebar-collapsed-w) !important;
+    transition: margin-left .3s ease;
 }
 
 /* Brand */
