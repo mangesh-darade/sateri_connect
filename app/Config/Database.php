@@ -39,7 +39,17 @@ class Database extends Config
                 $this->default['hostname'] = 'localhost';
                 $this->default['username'] = 'root';
                 $this->default['password'] = '';
-                $this->default['database'] = 'apiwa';
+                $this->default['database'] = 'sateri_connect';
+                $this->default['DBDriver'] = 'MySQLi';
+                $this->default['port']     = 3306;
+                break;
+
+            case 'androidtestings':
+                $this->default['hostname'] = 'localhost';
+                $this->default['username'] = 'stadmin_android';
+                $this->default['password'] = '1ub~UI7Yvgg~2txx';
+                $this->default['database'] = 'stadmin_android';
+                $this->default['DBDriver'] = 'MySQLi';
                 $this->default['port']     = 3306;
                 break;
 
