@@ -1,7 +1,7 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('styles') ?>
-<link rel="stylesheet" href="<?= base_url('assets/css/automations-flow.css') ?>?v=2">
+<link rel="stylesheet" href="<?= base_url('assets/css/automations-flow.css') ?>?v=5">
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
@@ -30,7 +30,7 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
             <span class="flow-zoom-label" id="flowZoomLabel">100%</span>
             <button type="button" class="btn btn-sm btn-outline-secondary" id="btnFlowZoomIn" title="Zoom in"><i class="fas fa-search-plus"></i></button>
             <button type="button" class="btn btn-sm btn-outline-secondary" id="btnFlowZoomFit" title="Fit to view"><i class="fas fa-compress-arrows-alt"></i></button>
-            <button type="button" class="btn btn-sm btn-success" id="btnFlowSave"><i class="fas fa-save me-1"></i> Save</button>
+            <button type="button" class="btn btn-sm btn-wa" id="btnFlowSave"><i class="fas fa-save me-1"></i> Save</button>
         </div>
     </header>
 
@@ -113,6 +113,9 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
             <div class="palette-item" draggable="true" data-palette="condition" data-condition="contact_status">
                 <i class="fas fa-user-check"></i> Contact status
             </div>
+            <div class="palette-item" draggable="true" data-palette="condition" data-condition="attribute_condition">
+                <i class="fas fa-sliders-h"></i> Attribute condition
+            </div>
 
             <h6 class="mt-3">Actions</h6>
             <div class="palette-item" draggable="true" data-palette="action" data-action="system_initiated">
@@ -132,6 +135,9 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
             <div class="palette-item" draggable="true" data-palette="action" data-action="send_text">
                 <i class="fas fa-comment"></i> Send text
             </div>
+            <div class="palette-item" draggable="true" data-palette="action" data-action="send_email">
+                <i class="fas fa-envelope"></i> Send email
+            </div>
             <div class="palette-item" draggable="true" data-palette="action" data-action="set_attribute">
                 <i class="fas fa-pen"></i> Update attribute
             </div>
@@ -143,6 +149,12 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
             </div>
             <div class="palette-item" draggable="true" data-palette="action" data-action="assign_agent">
                 <i class="fas fa-user-tie"></i> Assign agent
+            </div>
+            <div class="palette-item" draggable="true" data-palette="action" data-action="assign_bot">
+                <i class="fas fa-robot"></i> Assign to bot
+            </div>
+            <div class="palette-item" draggable="true" data-palette="action" data-action="update_chat_status">
+                <i class="fas fa-comments"></i> Update chat status
             </div>
             <div class="palette-item" draggable="true" data-palette="action" data-action="add_note">
                 <i class="fas fa-sticky-note"></i> Add note
@@ -167,7 +179,7 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
                             <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(7, 94, 84, 0.45)"></path>
                         </marker>
                         <marker id="flowArrowTrue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                            <path d="M 0 0 L 10 5 L 0 10 z" fill="#25D366"></path>
+                            <path d="M 0 0 L 10 5 L 0 10 z" fill="#8e53f7"></path>
                         </marker>
                         <marker id="flowArrowFalse" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
                             <path d="M 0 0 L 10 5 L 0 10 z" fill="#e25555"></path>
@@ -204,5 +216,5 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
-<script src="<?= base_url('assets/js/automations-flow.js') ?>?v=8"></script>
+<script src="<?= base_url('assets/js/automations-flow.js') ?>?v=9"></script>
 <?= $this->endSection() ?>

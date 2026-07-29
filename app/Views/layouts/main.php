@@ -22,14 +22,14 @@
     <?php endif; ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Onest:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2.0/dist/css/adminlte.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11.10.8/dist/sweetalert2.min.css">
-    <link rel="stylesheet" href="<?= base_url('assets/css/app.css') ?>?v=sections2">
-    <link rel="stylesheet" href="<?= base_url('assets/css/sidebar.css') ?>?v=stack1">
+    <link rel="stylesheet" href="<?= base_url('assets/css/app.css') ?>?v=brand4">
+    <link rel="stylesheet" href="<?= base_url('assets/css/sidebar.css') ?>?v=brand4">
     <?= $this->renderSection('styles') ?>
 </head>
 <body class="hold-transition sidebar-mini layout-fixed<?= ! empty($fullBleed) ? ' flow-builder-page' : '' ?><?= ! empty($chatPage) ? ' chat-page-active' : '' ?>">
@@ -191,6 +191,51 @@
                 ];
             }
 
+            // Inbox (Cheerio-like IA — first after dashboard)
+            $inboxItems = [];
+            if (function_exists('can') && can('chat.view')) {
+                $settingsSvc = function_exists('service') ? service('settingsService') : null;
+                $pageMsg = function_exists('service') ? service('pageMessaging') : null;
+                $igReady = $settingsSvc && $pageMsg && $settingsSvc->isInstagramInboxEnabled() && $pageMsg->isConfigured();
+                $fbReady = $settingsSvc && $pageMsg && $settingsSvc->isMessengerInboxEnabled() && $pageMsg->isConfigured();
+                $teamChildren = [
+                    [
+                        'label' => 'WhatsApp',
+                        'icon' => 'message-circle',
+                        'url' => site_url('chat?channel=whatsapp'),
+                        'match' => ['chat'],
+                        'channel' => 'whatsapp',
+                    ],
+                    [
+                        'label' => 'Messenger',
+                        'icon' => 'send',
+                        'url' => site_url('chat?channel=messenger'),
+                        'match' => ['chat'],
+                        'channel' => 'messenger',
+                        'hint' => $fbReady ? null : 'Setup in Settings',
+                    ],
+                    [
+                        'label' => 'Instagram',
+                        'icon' => 'instagram',
+                        'url' => site_url('chat?channel=instagram'),
+                        'match' => ['chat'],
+                        'channel' => 'instagram',
+                        'hint' => $igReady ? null : 'Setup in Settings',
+                    ],
+                ];
+                $inboxItems[] = [
+                    'label' => 'Team Inbox',
+                    'icon' => 'message-circle',
+                    'url' => site_url('chat?channel=whatsapp'),
+                    'match' => ['chat'],
+                    'badge' => $inboxBadge,
+                    'children' => $teamChildren,
+                ];
+            }
+            if ($inboxItems !== []) {
+                $navGroups[] = ['title' => 'Inbox', 'items' => $inboxItems];
+            }
+
             $dataItems = [];
             if (function_exists('can') && can('contacts.view')) {
                 $dataItems[] = [
@@ -203,18 +248,6 @@
                         ['label' => 'Customer Groups', 'icon' => 'tags', 'url' => site_url('customer-groups'), 'match' => ['customer-groups']],
                         ['label' => 'Import Contacts', 'icon' => 'file-up', 'url' => site_url('contacts/import'), 'match' => ['contacts/import']],
                         ['label' => 'Duplicate Check', 'icon' => 'copy', 'url' => site_url('contacts/duplicates'), 'match' => ['contacts/duplicates']],
-                    ],
-                ];
-            }
-            if (function_exists('can') && can('keywords.view')) {
-                $dataItems[] = [
-                    'label' => 'Smart Forms',
-                    'icon' => 'clipboard-list',
-                    'url' => site_url('keywords'),
-                    'match' => ['keywords'],
-                    'children' => [
-                        ['label' => 'Keywords', 'icon' => 'key-round', 'url' => site_url('keywords'), 'match' => ['keywords']],
-                        ['label' => 'Create Keyword', 'icon' => 'plus', 'url' => site_url('keywords/create'), 'match' => ['keywords/create']],
                     ],
                 ];
             }
@@ -267,63 +300,51 @@
             $automationItems = [];
             if (function_exists('can') && can('automations.view')) {
                 $automationItems[] = [
-                    'label' => 'AI Workflows',
+                    'label' => 'Workflows',
                     'icon' => 'bot',
                     'url' => site_url('automations'),
-                    'match' => ['automations', 'queue'],
+                    'match' => ['automations'],
                     'children' => [
                         ['label' => 'Automations', 'icon' => 'bot', 'url' => site_url('automations'), 'match' => ['automations']],
-                        ['label' => 'Queue', 'icon' => 'clock-3', 'url' => site_url('queue'), 'match' => ['queue']],
                     ],
+                ];
+            }
+            if (function_exists('can') && can('sequences.view')) {
+                $automationItems[] = [
+                    'label' => 'Sequences',
+                    'icon' => 'list-ordered',
+                    'url' => site_url('sequences'),
+                    'match' => ['sequences'],
+                ];
+            }
+            if (function_exists('can') && can('keywords.view')) {
+                $automationItems[] = [
+                    'label' => 'Keywords',
+                    'icon' => 'key-round',
+                    'url' => site_url('keywords'),
+                    'match' => ['keywords'],
+                    'children' => [
+                        ['label' => 'All Keywords', 'icon' => 'key-round', 'url' => site_url('keywords'), 'match' => ['keywords']],
+                        ['label' => 'Create Keyword', 'icon' => 'plus', 'url' => site_url('keywords/create'), 'match' => ['keywords/create']],
+                    ],
+                ];
+            }
+            if (function_exists('can') && (can('queue.view') || can('automations.view'))) {
+                $automationItems[] = [
+                    'label' => 'Queue',
+                    'icon' => 'clock-3',
+                    'url' => site_url('queue'),
+                    'match' => ['queue'],
                 ];
             }
             if ($automationItems !== []) {
                 $navGroups[] = ['title' => 'Automation', 'items' => $automationItems];
             }
 
-            $supportItems = [];
-            if (function_exists('can') && can('chat.view')) {
-                $settingsSvc = function_exists('service') ? service('settingsService') : null;
-                $pageMsg = function_exists('service') ? service('pageMessaging') : null;
-                $igReady = $settingsSvc && $pageMsg && $settingsSvc->isInstagramInboxEnabled() && $pageMsg->isConfigured();
-                $fbReady = $settingsSvc && $pageMsg && $settingsSvc->isMessengerInboxEnabled() && $pageMsg->isConfigured();
-                $teamChildren = [
-                    [
-                        'label' => 'WhatsApp',
-                        'icon' => 'message-circle',
-                        'url' => site_url('chat?channel=whatsapp'),
-                        'match' => ['chat'],
-                        'channel' => 'whatsapp',
-                    ],
-                    [
-                        'label' => 'Messenger',
-                        'icon' => 'send',
-                        'url' => site_url('chat?channel=messenger'),
-                        'match' => ['chat'],
-                        'channel' => 'messenger',
-                        'hint' => $fbReady ? null : 'Setup in Settings',
-                    ],
-                    [
-                        'label' => 'Instagram',
-                        'icon' => 'instagram',
-                        'url' => site_url('chat?channel=instagram'),
-                        'match' => ['chat'],
-                        'channel' => 'instagram',
-                        'hint' => $igReady ? null : 'Setup in Settings',
-                    ],
-                ];
-                $supportItems[] = [
-                    'label' => 'Team Inbox',
-                    'icon' => 'message-circle',
-                    'url' => site_url('chat?channel=whatsapp'),
-                    'match' => ['chat'],
-                    'badge' => $inboxBadge,
-                    'children' => $teamChildren,
-                ];
-            }
+            $analyticsItems = [];
             if (function_exists('can') && can('reports.view')) {
-                $supportItems[] = [
-                    'label' => 'WA Support Analytics',
+                $analyticsItems[] = [
+                    'label' => 'Analytics',
                     'icon' => 'bar-chart-3',
                     'url' => site_url('analytics'),
                     'match' => ['analytics', 'reports'],
@@ -334,8 +355,8 @@
                     ],
                 ];
             }
-            if ($supportItems !== []) {
-                $navGroups[] = ['title' => 'Support', 'items' => $supportItems];
+            if ($analyticsItems !== []) {
+                $navGroups[] = ['title' => 'Analytics', 'items' => $analyticsItems];
             }
 
             $systemItems = [];
@@ -345,12 +366,14 @@
             if (function_exists('can') && can('roles.view')) {
                 $systemItems[] = ['label' => 'Roles', 'icon' => 'shield', 'url' => site_url('roles'), 'match' => ['roles']];
             }
-            $systemItems[] = [
-                'label' => 'Setup Workspace',
-                'icon' => 'wrench',
-                'url' => site_url('guide/local'),
-                'match' => ['guide', 'guide/local', 'guide/production', 'guide/automations'],
-            ];
+            if (function_exists('can') && can('guide.view')) {
+                $systemItems[] = [
+                    'label' => 'Setup Workspace',
+                    'icon' => 'wrench',
+                    'url' => site_url('guide/local'),
+                    'match' => ['guide', 'guide/local', 'guide/production', 'guide/automations'],
+                ];
+            }
             if ($systemItems !== []) {
                 $navGroups[] = ['title' => 'System', 'items' => $systemItems];
             }

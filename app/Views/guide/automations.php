@@ -30,6 +30,8 @@ $stats = $stats ?? ['total' => 0, 'active' => 0, 'triggers' => 0, 'conditions' =
         <strong>How to fire safely:</strong>
         Message-based flows use a keyword filter like <code>FLOWTEST_…</code> so they do not reply to every chat.
         External triggers (Shopify, Facebook, webhook, …) run when <code>processTrigger</code> is called with that type.
+        <strong>Delay</strong> nodes resume via <code>php spark automations:process</code> (stores real rule id — not step_order).
+        Multi-step drips: <a href="<?= site_url('sequences') ?>">Sequences</a>.
         Re-seed / Meta test: <code>php spark automations:seed-catalog --test</code>
     </div>
 

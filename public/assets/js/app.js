@@ -82,7 +82,7 @@
             text: options.text || 'This action cannot be undone.',
             icon: options.icon || 'warning',
             showCancelButton: true,
-            confirmButtonColor: '#25D366',
+            confirmButtonColor: '#8e53f7',
             cancelButtonColor: '#6c757d',
             confirmButtonText: options.confirmText || 'Yes, continue',
             cancelButtonText: options.cancelText || 'Cancel'

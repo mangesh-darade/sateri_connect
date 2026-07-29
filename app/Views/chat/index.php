@@ -72,11 +72,18 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
                         </button>
                         <div class="dropdown-menu chat-scope-dropdown">
                             <button type="button" class="dropdown-item active" data-scope="all">All Chats</button>
-                            <button type="button" class="dropdown-item" data-scope="assigned">Assigned to Agents</button>
                             <button type="button" class="dropdown-item" data-scope="open">Open</button>
-                            <button type="button" class="dropdown-item" data-scope="closed">Closed</button>
+                            <button type="button" class="dropdown-item" data-scope="pending">Pending</button>
+                            <button type="button" class="dropdown-item" data-scope="chatbot">Chatbot</button>
+                            <button type="button" class="dropdown-item" data-scope="intervened">Intervened</button>
+                            <button type="button" class="dropdown-item" data-scope="resolved">Resolved</button>
+                            <button type="button" class="dropdown-item" data-scope="active">Active (24h)</button>
+                            <button type="button" class="dropdown-item" data-scope="expired">Expired</button>
+                            <button type="button" class="dropdown-item" data-scope="unassigned">Unassigned</button>
+                            <button type="button" class="dropdown-item" data-scope="assigned">Assigned to Agents</button>
+                            <button type="button" class="dropdown-item" data-scope="frt_exceeded">FRT Exceeded</button>
+                            <button type="button" class="dropdown-item" data-scope="ctwa">CTWA</button>
                             <button type="button" class="dropdown-item" data-scope="unread">Unread</button>
-                            <button type="button" class="dropdown-item" data-scope="unassigned">Unassigned Chats</button>
                         </div>
                     </div>
                     <label class="chat-unread-toggle">
@@ -89,7 +96,9 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
         </div>
         <div class="chat-inbox-filters">
             <button type="button" class="btn btn-sm btn-wa chat-status-filter active" data-status="open">Open</button>
-            <button type="button" class="btn btn-sm btn-outline-secondary chat-status-filter" data-status="closed">Closed</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary chat-status-filter" data-status="pending">Pending</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary chat-status-filter" data-status="chatbot">Bot</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary chat-status-filter" data-status="resolved">Resolved</button>
             <button type="button" class="btn btn-sm btn-outline-secondary chat-status-filter" data-status="all">All</button>
         </div>
         <div class="chat-conv-list" id="chatConvList">
@@ -123,8 +132,15 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
                     </select>
                     <?php endif; ?>
                     <?php if ($canClose): ?>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btnChatClose" title="Close conversation">
-                        <i class="fas fa-check"></i><span class="d-none d-md-inline ms-1">Close</span>
+                    <select id="chatStatusSelect" class="form-select form-select-sm" style="width:auto;max-width:128px" title="Conversation status">
+                        <option value="open">Open</option>
+                        <option value="pending">Pending</option>
+                        <option value="intervened">Intervened</option>
+                        <option value="chatbot">Chatbot</option>
+                        <option value="resolved">Resolved</option>
+                    </select>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btnChatClose" title="Resolve conversation">
+                        <i class="fas fa-check"></i><span class="d-none d-md-inline ms-1">Resolve</span>
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="btnChatReopen" title="Reopen">
                         <i class="fas fa-folder-open"></i>
@@ -196,8 +212,15 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
         <div class="chat-filter-group">
             <label class="form-label small fw-semibold">General</label>
             <select class="form-select form-select-sm" id="chatFilterStatusSelect">
-                <option value="open">Open chats</option>
-                <option value="closed">Closed chats</option>
+                <option value="open">Open</option>
+                <option value="pending">Pending</option>
+                <option value="chatbot">Chatbot</option>
+                <option value="intervened">Intervened</option>
+                <option value="resolved">Resolved</option>
+                <option value="active">Active (24h window)</option>
+                <option value="expired">Expired window</option>
+                <option value="frt_exceeded">FRT exceeded</option>
+                <option value="ctwa">CTWA ads</option>
                 <option value="all">All chats</option>
             </select>
         </div>
@@ -264,5 +287,5 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
-<script src="<?= base_url('assets/js/chat.js') ?>"></script>
+<script src="<?= base_url('assets/js/chat.js') ?>?v=inbox2"></script>
 <?= $this->endSection() ?>

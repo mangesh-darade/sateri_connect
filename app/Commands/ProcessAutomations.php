@@ -11,7 +11,7 @@ class ProcessAutomations extends BaseCommand
 {
     protected $group       = 'WhatsApp';
     protected $name        = 'automations:process';
-    protected $description = 'Process time-based automation triggers (e.g. birthdays).';
+    protected $description = 'Process delayed automation resumes, birthdays, and due sequence steps.';
     protected $usage       = 'automations:process';
 
     public function run(array $params)
@@ -20,7 +20,10 @@ class ProcessAutomations extends BaseCommand
 
         try {
             $count = (new AutomationEngine())->processPending();
-            CLI::write("Processed {$count} time-based automation trigger(s).", 'green');
+            CLI::write("Processed {$count} delayed/birthday automation job(s).", 'green');
+
+            $seqCount = (new \App\Libraries\SequenceService())->processDue(100);
+            CLI::write("Processed {$seqCount} sequence step(s).", 'green');
         } catch (Throwable $e) {
             CLI::error('Automation processing failed: ' . $e->getMessage());
 

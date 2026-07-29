@@ -159,8 +159,102 @@ class AutomationEngine
             }
 
             $actionType = $this->normalizeActionType((string) ($current['action_type'] ?? ''));
-            unset($context['_action_failed'], $context['_http_status']);
+            unset($context['_action_failed'], $context['_http_status'], $context['_stop_automation']);
             $this->executeAction($actionType, $config, $context);
+
+            // Delay (and similar) pause the graph; resume via automation_delayed_jobs.
+            if (! empty($context['_stop_automation'])) {
+                if (empty($context['_delay_scheduled']) && ! empty($context['_delayed_until'])) {
+                    $this->scheduleDelayedResume(
+                        $automationId,
+                        $current,
+                        $context,
+                        (string) $context['_delayed_until']
+                    );
+                }
+                break;
+            }
+
+            if (! empty($current['next_on_false']) && ! empty($context['_action_failed'])) {
+                $nextRef = $current['next_on_false'];
+            } else {
+                $nextRef = $current['next_on_true'] ?? null;
+            }
+            $current = $this->resolveNext($rules, $byId, $byStep, $current, $nextRef);
+        }
+    }
+
+    /**
+     * Resume an automation from a specific rule (used by delayed jobs).
+     *
+     * @param array<string, mixed> $context
+     */
+    public function resumeFromRule(int $automationId, ?int $resumeRuleId, array $context = []): void
+    {
+        $context['automation_id'] = $automationId;
+        $context = $this->enrichContactContext($context);
+
+        $rules = $this->rules
+            ->where('automation_id', $automationId)
+            ->orderBy('step_order', 'ASC')
+            ->findAll();
+
+        if ($rules === []) {
+            return;
+        }
+
+        $byId   = [];
+        $byStep = [];
+        foreach ($rules as $rule) {
+            $byId[(int) $rule['id']] = $rule;
+            $byStep[(int) $rule['step_order']] = $rule;
+        }
+
+        $current = null;
+        if ($resumeRuleId === null) {
+            // Terminal delay — do not restart the graph from step 1.
+            return;
+        }
+        if (isset($byId[$resumeRuleId])) {
+            $current = $byId[$resumeRuleId];
+        } elseif (isset($byStep[$resumeRuleId])) {
+            // Legacy jobs may have stored step_order instead of rule id.
+            $current = $byStep[$resumeRuleId];
+        } else {
+            log_message('error', 'Delay resume rule #{id} missing for automation #{a}', [
+                'id' => $resumeRuleId,
+                'a'  => $automationId,
+            ]);
+
+            return;
+        }
+
+        $guard = 0;
+        while ($current !== null && $guard < 100) {
+            $guard++;
+            $config = $this->decodeJson($current['config'] ?? null);
+            $type   = (string) ($current['rule_type'] ?? 'action');
+
+            if ($type === 'condition') {
+                $config['_preset'] = (string) ($current['action_type'] ?? $config['preset'] ?? '');
+                $passed = $this->evaluateCondition($config, $context);
+                $nextRef = $passed
+                    ? ($current['next_on_true'] ?? null)
+                    : ($current['next_on_false'] ?? null);
+                $current = $this->resolveNext($rules, $byId, $byStep, $current, $nextRef);
+                continue;
+            }
+
+            $actionType = $this->normalizeActionType((string) ($current['action_type'] ?? ''));
+            unset($context['_action_failed'], $context['_http_status'], $context['_stop_automation'], $context['_delay_scheduled']);
+            $this->executeAction($actionType, $config, $context);
+
+            if (! empty($context['_stop_automation'])) {
+                if (empty($context['_delay_scheduled']) && ! empty($context['_delayed_until'])) {
+                    $this->scheduleDelayedResume($automationId, $current, $context, (string) $context['_delayed_until']);
+                }
+                break;
+            }
 
             if (! empty($current['next_on_false']) && ! empty($context['_action_failed'])) {
                 $nextRef = $current['next_on_false'];
@@ -212,6 +306,9 @@ class AutomationEngine
             'cheerio_timedelay', 'timedelay', 'time_delay' => 'delay',
             'cheerio_updateattribute', 'updateattribute' => 'set_attribute',
             'cheerio_assignagent', 'assignagent' => 'assign_agent',
+            'send_email', 'sendemail', 'email' => 'send_email',
+            'update_chat_status', 'updatechatstatus', 'chat_status' => 'update_chat_status',
+            'assign_bot', 'assignbot', 'cheerio_assignchattobot' => 'assign_bot',
             default => $actionType,
         };
     }
@@ -314,6 +411,18 @@ class AutomationEngine
                 'field'    => 'contact.status',
                 'value'    => $config['value'] ?? 'active',
             ] + $config,
+            'attribute_condition' => [
+                'operator' => strtolower((string) ($config['operator'] ?? 'equals')),
+                'field'    => (static function (array $config): string {
+                    $attr = trim((string) ($config['attribute'] ?? $config['field'] ?? ''));
+                    if ($attr !== '' && ! str_contains($attr, '.')) {
+                        return 'contact.' . $attr;
+                    }
+
+                    return $attr;
+                })($config),
+                'value'    => $config['value'] ?? '',
+            ] + $config,
             'has_tag', 'within_window' => $config,
             default => $config,
         };
@@ -386,7 +495,13 @@ class AutomationEngine
                 break;
 
             case 'delay':
-                $seconds = (int) ($config['seconds'] ?? $config['delay'] ?? 60);
+                $seconds = (int) ($config['seconds'] ?? 0);
+                if ($seconds <= 0 && isset($config['minutes'])) {
+                    $seconds = (int) $config['minutes'] * 60;
+                }
+                if ($seconds <= 0) {
+                    $seconds = (int) ($config['delay'] ?? 60);
+                }
                 $seconds = max(1, $seconds);
                 if ($contactId > 0 && ! empty($config['follow_up'])) {
                     $followUp = is_array($config['follow_up']) ? $config['follow_up'] : [];
@@ -400,7 +515,8 @@ class AutomationEngine
                         date('Y-m-d H:i:s', time() + $seconds)
                     );
                 }
-                $context['_delayed_until'] = date('Y-m-d H:i:s', time() + $seconds);
+                $context['_delayed_until']   = date('Y-m-d H:i:s', time() + $seconds);
+                $context['_stop_automation'] = true;
                 break;
 
             case 'assign_agent':
@@ -411,6 +527,43 @@ class AutomationEngine
                         ->where('contact_id', $contactId)
                         ->update(['assigned_to' => $agentId ?: null]);
                 }
+                break;
+
+            case 'assign_bot':
+                if ($contactId > 0) {
+                    $channel = strtolower((string) ($context['channel'] ?? 'whatsapp')) ?: 'whatsapp';
+                    $payload = [
+                        'status'      => \App\Libraries\InboxStatus::CHATBOT,
+                        'assigned_to' => null,
+                    ];
+                    if (db_connect()->fieldExists('intervened_at', 'conversations')) {
+                        $payload['intervened_at'] = null;
+                    }
+                    $conv = model(\App\Models\ConversationModel::class)->findOrCreateForContact($contactId, $channel);
+                    model(\App\Models\ConversationModel::class)->update((int) $conv['id'], $payload);
+                    $this->contacts->update($contactId, ['assigned_to' => null]);
+                }
+                break;
+
+            case 'update_chat_status':
+                if ($contactId > 0) {
+                    $status  = \App\Libraries\InboxStatus::normalize((string) ($config['status'] ?? $config['value'] ?? 'open'));
+                    if (! \App\Libraries\InboxStatus::isWritable($status)) {
+                        $status = \App\Libraries\InboxStatus::OPEN;
+                    }
+                    $channel = strtolower((string) ($context['channel'] ?? 'whatsapp')) ?: 'whatsapp';
+                    $conv    = model(\App\Models\ConversationModel::class)->findOrCreateForContact($contactId, $channel);
+                    $payload = ['status' => $status];
+                    if ($status === \App\Libraries\InboxStatus::INTERVENED
+                        && db_connect()->fieldExists('intervened_at', 'conversations')) {
+                        $payload['intervened_at'] = date('Y-m-d H:i:s');
+                    }
+                    model(\App\Models\ConversationModel::class)->update((int) $conv['id'], $payload);
+                }
+                break;
+
+            case 'send_email':
+                $this->sendContactEmail($config, $context);
                 break;
 
             case 'add_tag':
@@ -517,6 +670,74 @@ class AutomationEngine
      */
     public function processPending(): int
     {
+        $count = 0;
+        $count += $this->processDelayedJobs();
+        $count += $this->processBirthdayTriggers();
+
+        return $count;
+    }
+
+    /**
+     * Resume workflows paused on Delay nodes.
+     */
+    public function processDelayedJobs(): int
+    {
+        $db = db_connect();
+        if (! $db->tableExists('automation_delayed_jobs')) {
+            return 0;
+        }
+
+        $now  = date('Y-m-d H:i:s');
+        $jobs = $db->table('automation_delayed_jobs')
+            ->where('status', 'pending')
+            ->where('run_at <=', $now)
+            ->orderBy('run_at', 'ASC')
+            ->limit(50)
+            ->get()
+            ->getResultArray();
+
+        $count = 0;
+        foreach ($jobs as $job) {
+            $jobId = (int) $job['id'];
+            // Claim atomically — skip if another worker already took it
+            $db->table('automation_delayed_jobs')
+                ->where('id', $jobId)
+                ->where('status', 'pending')
+                ->update(['status' => 'processing', 'updated_at' => $now]);
+            if ($db->affectedRows() !== 1) {
+                continue;
+            }
+
+            try {
+                $context = $this->decodeJson($job['context_json'] ?? null);
+                $context['contact_id'] = (int) ($job['contact_id'] ?? $context['contact_id'] ?? 0);
+                unset($context['_stop_automation'], $context['_delayed_until'], $context['_delay_scheduled']);
+                $resumeRuleId = isset($job['resume_rule_id']) && $job['resume_rule_id'] !== null && $job['resume_rule_id'] !== ''
+                    ? (int) $job['resume_rule_id']
+                    : null;
+                $this->resumeFromRule((int) $job['automation_id'], $resumeRuleId, $context);
+                $db->table('automation_delayed_jobs')->where('id', $jobId)->update([
+                    'status'     => 'done',
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+                $count++;
+            } catch (Throwable $e) {
+                $db->table('automation_delayed_jobs')->where('id', $jobId)->update([
+                    'status'     => 'failed',
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+                log_message('error', 'Delayed automation job #{id} failed: {msg}', [
+                    'id'  => $jobId,
+                    'msg' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return $count;
+    }
+
+    protected function processBirthdayTriggers(): int
+    {
         // Time-based birthday trigger for contacts celebrating today
         $today = date('m-d');
         $contacts = db_connect()->table('contacts')
@@ -562,6 +783,91 @@ class AutomationEngine
         }
 
         return $count;
+    }
+
+    /**
+     * @param array<string, mixed> $currentRule Delay rule row
+     * @param array<string, mixed> $context
+     */
+    protected function scheduleDelayedResume(int $automationId, array $currentRule, array $context, string $runAt): void
+    {
+        $db = db_connect();
+        if (! $db->tableExists('automation_delayed_jobs')) {
+            return;
+        }
+
+        $resumeRuleId = null;
+        $rules = $this->rules
+            ->where('automation_id', $automationId)
+            ->orderBy('step_order', 'ASC')
+            ->findAll();
+        $byId   = [];
+        $byStep = [];
+        foreach ($rules as $rule) {
+            $byId[(int) $rule['id']] = $rule;
+            $byStep[(int) $rule['step_order']] = $rule;
+        }
+        // next_on_true from WorkflowGraph is 1-based step_order (not always DB id).
+        $next = $this->resolveNext($rules, $byId, $byStep, $currentRule, $currentRule['next_on_true'] ?? null);
+        if (is_array($next)) {
+            $resumeRuleId = (int) $next['id'];
+        }
+
+        // Strip non-serializable / control keys
+        $ctx = $context;
+        unset(
+            $ctx['_stop_automation'],
+            $ctx['_delayed_until'],
+            $ctx['_delay_scheduled'],
+            $ctx['_action_failed'],
+            $ctx['_paused_for_images'],
+            $ctx['_current_rule']
+        );
+
+        $db->table('automation_delayed_jobs')->insert([
+            'automation_id'  => $automationId,
+            'contact_id'     => (int) ($context['contact_id'] ?? 0) ?: null,
+            'resume_rule_id' => $resumeRuleId,
+            'context_json'   => json_encode($ctx),
+            'run_at'         => $runAt,
+            'status'         => 'pending',
+            'created_at'     => date('Y-m-d H:i:s'),
+            'updated_at'     => date('Y-m-d H:i:s'),
+        ]);
+    }
+
+    /**
+     * Send email to contact (or explicit `to`) via EmailProvider.
+     *
+     * @param array<string, mixed> $config
+     * @param array<string, mixed> $context
+     */
+    protected function sendContactEmail(array $config, array &$context): void
+    {
+        $to = trim((string) ($config['to'] ?? ''));
+        if ($to === '') {
+            $contact = $context['contact'] ?? null;
+            if (! is_array($contact) && ! empty($context['contact_id'])) {
+                $contact = $this->contacts->find((int) $context['contact_id']);
+            }
+            $to = is_array($contact) ? trim((string) ($contact['email'] ?? '')) : '';
+        }
+        $to = $this->interpolate($to, $context);
+        $subject = $this->interpolate((string) ($config['subject'] ?? 'Message'), $context);
+        $body    = $this->interpolate((string) ($config['text'] ?? $config['body'] ?? $config['message'] ?? ''), $context);
+
+        if ($to === '' || $body === '') {
+            $context['_action_failed'] = true;
+            log_message('warning', 'send_email skipped: missing to/body');
+
+            return;
+        }
+
+        $result = service('emailProvider')->send($to, $subject, $body);
+        if (! ($result['ok'] ?? false)) {
+            $context['_action_failed'] = true;
+            log_message('error', 'Automation send_email failed: {debug}', ['debug' => $result['message'] ?? 'unknown']);
+        }
     }
 
     /**

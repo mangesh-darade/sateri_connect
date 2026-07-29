@@ -64,8 +64,8 @@ $(function () {
         data: {
             labels: labels,
             datasets: [
-                { label: 'Sent', data: sent, borderColor: '#128C7E', tension: 0.3 },
-                { label: 'Delivered', data: delivered, borderColor: '#25D366', tension: 0.3 }
+                { label: 'Sent', data: sent, borderColor: '#4b3786', tension: 0.3 },
+                { label: 'Delivered', data: delivered, borderColor: '#8e53f7', tension: 0.3 }
             ]
         },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }

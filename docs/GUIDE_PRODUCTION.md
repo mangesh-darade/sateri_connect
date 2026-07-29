@@ -22,13 +22,13 @@
 |-----:|---------|---------------------|
 | 1 | Prepare hosting | PHP 8.2+, MySQL, HTTPS ready |
 | 2 | Upload code + `.env` | Site opens on your domain |
-| 3 | Install / migrate | Login works on HTTPS |
+| 3 | Install / migrate / seed perms | Login works on HTTPS |
 | 4 | Harden security | `CI_ENVIRONMENT=production` |
 | 5 | Cheerio live setup | Live number + permanent token |
 | 6 | Webhook on HTTPS | Cheerio webhook verified |
 | 7 | Sync templates | Approved templates show |
-| 8 | Cron / workers | Queue sends automatically |
-| 9 | Smoke test | Real send + receive works |
+| 8 | Cron / workers | Queue + delays + sequences send |
+| 9 | Smoke test | Real send + receive + inbox statuses work |
 
 ---
 
@@ -83,7 +83,7 @@
 2. Point the web root to:
 
 ```text
-/path/to/whstapp/public
+/path/to/sateri_connect/public
 ```
 
 3. Make sure these are **not** public on the web:
@@ -147,7 +147,7 @@ If first deploy:
 2. Run:
 
 ```bash
-cd /path/to/whstapp
+cd /path/to/sateri_connect
 php spark migrate
 php spark db:seed
 ```
@@ -243,7 +243,7 @@ https://your-domain.com/webhooks
 If the app is in a subfolder and DocumentRoot is **not** `public/`:
 
 ```text
-https://your-domain.com/whstapp/public/webhooks
+https://your-domain.com/sateri_connect/public/webhooks
 ```
 
 In Cheerio / WABA webhook settings:
@@ -266,7 +266,7 @@ In Cheerio / WABA webhook settings:
 On the server:
 
 ```bash
-cd /path/to/whstapp
+cd /path/to/sateri_connect
 php spark templates:sync
 ```
 
@@ -290,16 +290,29 @@ Messages stay pending until workers run.
 Run every minute (Linux crontab example):
 
 ```cron
-* * * * * cd /path/to/whstapp && php spark queue:process >> writable/logs/queue.log 2>&1
-* * * * * cd /path/to/whstapp && php spark campaigns:process >> writable/logs/campaigns.log 2>&1
-* * * * * cd /path/to/whstapp && php spark automations:process >> writable/logs/automations.log 2>&1
+* * * * * cd /path/to/sateri_connect && php spark queue:process >> writable/logs/queue.log 2>&1
+* * * * * cd /path/to/sateri_connect && php spark campaigns:process >> writable/logs/campaigns.log 2>&1
+* * * * * cd /path/to/sateri_connect && php spark automations:process >> writable/logs/automations.log 2>&1
+```
+
+`automations:process` is required for:
+- Workflow **Delay** resume (`automation_delayed_jobs`)
+- **Sequence** drip steps
+- Birthday / scheduled automation triggers
+
+Also useful after deploy:
+
+```bash
+cd /path/to/sateri_connect
+php spark migrate
+php spark db:seed PermissionSeeder
 ```
 
 Also useful daily:
 
 ```cron
-5 3 * * * cd /path/to/whstapp && php spark templates:sync
-15 3 * * * cd /path/to/whstapp && php spark logs:cleanup
+5 3 * * * cd /path/to/sateri_connect && php spark templates:sync
+15 3 * * * cd /path/to/sateri_connect && php spark logs:cleanup
 ```
 
 Windows server: use Task Scheduler (see [CRON_SETUP.md](CRON_SETUP.md)).
@@ -320,33 +333,46 @@ Windows server: use Task Scheduler (see [CRON_SETUP.md](CRON_SETUP.md)).
 2. Send an **approved template**.  
 3. Confirm the phone receives it.  
 4. Reply from the phone.  
-5. Confirm **Live Chat** shows the inbound message.  
+5. Confirm **Team Inbox** (`/chat`) shows the inbound message and status filters work.  
 6. Reply from Live Chat (inside 24h window).  
-7. Check **Queue** is empty / sent (not stuck pending).  
-8. Check delivery status updates (if webhooks work).
+7. Optional: create a **Sequence**, enroll a contact, confirm `automations:process` sends the next step.  
+8. Check **Queue** is empty / sent (not stuck pending).  
+9. Check delivery status updates (if webhooks work).
 
 ### Checklist
 
 - [ ] Outbound template works  
 - [ ] Inbound webhook works  
 - [ ] Agent reply works  
+- [ ] Inbox statuses / Resolve work  
 - [ ] Queue is healthy  
+- [ ] `automations:process` is on cron  
 
 ---
 
 ## Step 12 — Team and roles
 
-1. **Roles** — only give needed permissions.  
+1. **Roles** — only give needed permissions. New modules:
+   - `sequences.view|create|edit|delete`
+   - `guide.view` (Setup Workspace guides)
 2. **Users** — create agent accounts (not shared admin).  
-3. Train agents on:
+3. Re-seed system role matrix after upgrades (custom roles are preserved):
+
+```bash
+php spark db:seed PermissionSeeder
+```
+
+4. Train agents on:
    - 24-hour window  
    - Templates outside the window  
-   - Live Chat + Keywords  
+   - Team Inbox statuses (open / pending / intervened / chatbot / resolved)  
+   - Keywords + Sequences (view) + Workflows (if allowed)  
 
 ### Checklist
 
 - [ ] Admin account is not shared  
 - [ ] Agents have only the rights they need  
+- [ ] Sequences / Guide permissions appear on Roles page  
 
 ---
 
@@ -356,6 +382,8 @@ Windows server: use Task Scheduler (see [CRON_SETUP.md](CRON_SETUP.md)).
 |---------|-----|
 | Webhook fails | HTTPS only; correct `/webhooks` path; same verify token |
 | Queue never sends | Cron/Supervisor not running |
+| Delay / sequence never continue | Ensure `automations:process` cron every minute + `php spark migrate` |
+| Missing Sequences menu | Role needs `sequences.view`; run PermissionSeeder |
 | SSL / curl errors | Server CA certs OK; PHP curl openssl enabled |
 | Token errors | Use System User token; check permissions |
 | 404 on all pages | DocumentRoot must be `public/`; enable rewrite |
@@ -378,8 +406,10 @@ writable/logs/
 - [ ] Live Cheerio number + API key saved  
 - [ ] Webhook verified + `messages`  
 - [ ] Templates synced  
-- [ ] Cron workers running  
+- [ ] Cron workers running (`queue`, `campaigns`, `automations`)  
 - [ ] Test send + receive OK  
+- [ ] Team Inbox statuses OK  
+- [ ] Sequences permissions reviewed  
 - [ ] Backups enabled  
 - [ ] Strong passwords / roles reviewed  
 

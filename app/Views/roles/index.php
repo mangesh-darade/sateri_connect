@@ -83,7 +83,7 @@ if (is_array($first) && array_is_list($permissions) && isset($first['slug'])) {
 
 <?= $this->section('styles') ?>
 <style>
-.roles-matrix .form-check-input { accent-color: var(--wa-green); }
+.roles-matrix .form-check-input { accent-color: var(--brand-500); }
 .roles-save-bar {
     position: sticky;
     bottom: 0;

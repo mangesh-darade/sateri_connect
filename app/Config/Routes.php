@@ -176,6 +176,15 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->get('automations/(:num)/builder', 'Automations::builderPage/$1');
     $routes->post('automations/(:num)/builder', 'Automations::builder/$1', ['filter' => 'csrf']);
 
+    // Sequences (multi-step drips)
+    $routes->get('sequences', 'Sequences::index');
+    $routes->get('sequences/create', 'Sequences::create');
+    $routes->post('sequences', 'Sequences::store', ['filter' => 'csrf']);
+    $routes->get('sequences/(:num)/edit', 'Sequences::edit/$1');
+    $routes->post('sequences/(:num)', 'Sequences::update/$1', ['filter' => 'csrf']);
+    $routes->post('sequences/(:num)/enroll', 'Sequences::enroll/$1', ['filter' => 'csrf']);
+    $routes->post('sequences/(:num)/delete', 'Sequences::delete/$1', ['filter' => 'csrf']);
+
     // Keywords
     $routes->get('keywords', 'Keywords::index');
     $routes->get('keywords/create', 'Keywords::create');

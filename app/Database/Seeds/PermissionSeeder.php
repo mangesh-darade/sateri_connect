@@ -47,14 +47,21 @@ class PermissionSeeder extends Seeder
             ['name' => 'Create Automations', 'slug' => 'automations.create', 'module' => 'automations', 'description' => 'Create automations'],
             ['name' => 'Edit Automations', 'slug' => 'automations.edit', 'module' => 'automations', 'description' => 'Edit automations'],
             ['name' => 'Delete Automations', 'slug' => 'automations.delete', 'module' => 'automations', 'description' => 'Delete automations'],
+            // Sequences (multi-step drips)
+            ['name' => 'View Sequences', 'slug' => 'sequences.view', 'module' => 'sequences', 'description' => 'View message sequences'],
+            ['name' => 'Create Sequences', 'slug' => 'sequences.create', 'module' => 'sequences', 'description' => 'Create message sequences'],
+            ['name' => 'Edit Sequences', 'slug' => 'sequences.edit', 'module' => 'sequences', 'description' => 'Edit sequences and enroll contacts'],
+            ['name' => 'Delete Sequences', 'slug' => 'sequences.delete', 'module' => 'sequences', 'description' => 'Delete message sequences'],
             // Keywords
             ['name' => 'View Keywords', 'slug' => 'keywords.view', 'module' => 'keywords', 'description' => 'View keyword replies'],
             ['name' => 'Create Keywords', 'slug' => 'keywords.create', 'module' => 'keywords', 'description' => 'Create keyword replies'],
             ['name' => 'Edit Keywords', 'slug' => 'keywords.edit', 'module' => 'keywords', 'description' => 'Edit keyword replies'],
             ['name' => 'Delete Keywords', 'slug' => 'keywords.delete', 'module' => 'keywords', 'description' => 'Delete keyword replies'],
-            // Reports
+            // Reports / Analytics
             ['name' => 'View Reports', 'slug' => 'reports.view', 'module' => 'reports', 'description' => 'View reports and analytics'],
             ['name' => 'Export Reports', 'slug' => 'reports.export', 'module' => 'reports', 'description' => 'Export reports'],
+            // Guides
+            ['name' => 'View Guides', 'slug' => 'guide.view', 'module' => 'guide', 'description' => 'View setup and product guides'],
             // Settings
             ['name' => 'View Settings', 'slug' => 'settings.view', 'module' => 'settings', 'description' => 'View application settings'],
             ['name' => 'Edit Settings', 'slug' => 'settings.edit', 'module' => 'settings', 'description' => 'Update application settings'],
@@ -103,8 +110,10 @@ class PermissionSeeder extends Seeder
             'templates.view', 'templates.create', 'templates.edit', 'templates.delete', 'templates.sync',
             'chat.view', 'chat.send', 'chat.assign', 'chat.close',
             'automations.view', 'automations.create', 'automations.edit', 'automations.delete',
+            'sequences.view', 'sequences.create', 'sequences.edit', 'sequences.delete',
             'keywords.view', 'keywords.create', 'keywords.edit', 'keywords.delete',
             'reports.view', 'reports.export',
+            'guide.view',
             'settings.view',
             'queue.view', 'queue.manage',
         ];
@@ -116,50 +125,48 @@ class PermissionSeeder extends Seeder
             'emails.view',
             'chat.view', 'chat.send', 'chat.close',
             'templates.view',
+            'automations.view',
+            'sequences.view',
             'keywords.view',
             'reports.view',
+            'guide.view',
+        ];
+
+        // Only re-sync built-in roles. Custom roles keep their existing grants.
+        $systemRoleSlugs = ['super-admin', 'admin', 'manager', 'agent'];
+        $systemRoleIds   = [];
+        foreach ($systemRoleSlugs as $roleSlug) {
+            if (isset($roleIds[$roleSlug])) {
+                $systemRoleIds[] = (int) $roleIds[$roleSlug];
+            }
+        }
+
+        $matrix = [
+            'super-admin' => array_keys($permissionIds),
+            'admin'       => array_keys($permissionIds),
+            'manager'     => $managerSlugs,
+            'agent'       => $agentSlugs,
         ];
 
         $assignments = [];
-
-        foreach (['super-admin', 'admin'] as $roleSlug) {
+        foreach ($matrix as $roleSlug => $slugs) {
             if (! isset($roleIds[$roleSlug])) {
                 continue;
             }
-
-            foreach ($permissionIds as $permissionId) {
+            $roleId = (int) $roleIds[$roleSlug];
+            foreach ($slugs as $slug) {
+                if (! isset($permissionIds[$slug])) {
+                    continue;
+                }
                 $assignments[] = [
-                    'role_id'       => $roleIds[$roleSlug],
-                    'permission_id' => $permissionId,
+                    'role_id'       => $roleId,
+                    'permission_id' => $permissionIds[$slug],
                 ];
             }
         }
 
-        if (isset($roleIds['manager'])) {
-            foreach ($managerSlugs as $slug) {
-                if (isset($permissionIds[$slug])) {
-                    $assignments[] = [
-                        'role_id'       => $roleIds['manager'],
-                        'permission_id' => $permissionIds[$slug],
-                    ];
-                }
-            }
-        }
-
-        if (isset($roleIds['agent'])) {
-            foreach ($agentSlugs as $slug) {
-                if (isset($permissionIds[$slug])) {
-                    $assignments[] = [
-                        'role_id'       => $roleIds['agent'],
-                        'permission_id' => $permissionIds[$slug],
-                    ];
-                }
-            }
-        }
-
-        if ($assignments !== []) {
-            // Re-sync safely so installer re-runs don't duplicate pivot rows.
-            $this->db->table('role_permissions')->truncate();
+        if ($systemRoleIds !== [] && $assignments !== []) {
+            $this->db->table('role_permissions')->whereIn('role_id', $systemRoleIds)->delete();
             $this->db->table('role_permissions')->insertBatch($assignments);
         }
     }

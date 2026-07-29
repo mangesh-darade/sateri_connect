@@ -27,13 +27,13 @@ $pct = min(100, round(($sent / $total) * 100));
                 </div>
                 <label class="form-label small text-muted mb-1">Progress · <?= esc((string) $sent) ?> / <?= esc((string) ($campaign['total_contacts'] ?? 0)) ?></label>
                 <div class="progress mb-3" style="height:10px;border-radius:999px;background:var(--wa-mist)">
-                    <div class="progress-bar" style="width:<?= $pct ?>%;background:linear-gradient(90deg,#128C7E,#25D366);border-radius:999px"></div>
+                    <div class="progress-bar" style="width:<?= $pct ?>%;background:linear-gradient(90deg,#4b3786,#8e53f7);border-radius:999px"></div>
                 </div>
                 <div class="row g-2 text-center">
                     <?php
                     $metrics = [
-                        ['Sent', $campaign['sent_count'] ?? 0, '#128C7E'],
-                        ['Delivered', $campaign['delivered_count'] ?? 0, '#25D366'],
+                        ['Sent', $campaign['sent_count'] ?? 0, '#4b3786'],
+                        ['Delivered', $campaign['delivered_count'] ?? 0, '#8e53f7'],
                         ['Read', $campaign['read_count'] ?? 0, '#34B7F1'],
                         ['Failed', $campaign['failed_count'] ?? 0, '#e25555'],
                         ['Replies', $campaign['reply_count'] ?? 0, '#f0a202'],
@@ -129,7 +129,7 @@ $(function () {
                 labels: labels,
                 datasets: [{
                     data: values,
-                    backgroundColor: ['#128C7E','#25D366','#34B7F1','#e25555','#f0a202'],
+                    backgroundColor: ['#4b3786','#8e53f7','#34B7F1','#e25555','#f0a202'],
                     borderWidth: 0
                 }]
             },

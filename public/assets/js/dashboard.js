@@ -43,8 +43,8 @@
             data: {
                 labels: labels,
                 datasets: [
-                    { label: 'Sent', data: sent, borderColor: '#128C7E', backgroundColor: 'rgba(18,140,126,.15)', tension: 0.3, fill: true },
-                    { label: 'Delivered', data: delivered, borderColor: '#25D366', backgroundColor: 'rgba(37,211,102,.1)', tension: 0.3, fill: false },
+                    { label: 'Sent', data: sent, borderColor: '#4b3786', backgroundColor: 'rgba(142,83,247,.15)', tension: 0.3, fill: true },
+                    { label: 'Delivered', data: delivered, borderColor: '#8e53f7', backgroundColor: 'rgba(142,83,247,.1)', tension: 0.3, fill: false },
                     { label: 'Read', data: read, borderColor: '#34B7F1', backgroundColor: 'transparent', tension: 0.3, fill: false },
                     { label: 'Failed', data: failed, borderColor: '#dc3545', backgroundColor: 'transparent', tension: 0.3, fill: false },
                     { label: 'Replies', data: replies, borderColor: '#fd7e14', backgroundColor: 'transparent', tension: 0.3, fill: false }
@@ -80,7 +80,7 @@
                 datasets: [{
                     data: values,
                     backgroundColor: [
-                        '#25D366', '#128C7E', '#34B7F1', '#f0a202', '#e25555', '#5b8def', '#6c757d'
+                        '#8e53f7', '#4b3786', '#34B7F1', '#f0a202', '#e25555', '#5b8def', '#6c757d'
                     ],
                     borderWidth: 0
                 }]

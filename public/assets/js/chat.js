@@ -186,9 +186,15 @@
         if (!conversation) return;
         Chat.conversationId = conversation.id || Chat.conversationId;
         Chat.conversationStatus = conversation.status || 'open';
-        var closed = Chat.conversationStatus === 'closed';
-        $('#btnChatClose').toggleClass('d-none', closed);
-        $('#btnChatReopen').toggleClass('d-none', !closed);
+        var resolved = Chat.conversationStatus === 'resolved' || Chat.conversationStatus === 'closed';
+        $('#btnChatClose').toggleClass('d-none', resolved);
+        $('#btnChatReopen').toggleClass('d-none', !resolved);
+        if ($('#chatStatusSelect').length) {
+            var st = Chat.conversationStatus === 'closed' ? 'resolved' : Chat.conversationStatus;
+            if ($('#chatStatusSelect option[value="' + st + '"]').length) {
+                $('#chatStatusSelect').val(st);
+            }
+        }
         if ($('#chatAssignSelect').length && conversation.assigned_to !== undefined && conversation.assigned_to !== null) {
             $('#chatAssignSelect').val(String(conversation.assigned_to || ''));
         } else if ($('#chatAssignSelect').length && (conversation.assigned_to === null || conversation.assigned_to === '')) {
@@ -279,13 +285,26 @@
             unread_count: parseInt(c.unread_count || c.unread || 0, 10) || 0,
             last_message_direction: c.last_message_direction || '',
             status: c.status || 'open',
-            assigned_to: c.assigned_to
+            status_label: c.status_label || c.status || 'open',
+            assigned_to: c.assigned_to,
+            within_24h: !!c.within_24h,
+            window_state: c.window_state || (c.within_24h ? 'active' : 'expired'),
+            frt_exceeded: !!c.frt_exceeded,
+            is_ctwa: !!c.is_ctwa,
+            ctwa_referral: c.ctwa_referral || null
         };
+    }
+
+    function statusBadgeHtml(c) {
+        var status = String(c.status || 'open');
+        var label = c.status_label || status;
+        var cls = 'chat-conv-status chat-conv-status-' + status.replace(/_/g, '-');
+        return '<span class="' + cls + '">' + escapeHtml(label) + '</span>';
     }
 
     function conversationSignature(list) {
         return list.map(function (c) {
-            return [c.contact_id, c.channel || '', c.unread_count, c.last_message_at, c.last_message, c.status, c.assigned_to || ''].join(':');
+            return [c.contact_id, c.channel || '', c.unread_count, c.last_message_at, c.last_message, c.status, c.assigned_to || '', c.frt_exceeded ? 1 : 0, c.is_ctwa ? 1 : 0].join(':');
         }).join('|');
     }
 
@@ -294,9 +313,17 @@
             all: 'All Chats',
             assigned: 'Assigned to Agents',
             open: 'Open',
-            closed: 'Closed',
+            pending: 'Pending',
+            chatbot: 'Chatbot',
+            intervened: 'Intervened',
+            resolved: 'Resolved',
+            closed: 'Resolved',
+            active: 'Active',
+            expired: 'Expired',
             unread: 'Unread',
-            unassigned: 'Unassigned Chats'
+            unassigned: 'Unassigned',
+            frt_exceeded: 'FRT Exceeded',
+            ctwa: 'CTWA'
         };
         return (labels[Chat.scopeFilter] || 'All Chats') + ' (' + count + ')';
     }
@@ -330,9 +357,17 @@
         } else if (Chat.assigneeFilter === 'unassigned') {
             assignedTo = 'unassigned';
         }
+        var status = Chat.inboxStatus || 'open';
+        var filter = '';
+        var composite = ['active', 'expired', 'frt_exceeded', 'ctwa', 'unassigned', 'assigned', 'unread'];
+        if (composite.indexOf(status) !== -1) {
+            filter = status;
+            status = 'all';
+        }
         return APP.get(base() + '/chat/conversations', {
             q: q || '',
-            status: Chat.inboxStatus || 'open',
+            status: status,
+            filter: filter,
             channel: Chat.channel || 'all',
             unread_only: Chat.unreadOnly ? 1 : 0,
             assigned_to: assignedTo
@@ -370,12 +405,19 @@
                     var active = String(c.contact_id) === String(Chat.contactId) ? ' active' : '';
                     var hasUnread = c.unread_count > 0;
                     var unreadClass = hasUnread ? ' has-unread' : '';
-                    var statusBadge = c.status === 'closed'
-                        ? '<span class="chat-conv-status chat-conv-status-closed">Closed</span>'
-                        : '<span class="chat-conv-status chat-conv-status-open">Open</span>';
+                    var statusBadge = statusBadgeHtml(c);
                     var flags = '';
                     if (c.unread_count > 0) {
                         flags += '<span class="chat-flag chat-flag-new">New</span>';
+                    }
+                    if (c.is_ctwa) {
+                        flags += '<span class="chat-flag chat-flag-ctwa">CTWA</span>';
+                    }
+                    if (c.frt_exceeded) {
+                        flags += '<span class="chat-flag chat-flag-frt">FRT</span>';
+                    }
+                    if (c.window_state === 'expired') {
+                        flags += '<span class="chat-flag chat-flag-expired">Expired</span>';
                     }
                     if (!c.assigned_to) {
                         flags += '<span class="chat-flag chat-flag-chatbot">Unassigned</span>';
@@ -627,16 +669,20 @@
 
     Chat.setStatus = function (status) {
         if (!Chat.contactId) return;
+        if (status === 'closed') {
+            status = 'resolved';
+        }
         APP.post(base() + '/chat/status', {
             contact_id: Chat.contactId,
-            status: status
+            status: status,
+            channel: Chat.contactChannel || Chat.channel || 'whatsapp'
         }).done(function () {
             Chat.conversationStatus = status;
             syncConversationChrome({ status: status, id: Chat.conversationId });
             Chat._convSig = '';
             Chat.loadConversations($('#chatSearch').val());
-            APP.toast(status === 'closed' ? 'Conversation closed' : 'Conversation reopened');
-            if (status === 'closed' && Chat.inboxStatus === 'open') {
+            APP.toast(status === 'resolved' ? 'Conversation resolved' : 'Conversation updated');
+            if (status === 'resolved' && Chat.inboxStatus === 'open') {
                 Chat.closeThread();
             }
         }).fail(function (xhr) {
@@ -770,10 +816,12 @@
             $('.chat-scope-dropdown .dropdown-item').removeClass('active');
             $(this).addClass('active');
 
-            if (scope === 'open' || scope === 'closed') {
-                Chat.inboxStatus = scope;
-            } else if (scope === 'all' || scope === 'assigned' || scope === 'unread' || scope === 'unassigned') {
-                Chat.inboxStatus = 'all';
+            var workflow = ['open', 'pending', 'chatbot', 'intervened', 'resolved', 'closed'];
+            var composite = ['active', 'expired', 'frt_exceeded', 'ctwa', 'unassigned', 'assigned', 'unread', 'all'];
+            if (workflow.indexOf(scope) !== -1) {
+                Chat.inboxStatus = scope === 'closed' ? 'resolved' : scope;
+            } else if (composite.indexOf(scope) !== -1) {
+                Chat.inboxStatus = scope === 'all' ? 'all' : scope;
             }
 
             Chat.unreadOnly = scope === 'unread';
@@ -786,7 +834,8 @@
             }
 
             $('.chat-status-filter').removeClass('active btn-wa').addClass('btn-outline-secondary');
-            $('.chat-status-filter[data-status="' + Chat.inboxStatus + '"]').addClass('active btn-wa').removeClass('btn-outline-secondary');
+            var chipStatus = workflow.indexOf(Chat.inboxStatus) !== -1 ? Chat.inboxStatus : 'all';
+            $('.chat-status-filter[data-status="' + chipStatus + '"]').addClass('active btn-wa').removeClass('btn-outline-secondary');
             $('.chat-extra-filter').removeClass('active btn-wa').addClass('btn-outline-secondary');
             if (Chat.unreadOnly) {
                 $('.chat-extra-filter[data-filter="unread"]').addClass('active btn-wa').removeClass('btn-outline-secondary');
@@ -920,8 +969,14 @@
         $('#chatAssignSelect').on('change', function () {
             Chat.assign($(this).val());
         });
-        $('#btnChatClose').on('click', function () { Chat.setStatus('closed'); });
+        $('#btnChatClose').on('click', function () { Chat.setStatus('resolved'); });
         $('#btnChatReopen').on('click', function () { Chat.setStatus('open'); });
+        $('#chatStatusSelect').on('change', function () {
+            var status = String($(this).val() || '').trim();
+            if (status) {
+                Chat.setStatus(status);
+            }
+        });
 
         $('#btnTemplateReply, #btnComposerTemplate').on('click', function () {
             if (window.APP && typeof APP.showModal === 'function') {

@@ -74,7 +74,8 @@ class Chat extends BaseController
 
         try {
             $search = (string) ($this->request->getGet('q') ?? '');
-            $status = (string) ($this->request->getGet('status') ?? 'open');
+            $status = strtolower(trim((string) ($this->request->getGet('status') ?? 'open')));
+            $filter = strtolower(trim((string) ($this->request->getGet('filter') ?? '')));
             $channel = strtolower(trim((string) ($this->request->getGet('channel') ?? 'all')));
             if (! in_array($channel, ['all', 'whatsapp', 'instagram', 'messenger'], true)) {
                 $channel = 'all';
@@ -97,6 +98,9 @@ class Chat extends BaseController
             $hasContactChannel = $db->fieldExists('channel', 'contacts');
             $hasExternalId     = $db->fieldExists('external_id', 'contacts');
             $hasDeletedAt      = $db->fieldExists('deleted_at', 'contacts');
+            $hasFrt            = $db->fieldExists('frt_due_at', 'conversations');
+            $hasCtwa           = $db->fieldExists('ctwa_referral', 'conversations');
+            $hasIntervened     = $db->fieldExists('intervened_at', 'conversations');
 
             $select = 'cv.*, c.name AS contact_name, c.mobile, c.last_reply_at,
                        c.last_message_at AS contact_last_message_at,
@@ -118,9 +122,23 @@ class Chat extends BaseController
                 $builder->where('c.deleted_at', null);
             }
 
-            if ($status !== '' && $status !== 'all') {
-                $builder->where('cv.status', $status);
+            // Composite filters (active/expired/ctwa/frt) take precedence over plain status when provided.
+            $composite = in_array($filter, \App\Libraries\InboxStatus::COMPOSITE_FILTERS, true)
+                ? $filter
+                : (in_array($status, \App\Libraries\InboxStatus::COMPOSITE_FILTERS, true) ? $status : '');
+
+            if ($composite !== '' && $composite !== 'all' && $composite !== 'unread') {
+                \App\Libraries\InboxStatus::applyCompositeFilter($builder, $composite, $hasFrt, $hasCtwa);
+                if (! in_array($composite, ['unassigned', 'assigned'], true)) {
+                    // Keep resolved/open etc. when also requested via status (except when status itself is composite).
+                    if ($status !== '' && $status !== 'all' && ! in_array($status, \App\Libraries\InboxStatus::COMPOSITE_FILTERS, true)) {
+                        \App\Libraries\InboxStatus::applyStatusFilter($builder, $status);
+                    }
+                }
+            } else {
+                \App\Libraries\InboxStatus::applyStatusFilter($builder, $status);
             }
+
             if ($channel !== 'all') {
                 if ($hasConvChannel) {
                     $builder->where('cv.channel', $channel);
@@ -128,10 +146,10 @@ class Chat extends BaseController
                     $builder->where('c.channel', $channel);
                 }
             }
-            if ($unreadOnly) {
+            if ($unreadOnly || $composite === 'unread') {
                 $builder->where('cv.unread_count >', 0);
             }
-            if ($assignedTo === 'unassigned') {
+            if ($assignedTo === 'unassigned' || $composite === 'unassigned') {
                 $builder->where('cv.assigned_to', null);
             } elseif (is_int($assignedTo) && $assignedTo > 0) {
                 $builder->where('cv.assigned_to', $assignedTo);
@@ -154,8 +172,19 @@ class Chat extends BaseController
                 ->getResultArray();
 
             $normalized = [];
+            $nowTs = time();
             foreach ($rows as $row) {
                 $rowChannel = (string) ($row['channel'] ?? $row['contact_channel'] ?? 'whatsapp');
+                $rawStatus  = (string) ($row['status'] ?? 'open');
+                $status     = \App\Libraries\InboxStatus::normalize($rawStatus);
+                $within24h  = is_within_24h_window($row['last_reply_at'] ?? null);
+                $frtDue     = $hasFrt ? ($row['frt_due_at'] ?? null) : null;
+                $frtExceeded = false;
+                if ($frtDue !== null && $frtDue !== '') {
+                    $frtExceeded = strtotime((string) $frtDue) < $nowTs
+                        && in_array($status, [\App\Libraries\InboxStatus::OPEN, \App\Libraries\InboxStatus::PENDING], true);
+                }
+                $ctwa = $hasCtwa ? trim((string) ($row['ctwa_referral'] ?? '')) : '';
                 $normalized[] = [
                     'id'              => (int) ($row['id'] ?? 0),
                     'contact_id'      => (int) ($row['contact_id'] ?? 0),
@@ -164,7 +193,8 @@ class Chat extends BaseController
                     'contact_name'    => (string) ($row['contact_name'] ?? ''),
                     'mobile'          => (string) ($row['mobile'] ?? $row['external_id'] ?? ''),
                     'external_id'     => (string) ($row['external_id'] ?? ''),
-                    'status'          => (string) ($row['status'] ?? ''),
+                    'status'          => $status,
+                    'status_label'    => \App\Libraries\InboxStatus::label($status),
                     'assigned_to'     => isset($row['assigned_to']) && $row['assigned_to'] !== null && $row['assigned_to'] !== ''
                         ? (int) $row['assigned_to']
                         : null,
@@ -173,7 +203,13 @@ class Chat extends BaseController
                     'last_message'    => (string) ($row['last_message_content'] ?? ''),
                     'last_message_content' => (string) ($row['last_message_content'] ?? ''),
                     'last_message_direction' => (string) ($row['last_message_direction'] ?? ''),
-                    'within_24h'      => is_within_24h_window($row['last_reply_at'] ?? null),
+                    'within_24h'      => $within24h,
+                    'window_state'    => $within24h ? 'active' : 'expired',
+                    'frt_due_at'      => $frtDue,
+                    'frt_exceeded'    => $frtExceeded,
+                    'intervened_at'   => $hasIntervened ? ($row['intervened_at'] ?? null) : null,
+                    'ctwa_referral'   => $ctwa !== '' ? $ctwa : null,
+                    'is_ctwa'         => $ctwa !== '',
                 ];
             }
 
@@ -704,24 +740,41 @@ class Chat extends BaseController
 
         $input     = $this->requestInput();
         $contactId = (int) ($input['contact_id'] ?? 0);
-        $status    = strtolower(trim((string) ($input['status'] ?? '')));
+        $status    = \App\Libraries\InboxStatus::normalize((string) ($input['status'] ?? ''));
+        $channel   = strtolower(trim((string) ($input['channel'] ?? 'whatsapp'))) ?: 'whatsapp';
 
-        if ($contactId <= 0 || ! in_array($status, ['open', 'closed'], true)) {
-            return $this->jsonResponse(false, null, 'contact_id and status (open|closed) are required.', [], 422);
+        if ($contactId <= 0 || ! \App\Libraries\InboxStatus::isWritable($status)) {
+            return $this->jsonResponse(
+                false,
+                null,
+                'contact_id and status (open|pending|resolved|chatbot|intervened) are required.',
+                [],
+                422
+            );
         }
 
-        $conversation = model(ConversationModel::class)->findOrCreateForContact($contactId);
-        model(ConversationModel::class)->update((int) $conversation['id'], ['status' => $status]);
+        $conversation = model(ConversationModel::class)->findOrCreateForContact($contactId, $channel);
+        $payload = ['status' => $status];
+        $db = db_connect();
+        if ($status === \App\Libraries\InboxStatus::INTERVENED && $db->fieldExists('intervened_at', 'conversations')) {
+            $payload['intervened_at'] = date('Y-m-d H:i:s');
+        }
+        if ($status === \App\Libraries\InboxStatus::OPEN && $db->fieldExists('frt_due_at', 'conversations')) {
+            $payload['frt_due_at'] = \App\Libraries\InboxStatus::defaultFrtDueAt();
+        }
+        model(ConversationModel::class)->update((int) $conversation['id'], $payload);
 
         (new ActivityLogger())->log('status', 'chat', 'Conversation ' . $status, [
             'contact_id' => $contactId,
             'status'     => $status,
+            'channel'    => $channel,
         ]);
 
         return $this->jsonResponse(true, [
             'contact_id' => $contactId,
             'status'     => $status,
-        ], $status === 'closed' ? 'Conversation closed.' : 'Conversation reopened.');
+            'status_label' => \App\Libraries\InboxStatus::label($status),
+        ], $status === \App\Libraries\InboxStatus::RESOLVED ? 'Conversation resolved.' : 'Conversation updated.');
     }
 
     public function search(): ResponseInterface

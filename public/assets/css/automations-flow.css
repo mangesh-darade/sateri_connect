@@ -1,32 +1,61 @@
-/* Workflow builder — full white canvas */
+/* Workflow builder — true viewport fullscreen (no app chrome) */
+html:has(body.flow-builder-page),
+body.flow-builder-page {
+    height: 100% !important;
+    overflow: hidden !important;
+    background: #ffffff !important;
+}
 body.flow-builder-page,
 body.flow-builder-page .wrapper {
     background: #ffffff !important;
-    min-height: 100vh;
+    height: 100vh !important;
+    height: 100dvh !important;
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+    margin: 0 !important;
+    overflow: hidden !important;
 }
 .flow-builder-page .main-header,
 .flow-builder-page .main-sidebar,
 .flow-builder-page .main-footer,
-.flow-builder-page .content-header {
+.flow-builder-page .content-header,
+.flow-builder-page .control-sidebar {
     display: none !important;
 }
 .flow-builder-page .content-wrapper {
     margin-left: 0 !important;
-    min-height: 100vh;
+    margin-right: 0 !important;
+    padding: 0 !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
     background: #ffffff !important;
+    overflow: hidden !important;
 }
 .flow-builder-page .content {
     padding: 0 !important;
     margin: 0 !important;
+    height: 100% !important;
     background: #ffffff !important;
+    overflow: hidden !important;
 }
 .flow-builder-page .content > .container-fluid {
     padding: 0 !important;
     max-width: none !important;
+    height: 100% !important;
+    display: flex;
+    flex-direction: column;
     background: #ffffff !important;
+    overflow: hidden !important;
 }
-/* Flash alerts — compact strip, don't break full-bleed layout */
+/* Flash alerts — compact strip above fullscreen canvas */
 .flow-builder-page .content > .container-fluid > .alert {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 2100;
     margin: 0;
     border-radius: 0;
     border-left: 0;
@@ -40,14 +69,26 @@ body.flow-builder-page .wrapper {
     animation: none !important;
 }
 
+/* Save toasts must sit above fixed .flow-shell (z-index 2000) */
+body.flow-builder-page .swal2-container {
+    z-index: 3000 !important;
+}
+
 .flow-shell {
     display: flex;
     flex-direction: column;
+    flex: 1 1 auto;
+    position: fixed;
+    inset: 0;
+    width: 100vw;
     height: 100vh;
-    min-height: 560px;
-    color: #14332e;
+    height: 100dvh;
+    z-index: 2000;
+    min-height: 0;
+    color: #1a1228;
     background: #ffffff;
     font-family: 'DM Sans', system-ui, sans-serif;
+    overflow: hidden;
 }
 
 .flow-topbar {
@@ -57,7 +98,7 @@ body.flow-builder-page .wrapper {
     gap: 1rem;
     padding: 0.7rem 1.1rem;
     background: #ffffff;
-    border-bottom: 1px solid rgba(7, 94, 84, 0.12);
+    border-bottom: 1px solid rgba(75, 55, 134, 0.12);
 }
 .flow-topbar-left,
 .flow-topbar-right {
@@ -68,32 +109,32 @@ body.flow-builder-page .wrapper {
 }
 .flow-topbar .btn-outline-secondary,
 .flow-topbar .btn-outline-light {
-    border-color: rgba(7, 94, 84, 0.2);
-    color: #14332e;
+    border-color: rgba(75, 55, 134, 0.2);
+    color: #1a1228;
     border-radius: 999px;
     background: #fff;
 }
 .flow-topbar .btn-outline-secondary:hover,
 .flow-topbar .btn-outline-light:hover {
-    background: #e8f3ef;
-    color: #075E54;
-    border-color: rgba(7, 94, 84, 0.35);
+    background: #f6f1ff;
+    color: #4b3786;
+    border-color: rgba(75, 55, 134, 0.35);
 }
 .flow-topbar .btn-success,
 .flow-topbar #btnFlowSave {
-    background: linear-gradient(180deg, #2be072, #25D366) !important;
+    background: linear-gradient(180deg, #9b6af8, #8e53f7) !important;
     border: 0 !important;
-    color: #042f2a !important;
+    color: #1a1228 !important;
     font-weight: 600;
     border-radius: 999px;
-    box-shadow: 0 4px 14px rgba(37, 211, 102, 0.35);
+    box-shadow: 0 4px 14px rgba(142, 83, 247, 0.35);
 }
 .flow-name-input {
     background: transparent;
     border: 0;
     border-bottom: 1px solid transparent;
-    color: #042f2a;
-    font-family: 'Sora', system-ui, sans-serif;
+    color: #1a1228;
+    font-family: 'Onest', system-ui, sans-serif;
     font-weight: 600;
     font-size: 1.05rem;
     letter-spacing: -0.03em;
@@ -102,14 +143,14 @@ body.flow-builder-page .wrapper {
 }
 .flow-name-input:focus {
     outline: none;
-    border-bottom-color: #25D366;
+    border-bottom-color: #8e53f7;
 }
 .flow-pill {
     font-size: 0.7rem;
     font-weight: 600;
-    background: rgba(37, 211, 102, 0.12);
-    color: #075E54;
-    border: 1px solid rgba(37, 211, 102, 0.3);
+    background: rgba(142, 83, 247, 0.12);
+    color: #4b3786;
+    border: 1px solid rgba(142, 83, 247, 0.3);
     border-radius: 999px;
     padding: 0.25rem 0.7rem;
     letter-spacing: 0.02em;
@@ -131,12 +172,12 @@ body.flow-builder-page .wrapper {
 
 .flow-palette {
     background: #ffffff;
-    border-right: 1px solid rgba(7, 94, 84, 0.12);
+    border-right: 1px solid rgba(75, 55, 134, 0.12);
     padding: 0.95rem;
     overflow: auto;
 }
 .flow-palette h6 {
-    font-family: 'Sora', system-ui, sans-serif;
+    font-family: 'Onest', system-ui, sans-serif;
     color: #5a726c;
     text-transform: uppercase;
     font-size: 0.65rem;
@@ -149,24 +190,24 @@ body.flow-builder-page .wrapper {
     align-items: center;
     gap: 0.55rem;
     background: #f7faf8;
-    border: 1px solid rgba(7, 94, 84, 0.1);
+    border: 1px solid rgba(75, 55, 134, 0.1);
     border-radius: 12px;
     padding: 0.55rem 0.7rem;
     margin-bottom: 0.45rem;
     cursor: grab;
     font-size: 0.84rem;
-    color: #14332e;
+    color: #1a1228;
     user-select: none;
     transition: border-color 0.15s, transform 0.15s, background 0.15s;
 }
 .palette-item:hover {
-    border-color: rgba(37, 211, 102, 0.55);
-    background: rgba(37, 211, 102, 0.1);
+    border-color: rgba(142, 83, 247, 0.55);
+    background: rgba(142, 83, 247, 0.1);
     transform: translateY(-1px);
 }
 .palette-item i {
     width: 1.15rem;
-    color: #25D366;
+    color: #8e53f7;
 }
 .palette-hint {
     margin-top: 1rem;
@@ -180,7 +221,7 @@ body.flow-builder-page .wrapper {
     overflow: hidden;
     cursor: default;
     background-color: #ffffff;
-    background-image: radial-gradient(circle at 1px 1px, rgba(7, 94, 84, 0.08) 1px, transparent 0);
+    background-image: radial-gradient(circle at 1px 1px, rgba(75, 55, 134, 0.08) 1px, transparent 0);
     background-size: 24px 24px;
 }
 .flow-canvas-wrap.can-pan,
@@ -194,7 +235,7 @@ body.flow-builder-page .wrapper {
     cursor: crosshair;
 }
 .flow-canvas-wrap.drop-target {
-    outline: 2px dashed rgba(37, 211, 102, 0.55);
+    outline: 2px dashed rgba(142, 83, 247, 0.55);
     outline-offset: -6px;
 }
 .flow-viewport {
@@ -235,7 +276,7 @@ body.flow-builder-page .wrapper {
     font-size: 0.72rem;
     color: #5a726c;
     background: rgba(255, 255, 255, 0.92);
-    border: 1px solid rgba(7, 94, 84, 0.12);
+    border: 1px solid rgba(75, 55, 134, 0.12);
     border-radius: 999px;
     padding: 0.3rem 0.75rem;
     backdrop-filter: blur(6px);
@@ -252,7 +293,7 @@ body.flow-builder-page .wrapper {
     position: absolute;
     width: 210px;
     background: #ffffff;
-    border: 1px solid rgba(7, 94, 84, 0.14);
+    border: 1px solid rgba(75, 55, 134, 0.14);
     border-radius: 14px;
     box-shadow: 0 4px 16px rgba(4, 47, 42, 0.08);
     cursor: move;
@@ -271,12 +312,12 @@ body.flow-builder-page .wrapper {
     box-shadow: 0 12px 28px rgba(4, 47, 42, 0.16);
 }
 .flow-node.selected {
-    border-color: #25D366;
-    box-shadow: 0 0 0 2px rgba(37, 211, 102, 0.28), 0 8px 20px rgba(4, 47, 42, 0.1);
+    border-color: #8e53f7;
+    box-shadow: 0 0 0 2px rgba(142, 83, 247, 0.28), 0 8px 20px rgba(4, 47, 42, 0.1);
 }
 .flow-node.trigger { border-top: 3px solid #34B7F1; }
 .flow-node.condition { border-top: 3px solid #f0a202; }
-.flow-node.action { border-top: 3px solid #25D366; }
+.flow-node.action { border-top: 3px solid #8e53f7; }
 .flow-node.end { border-top: 3px solid #94a3b8; opacity: 0.92; }
 
 .flow-node-head {
@@ -294,9 +335,9 @@ body.flow-builder-page .wrapper {
     padding: 0.2rem 0.75rem 0.75rem;
     font-size: 0.9rem;
     font-weight: 600;
-    color: #042f2a;
+    color: #1a1228;
     word-break: break-word;
-    font-family: 'Sora', system-ui, sans-serif;
+    font-family: 'Onest', system-ui, sans-serif;
     letter-spacing: -0.02em;
 }
 .flow-node-sub {
@@ -323,7 +364,7 @@ body.flow-builder-page .wrapper {
 .flow-port.linking,
 .flow-port.link-target {
     transform: translateY(-50%) scale(1.35);
-    box-shadow: 0 0 0 4px rgba(37, 211, 102, 0.25);
+    box-shadow: 0 0 0 4px rgba(142, 83, 247, 0.25);
 }
 .flow-port.in {
     left: -7px;
@@ -340,12 +381,12 @@ body.flow-builder-page .wrapper {
     right: -7px;
     top: 50%;
     transform: translateY(-50%);
-    background: #25D366;
+    background: #8e53f7;
 }
 .flow-port.true {
     right: -7px;
     top: 32%;
-    background: #25D366;
+    background: #8e53f7;
 }
 .flow-port.false {
     right: -7px;
@@ -364,17 +405,17 @@ body.flow-builder-page .wrapper {
 
 .flow-edge {
     fill: none;
-    stroke: rgba(7, 94, 84, 0.35);
+    stroke: rgba(75, 55, 134, 0.35);
     stroke-width: 2.4;
     pointer-events: stroke;
     cursor: pointer;
     transition: stroke 0.15s ease, stroke-width 0.15s ease;
 }
-.flow-edge.true { stroke: #25D366; }
+.flow-edge.true { stroke: #8e53f7; }
 .flow-edge.false { stroke: #e25555; }
 .flow-edge.temp {
     stroke-dasharray: 6 5;
-    stroke: rgba(37, 211, 102, 0.75);
+    stroke: rgba(142, 83, 247, 0.75);
     animation: flowDash 0.7s linear infinite;
 }
 .flow-edge.selected {
@@ -392,13 +433,13 @@ body.flow-builder-page .wrapper {
 
 .flow-inspector {
     background: #ffffff;
-    border-left: 1px solid rgba(7, 94, 84, 0.12);
+    border-left: 1px solid rgba(75, 55, 134, 0.12);
     padding: 0.95rem;
     overflow: auto;
 }
 .flow-inspector h6 {
-    font-family: 'Sora', system-ui, sans-serif;
-    color: #042f2a;
+    font-family: 'Onest', system-ui, sans-serif;
+    color: #1a1228;
     font-weight: 650;
     letter-spacing: -0.02em;
 }
@@ -410,17 +451,17 @@ body.flow-builder-page .wrapper {
 .flow-inspector .form-control,
 .flow-inspector .form-select {
     background: #ffffff;
-    border-color: rgba(7, 94, 84, 0.18);
-    color: #14332e;
+    border-color: rgba(75, 55, 134, 0.18);
+    color: #1a1228;
     font-size: 0.85rem;
     border-radius: 10px;
 }
 .flow-inspector .form-control:focus,
 .flow-inspector .form-select:focus {
     background: #ffffff;
-    color: #042f2a;
-    border-color: #25D366;
-    box-shadow: 0 0 0 3px rgba(37, 211, 102, 0.2);
+    color: #1a1228;
+    border-color: #8e53f7;
+    box-shadow: 0 0 0 3px rgba(142, 83, 247, 0.2);
 }
 .flow-inspector .btn-outline-danger {
     border-radius: 999px;

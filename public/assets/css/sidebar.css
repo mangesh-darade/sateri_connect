@@ -5,15 +5,15 @@
 :root {
     --sidebar-w: 256px;
     --sidebar-collapsed-w: 72px;
-    --elint-primary: #10B981;
-    --elint-primary-soft: #ECFDF5;
+    --elint-primary: #8e53f7;
+    --elint-primary-soft: #f6f1ff;
     --elint-border: #E5E7EB;
-    --elint-text: #111827;
-    --elint-muted: #64748B;
+    --elint-text: #1a1228;
+    --elint-muted: #6b7280;
     --elint-heading: #94A3B8;
     --elint-danger: #EF4444;
     --elint-hover: #F3F4F6;
-    --elint-sidebar-font: 'Inter', system-ui, -apple-system, sans-serif;
+    --elint-sidebar-font: 'DM Sans', 'Onest', system-ui, -apple-system, sans-serif;
 }
 
 .main-sidebar.elint-sidebar,
@@ -57,7 +57,7 @@ body.sidebar-mini.sidebar-collapse .main-header {
     width: 30px;
     height: 30px;
     border-radius: 8px;
-    background: linear-gradient(135deg, #10B981, #059669);
+    background: linear-gradient(135deg, #8e53f7, #4b3786);
     color: #fff;
     display: inline-flex;
     align-items: center;
@@ -256,7 +256,7 @@ body.sidebar-mini.sidebar-collapse .main-header {
 .elint-sidebar .nav-sidebar > .nav-item > .nav-link:focus-visible,
 .elint-sidebar .sidebar-footer-links .nav-link:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.16) !important;
+    box-shadow: 0 0 0 3px rgba(142, 83, 247, 0.16) !important;
 }
 
 /* Parent active */

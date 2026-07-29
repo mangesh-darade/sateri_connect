@@ -2,9 +2,9 @@
 
 Complete step-by-step guide for the WhatsApp Automation Platform after installation.
 
-**Local base:** `http://localhost/whstapp/public/`
+**Local base:** `http://localhost/sateri_connect/public/`
 
-Related docs: [SETTINGS.md](SETTINGS.md) · [CHEERIO_CONFIGURATION.md](CHEERIO_CONFIGURATION.md) · [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md) · [CRON_SETUP.md](CRON_SETUP.md) · [API.md](API.md)
+Related docs: [SETTINGS.md](SETTINGS.md) · [CHEERIO_CONFIGURATION.md](CHEERIO_CONFIGURATION.md) · [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md) · [CRON_SETUP.md](CRON_SETUP.md) · [API.md](API.md) · [GUIDE_LOCAL.md](GUIDE_LOCAL.md) · [CHANGELOG_2026-07-29.md](CHANGELOG_2026-07-29.md)
 
 ---
 
@@ -17,21 +17,22 @@ Related docs: [SETTINGS.md](SETTINGS.md) · [CHEERIO_CONFIGURATION.md](CHEERIO_C
 5. [Templates](#5-templates)
 6. [Contacts](#6-contacts)
 7. [Campaigns](#7-campaigns)
-8. [Chat inbox](#8-chat-inbox)
+8. [Team Inbox](#8-team-inbox)
 9. [Keywords (chatbot)](#9-keywords-chatbot)
-10. [Automations](#10-automations)
-11. [Message queue](#11-message-queue)
-12. [Reports](#12-reports)
-13. [Users & roles](#13-users--roles)
-14. [Background workers (required)](#14-background-workers-required)
-15. [24-hour messaging window](#15-24-hour-messaging-window)
-16. [Troubleshooting](#16-troubleshooting)
+10. [Automations / Workflows](#10-automations--workflows)
+11. [Sequences](#11-sequences)
+12. [Message queue](#12-message-queue)
+13. [Reports / Analytics](#13-reports--analytics)
+14. [Users & roles](#14-users--roles)
+15. [Background workers (required)](#15-background-workers-required)
+16. [24-hour messaging window](#16-24-hour-messaging-window)
+17. [Troubleshooting](#17-troubleshooting)
 
 ---
 
 ## 1. First login
 
-1. Open http://localhost/whstapp/public/login  
+1. Open http://localhost/sateri_connect/public/login  
 2. Sign in with the admin account created in the installer.  
 3. You land on **Dashboard**.
 
@@ -156,20 +157,26 @@ Broadcast template messages to many contacts.
 
 ---
 
-## 8. Chat inbox
+## 8. Team Inbox
 
-**URL:** `/chat`
+**URL:** `/chat`  
+**Permissions:** `chat.view`, `chat.send`, `chat.assign`, `chat.close`
 
-Live agent inbox for 1:1 conversations.
+Live agent inbox for 1:1 conversations (Team Inbox 2.0).
+
+### Statuses
+
+`open` · `pending` · `intervened` · `chatbot` · `resolved` (legacy `closed` → resolved)
 
 ### Flow
 
-1. Customer messages your WhatsApp Business number → Cheerio webhook → app stores message → conversation appears.  
-2. Agent opens **Chat**, selects conversation, replies.  
-3. Inside the **24-hour session window**, free-form text/media is allowed.  
-4. Outside the window, use an approved **template** (or wait for customer to message again).  
-5. Internal notes: agent-only notes on the contact (not sent to WhatsApp).  
-6. Mark read / assign (permissions permitting).
+1. Customer messages → webhook → conversation appears.  
+2. Agent opens **Team Inbox**, selects conversation, replies.  
+3. Use status dropdown or **Resolve** / **Reopen** (`chat.close`).  
+4. Filters: Active, Expired, CTWA, FRT exceeded, status chips.  
+5. Inside the **24-hour session window**, free-form text/media is allowed.  
+6. Outside the window, use an approved **template**.  
+7. Internal notes: agent-only (not sent to WhatsApp).  
 
 Webhook must be verified and subscribed to `messages` or the inbox stays empty.
 
@@ -210,23 +217,42 @@ After install seeders, a simple menu may exist:
 
 ---
 
-## 10. Automations
+## 10. Automations / Workflows
 
-**URL:** `/automations`
+**URL:** `/automations`  
+**Builder:** `/automations/{id}/builder` (fullscreen)  
+**Permissions:** `automations.view|create|edit|delete`
 
-Rule engine for events / time-based triggers (e.g. birthday, delayed follow-ups — depending on configured rules).
+Visual rule engine: trigger → conditions → actions.
 
 ### Steps
 
 1. **Automations → Create** — name + enable.  
-2. Open **Builder** for that automation.  
-3. Define trigger → conditions → actions (send template / tag / etc.).  
-4. Toggle on/off from the list.  
-5. Ensure `php spark automations:process` runs on a schedule.
+2. Open **Builder** (fullscreen canvas).  
+3. Drag triggers / conditions / actions; connect ports; **Save**.  
+4. Useful nodes: Delay (resumes via worker), send_email, assign_bot, update_chat_status, attribute_condition, campaign_sent.  
+5. Toggle Active from the list.  
+6. Ensure `php spark automations:process` runs every minute (delays + birthday).
+
+Catalog help: `/guide/automations`.
 
 ---
 
-## 11. Message queue
+## 11. Sequences
+
+**URL:** `/sequences`  
+**Permissions:** `sequences.view|create|edit|delete`
+
+Multi-step WhatsApp drips (text or template) with delay between steps and optional **exit on reply**.
+
+1. Create sequence → add steps → save.  
+2. Enroll contact by ID on the edit form.  
+3. Worker `automations:process` sends due steps.  
+4. Inbound reply can exit active enrollments.
+
+---
+
+## 12. Message queue
 
 **URL:** `/queue`
 
@@ -250,11 +276,12 @@ If the queue never drains → workers/cron are not running.
 
 ---
 
-## 12. Reports
+## 13. Reports / Analytics
 
-**URL:** `/reports`
+**URL:** `/reports`, `/analytics`  
+**Permission:** `reports.view` (export: `reports.export`)
 
-- Overview stats  
+- Overview / analytics  
 - Campaign reports  
 - Delivery reports  
 - Export PDF / Excel (where enabled)
@@ -263,7 +290,7 @@ Use after campaigns have run and status webhooks have updated delivery states.
 
 ---
 
-## 13. Users & roles
+## 14. Users & roles
 
 ### Users — `/users`
 
@@ -274,19 +301,20 @@ Create team members: name, email, password, role, active/inactive.
 Permission matrix by module:
 
 - Dashboard, Contacts, Campaigns, Templates, Chat  
-- Automations, Keywords, Reports, Settings  
-- Users, Roles, Queue  
+- Automations, **Sequences**, Keywords, Reports, Settings  
+- Users, Roles, Queue, **Guide** (`guide.view`)
 
 **Super Admin** is locked to full access.  
 Edit checkboxes for Admin / Manager / Agent → **Save Permissions**.
 
-Default roles from seeder: `super-admin`, `admin`, `manager`, `agent`.
+Default roles from seeder: `super-admin`, `admin`, `manager`, `agent`.  
+`php spark db:seed PermissionSeeder` re-syncs system roles only (custom roles kept).
 
 ---
 
-## 14. Background workers (required)
+## 15. Background workers (required)
 
-From project root (`c:\wamp64\www\whstapp`):
+From project root (`c:\wamp64\www\sateri_connect`):
 
 ```bash
 php spark queue:process
@@ -297,13 +325,20 @@ php spark templates:sync
 php spark logs:cleanup
 ```
 
+`automations:process` also processes delayed workflow jobs and sequence due steps.
+
+Verify:
+
+```bash
+php spark functional:smoke
+```
 For production, schedule these (Task Scheduler on Windows / cron on Linux). Full examples: [CRON_SETUP.md](CRON_SETUP.md).
 
 **Windows Task Scheduler tip:** run `php.exe` with working directory = project root, trigger every 1 minute for queue + campaigns.
 
 ---
 
-## 15. 24-hour messaging window
+## 16. 24-hour messaging window
 
 WhatsApp policy (simplified):
 
@@ -315,7 +350,7 @@ The inbox UI is aware of this window; campaigns almost always use templates.
 
 ---
 
-## 16. Troubleshooting
+## 17. Troubleshooting
 
 | Symptom | Check |
 |---------|--------|
@@ -338,13 +373,13 @@ writable/logs/log-YYYY-MM-DD.log
 ### Useful local URLs
 
 ```
-http://localhost/whstapp/public/login
-http://localhost/whstapp/public/settings
-http://localhost/whstapp/public/templates
-http://localhost/whstapp/public/contacts
-http://localhost/whstapp/public/campaigns
-http://localhost/whstapp/public/chat
-http://localhost/whstapp/public/queue
+http://localhost/sateri_connect/public/login
+http://localhost/sateri_connect/public/settings
+http://localhost/sateri_connect/public/templates
+http://localhost/sateri_connect/public/contacts
+http://localhost/sateri_connect/public/campaigns
+http://localhost/sateri_connect/public/chat
+http://localhost/sateri_connect/public/queue
 ```
 
 ---

@@ -23,6 +23,9 @@ class ConversationModel extends Model
         'assigned_to',
         'status',
         'last_message_at',
+        'frt_due_at',
+        'intervened_at',
+        'ctwa_referral',
     ];
 
     protected bool $allowEmptyInserts = false;
@@ -35,7 +38,7 @@ class ConversationModel extends Model
 
     protected $validationRules = [
         'contact_id' => 'required|is_natural_no_zero',
-        'status'     => 'permit_empty|in_list[open,closed]',
+        'status'     => 'permit_empty|in_list[open,pending,resolved,chatbot,intervened,closed]',
     ];
 
     protected $validationMessages   = [];

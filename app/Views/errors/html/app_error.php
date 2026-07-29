@@ -55,17 +55,17 @@ try {
     <title><?= esc($code) ?> — <?= esc($title) ?> | <?= esc($appName) ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Sora:wght@600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Onest:wght@600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
     <style>
         :root {
-            --wa-green: #25D366;
-            --wa-ink: #042f2a;
-            --wa-teal: #075E54;
+            --brand-500: #8e53f7; --wa-green: #8e53f7;
+            --wa-ink: #1a1228;
+            --wa-teal: #4b3786;
             --surface: #ffffff;
-            --text: #14332e;
-            --muted: #5a726c;
-            --border: rgba(7, 94, 84, 0.14);
+            --text: #1a1228;
+            --muted: #6b7280;
+            --border: rgba(75, 55, 134, 0.14);
             --radius: 18px;
         }
         * { box-sizing: border-box; }
@@ -79,9 +79,9 @@ try {
             font-family: 'DM Sans', system-ui, sans-serif;
             color: var(--text);
             background:
-                radial-gradient(900px 520px at 12% 0%, rgba(37, 211, 102, 0.22), transparent 55%),
-                radial-gradient(700px 420px at 100% 100%, rgba(18, 140, 126, 0.18), transparent 50%),
-                linear-gradient(165deg, #f3f7f5 0%, #e8f3ef 45%, #f7faf8 100%);
+                radial-gradient(900px 520px at 12% 0%, rgba(142, 83, 247, 0.22), transparent 55%),
+                radial-gradient(700px 420px at 100% 100%, rgba(75, 55, 134, 0.18), transparent 50%),
+                linear-gradient(165deg, #fafafa 0%, #f6f1ff 45%, #f6f1ff 100%);
         }
         .error-shell {
             width: 100%;
@@ -89,7 +89,7 @@ try {
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: var(--radius);
-            box-shadow: 0 12px 40px rgba(4, 47, 42, 0.08);
+            box-shadow: 0 12px 40px rgba(75, 55, 134, 0.08);
             overflow: hidden;
         }
         .error-top {
@@ -117,8 +117,8 @@ try {
             align-items: center;
             justify-content: center;
             color: #fff;
-            background: linear-gradient(145deg, #2be072, #128C7E);
-            box-shadow: 0 8px 18px rgba(18, 140, 126, 0.28);
+            background: linear-gradient(145deg, #9b6af8, #4b3786);
+            box-shadow: 0 8px 18px rgba(75, 55, 134, 0.28);
             margin-bottom: 0.85rem;
             font-size: 1.05rem;
         }
@@ -129,14 +129,14 @@ try {
             font-size: 0.75rem;
             font-weight: 650;
             color: var(--wa-teal);
-            background: #e8f3ef;
+            background: #f6f1ff;
             border: 1px solid var(--border);
             border-radius: 999px;
             padding: 0.2rem 0.65rem;
             margin-bottom: 0.65rem;
         }
         h1 {
-            font-family: 'Sora', system-ui, sans-serif;
+            font-family: 'Onest', system-ui, sans-serif;
             font-size: clamp(1.25rem, 2.5vw, 1.55rem);
             font-weight: 700;
             letter-spacing: -0.03em;
@@ -188,8 +188,8 @@ try {
         .btn-err-primary {
             border: 0;
             color: var(--wa-ink);
-            background: linear-gradient(180deg, #2be072, #25D366);
-            box-shadow: 0 6px 16px rgba(37, 211, 102, 0.28);
+            background: linear-gradient(180deg, #9b6af8, #8e53f7);
+            box-shadow: 0 6px 16px rgba(142, 83, 247, 0.28);
         }
         .btn-err:hover { filter: brightness(0.98); }
         .error-details {
@@ -208,8 +208,8 @@ try {
             margin: 0.65rem 0 0;
             padding: 0.75rem 0.85rem;
             border-radius: 10px;
-            background: #042f2a;
-            color: #e8f3ef;
+            background: #1a1228;
+            color: #f6f1ff;
             font-size: 0.75rem;
             line-height: 1.45;
             overflow: auto;
@@ -221,7 +221,7 @@ try {
             font-size: 0.75rem;
             color: var(--muted);
         }
-        .error-kind-database .error-mark { background: linear-gradient(145deg, #34b7f1, #075E54); }
+        .error-kind-database .error-mark { background: linear-gradient(145deg, #34b7f1, #4b3786); }
         .error-kind-permission .error-mark { background: linear-gradient(145deg, #f59e0b, #b45309); }
         .error-kind-not_found .error-mark { background: linear-gradient(145deg, #94a3b8, #475569); }
     </style>

@@ -35,7 +35,7 @@
             <div class="panel-body">
                 <?php if (! empty($contact['tags'])): ?>
                     <?php foreach ($contact['tags'] as $tag): ?>
-                        <span class="badge me-1 mb-1 rounded-pill" style="background:<?= esc($tag['color'] ?? '#25D366'); ?>;color:#042f2a"><?= esc($tag['name'] ?? $tag) ?></span>
+                        <span class="badge me-1 mb-1 rounded-pill" style="background:<?= esc($tag['color'] ?? '#8e53f7'); ?>;color:#042f2a"><?= esc($tag['name'] ?? $tag) ?></span>
                     <?php endforeach; ?>
                 <?php else: ?>
                     <span class="text-muted">No groups</span>

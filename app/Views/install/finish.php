@@ -2,7 +2,7 @@
 
 <?= $this->section('content') ?>
 <div class="text-center py-3">
-    <div class="mx-auto mb-3 d-flex align-items-center justify-content-center" style="width:72px;height:72px;border-radius:22px;background:linear-gradient(145deg,#2be072,#128C7E);color:#fff;font-size:2rem;box-shadow:0 10px 28px rgba(37,211,102,.35)">
+    <div class="mx-auto mb-3 d-flex align-items-center justify-content-center" style="width:72px;height:72px;border-radius:22px;background:linear-gradient(145deg,#9b6af8,#4b3786);color:#fff;font-size:2rem;box-shadow:0 10px 28px rgba(142,83,247,.35)">
         <i class="fas fa-check"></i>
     </div>
     <h2 class="mb-2" style="font-family:var(--font-display);color:var(--wa-ink)">You’re ready</h2>

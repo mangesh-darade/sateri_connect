@@ -34,11 +34,19 @@ class Guide extends BaseController
 
     public function index(): ResponseInterface
     {
+        if ($denied = $this->requirePermission('guide.view')) {
+            return $denied;
+        }
+
         return redirect()->to(site_url('guide/local'));
     }
 
     public function show(string $type = 'local'): string|ResponseInterface
     {
+        if ($denied = $this->requirePermission('guide.view')) {
+            return $denied;
+        }
+
         $type = strtolower($type);
         if (! isset($this->guides[$type])) {
             return redirect()->to(site_url('guide/local'));

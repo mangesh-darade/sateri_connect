@@ -406,6 +406,11 @@ class Webhooks extends Controller
                 'channel'      => $channel,
                 'source'       => $channel,
             ]);
+            try {
+                (new \App\Libraries\SequenceService())->onContactReply($contactId);
+            } catch (\Throwable $e) {
+                log_message('error', 'Sequence exit-on-reply failed: {msg}', ['msg' => $e->getMessage()]);
+            }
         } catch (Throwable $e) {
             log_message('error', 'Page messaging automation error: {msg}', ['msg' => $e->getMessage()]);
         }
@@ -606,6 +611,11 @@ class Webhooks extends Controller
                 'from'         => $from,
                 'provider'     => $activeProvider,
             ]);
+            try {
+                (new \App\Libraries\SequenceService())->onContactReply($contactId);
+            } catch (\Throwable $e) {
+                log_message('error', 'Sequence exit-on-reply failed: {msg}', ['msg' => $e->getMessage()]);
+            }
 
             if ($runKeywordMatch) {
                 service('automationEngine')->processTrigger('keyword', [

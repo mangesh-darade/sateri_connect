@@ -52,9 +52,12 @@
         collect_images: 'Collect Images',
         send_template: 'Send WA template',
         send_text: 'Send text',
+        send_email: 'Send email',
         add_tag: 'Add tag',
         remove_tag: 'Remove tag',
         assign_agent: 'Assign agent',
+        assign_bot: 'Assign to bot',
+        update_chat_status: 'Update chat status',
         add_note: 'Add note',
         delay: 'Delay',
         webhook: 'Webhook',
@@ -70,7 +73,8 @@
         message_type: 'Message type (text/image/video…)',
         has_tag: 'Has tag',
         within_window: 'Within 24h window',
-        contact_status: 'Contact status'
+        contact_status: 'Contact status',
+        attribute_condition: 'Attribute condition'
     };
 
     var TRIGGER_CONFIG_KEYS = [
@@ -421,7 +425,7 @@
             var defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
             defs.innerHTML =
                 '<marker id="flowArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(7, 94, 84, 0.45)"></path></marker>' +
-                '<marker id="flowArrowTrue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#25D366"></path></marker>' +
+                '<marker id="flowArrowTrue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#8e53f7"></path></marker>' +
                 '<marker id="flowArrowFalse" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#e25555"></path></marker>';
             svg.appendChild(defs);
         }
@@ -689,6 +693,19 @@
             html += inspHint('Core fields (name, mobile, email…) update the contact row; others go into custom attributes.');
         } else if (a === 'assign_agent') {
             html += agentSelectHtml(d);
+        } else if (a === 'assign_bot') {
+            html += inspHint('Marks the conversation as Chatbot and clears the human assignee.');
+        } else if (a === 'update_chat_status') {
+            html += '<label>Chat status</label><select class="form-select insp" data-k="status">';
+            ['open', 'pending', 'resolved', 'chatbot', 'intervened'].forEach(function (s) {
+                html += '<option value="' + s + '"' + ((d.status || 'open') === s ? ' selected' : '') + '>' + s + '</option>';
+            });
+            html += '</select>';
+        } else if (a === 'send_email') {
+            html += '<label>To (optional)</label><input class="form-control insp" data-k="to" value="' + esc(d.to || '') + '" placeholder="Leave blank = contact email">';
+            html += '<label>Subject</label><input class="form-control insp" data-k="subject" value="' + esc(d.subject || '') + '">';
+            html += '<label>Body</label><textarea class="form-control insp" data-k="text" rows="4">' + esc(d.text || d.body || '') + '</textarea>';
+            html += inspHint('Uses the active Email provider. Placeholders: {{contact.name}}, {{contact.email}}.');
         } else if (a === 'add_note') {
             html += '<label>Note</label><textarea class="form-control insp" data-k="text" rows="3">' + esc(d.text || d.note || '') + '</textarea>';
         } else if (a === 'delay') {
@@ -758,6 +775,21 @@
             } else if (d.condition_type === 'caption_contains') {
                 html += '<label>Caption contains</label><input class="form-control insp" data-k="value" value="' + esc(d.value || '') + '">';
                 html += inspHint('Matches text OR media caption (image/video/document).');
+            } else if (d.condition_type === 'attribute_condition') {
+                html += attributeSelectHtml(d);
+                html += '<label>Operator</label><select class="form-select insp" data-k="operator">';
+                [
+                    ['equals', 'Equals'],
+                    ['not_equals', 'Not equals'],
+                    ['contains', 'Contains'],
+                    ['not_contains', 'Does not contain'],
+                    ['empty', 'Is empty'],
+                    ['not_empty', 'Is not empty']
+                ].forEach(function (pair) {
+                    html += '<option value="' + pair[0] + '"' + ((d.operator || 'equals') === pair[0] ? ' selected' : '') + '>' + pair[1] + '</option>';
+                });
+                html += '</select>';
+                html += '<label>Value</label><input class="form-control insp" data-k="value" value="' + esc(d.value || '') + '">';
             } else {
                 html += '<label>Value</label><input class="form-control insp" data-k="value" value="' + esc(d.value || '') + '">';
             }

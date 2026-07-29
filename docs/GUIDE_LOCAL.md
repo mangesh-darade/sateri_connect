@@ -12,8 +12,8 @@
 > **Tip:** Finish one step fully. Then go to the next step. Use the checklists.  
 > For live customers on a real server, open the **Production** guide instead.
 
-**Project folder:** `c:\wamp64\www\whstapp`  
-**App link:** http://localhost/whstapp/public/
+**Project folder:** `c:\wamp64\www\sateri_connect`  
+**App link:** http://localhost/sateri_connect/public/
 
 ---
 
@@ -39,7 +39,7 @@
 | Item | Why |
 |------|-----|
 | WAMP64 | Runs the website (Apache + MySQL + PHP) |
-| This project in `c:\wamp64\www\whstapp` | The app files |
+| This project in `c:\wamp64\www\sateri_connect` | The app files |
 | Cheerio account | To use Cheerio live WhatsApp |
 | Your phone number | For test messages (OTP) |
 | Internet | To talk to Cheerio |
@@ -78,7 +78,7 @@ We use a free Cloudflare tunnel for local testing.
 Your folder should look like this:
 
 ```
-c:\wamp64\www\whstapp\
+c:\wamp64\www\sateri_connect\
   app\
   public\          ← open this from the browser
   writable\
@@ -91,7 +91,7 @@ c:\wamp64\www\whstapp\
 Open this link:
 
 ```
-http://localhost/whstapp/public/
+http://localhost/sateri_connect/public/
 ```
 
 - If you see **Install** → go to Step 3.  
@@ -104,7 +104,7 @@ http://localhost/whstapp/public/
 Open:
 
 ```
-http://localhost/whstapp/public/install
+http://localhost/sateri_connect/public/install
 ```
 
 Follow each screen:
@@ -113,7 +113,7 @@ Follow each screen:
 |--------|----------------|
 | Requirements | All items should be green |
 | Database | Host `localhost`, user `root`, password empty (often), database name `apiwa` |
-| App | Base URL: `http://localhost/whstapp/public/` |
+| App | Base URL: `http://localhost/sateri_connect/public/` |
 | Admin | Your name, email, password — **save these** |
 | Cheerio | You can skip this and fill Settings later |
 | Finish | Click Finish |
@@ -135,7 +135,7 @@ Follow each screen:
 Open:
 
 ```
-http://localhost/whstapp/public/login
+http://localhost/sateri_connect/public/login
 ```
 
 ![Login page](images/02-login.png)
@@ -156,7 +156,7 @@ Change the password later. Do not share it.
 ### Checklist
 
 - [ ] Dashboard opens  
-- [ ] Left menu shows Dashboard, Contacts, Guide, Settings, Live Chat, and more  
+- [ ] Left menu shows **Inbox → Data → Marketing → Automation → Analytics → System**  
 
 ---
 
@@ -300,7 +300,7 @@ To change it, paste a new value and Save.
 Open PowerShell:
 
 ```powershell
-cd c:\wamp64\www\whstapp
+cd c:\wamp64\www\sateri_connect
 php spark templates:sync
 ```
 
@@ -317,7 +317,7 @@ Synced 5 template(s).
 Then open:
 
 ```
-http://localhost/whstapp/public/templates
+http://localhost/sateri_connect/public/templates
 ```
 
 ![Templates after sync](images/07-templates-sync.png)
@@ -362,7 +362,7 @@ https://something.trycloudflare.com
 ### Your webhook URL
 
 ```text
-https://something.trycloudflare.com/whstapp/public/webhooks
+https://something.trycloudflare.com/sateri_connect/public/webhooks
 ```
 
 If you restart the tunnel, the link changes. Update Cheerio webhook URL again.
@@ -378,7 +378,7 @@ ngrok http 80
 Then use:
 
 ```text
-https://YOUR-ID.ngrok-free.app/whstapp/public/webhooks
+https://YOUR-ID.ngrok-free.app/sateri_connect/public/webhooks
 ```
 
 ### Checklist
@@ -400,7 +400,7 @@ https://YOUR-ID.ngrok-free.app/whstapp/public/webhooks
 ### Quick local test (optional)
 
 ```powershell
-curl "http://localhost/whstapp/public/webhooks?hub.mode=subscribe&hub.verify_token=YOUR_TOKEN&hub.challenge=12345"
+curl "http://localhost/sateri_connect/public/webhooks?hub.mode=subscribe&hub.verify_token=YOUR_TOKEN&hub.challenge=12345"
 ```
 
 You should see `12345`.
@@ -447,7 +447,7 @@ Ways to send:
 3. Then run:
 
 ```powershell
-cd c:\wamp64\www\whstapp
+cd c:\wamp64\www\sateri_connect
 php spark queue:process
 ```
 
@@ -466,7 +466,7 @@ Your phone should get the Hello World message.
 3. Open:
 
 ```
-http://localhost/whstapp/public/chat
+http://localhost/sateri_connect/public/chat
 ```
 
 4. Click the chat on the left.  
@@ -511,43 +511,159 @@ After the customer messages you, you have about **24 hours** to send free text.
 Some messages wait in **Queue** until a worker runs.
 
 ```powershell
-cd c:\wamp64\www\whstapp
+cd c:\wamp64\www\sateri_connect
 php spark queue:process
 php spark campaigns:process
 php spark automations:process
 ```
 
+`automations:process` also runs:
+- **Delay resume** jobs (workflow Delay nodes)
+- **Sequence** due steps (multi-step drips)
+
 For daily use, run these every minute (Windows Task Scheduler).  
 See [CRON_SETUP.md](CRON_SETUP.md).
+
+### After pulling new code
+
+```powershell
+cd c:\wamp64\www\sateri_connect
+php spark migrate
+php spark db:seed PermissionSeeder
+```
 
 ### Checklist
 
 - [ ] You can run `queue:process`  
+- [ ] You can run `automations:process`  
 - [ ] Test messages do not stay pending forever  
 
 ---
 
-# PART G — Menu meaning (short)
+# PART G — Team Inbox 2.0
+
+**URL:** `/chat`  
+**Permission:** `chat.view` (status change needs `chat.close`)
+
+### Statuses
+
+| Status | Meaning |
+|--------|---------|
+| open | Active conversation |
+| pending | Waiting on customer / follow-up |
+| intervened | Agent took over from bot |
+| chatbot | Handled by automation / bot |
+| resolved | Done (legacy `closed` maps here) |
+
+### Filters
+
+Left sidebar scopes include Active, Expired window, CTWA, FRT exceeded, Resolved, and status chips.
+
+### Agent actions
+
+1. Open a conversation.  
+2. Use the **status** dropdown (Open / Pending / Intervened / Chatbot / Resolved).  
+3. Or click **Resolve** / **Reopen**.  
+4. Assign agent (if you have `chat.assign`).  
+
+Dummy inbox samples (local only):
+
+```powershell
+php spark db:seed ConversationSeeder
+```
+
+Mobiles use `91999900xxxx`.
+
+### Checklist
+
+- [ ] Filters change the conversation list  
+- [ ] Resolve / status dropdown updates the chat header  
+- [ ] Reopen brings a resolved chat back to Open  
+
+---
+
+# PART H — Workflows (visual builder)
+
+**URL:** `/automations` → **Builder** (fullscreen canvas)  
+**Permission:** `automations.edit`
+
+### Useful nodes
+
+| Node | What it does |
+|------|----------------|
+| Incoming WhatsApp | Trigger on inbound message |
+| Campaign Sent | Fires when a WhatsApp campaign starts (per contact) |
+| Delay | Pauses the flow; resumes via `automations:process` |
+| Send email / Assign bot / Update chat status | New actions |
+| Attribute condition | Branch on contact field |
+
+### How to test Delay
+
+1. Build: Trigger → Delay (1–5 sec) → Update chat status / Add note.  
+2. Save + set **Active**.  
+3. Trigger the flow (send a matching WhatsApp message).  
+4. Run: `php spark automations:process`  
+5. Confirm the next node ran (status / note), not a restart from the first node.
+
+Catalog of sample flows: **System → Setup Workspace → Automations guide** (`/guide/automations`).
+
+### Checklist
+
+- [ ] Builder opens fullscreen (no sidebar)  
+- [ ] Save shows a toast (not hidden behind the canvas)  
+- [ ] Delay resumes the **next** node after `automations:process`  
+
+---
+
+# PART I — Sequences (multi-step drips)
+
+**URL:** `/sequences`  
+**Permissions:** `sequences.view` / `create` / `edit` / `delete`
+
+1. Create a sequence (name, Active, Exit on reply).  
+2. Add steps: delay (minutes) + text or template.  
+3. Enroll a contact by **contact ID** on the edit form.  
+4. Run `php spark automations:process` so due steps send.  
+5. If the contact replies and Exit on reply is on, enrollment stops.
+
+Agents typically have **view only**; managers/admins can edit.
+
+### Checklist
+
+- [ ] Sequence appears in the list  
+- [ ] Enroll succeeds for an active sequence  
+- [ ] Inactive sequence blocks enroll  
+- [ ] Reply exits the enrollment  
+
+---
+
+# PART J — Menu meaning (short)
+
+Nav groups (left sidebar):
+
+| Group | Items |
+|-------|--------|
+| Inbox | Dashboard, Team Inbox |
+| Data | Contacts, Groups |
+| Marketing | Campaigns, Email, Templates |
+| Automation | Workflows, Sequences, Keywords, Queue |
+| Analytics | Overview, Reports, Delivery |
+| System | Users, Roles, Setup Workspace (guides) |
 
 | Menu | Use |
 |------|-----|
-| Dashboard | Overview |
-| Guide | This help page |
-| Contacts | People you message |
-| Templates | Approved Cheerio message templates |
-| Campaigns | Send templates to many people |
-| Live Chat | One-to-one inbox |
+| Team Inbox | 1:1 chat + statuses / filters |
+| Sequences | Multi-step drips |
+| Workflows | Visual automations |
 | Keyword Bot | Auto replies |
-| Automations | Rules |
-| Queue | Waiting / failed jobs |
-| Settings | Cheerio and app settings |
-| Users / Roles | Team access |
+| Setup Workspace | Local / Production / Automations guides (`guide.view`) |
+| Roles | Permission matrix (includes `sequences.*`, `guide.view`) |
 
 More detail: [USER_GUIDE.md](USER_GUIDE.md)
 
 ---
 
-# PART H — WhatsApp / Cheerio rules (simple)
+# PART K — WhatsApp / Cheerio rules (simple)
 
 1. First message to a new user → **template only**.  
 2. After they reply → free text for about **24 hours**.  
@@ -556,7 +672,30 @@ More detail: [USER_GUIDE.md](USER_GUIDE.md)
 5. Temporary tokens **expire** — make a new one when needed.  
 6. Full production needs business verification later — not needed for this first test.
 
-More: [CHEERIO_FLOW.md](CHEERIO_FLOW.md) · [CHEERIO_FLOW.md](CHEERIO_FLOW.md)
+More: [CHEERIO_FLOW.md](CHEERIO_FLOW.md)
+
+---
+
+# PART L — Verify with automated tests
+
+Use PHP **8.2** from WAMP if your default `php` has broken extensions:
+
+```powershell
+cd c:\wamp64\www\sateri_connect
+C:\wamp64\bin\php\php8.2.29\php.exe spark migrate
+C:\wamp64\bin\php\php8.2.29\php.exe spark db:seed PermissionSeeder
+C:\wamp64\bin\php\php8.2.29\php.exe spark functional:smoke
+```
+
+Expect: smoke + permissions + inbox + workflow all **pass**.
+
+Individual suites:
+
+```powershell
+php spark inbox:test
+php spark workflow:test
+php spark permissions:audit
+```
 
 ---
 
@@ -564,18 +703,22 @@ More: [CHEERIO_FLOW.md](CHEERIO_FLOW.md) · [CHEERIO_FLOW.md](CHEERIO_FLOW.md)
 
 | Problem | Fix |
 |---------|-----|
-| Page not found | Use `/whstapp/public/...` in the URL |
+| Page not found | Use `/sateri_connect/public/...` in the URL |
 | Install keeps opening | Finish install; app must be marked installed |
 | Sync SSL error | Step 5 + restart WAMP |
 | Sync auth error | New token → Save → sync again |
 | Webhook verify fails | Same verify token in app and Cheerio |
 | No inbound chat | Tunnel closed, wrong URL, or `messages` not subscribed |
 | Chat click issues | Ctrl+F5, click the conversation again |
+| Sequence / Delay SQL error | Run `php spark migrate` |
+| Missing Sequences menu | Seed permissions; role needs `sequences.view` |
+| Builder Save toast missing | Hard-refresh builder CSS (`automations-flow.css?v=5`) |
+| Delay restarts whole flow | Update code (resume uses real rule id); re-test with `workflow:test` |
 
 Logs folder:
 
 ```
-c:\wamp64\www\whstapp\writable\logs\
+c:\wamp64\www\sateri_connect\writable\logs\
 ```
 
 ---
@@ -596,7 +739,11 @@ c:\wamp64\www\whstapp\writable\logs\
 - [ ] Template received on phone  
 - [ ] Phone reply shows in Live Chat  
 - [ ] You can reply from Live Chat  
-- [ ] You know `queue:process`  
+- [ ] Team Inbox status / filters work  
+- [ ] Sequence create + enroll works  
+- [ ] Workflow Delay resumes correctly  
+- [ ] You know `queue:process` + `automations:process`  
+- [ ] `functional:smoke` passes  
 
 When all boxes are checked, your first WhatsApp setup is working.
 
@@ -611,8 +758,9 @@ When all boxes are checked, your first WhatsApp setup is working.
 | [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md) | Webhooks |
 | [USER_GUIDE.md](USER_GUIDE.md) | All modules |
 | [CRON_SETUP.md](CRON_SETUP.md) | Auto workers |
+| [CHANGELOG_2026-07-29.md](CHANGELOG_2026-07-29.md) | Latest feature notes |
 
 ---
 
 **End of guide.**  
-Follow Part A → H in order. Do not skip SSL, tunnel, or queue.
+Follow Part A → L in order. Do not skip SSL, tunnel, migrate, or queue.

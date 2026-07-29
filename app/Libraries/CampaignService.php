@@ -135,7 +135,39 @@ class CampaignService
             'queued'      => $queued,
         ]);
 
+        // Fire "Campaign Sent" automations for each audience contact (capped for safety).
+        $this->fireCampaignSentTriggers($campaignId, $contactIds, $tagIds, $allActive);
+
         return $queued;
+    }
+
+    /**
+     * Notify automation engine that a campaign was launched for contacts.
+     *
+     * @param list<int>|null $contactIds
+     * @param list<int>|null $tagIds
+     */
+    protected function fireCampaignSentTriggers(int $campaignId, ?array $contactIds, ?array $tagIds, bool $allActive): void
+    {
+        try {
+            $contacts = $this->resolveContacts($contactIds, $tagIds, $allActive);
+            $engine   = service('automationEngine');
+            $limit    = 500;
+            $n        = 0;
+            foreach ($contacts as $contact) {
+                if ($n >= $limit) {
+                    break;
+                }
+                $engine->processTrigger('campaign_sent', [
+                    'contact_id'  => (int) $contact['id'],
+                    'contact'     => $contact,
+                    'campaign_id' => $campaignId,
+                ]);
+                $n++;
+            }
+        } catch (\Throwable $e) {
+            log_message('error', 'campaign_sent triggers failed: {msg}', ['msg' => $e->getMessage()]);
+        }
     }
 
     /**
