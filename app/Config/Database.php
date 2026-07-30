@@ -39,7 +39,7 @@ class Database extends Config
                 $this->default['hostname'] = 'localhost';
                 $this->default['username'] = 'root';
                 $this->default['password'] = '';
-                $this->default['database'] = 'sateri_connect';
+                $this->default['database'] = 'apiwa';
                 $this->default['DBDriver'] = 'MySQLi';
                 $this->default['port']     = 3306;
                 break;

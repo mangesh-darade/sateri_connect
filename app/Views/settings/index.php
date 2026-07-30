@@ -815,33 +815,53 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                 <div class="settings-step-head">
                                     <span class="settings-step-num">2</span>
                                     <div class="settings-step-copy">
-                                        <strong>Public HTTPS URL (Cloudflare / ngrok)</strong>
+                                        <strong>Public HTTPS callback
+                                            <?php
+                                            $whMode = (string) ($wh['mode'] ?? 'local');
+                                            $whSource = (string) ($wh['source'] ?? 'none');
+                                            ?>
+                                            <span class="badge <?= $whMode === 'live' ? 'text-bg-primary' : 'text-bg-warning' ?>" id="webhookModeBadge">
+                                                <?= $whMode === 'live' ? 'Live' : 'Local' ?>
+                                            </span>
+                                            <span class="badge text-bg-secondary" id="webhookSourceBadge"><?= esc($whSource) ?></span>
+                                        </strong>
                                         <span class="badge <?= $step2 ? 'text-bg-success' : 'text-bg-secondary' ?>" id="badgeStep2">
                                             <?= $step2 ? 'Done' : 'Pending' ?>
                                         </span>
                                     </div>
                                 </div>
                                 <div class="settings-step-body">
-                                    <ol class="small text-muted mb-3 ps-3">
-                                        <li>Cloudflare: <code>cloudflared tunnel --url http://127.0.0.1:80</code></li>
-                                        <li>Or ngrok: <code>ngrok http 80</code></li>
-                                        <li>Copy the HTTPS URL below (editable — paste / change anytime)</li>
-                                    </ol>
-                                    <label class="form-label" for="webhookPublicBase">Public HTTPS base (editable)</label>
+                                    <p class="small text-muted mb-2" id="webhookAutoHint"><?= esc($wh['hint'] ?? '') ?></p>
+                                    <?php if ($whMode === 'local'): ?>
+                                        <ol class="small text-muted mb-3 ps-3">
+                                            <li>Start: <code>cloudflared tunnel --url http://127.0.0.1:80</code></li>
+                                            <li>Browser मध्ये Settings <strong>tunnel HTTPS URL</strong> वरून उघडा</li>
+                                            <li><strong>Auto-generate</strong> क्लिक → Save (किंवा paste)</li>
+                                        </ol>
+                                    <?php else: ?>
+                                        <p class="small text-muted mb-3">
+                                            Live domain वर Settings उघडताच callback <strong>auto-detect + save</strong> होते.
+                                            <strong>Auto</strong> पुन्हा detect करण्यासाठी वापरा. Override फक्त गरज असल्यास.
+                                        </p>
+                                    <?php endif; ?>
+                                    <label class="form-label" for="webhookPublicBase">Public HTTPS base</label>
                                     <div class="input-group mb-2">
                                         <input type="url" class="form-control font-monospace" id="webhookPublicBase"
                                                name="webhook_public_base"
-                                               placeholder="https://xxxx.trycloudflare.com"
+                                               placeholder="<?= $whMode === 'live' ? 'https://your-domain.com' : 'https://xxxx.trycloudflare.com' ?>"
                                                value="<?= esc($wh['public_base'] ?? '') ?>"
                                                autocomplete="off">
+                                        <button type="button" class="btn btn-outline-secondary" id="btnAutoPublicBase" title="Detect Local tunnel / Live domain">
+                                            <i class="fas fa-magic me-1"></i> Auto
+                                        </button>
                                         <button type="button" class="btn btn-wa" id="btnSavePublicBase">
-                                            <i class="fas fa-save me-1"></i> Save Step 2
+                                            <i class="fas fa-save me-1"></i> Save
                                         </button>
                                     </div>
-                                    <div class="form-text">
-                                        Host only is enough (e.g. <code>https://….trycloudflare.com</code>).
-                                        Callback path is added automatically.
-                                        Local: <code><?= esc($wh['callback_url'] ?? site_url('webhooks')) ?></code>
+                                    <div class="form-text mb-2">
+                                        Auto suggested:
+                                        <code id="webhookAutoSuggested"><?= esc(($wh['auto_callback'] ?? '') !== '' ? (string) $wh['auto_callback'] : '—') ?></code>
+                                        · Local path: <code><?= esc($wh['callback_url'] ?? site_url('webhooks')) ?></code>
                                     </div>
                                 </div>
                             </div>
@@ -1026,6 +1046,36 @@ $(function () {
 
     $('#btnSavePublicBase').on('click', function () {
         savePublicWebhookUrl($('#webhookPublicBase').val(), $(this));
+    });
+
+    $('#btnAutoPublicBase').on('click', function () {
+        var $btn = $(this).prop('disabled', true);
+        webhookSetup('auto_public_url')
+            .done(function (res) {
+                var data = res.data || {};
+                if (data.public_base) $('#webhookPublicBase').val(data.public_base);
+                if (data.public_callback) {
+                    $('#webhookPublicCallback').val(data.public_callback);
+                    $('#webhookAutoSuggested').text(data.public_callback);
+                }
+                if (data.mode) {
+                    $('#webhookModeBadge')
+                        .text(data.mode === 'live' ? 'Live' : 'Local')
+                        .toggleClass('text-bg-primary', data.mode === 'live')
+                        .toggleClass('text-bg-warning', data.mode !== 'live');
+                }
+                $('#webhookSourceBadge').text(data.source || 'saved');
+                setStepBadge('badgeStep2', true);
+                setStepBadge('badgeStep3', true, 'Ready');
+                APP.toast(res.message || 'Callback auto-saved', 'success');
+            })
+            .fail(function (xhr) {
+                var data = (xhr.responseJSON && xhr.responseJSON.data) || {};
+                if (data.hint) $('#webhookAutoHint').text(data.hint);
+                if (data.auto_callback) $('#webhookAutoSuggested').text(data.auto_callback);
+                APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Auto-detect failed', 'warning');
+            })
+            .always(function () { $btn.prop('disabled', false); });
     });
 
     $('#btnSavePublicCallback').on('click', function () {

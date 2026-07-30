@@ -534,4 +534,226 @@ class SettingsService
             $this->set('cheerio_email_campaign_name', $config['default_campaign'], 'email', false);
         }
     }
+
+    /**
+     * Resolve public webhook base + callback for local (tunnel) vs live (HTTPS domain).
+     *
+     * Priority: saved override → auto (live site_url / current HTTPS request / tunnel host).
+     *
+     * @return array{
+     *   mode: string,
+     *   source: string,
+     *   public_base: string,
+     *   public_callback: string,
+     *   auto_base: string,
+     *   auto_callback: string,
+     *   saved_base: string,
+     *   local_callback: string,
+     *   hint: string,
+     *   auto_persisted: bool
+     * }
+     */
+    public function resolveWebhookPublicConfig(?string $requestOrigin = null): array
+    {
+        $localCallback = site_url('webhooks');
+        $savedBase     = rtrim((string) $this->get('webhook_public_base', ''), '/');
+        $autoBase      = $this->detectAutoWebhookPublicBase($requestOrigin);
+        $mode          = $this->resolveWebhookMode($autoBase !== '' ? $autoBase : $savedBase);
+        $effectiveBase = $savedBase !== '' ? $savedBase : $autoBase;
+        $source        = $savedBase !== '' ? 'saved' : ($autoBase !== '' ? 'auto' : 'none');
+
+        $path = (string) (parse_url($localCallback, PHP_URL_PATH) ?: '/webhooks');
+        $build = static function (string $base) use ($localCallback, $path): string {
+            $base = rtrim($base, '/');
+            if ($base === '') {
+                return $localCallback;
+            }
+
+            return $base . $path;
+        };
+
+        $hint = match (true) {
+            $mode === 'live' && $effectiveBase !== '' => 'Live domain detected — callback auto from HTTPS host. Override only if Meta needs a different URL.',
+            $mode === 'live' => 'Live: open Settings on your public HTTPS domain so callback can auto-detect.',
+            $autoBase !== '' && SubdomainDatabase::isLocalTunnelHost((string) (parse_url($autoBase, PHP_URL_HOST) ?: '')) => 'Local tunnel detected from this page — callback auto-filled. Save / Auto to pin Meta/Cheerio.',
+            default => 'Local: start Cloudflare/ngrok, open Settings via that HTTPS URL, click Auto — or paste tunnel URL.',
+        };
+
+        return [
+            'mode'            => $mode,
+            'source'          => $source,
+            'public_base'     => $effectiveBase,
+            'public_callback' => $build($effectiveBase),
+            'auto_base'       => $autoBase,
+            'auto_callback'   => $build($autoBase),
+            'saved_base'      => $savedBase,
+            'local_callback'  => $localCallback,
+            'hint'            => $hint,
+            'auto_persisted'  => false,
+        ];
+    }
+
+    /**
+     * On live HTTPS domain: if webhook base is empty, detect + persist automatically.
+     *
+     * @return array<string, mixed>
+     */
+    public function ensureLiveWebhookPublicBasePersisted(?string $requestOrigin = null): array
+    {
+        $resolved = $this->resolveWebhookPublicConfig($requestOrigin);
+        $autoBase = rtrim((string) ($resolved['auto_base'] ?? ''), '/');
+        $saved    = rtrim((string) ($resolved['saved_base'] ?? ''), '/');
+        $mode     = (string) ($resolved['mode'] ?? 'local');
+
+        if ($mode !== 'live' || $autoBase === '' || ! str_starts_with($autoBase, 'https://')) {
+            return $resolved;
+        }
+
+        // Persist when empty, or when saved value is a stale local tunnel but we're now on live.
+        $savedHost = strtolower((string) (parse_url($saved, PHP_URL_HOST) ?: ''));
+        $shouldPersist = $saved === ''
+            || ($savedHost !== '' && SubdomainDatabase::isLocalTunnelHost($savedHost));
+
+        if (! $shouldPersist) {
+            return $resolved;
+        }
+
+        $this->set('webhook_public_base', $autoBase, 'whatsapp');
+        $resolved = $this->resolveWebhookPublicConfig($requestOrigin);
+        $resolved['auto_persisted'] = true;
+        $resolved['source'] = 'auto';
+        $resolved['hint'] = 'Live callback auto-detected and saved from your HTTPS domain.';
+
+        return $resolved;
+    }
+
+    /**
+     * live = production env OR public non-tunnel HTTPS host.
+     */
+    public function resolveWebhookMode(string $httpsOriginOrEmpty = ''): string
+    {
+        if (defined('ENVIRONMENT') && ENVIRONMENT === 'production') {
+            return 'live';
+        }
+
+        $origin = $httpsOriginOrEmpty !== '' ? $httpsOriginOrEmpty : $this->detectAutoWebhookPublicBase();
+        $host   = strtolower((string) (parse_url($origin, PHP_URL_HOST) ?: ''));
+        if ($host === '' || $this->isLocalDevHost($host) || SubdomainDatabase::isLocalTunnelHost($host)) {
+            return 'local';
+        }
+
+        return 'live';
+    }
+
+    /**
+     * Auto HTTPS origin for webhooks (no manual paste when possible).
+     */
+    public function detectAutoWebhookPublicBase(?string $requestOrigin = null): string
+    {
+        $candidates = [];
+
+        if (is_string($requestOrigin) && $requestOrigin !== '') {
+            $candidates[] = $requestOrigin;
+        }
+
+        // Current browser request (live domain or tunnel) — prefer real HTTPS / forwarded proto.
+        try {
+            $req = service('request');
+            if ($req !== null) {
+                $host = (string) ($req->getServer('HTTP_HOST') ?: $req->getServer('SERVER_NAME') ?: '');
+                if ($host !== '') {
+                    $https = $req->isSecure()
+                        || strtolower((string) $req->getServer('HTTP_X_FORWARDED_PROTO')) === 'https'
+                        || (string) $req->getServer('SERVER_PORT') === '443';
+                    // Live servers often terminate TLS at proxy; treat public host as https.
+                    if (! $https && ! $this->isLocalDevHost(strtolower($host)) && ! SubdomainDatabase::isLocalTunnelHost(strtolower($host))) {
+                        $https = true;
+                    }
+                    $candidates[] = ($https ? 'https' : 'http') . '://' . $host;
+                }
+            }
+        } catch (\Throwable $e) {
+            // CLI / early boot
+        }
+
+        if (! empty($_SERVER['HTTP_HOST'])) {
+            $https = (! empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+                || (isset($_SERVER['SERVER_PORT']) && (string) $_SERVER['SERVER_PORT'] === '443')
+                || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+            $host = (string) $_SERVER['HTTP_HOST'];
+            if (! $https && ! $this->isLocalDevHost(strtolower($host)) && ! SubdomainDatabase::isLocalTunnelHost(strtolower($host))) {
+                $https = true;
+            }
+            $candidates[] = ($https ? 'https' : 'http') . '://' . $host;
+        }
+
+        $appUrl = trim((string) $this->get('app_url', ''));
+        if ($appUrl !== '') {
+            $candidates[] = $appUrl;
+        }
+        $candidates[] = (string) config('App')->baseURL;
+        $candidates[] = site_url('/');
+
+        $livePick   = '';
+        $tunnelPick = '';
+
+        foreach ($candidates as $raw) {
+            $origin = $this->normalizeHttpsOrigin((string) $raw);
+            if ($origin === '') {
+                continue;
+            }
+            $host = strtolower((string) (parse_url($origin, PHP_URL_HOST) ?: ''));
+            if ($host === '' || $this->isLocalDevHost($host)) {
+                continue;
+            }
+            if (SubdomainDatabase::isLocalTunnelHost($host)) {
+                if ($tunnelPick === '') {
+                    $tunnelPick = $origin;
+                }
+                continue;
+            }
+            // First real public domain wins (live).
+            if ($livePick === '') {
+                $livePick = $origin;
+            }
+        }
+
+        if ($livePick !== '') {
+            return $livePick;
+        }
+
+        // Local lab: tunnel is OK.
+        return $tunnelPick;
+    }
+
+    protected function isLocalDevHost(string $host): bool
+    {
+        $host = strtolower(trim($host));
+
+        return $host === ''
+            || $host === 'localhost'
+            || $host === '127.0.0.1'
+            || str_starts_with($host, '192.168.')
+            || str_starts_with($host, '10.')
+            || preg_match('/^172\.(1[6-9]|2\d|3[0-1])\./', $host) === 1;
+    }
+
+    public function normalizeHttpsOrigin(string $input): string
+    {
+        $input = trim($input);
+        if ($input === '') {
+            return '';
+        }
+        if (! preg_match('#^https?://#i', $input)) {
+            $input = 'https://' . ltrim($input, '/');
+        }
+        $parts = parse_url($input);
+        if (! is_array($parts) || empty($parts['host'])) {
+            return '';
+        }
+        $host = (string) $parts['host'];
+        $port = isset($parts['port']) ? (':' . (int) $parts['port']) : '';
+
+        return 'https://' . $host . $port;
+    }
 }

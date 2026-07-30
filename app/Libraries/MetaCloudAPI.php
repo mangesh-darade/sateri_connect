@@ -571,13 +571,17 @@ class MetaCloudAPI
 
         $settings = $this->settings;
         $meta     = $settings->getMetaConfig();
-        $base     = rtrim((string) $settings->get('webhook_public_base', ''), '/');
+        $resolved = $settings->resolveWebhookPublicConfig();
+        $base     = rtrim((string) ($resolved['public_base'] ?? ''), '/');
         $localPath = parse_url(site_url('webhooks'), PHP_URL_PATH) ?: '/webhooks';
-        $callback  = $callbackUrl ?: ($base !== '' ? $base . $localPath : (string) site_url('webhooks'));
+        $callback  = $callbackUrl ?: ($base !== '' ? $base . $localPath : (string) ($resolved['public_callback'] ?? site_url('webhooks')));
         if ($callback === '' || ! str_starts_with($callback, 'https://')) {
             if ($base !== '') {
                 $callback = $base . $localPath;
             }
+        }
+        if (($callback === '' || ! str_starts_with($callback, 'https://')) && ! empty($resolved['auto_callback'])) {
+            $callback = (string) $resolved['auto_callback'];
         }
         if ($callback === '' || ! str_starts_with($callback, 'https://')) {
             throw new RuntimeException('Set a public HTTPS webhook base (Cloudflare/ngrok) in Settings → Webhooks first.');
@@ -628,9 +632,8 @@ class MetaCloudAPI
         $callback   = trim((string) ($callbackUrl ?? ''));
 
         if ($callback === '') {
-            $base = rtrim((string) $this->settings->get('webhook_public_base', ''), '/');
-            $path = parse_url(site_url('webhooks'), PHP_URL_PATH) ?: '/webhooks';
-            $callback = $base !== '' ? $base . $path : '';
+            $resolved = $this->settings->resolveWebhookPublicConfig();
+            $callback = (string) ($resolved['public_callback'] ?? $resolved['auto_callback'] ?? '');
         }
 
         if ($appId === '') {

@@ -60,9 +60,10 @@ class Settings extends BaseController
 
         $embeddedSignup = (new \App\Libraries\MetaEmbeddedSignup($settings))->clientConfig();
 
-        $localCallback  = site_url('webhooks');
-        $publicBase     = rtrim((string) $settings->get('webhook_public_base', ''), '/');
-        $publicCallback = $this->buildPublicWebhookUrl($publicBase, $localCallback);
+        $webhookPublic = $settings->ensureLiveWebhookPublicBasePersisted();
+        $localCallback = (string) ($webhookPublic['local_callback'] ?? site_url('webhooks'));
+        $publicBase    = (string) ($webhookPublic['public_base'] ?? '');
+        $publicCallback = (string) ($webhookPublic['public_callback'] ?? $localCallback);
 
         $sendGrid = $settings->getSendGridConfig();
         $sendGridDisplay = $sendGrid;
@@ -105,6 +106,11 @@ class Settings extends BaseController
                 'callback_url'    => $localCallback,
                 'public_base'     => $publicBase,
                 'public_callback' => $publicCallback,
+                'mode'            => (string) ($webhookPublic['mode'] ?? 'local'),
+                'source'          => (string) ($webhookPublic['source'] ?? 'none'),
+                'auto_base'       => (string) ($webhookPublic['auto_base'] ?? ''),
+                'auto_callback'   => (string) ($webhookPublic['auto_callback'] ?? ''),
+                'hint'            => (string) ($webhookPublic['hint'] ?? ''),
                 'step1_done'      => trim((string) $activeWh['verify_token']) !== '',
                 'step2_done'      => $publicBase !== '' && str_starts_with($publicBase, 'https://'),
                 'step3_ready'     => trim((string) $activeWh['verify_token']) !== ''
@@ -254,7 +260,7 @@ class Settings extends BaseController
             if (in_array($section, ['all', 'cheerio', 'meta', 'webhooks'], true)) {
                 $publicBase = trim((string) $this->request->getPost('webhook_public_base'));
                 if ($publicBase !== '') {
-                    $publicBase = $this->normalizePublicWebhookBase($publicBase);
+                    $publicBase = $settings->normalizeHttpsOrigin($publicBase);
                     $settings->set('webhook_public_base', $publicBase, 'whatsapp');
                 }
             }
@@ -540,10 +546,53 @@ class Settings extends BaseController
                 ], 'Step 1 done — verify token saved.');
             }
 
+            if ($action === 'auto_public_url') {
+                // Force re-detect from current request; on live, persist immediately.
+                $resolved = $settings->ensureLiveWebhookPublicBasePersisted();
+                if (($resolved['mode'] ?? '') !== 'live' || empty($resolved['auto_persisted'])) {
+                    $resolved = $settings->resolveWebhookPublicConfig();
+                    $autoBase = (string) ($resolved['auto_base'] ?? '');
+                    if ($autoBase === '' || ! str_starts_with($autoBase, 'https://')) {
+                        $mode = (string) ($resolved['mode'] ?? 'local');
+                        $msg  = $mode === 'live'
+                            ? 'Could not auto-detect live HTTPS domain. Open Settings on your live HTTPS URL, or paste the domain.'
+                            : 'Could not auto-detect tunnel. Start cloudflared, open Settings via the trycloudflare HTTPS link, then click Auto again — or paste the tunnel URL.';
+
+                        return $this->jsonResponse(false, $resolved, $msg, [], 422);
+                    }
+                    $settings->set('webhook_public_base', $autoBase, 'whatsapp');
+                    $resolved = $settings->resolveWebhookPublicConfig();
+                }
+
+                $callback = (string) ($resolved['public_callback'] ?? '');
+                $autoBase = (string) ($resolved['public_base'] ?? '');
+
+                $metaSubscribe = null;
+                if ($settings->isMetaProvider() && $callback !== '' && str_starts_with($callback, 'https://')) {
+                    try {
+                        $metaSubscribe = (new \App\Libraries\MetaCloudAPI($settings))
+                            ->subscribeWabaWebhook($callback);
+                    } catch (\Throwable $e) {
+                        $metaSubscribe = ['ok' => false, 'error' => $e->getMessage()];
+                    }
+                }
+
+                $modeLabel = (($resolved['mode'] ?? '') === 'live') ? 'Live' : 'Local';
+
+                return $this->jsonResponse(true, [
+                    'public_base'     => $autoBase,
+                    'public_callback' => $callback,
+                    'mode'            => (string) ($resolved['mode'] ?? 'local'),
+                    'source'          => (string) ($resolved['source'] ?? 'saved'),
+                    'step2_done'      => true,
+                    'meta_subscribe'  => $metaSubscribe,
+                ], $modeLabel . ' callback auto-detected: ' . $callback);
+            }
+
             if ($action === 'save_public_url') {
                 $input = (string) ($this->request->getPost('webhook_public_base')
                     ?? ($this->safeGetJSON()['webhook_public_base'] ?? ''));
-                $base = $this->normalizePublicWebhookBase($input);
+                $base = $settings->normalizeHttpsOrigin($input);
                 if ($base === '' || ! str_starts_with($base, 'https://')) {
                     return $this->jsonResponse(
                         false,
@@ -643,37 +692,11 @@ class Settings extends BaseController
 
     /**
      * Normalize ngrok / production HTTPS base (host only or full webhook URL).
+     * @deprecated Use SettingsService::normalizeHttpsOrigin()
      */
     protected function normalizePublicWebhookBase(string $input): string
     {
-        $input = trim($input);
-        if ($input === '') {
-            return '';
-        }
-
-        // Allow pasting full webhook URL — strip path back to origin.
-        if (preg_match('#^https?://#i', $input)) {
-            $parts = parse_url($input);
-            if (! is_array($parts) || empty($parts['host'])) {
-                return '';
-            }
-            $scheme = strtolower((string) ($parts['scheme'] ?? 'https'));
-            if ($scheme !== 'https') {
-                $scheme = 'https';
-            }
-            $host = (string) $parts['host'];
-            $port = isset($parts['port']) ? (':' . (int) $parts['port']) : '';
-
-            return $scheme . '://' . $host . $port;
-        }
-
-        // Bare host: abcd.ngrok-free.app
-        $host = preg_replace('#^/+|#+$|/.*$#', '', $input) ?: '';
-        if ($host === '') {
-            return '';
-        }
-
-        return 'https://' . $host;
+        return service('settingsService')->normalizeHttpsOrigin($input);
     }
 
     /**

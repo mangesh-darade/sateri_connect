@@ -157,8 +157,9 @@ class SubdomainDatabase
     /**
      * Public reverse-tunnel hostnames used for local Meta/Cheerio webhook delivery.
      */
-    protected static function isLocalTunnelHost(string $host): bool
+    public static function isLocalTunnelHost(string $host): bool
     {
+        $host = strtolower(trim($host));
         $suffixes = [
             '.trycloudflare.com',
             '.cfargotunnel.com',
