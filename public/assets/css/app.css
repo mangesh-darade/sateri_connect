@@ -505,6 +505,43 @@ body.layout-fixed .main-sidebar > .sidebar {
     background: var(--wa-green) !important;
     color: #1a1228 !important;
 }
+.nav-clock {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    line-height: 1.15;
+    padding: 0.15rem 0.65rem 0.15rem 0.35rem;
+    margin-right: 0.15rem;
+    min-width: 5.75rem;
+    user-select: none;
+}
+.nav-clock-time {
+    font-family: var(--font-display, Onest, sans-serif);
+    font-size: 0.92rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: var(--wa-ink);
+    font-variant-numeric: tabular-nums;
+}
+.nav-clock-date {
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+@media (max-width: 575.98px) {
+    .nav-clock {
+        min-width: 0;
+        padding-right: 0.35rem;
+    }
+    .nav-clock-time {
+        font-size: 0.82rem;
+    }
+    .nav-clock-date {
+        font-size: 0.62rem;
+    }
+}
 
 .content-wrapper {
     background: transparent !important;

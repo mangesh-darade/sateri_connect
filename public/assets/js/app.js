@@ -602,7 +602,63 @@
         });
     };
 
+    function initNavTimezoneClock() {
+        var $wrap = $('#navAppClock');
+        if (!$wrap.length) return;
+
+        var tz = String($wrap.attr('data-timezone') || APP.timezone || 'UTC').trim() || 'UTC';
+        var $time = $('#navAppClockTime');
+        var $date = $('#navAppClockDate');
+        var timeFmt;
+        var dateFmt;
+
+        try {
+            timeFmt = new Intl.DateTimeFormat('en-GB', {
+                timeZone: tz,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+            dateFmt = new Intl.DateTimeFormat('en-GB', {
+                timeZone: tz,
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric'
+            });
+        } catch (e) {
+            tz = 'UTC';
+            $wrap.attr('data-timezone', tz).attr('title', tz);
+            timeFmt = new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'UTC',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+            dateFmt = new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'UTC',
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric'
+            });
+        }
+
+        function tick() {
+            var now = new Date();
+            $time.text(timeFmt.format(now));
+            $date.text(dateFmt.format(now));
+        }
+
+        tick();
+        if ($wrap.data('clock-timer')) {
+            clearInterval($wrap.data('clock-timer'));
+        }
+        $wrap.data('clock-timer', setInterval(tick, 1000));
+    }
+
     $(function () {
+        initNavTimezoneClock();
         LiveNotif.start();
 
         function refreshLucideIcons() {

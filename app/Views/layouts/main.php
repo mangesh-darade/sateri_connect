@@ -8,6 +8,17 @@
     <?php
     $appName    = function_exists('setting') ? (string) setting('app_name', 'WhatsApp Automation') : 'WhatsApp Automation';
     $appTagline = function_exists('setting') ? (string) setting('app_tagline', 'Automation console') : 'Automation console';
+    $appTimezone = 'UTC';
+    try {
+        $appTimezone = (string) (function_exists('setting')
+            ? (setting('app_timezone') ?: setting('timezone', 'UTC'))
+            : 'UTC');
+    } catch (Throwable $e) {
+        $appTimezone = 'UTC';
+    }
+    if ($appTimezone === '') {
+        $appTimezone = 'UTC';
+    }
     $siteLogo    = function_exists('setting_asset_url') ? setting_asset_url('site_logo') : '';
     $siteFavicon = function_exists('setting_asset_url') ? setting_asset_url('site_favicon') : '';
     if ($siteFavicon === '' && $siteLogo !== '') {
@@ -41,6 +52,12 @@
             </li>
         </ul>
         <ul class="navbar-nav ms-auto align-items-center">
+            <li class="nav-item">
+                <div class="nav-clock" id="navAppClock" data-timezone="<?= esc($appTimezone, 'attr') ?>" title="<?= esc($appTimezone) ?>" aria-live="polite">
+                    <span class="nav-clock-time" id="navAppClockTime">--:--:--</span>
+                    <span class="nav-clock-date" id="navAppClockDate">---- -- ----</span>
+                </div>
+            </li>
             <li class="nav-item dropdown" id="navNotifWrap">
                 <a class="nav-link" id="navNotifToggle" data-bs-toggle="dropdown" href="#" aria-expanded="false" aria-label="Notifications">
                     <i class="far fa-bell"></i>
@@ -664,6 +681,7 @@
         appName: <?= json_encode($appName) ?>,
         favicon: <?= json_encode($siteFavicon !== '' ? $siteFavicon : base_url('assets/img/avatar.png')) ?>,
         liveNotif: true,
+        timezone: <?= json_encode($appTimezone) ?>,
         whatsappProvider: <?= json_encode(function_exists('whatsapp_provider') ? whatsapp_provider() : 'cheerio') ?>,
         whatsappProviderShort: <?= json_encode(function_exists('whatsapp_provider_short') ? whatsapp_provider_short() : 'Cheerio') ?>,
         whatsappProviderLabel: <?= json_encode(function_exists('whatsapp_provider_label') ? whatsapp_provider_label() : 'Cheerio Direct API') ?>
