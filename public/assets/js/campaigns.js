@@ -814,9 +814,6 @@
         $('#cwLabel, #cwEmailSubject, #cwMediaUrl, #cwScheduledAt').on('change input', function () {
             $(this).removeClass('is-invalid');
         });
-        $('#cwMediaUrl').on('input', function () {
-            $('#cwMediaUrlError').addClass('d-none');
-        });
 
         $('#cwBackBtn').on('click', function (e) {
             e.preventDefault();
