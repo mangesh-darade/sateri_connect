@@ -357,7 +357,11 @@ class CheerioDirectAPI
             $headerType = strtolower((string) ($tpl['header_type'] ?? ''));
             $mediaUrl   = $this->extractTemplateHeaderMediaUrl($tpl);
 
-            if (in_array($headerType, ['image', 'video', 'document'], true) && $mediaUrl !== '') {
+            if (
+                in_array($headerType, ['image', 'video', 'document'], true)
+                && $mediaUrl !== ''
+                && $this->isReusableHeaderMediaForType($headerType, $mediaUrl)
+            ) {
                 array_unshift($components, [
                     'type'       => 'header',
                     'parameters' => [[
@@ -387,7 +391,59 @@ class CheerioDirectAPI
             $components[] = $buttonComponent;
         }
 
+        $headerType = strtolower((string) ($tpl['header_type'] ?? ''));
+        if (
+            $templateType !== 'carousel'
+            && in_array($headerType, ['image', 'video', 'document'], true)
+            && ! $this->componentsHaveMediaHeader($components)
+        ) {
+            throw new RuntimeException(
+                'Template "' . $templateName . '" requires a '
+                . strtoupper($headerType)
+                . ' header at send time. The Meta approval sample cannot be reused'
+                . ($headerType === 'document' ? ' — upload a PDF in the campaign wizard.' : ' — upload matching media in the campaign wizard.')
+            );
+        }
+
         return array_values($components);
+    }
+
+    /**
+     * Meta CDN / localhost / wrong-extension samples must not be auto-sent (API accepts, phone never gets it).
+     */
+    protected function isReusableHeaderMediaForType(string $headerType, string $url): bool
+    {
+        $url = trim($url);
+        if ($url === '' || ! filter_var($url, FILTER_VALIDATE_URL)) {
+            return false;
+        }
+
+        $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?: ''));
+        $scheme = strtolower((string) (parse_url($url, PHP_URL_SCHEME) ?: ''));
+        if ($scheme !== 'https' || $host === '') {
+            return false;
+        }
+        if (
+            $host === 'localhost'
+            || $host === '127.0.0.1'
+            || str_ends_with($host, '.local')
+            || str_contains($host, 'whatsapp.net')
+            || str_contains($host, 'fbcdn.net')
+            || str_contains($host, 'facebook.com')
+            || str_contains($host, 'scontent.')
+        ) {
+            return false;
+        }
+
+        $path = strtolower((string) (parse_url($url, PHP_URL_PATH) ?: ''));
+        $ext  = pathinfo($path, PATHINFO_EXTENSION);
+
+        return match ($headerType) {
+            'image' => in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true),
+            'video' => in_array($ext, ['mp4', '3gp'], true),
+            'document' => in_array($ext, ['pdf', 'doc', 'docx'], true),
+            default => false,
+        };
     }
 
     /**

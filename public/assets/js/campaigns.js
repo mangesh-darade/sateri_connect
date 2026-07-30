@@ -418,8 +418,10 @@
         var html = '';
         if (media) {
             html += '<div class="mb-2 small text-info">[Media attached]</div>';
-        } else if (tpl.has_sample_media || tpl.media_optional) {
+        } else if (tpl.media_optional) {
             html += '<div class="mb-2 small text-muted">[Using approved template sample media]</div>';
+        } else if (tpl.needs_media) {
+            html += '<div class="mb-2 small text-warning">[Upload required: Meta sample cannot be reused]</div>';
         }
         html += esc(body).replace(/\n/g, '<br>');
         if (footer) {
