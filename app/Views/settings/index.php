@@ -249,6 +249,7 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                             <span class="badge <?= $connected ? 'text-bg-success' : 'text-bg-secondary' ?>" id="metaConnectStatus">
                                                 <?= $connected ? 'Connected' : 'Not connected' ?>
                                             </span>
+                                            <span class="badge text-bg-secondary" id="metaSdkStatus" title="Facebook JavaScript SDK">SDK: loading…</span>
                                             <?php if ($connected): ?>
                                                 <span class="small text-muted" id="metaConnectSummary">
                                                     WABA <?= esc((string) ($meta['waba_id'] ?? '')) ?> · Phone ID <?= esc((string) ($meta['phone_number_id'] ?? '')) ?>
@@ -267,7 +268,7 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                         </div>
                                         <div id="metaEmbedResult" class="creds-test-result mt-2"></div>
                                         <div class="form-text mt-2">
-                                            Domain must be listed under Meta App → Facebook Login for Business → Allowed domains / Valid OAuth redirect URIs (HTTPS).
+                                            Uses Facebook JS SDK + Embedded Signup <code>config_id</code> (not a plain OAuth link). Domain must be listed under Meta App → Facebook Login for Business → Allowed domains / Valid OAuth redirect URIs (HTTPS).
                                         </div>
                                     </div>
 
@@ -968,6 +969,7 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
+<script src="<?= asset_url('assets/js/meta-embedded-signup.js') ?>"></script>
 <script>
 $(function () {
     $('.toggle-secret').on('click', function () {
@@ -1321,15 +1323,26 @@ $(function () {
     $('#btnTestCheerio').on('click', function () { runCheerioTest($(this), true); });
     $('#btnTestMeta').on('click', function () { runMetaTest($(this), true); });
 
-    // ── Meta Embedded Signup (Connect WhatsApp) ──────────────────────────
+    // ── Meta Embedded Signup (Connect WhatsApp) — Facebook JS SDK ────────
     (function initMetaEmbeddedSignup() {
         var $box = $('#metaEmbeddedSignupBox');
         if (!$box.length) return;
 
+        function setResult(html, ok) {
+            $('#metaEmbedResult').html(
+                '<span class="' + (ok ? 'text-success' : 'text-danger') + '">' + html + '</span>'
+            );
+        }
+
+        if (!APP.MetaEmbeddedSignup) {
+            $('#metaSdkStatus').removeClass('text-bg-secondary text-bg-success').addClass('text-bg-danger').text('SDK: missing');
+            setResult('meta-embedded-signup.js failed to load.', false);
+            return;
+        }
+
         var pendingSession = null;
         var pendingCode = null;
         var completing = false;
-        var sdkLoading = false;
 
         function embedCfg() {
             return {
@@ -1339,20 +1352,22 @@ $(function () {
             };
         }
 
+        function setSdkStatus(state, label) {
+            var $badge = $('#metaSdkStatus');
+            $badge
+                .removeClass('text-bg-secondary text-bg-success text-bg-danger text-bg-warning')
+                .addClass(state)
+                .text(label);
+        }
+
         function setReady() {
             var c = embedCfg();
             var ready = !!(c.appId && c.configId);
             $box.attr('data-ready', ready ? '1' : '0');
-            $('#btnConnectWhatsApp').prop('disabled', !ready);
+            $('#btnConnectWhatsApp').prop('disabled', !ready || !APP.MetaEmbeddedSignup.isSdkReady());
             if (!ready) {
                 $('#metaConnectSummary').text('Save App ID + Config ID + App Secret, then connect.');
             }
-        }
-
-        function setResult(html, ok) {
-            $('#metaEmbedResult').html(
-                '<span class="' + (ok ? 'text-success' : 'text-danger') + '">' + html + '</span>'
-            );
         }
 
         function finishTypes() {
@@ -1419,59 +1434,7 @@ $(function () {
             });
         }
 
-        function ensureSdk(cb) {
-            if (window.FB && typeof window.FB.login === 'function') {
-                cb();
-                return;
-            }
-            if (sdkLoading) {
-                var tries = 0;
-                var t = setInterval(function () {
-                    tries++;
-                    if (window.FB && typeof window.FB.login === 'function') {
-                        clearInterval(t);
-                        cb();
-                    } else if (tries > 50) {
-                        clearInterval(t);
-                        setResult('Facebook SDK failed to load.', false);
-                    }
-                }, 100);
-                return;
-            }
-            sdkLoading = true;
-            var c = embedCfg();
-            window.fbAsyncInit = function () {
-                window.FB.init({
-                    appId: c.appId,
-                    autoLogAppEvents: true,
-                    xfbml: true,
-                    version: c.apiVersion
-                });
-                cb();
-            };
-            var s = document.createElement('script');
-            s.async = true;
-            s.defer = true;
-            s.crossOrigin = 'anonymous';
-            s.src = 'https://connect.facebook.net/en_US/sdk.js';
-            s.onerror = function () {
-                sdkLoading = false;
-                setResult('Could not load Facebook SDK. Check network / HTTPS.', false);
-            };
-            document.body.appendChild(s);
-        }
-
-        window.addEventListener('message', function (event) {
-            var origin = (event.origin || '').toString();
-            if (origin.indexOf('facebook.com') === -1) return;
-            var data = event.data;
-            try {
-                if (typeof data === 'string') data = JSON.parse(data);
-            } catch (e) {
-                return;
-            }
-            if (!data || data.type !== 'WA_EMBEDDED_SIGNUP') return;
-
+        function onEmbeddedSession(data) {
             var ev = (data.event || '').toString();
             if (finishTypes()[ev]) {
                 var d = data.data || {};
@@ -1491,12 +1454,32 @@ $(function () {
                     false
                 );
             }
-        });
+        }
+
+        function preloadSdk() {
+            var c = embedCfg();
+            setSdkStatus('text-bg-warning', 'SDK: loading…');
+            APP.MetaEmbeddedSignup.preload({ appId: c.appId, apiVersion: c.apiVersion })
+                .then(function () {
+                    setSdkStatus('text-bg-success', 'SDK: ready');
+                    setReady();
+                })
+                .catch(function (err) {
+                    setSdkStatus('text-bg-danger', 'SDK: failed');
+                    setResult($('<div>').text((err && err.message) || 'Facebook SDK failed to load').html(), false);
+                    setReady();
+                });
+        }
 
         $('#btnConnectWhatsApp').on('click', function () {
             var c = embedCfg();
             if (!c.appId || !c.configId) {
                 APP.toast('Enter Meta App ID and Embedded Signup Config ID first.', 'warning');
+                return;
+            }
+            if (!APP.MetaEmbeddedSignup.isSdkReady()) {
+                APP.toast('Facebook SDK is still loading. Wait a second and try again.', 'warning');
+                preloadSdk();
                 return;
             }
 
@@ -1538,32 +1521,27 @@ $(function () {
                     $box.attr('data-config-id', c.configId);
                     $box.attr('data-api-version', c.apiVersion);
                     $box.attr('data-ready', '1');
-                    setResult('Opening Meta Embedded Signup…', true);
-                    ensureSdk(function () {
-                        if (window.FB && c.appId) {
-                            try {
-                                window.FB.init({
-                                    appId: c.appId,
-                                    autoLogAppEvents: true,
-                                    xfbml: true,
-                                    version: c.apiVersion
-                                });
-                            } catch (e) { /* already inited */ }
-                        }
-                        window.FB.login(function (response) {
-                            if (response && response.authResponse && response.authResponse.code) {
-                                pendingCode = response.authResponse.code;
-                                tryComplete();
-                            } else if (!pendingSession) {
-                                setResult('Meta login did not return an auth code.', false);
+                    setResult('Opening Meta Embedded Signup (Facebook SDK)…', true);
+
+                    APP.MetaEmbeddedSignup.launch({
+                        appId: c.appId,
+                        configId: c.configId,
+                        apiVersion: c.apiVersion,
+                        onSession: onEmbeddedSession,
+                        onCode: function (code) {
+                            pendingCode = code;
+                            tryComplete();
+                        },
+                        onCancel: function () {
+                            if (!pendingSession) {
+                                setResult('Meta login did not return an auth code. Check App Review / Advanced Access on Meta.', false);
                                 setReady();
                             }
-                        }, {
-                            config_id: c.configId,
-                            response_type: 'code',
-                            override_default_response_type: true,
-                            extras: { setup: {}, featureType: '', sessionInfoVersion: '3' }
-                        });
+                        }
+                    }).catch(function (err) {
+                        setResult($('<div>').text((err && err.message) || 'Could not launch Embedded Signup').html(), false);
+                        APP.toast((err && err.message) || 'Embedded Signup failed', 'error');
+                        setReady();
                     });
                 })
                 .fail(function (xhr) {
@@ -1574,9 +1552,20 @@ $(function () {
                 });
         });
 
-        $('#meta_app_id, #meta_embedded_config_id, #meta_api_version').on('input change', setReady);
-        $('#btnReloadEmbeddedConfig').on('click', setReady);
+        $('#meta_app_id, #meta_embedded_config_id, #meta_api_version').on('input change', function () {
+            setReady();
+            var c = embedCfg();
+            if (c.appId && APP.MetaEmbeddedSignup.isSdkReady()) {
+                APP.MetaEmbeddedSignup.preload({ appId: c.appId, apiVersion: c.apiVersion }).catch(function () {});
+            }
+        });
+        $('#btnReloadEmbeddedConfig').on('click', function () {
+            setReady();
+            preloadSdk();
+        });
+
         setReady();
+        preloadSdk();
     })();
 
     $('#btnTestPageMessaging').on('click', function () {
