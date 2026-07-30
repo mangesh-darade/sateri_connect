@@ -376,6 +376,15 @@
             $('#cwMediaFile').val('');
             $('#cwMediaStatus').addClass('d-none').text('');
         } else if (mediaOptional) {
+            // Drop stale override from a previous template/upload so sample can be used.
+            state.mediaUrl = '';
+            state.mediaId = '';
+            state.mediaMime = '';
+            $('#cwMediaUrl').val('');
+            $('#cwMediaFile').val('');
+            $('#cwMediaStatus').addClass('d-none').text('');
+            $('#cwMediaUrlError').addClass('d-none');
+            $('#cwMediaUrl').removeClass('is-invalid');
             $('#cwUploadTitle').text('Replace header media (optional)');
             $('#cwUploadHint').text('Approved template already has ' + (tpl.header_type || 'media')
                 + ' sample. Leave empty to use that sample, or upload to override.');
@@ -573,17 +582,19 @@
                     payload.header_media_mime = String(state.mediaMime).trim();
                 }
             } else if (state.template && state.template.media_optional) {
-                var overrideUrl = String($('#cwMediaUrl').val() || state.mediaUrl || '').trim();
-                if (overrideUrl || state.mediaId) {
+                // Only treat as override when the URL field has a value (fresh upload/paste).
+                // Orphan mediaId from an earlier PNG attempt must not force DOCUMENT validation.
+                var overrideUrl = String($('#cwMediaUrl').val() || '').trim();
+                if (overrideUrl) {
                     payload.header_media_url = overrideUrl;
-                    if (state.mediaId) {
+                    if (state.mediaId && state.mediaUrl === overrideUrl) {
                         payload.header_media_id = String(state.mediaId).trim();
                     }
-                    if (state.mediaMime) {
+                    if (state.mediaMime && state.mediaUrl === overrideUrl) {
                         payload.header_media_mime = String(state.mediaMime).trim();
                     }
                 }
-                // No override → send uses approved template sample automatically.
+                // Empty field → approved template sample is used automatically.
             }
         } else {
             payload.subject = String($('#cwEmailSubject').val() || '').trim();
@@ -914,7 +925,22 @@
             }
         });
 
-        $('#cwMediaUrl').on('input', updateWaPreview);
+        $('#cwMediaUrl').on('input', function () {
+            $('#cwMediaUrlError').addClass('d-none');
+            $('#cwMediaUrl').removeClass('is-invalid');
+            var v = String($(this).val() || '').trim();
+            if (!v) {
+                // Cleared → fall back to approved sample; drop stale override ids.
+                state.mediaUrl = '';
+                state.mediaId = '';
+                state.mediaMime = '';
+                $('#cwMediaFile').val('');
+                $('#cwMediaStatus').addClass('d-none').text('');
+            } else {
+                state.mediaUrl = v;
+            }
+            updateWaPreview();
+        });
 
         function uploadCampaignMediaFile(file) {
             if (!file) return;
@@ -963,6 +989,8 @@
                 state.mediaId = String(data.wa_media_id || data.media_id || '').trim();
                 state.mediaMime = String(data.mime_type || file.type || '').trim();
                 $('#cwMediaUrl').val(url);
+                $('#cwMediaUrlError').addClass('d-none');
+                $('#cwMediaUrl').removeClass('is-invalid');
                 $status.removeClass('text-muted').addClass('text-success').text('Uploaded: ' + (data.filename || file.name));
                 updateWaPreview();
                 toast('Media uploaded.', 'success');
