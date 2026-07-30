@@ -76,7 +76,7 @@
                                 <?php if (! empty($note['message'])): ?>
                                     <div class="small text-muted text-truncate" style="max-width:16rem"><?= esc($note['message']) ?></div>
                                 <?php endif; ?>
-                                <span class="float-end text-muted text-sm"><?= esc($note['created_at'] ?? '') ?></span>
+                                <span class="float-end text-muted text-sm"><?= esc(format_app_datetime($note['created_at'] ?? null, 'd-M-Y, g:i A', '')) ?></span>
                             </a>
                             <div class="dropdown-divider"></div>
                         <?php endforeach; ?>

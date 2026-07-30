@@ -91,35 +91,46 @@ class EmailLogModel extends Model
      */
     public function daily(string $from, string $to): array
     {
-        $start = strtotime($from);
-        $end   = strtotime($to);
-        if ($start === false || $end === false) {
+        try {
+            $start = new \DateTimeImmutable($from, \App\Libraries\AppDateTime::appZone());
+            $end   = new \DateTimeImmutable($to, \App\Libraries\AppDateTime::appZone());
+        } catch (\Throwable $e) {
             return [];
         }
 
+        if ($end < $start) {
+            return [];
+        }
+
+        [$rangeStart, $rangeEnd] = \App\Libraries\AppDateTime::rangeBoundsUtc($from, $to);
+
         $rows = $this->db->table($this->table)
-            ->select("DATE(created_at) AS d,
-                SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
-                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed
-            ", false)
-            ->where('created_at >=', $from . ' 00:00:00')
-            ->where('created_at <=', $to . ' 23:59:59')
-            ->groupBy('d')
-            ->orderBy('d', 'ASC')
+            ->select('created_at, status')
+            ->where('created_at >=', $rangeStart)
+            ->where('created_at <=', $rangeEnd)
             ->get()
             ->getResultArray();
 
         $byDay = [];
         foreach ($rows as $row) {
-            $byDay[(string) $row['d']] = [
-                'sent'   => (int) $row['sent'],
-                'failed' => (int) $row['failed'],
-            ];
+            $day = \App\Libraries\AppDateTime::format($row['created_at'] ?? null, 'Y-m-d', '');
+            if ($day === '') {
+                continue;
+            }
+            if (! isset($byDay[$day])) {
+                $byDay[$day] = ['sent' => 0, 'failed' => 0];
+            }
+            $status = (string) ($row['status'] ?? '');
+            if ($status === 'sent') {
+                $byDay[$day]['sent']++;
+            } elseif ($status === 'failed') {
+                $byDay[$day]['failed']++;
+            }
         }
 
         $out = [];
-        for ($ts = $start; $ts <= $end; $ts += 86400) {
-            $day = date('Y-m-d', $ts);
+        for ($d = $start; $d <= $end; $d = $d->modify('+1 day')) {
+            $day = $d->format('Y-m-d');
             $out[] = [
                 'date'   => $day,
                 'sent'   => $byDay[$day]['sent'] ?? 0,

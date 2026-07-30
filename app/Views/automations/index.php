@@ -59,7 +59,7 @@
                                 <?= ! empty($a['is_active']) ? 'On' : 'Off' ?>
                             <?php endif; ?>
                         </td>
-                        <td class="text-muted small text-nowrap"><?= esc($a['updated_at'] ?? '') ?></td>
+                        <td class="text-muted small text-nowrap"><?= esc(format_app_datetime($a['updated_at'] ?? null)) ?></td>
                         <td class="text-end">
                             <div class="table-actions justify-content-end">
                             <?php if (function_exists('can') && can('automations.edit')): ?>

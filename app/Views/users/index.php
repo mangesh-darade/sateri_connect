@@ -34,7 +34,7 @@
                         <td><?= esc($u['phone'] ?? '—') ?></td>
                         <td><?= esc($u['role_name'] ?? $u['role_id'] ?? '') ?></td>
                         <td><?= view('partials/status_badge', ['status' => $u['status'] ?? 'active']) ?></td>
-                        <td class="text-muted small text-nowrap"><?= esc($u['last_login'] ?? '—') ?></td>
+                        <td class="text-muted small text-nowrap"><?= esc(format_app_datetime($u['last_login'] ?? null)) ?></td>
                         <td class="text-end">
                             <div class="table-actions justify-content-end">
                             <?php if (function_exists('can') && can('users.edit')): ?>

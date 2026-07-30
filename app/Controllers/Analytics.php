@@ -25,14 +25,23 @@ class Analytics extends BaseController
             $tab = 'whatsapp';
         }
 
-        $from = (string) ($this->request->getGet('from') ?: date('Y-m-01'));
-        $to   = (string) ($this->request->getGet('to') ?: date('Y-m-d'));
+        $from = (string) ($this->request->getGet('from') ?: '');
+        $to   = (string) ($this->request->getGet('to') ?: '');
+        if ($from === '') {
+            $from = (new \DateTimeImmutable('now', \App\Libraries\AppDateTime::appZone()))
+                ->modify('first day of this month')
+                ->format('Y-m-d');
+        }
+        if ($to === '') {
+            $to = app_today_ymd();
+        }
+        [$fromUtc, $toUtc] = app_range_bounds_utc($from, $to);
 
-        $waSummary = $this->whatsappStats($from . ' 00:00:00', $to . ' 23:59:59');
+        $waSummary = $this->whatsappStats($fromUtc, $toUtc);
         $waDaily   = $this->whatsappDaily($from, $to);
 
         $emailModel   = model(EmailLogModel::class);
-        $emailSummary = $emailModel->summary($from . ' 00:00:00', $to . ' 23:59:59');
+        $emailSummary = $emailModel->summary($fromUtc, $toUtc);
         $emailDaily   = $emailModel->daily($from, $to);
 
         $emailCampaignRows = model(EmailHtmlCampaignModel::class)
@@ -145,20 +154,21 @@ class Analytics extends BaseController
         }
 
         $channel = strtolower(trim((string) ($this->request->getGet('channel') ?: 'whatsapp')));
-        $from    = (string) ($this->request->getGet('from') ?: date('Y-m-01'));
-        $to      = (string) ($this->request->getGet('to') ?: date('Y-m-d'));
+        $from    = (string) ($this->request->getGet('from') ?: (new \DateTimeImmutable('now', \App\Libraries\AppDateTime::appZone()))->modify('first day of this month')->format('Y-m-d'));
+        $to      = (string) ($this->request->getGet('to') ?: app_today_ymd());
+        [$fromUtc, $toUtc] = app_range_bounds_utc($from, $to);
 
         if ($channel === 'email') {
             $model = model(EmailLogModel::class);
 
             return $this->jsonResponse(true, [
-                'summary' => $model->summary($from . ' 00:00:00', $to . ' 23:59:59'),
+                'summary' => $model->summary($fromUtc, $toUtc),
                 'daily'   => $model->daily($from, $to),
             ]);
         }
 
         return $this->jsonResponse(true, [
-            'summary' => $this->whatsappStats($from . ' 00:00:00', $to . ' 23:59:59'),
+            'summary' => $this->whatsappStats($fromUtc, $toUtc),
             'daily'   => $this->whatsappDaily($from, $to),
         ]);
     }
@@ -195,16 +205,22 @@ class Analytics extends BaseController
      */
     protected function whatsappDaily(string $from, string $to): array
     {
-        $start = strtotime($from);
-        $end   = strtotime($to);
-        if ($start === false || $end === false) {
+        try {
+            $start = new \DateTimeImmutable($from, \App\Libraries\AppDateTime::appZone());
+            $end   = new \DateTimeImmutable($to, \App\Libraries\AppDateTime::appZone());
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        if ($end < $start) {
             return [];
         }
 
         $out = [];
-        for ($ts = $start; $ts <= $end; $ts += 86400) {
-            $day = date('Y-m-d', $ts);
-            $out[] = array_merge(['date' => $day], $this->whatsappStats($day . ' 00:00:00', $day . ' 23:59:59'));
+        for ($d = $start; $d <= $end; $d = $d->modify('+1 day')) {
+            $day = $d->format('Y-m-d');
+            [$dayStart, $dayEnd] = app_day_bounds_utc($day);
+            $out[] = array_merge(['date' => $day], $this->whatsappStats($dayStart, $dayEnd));
         }
 
         return $out;

@@ -47,7 +47,7 @@
                             <td class="text-center"><?= (int) ($group['contact_count'] ?? 0) ?></td>
                             <?php $added = $group['created_at'] ?? ''; ?>
                             <td class="text-muted small" data-order="<?= $added !== '' ? (int) strtotime($added) : 0 ?>">
-                                <?= $added !== '' ? esc(date('n/j/Y, g:i:s A', strtotime($added))) : '—' ?>
+                                <?= $added !== '' ? esc(format_app_datetime($added)) : '—' ?>
                             </td>
                             <td class="text-end">
                                 <div class="table-actions justify-content-end">

@@ -393,6 +393,7 @@ class Install extends Controller
             $appName = (string) ($this->request->getPost('app_name') ?: 'WhatsApp Automation');
             $settings->set('app_name', $appName, 'general');
             $settings->set('app_timezone', (string) ($this->request->getPost('app_timezone') ?: 'UTC'), 'general');
+            $settings->set('timezone', (string) ($this->request->getPost('app_timezone') ?: 'UTC'), 'general');
 
             session()->set('install_cheerio_ok', true);
 

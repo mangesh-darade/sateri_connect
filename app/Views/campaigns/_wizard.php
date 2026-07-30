@@ -153,6 +153,7 @@
                     <div class="border rounded-3 p-3 d-none" id="cwScheduleWrap">
                         <label class="form-label fw-semibold" for="cwScheduledAt">Schedule for</label>
                         <input type="datetime-local" id="cwScheduledAt" class="form-control">
+                        <div class="form-text">Uses app timezone: <?= esc(settings_timezone()) ?></div>
                         <div class="invalid-feedback">Pick a future date and time.</div>
                     </div>
                 </div>

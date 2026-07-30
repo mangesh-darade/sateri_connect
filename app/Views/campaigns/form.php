@@ -89,7 +89,8 @@ if (is_string($variablesJson)) {
             <div id="scheduleFields" class="row <?= empty($campaign['scheduled_at']) ? 'd-none' : '' ?>">
                 <div class="col-md-4">
                     <label class="form-label">Scheduled at</label>
-                    <input type="datetime-local" name="scheduled_at" class="form-control" value="<?= esc(old('scheduled_at') ?? (isset($campaign['scheduled_at']) ? date('Y-m-d\TH:i', strtotime($campaign['scheduled_at'])) : '')) ?>">
+                    <input type="datetime-local" name="scheduled_at" class="form-control" value="<?= esc(old('scheduled_at') ?? (isset($campaign['scheduled_at']) ? app_datetime_local($campaign['scheduled_at']) : '')) ?>">
+                    <div class="form-text">Time is in <?= esc(settings_timezone()) ?>.</div>
                 </div>
             </div>
         </div>

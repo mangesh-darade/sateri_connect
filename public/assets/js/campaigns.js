@@ -700,9 +700,12 @@
         if (!when) {
             return showWizardError('Pick a schedule date/time.', $('#cwScheduledAt'));
         }
-        var whenTs = Date.parse(when);
+        var whenDate = (window.APP && typeof APP.parseAppLocalInput === 'function')
+            ? APP.parseAppLocalInput(when)
+            : new Date(when);
+        var whenTs = whenDate ? whenDate.getTime() : NaN;
         if (!whenTs || whenTs < Date.now() - 60000) {
-            return showWizardError('Schedule time must be in the future.', $('#cwScheduledAt'));
+            return showWizardError('Schedule time must be in the future (' + ((APP && APP.timezone) || 'app timezone') + ').', $('#cwScheduledAt'));
         }
         var $btn = $('#cwScheduleBtn').prop('disabled', true);
         APP.post(base() + '/campaigns/wizard/' + state.channel + '/' + state.campaignId + '/schedule', {

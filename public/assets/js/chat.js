@@ -47,7 +47,10 @@
 
     function formatTime(ts) {
         if (!ts) return '';
-        var d = new Date(String(ts).replace(' ', 'T'));
+        if (window.APP && typeof APP.formatTime === 'function') {
+            return APP.formatTime(ts);
+        }
+        var d = new Date(String(ts).replace(' ', 'T') + 'Z');
         if (isNaN(d.getTime())) return ts;
         return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
@@ -175,7 +178,9 @@
         notes.forEach(function (n) {
             $list.append(
                 '<div class="note-item">' +
-                '<div class="text-muted small">' + escapeHtml(n.created_at || '') +
+                '<div class="text-muted small">' + escapeHtml(
+                    (window.APP && APP.formatDateTime) ? APP.formatDateTime(n.created_at || '') : (n.created_at || '')
+                ) +
                 (n.user_name ? (' · ' + escapeHtml(n.user_name)) : '') + '</div>' +
                 '<div>' + escapeHtml(n.note || n.content || '') + '</div></div>'
             );

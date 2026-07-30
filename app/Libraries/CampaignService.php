@@ -81,15 +81,21 @@ class CampaignService
             throw new RuntimeException('Campaign cannot be scheduled from status: ' . $campaign['status']);
         }
 
+        $normalized = AppDateTime::localToStorage($scheduledAt);
+        if ($normalized === null) {
+            throw new RuntimeException('A valid scheduled_at datetime is required.');
+        }
+
         $ok = (bool) $this->campaigns->update($campaignId, [
             'status'       => 'scheduled',
-            'scheduled_at' => $scheduledAt,
+            'scheduled_at' => $normalized,
         ]);
 
         if ($ok) {
             $this->logger->log('schedule', 'campaigns', 'Campaign scheduled', [
                 'campaign_id'  => $campaignId,
-                'scheduled_at' => $scheduledAt,
+                'scheduled_at' => $normalized,
+                'timezone'     => AppDateTime::timezone(),
             ]);
         }
 

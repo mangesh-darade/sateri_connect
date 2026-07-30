@@ -68,7 +68,7 @@
                         <td><?= esc($item['message_type'] ?? '') ?></td>
                         <td><?= view('partials/status_badge', ['status' => $item['status'] ?? '']) ?></td>
                         <td><?= esc(($item['attempts'] ?? 0) . '/' . ($item['max_attempts'] ?? 3)) ?></td>
-                        <td class="text-muted small text-nowrap"><?= esc($item['scheduled_at'] ?? '') ?></td>
+                        <td class="text-muted small text-nowrap"><?= esc(format_app_datetime($item['scheduled_at'] ?? null)) ?></td>
                         <td class="small text-danger"><?= esc(mb_strimwidth($item['error_message'] ?? '', 0, 60, '…')) ?></td>
                         <td class="text-end">
                             <div class="table-actions justify-content-end">

@@ -116,7 +116,7 @@ $campaigns = $campaigns ?? [];
                         <?php foreach ($campaigns as $c): ?>
                             <?php
                             $channel = (string) ($c['channel'] ?? 'whatsapp');
-                            $created = ! empty($c['created_at']) ? date('d-M-Y, g:iA', strtotime((string) $c['created_at'])) : '';
+                            $created = ! empty($c['created_at']) ? format_app_datetime($c['created_at']) : '';
                             ?>
                             <tr>
                                 <td>

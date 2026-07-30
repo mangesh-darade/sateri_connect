@@ -214,7 +214,7 @@ $failedCount = (int) $get($stats, 'failed');
                             <?php if (! empty($activityRows) && is_array($activityRows)): ?>
                                 <?php foreach ($activityRows as $row): ?>
                                     <tr>
-                                        <td class="text-muted small text-nowrap"><?= esc($row['created_at'] ?? '') ?></td>
+                                        <td class="text-muted small text-nowrap"><?= esc(format_app_datetime($row['created_at'] ?? null)) ?></td>
                                         <td><?= esc($row['user_name'] ?? 'System') ?></td>
                                         <td><span class="badge badge-soft"><?= esc($row['action'] ?? $row['event'] ?? '') ?></span></td>
                                         <td class="small text-muted"><?= esc($row['description'] ?? $row['details'] ?? '') ?></td>

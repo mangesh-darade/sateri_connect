@@ -29,9 +29,10 @@ class Dashboard extends BaseController
         $totalCampaigns = model(CampaignModel::class)->countAllResults();
 
         $messageStats = $this->messageCounts();
-        $todayStats   = $this->periodMessageCounts(date('Y-m-d 00:00:00'), date('Y-m-d 23:59:59'));
-        $monthStart   = date('Y-m-01 00:00:00');
-        $monthStats   = $this->periodMessageCounts($monthStart, date('Y-m-d 23:59:59'));
+        [$todayStart, $todayEnd] = app_day_bounds_utc();
+        $todayStats   = $this->periodMessageCounts($todayStart, $todayEnd);
+        [$monthStart, $monthEnd] = \App\Libraries\AppDateTime::monthToDateBoundsUtc();
+        $monthStats   = $this->periodMessageCounts($monthStart, $monthEnd);
 
         $queuePending = model(MessageQueueModel::class)->where('status', 'pending')->countAllResults();
         $openChats    = model(ConversationModel::class)->where('status', 'open')->countAllResults();
@@ -187,10 +188,8 @@ class Dashboard extends BaseController
         $db     = db_connect();
         $result = [];
 
-        for ($i = $days - 1; $i >= 0; $i--) {
-            $date = date('Y-m-d', strtotime("-{$i} days"));
-            $from = $date . ' 00:00:00';
-            $to   = $date . ' 23:59:59';
+        foreach (\App\Libraries\AppDateTime::recentDaysYmd($days) as $date) {
+            [$from, $to] = app_day_bounds_utc($date);
 
             $row = $db->table('messages')
                 ->select("

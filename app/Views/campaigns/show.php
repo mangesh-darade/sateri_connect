@@ -22,8 +22,8 @@ $pct = min(100, round(($sent / $total) * 100));
             <div class="panel-body">
                 <div class="row g-2 mb-3 small text-muted">
                     <div class="col-md-4"><strong class="text-dark">Template</strong><br><?= esc($template['name'] ?? $campaign['template_name'] ?? $campaign['template_id'] ?? '—') ?></div>
-                    <div class="col-md-4"><strong class="text-dark">Scheduled</strong><br><?= esc($campaign['scheduled_at'] ?? '—') ?></div>
-                    <div class="col-md-4"><strong class="text-dark">Started / Done</strong><br><?= esc($campaign['started_at'] ?? '—') ?> / <?= esc($campaign['completed_at'] ?? '—') ?></div>
+                    <div class="col-md-4"><strong class="text-dark">Scheduled</strong><br><?= esc(format_app_datetime($campaign['scheduled_at'] ?? null)) ?></div>
+                    <div class="col-md-4"><strong class="text-dark">Started / Done</strong><br><?= esc(format_app_datetime($campaign['started_at'] ?? null)) ?> / <?= esc(format_app_datetime($campaign['completed_at'] ?? null)) ?></div>
                 </div>
                 <label class="form-label small text-muted mb-1">Progress · <?= esc((string) $sent) ?> / <?= esc((string) ($campaign['total_contacts'] ?? 0)) ?></label>
                 <div class="progress mb-3" style="height:10px;border-radius:999px;background:var(--wa-mist)">
@@ -105,7 +105,7 @@ $pct = min(100, round(($sent / $total) * 100));
                             <td><?= esc($r['name'] ?? '') ?></td>
                             <td><?= esc($r['mobile'] ?? '') ?></td>
                             <td><?= view('partials/status_badge', ['status' => $r['status'] ?? '']) ?></td>
-                            <td class="text-muted small"><?= esc($r['sent_at'] ?? $r['processed_at'] ?? '—') ?></td>
+                            <td class="text-muted small"><?= esc(format_app_datetime($r['sent_at'] ?? $r['processed_at'] ?? null)) ?></td>
                             <td class="small text-danger"><?= esc($r['error_message'] ?? '') ?></td>
                         </tr>
                     <?php endforeach; ?>

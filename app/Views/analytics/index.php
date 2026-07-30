@@ -241,7 +241,7 @@ $emailSum = $email['summary'] ?? [];
                                     $logStatus = (string) ($log['status'] ?? 'unknown');
                                     ?>
                                     <tr>
-                                        <td class="small text-nowrap"><?= esc($log['created_at'] ?? '') ?></td>
+                                        <td class="text-muted small text-nowrap"><?= esc(format_app_datetime($log['created_at'] ?? null)) ?></td>
                                         <td><?= esc($log['kind'] ?? '') ?></td>
                                         <td class="small"><?= esc(mb_strimwidth((string) ($log['to_email'] ?? ''), 0, 40, '…')) ?></td>
                                         <td><span class="badge text-bg-<?= $logStatus === 'sent' ? 'success' : ($logStatus === 'queued' ? 'warning' : 'danger') ?>"><?= esc($logStatus) ?></span></td>

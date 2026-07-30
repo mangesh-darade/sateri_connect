@@ -573,7 +573,7 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                             </optgroup>
                                         <?php endforeach; ?>
                                     </select>
-                                    <div class="form-text">Full timezone list with UTC offsets for all regions/countries.</div>
+                                    <div class="form-text">All dates/times across the app (chat, campaigns, reports, schedules) use this timezone.</div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Support / App Email</label>

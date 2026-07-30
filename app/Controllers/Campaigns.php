@@ -248,7 +248,7 @@ class Campaigns extends BaseController
             ?? $this->request->getJSON(true)['scheduled_at']
             ?? '');
 
-        if ($scheduledAt === '' || strtotime($scheduledAt) === false) {
+        if (app_local_to_storage($scheduledAt) === null) {
             return $this->failOrRedirect('A valid scheduled_at datetime is required.');
         }
 
@@ -607,16 +607,16 @@ class Campaigns extends BaseController
         $channel = strtolower($channel);
         $input   = $this->requestInput();
         $scheduledAt = trim((string) ($input['scheduled_at'] ?? ''));
-        if ($scheduledAt === '' || strtotime($scheduledAt) === false) {
+        $storageAt   = app_local_to_storage($scheduledAt);
+        if ($storageAt === null) {
             return $this->jsonResponse(false, null, 'A valid scheduled_at datetime is required.', [], 422);
         }
-        $ts = date('Y-m-d H:i:s', (int) strtotime($scheduledAt));
 
         if ($channel === 'email') {
-            return $this->wizardScheduleEmail($id, $ts);
+            return $this->wizardScheduleEmail($id, $storageAt);
         }
 
-        return $this->wizardScheduleWhatsApp($id, $ts, $input);
+        return $this->wizardScheduleWhatsApp($id, $scheduledAt, $input);
     }
 
     /**
@@ -1326,12 +1326,12 @@ class Campaigns extends BaseController
 
         if ($action === 'schedule') {
             $scheduledAt = (string) ($this->request->getPost('scheduled_at') ?? '');
-            if ($scheduledAt === '' || strtotime($scheduledAt) === false) {
+            $ts          = app_local_to_storage($scheduledAt);
+            if ($ts === null) {
                 return redirect()->to('/campaigns/' . $id)->with('error', 'A valid scheduled_at datetime is required to schedule.');
             }
-            // Normalize datetime-local to Y-m-d H:i:s
-            $ts = date('Y-m-d H:i:s', (int) strtotime($scheduledAt));
-            service('campaignService')->schedule($id, $ts);
+            // datetime-local is wall time in Settings timezone → store UTC
+            service('campaignService')->schedule($id, $scheduledAt);
 
             return redirect()->to('/campaigns/' . $id)->with('success', 'Campaign scheduled.');
         }

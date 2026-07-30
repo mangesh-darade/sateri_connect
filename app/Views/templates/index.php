@@ -140,7 +140,7 @@ sort($templateLanguages);
                     <div class="panel-body flex-grow-1">
                         <p class="small mb-2" style="white-space:pre-wrap;color:var(--text-muted)"><?= esc(mb_strimwidth($tpl['body'] ?? '', 0, 160, '…')) ?></p>
                         <?php if (! empty($tpl['synced_at'])): ?>
-                            <div class="small text-muted">Synced <?= esc($tpl['synced_at']) ?></div>
+                            <div class="small text-muted">Synced <?= esc(format_app_datetime($tpl['synced_at'] ?? null)) ?></div>
                         <?php endif; ?>
                     </div>
                     <div class="panel-body border-top pt-2 d-flex gap-2" style="border-color:var(--border)!important">
@@ -196,7 +196,7 @@ sort($templateLanguages);
                                 <td><?= esc($tpl['language'] ?? '') ?></td>
                                 <td><?= esc($tpl['category'] ?? '') ?></td>
                                 <td><?= view('partials/status_badge', ['status' => strtolower($tpl['status'] ?? '')]) ?></td>
-                                <td class="text-muted small text-nowrap"><?= esc($tpl['synced_at'] ?? '') ?></td>
+                                <td class="text-muted small text-nowrap"><?= esc(format_app_datetime($tpl['synced_at'] ?? null, 'd-M-Y, g:i A', '')) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>

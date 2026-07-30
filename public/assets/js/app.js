@@ -7,6 +7,145 @@
     var APP = window.APP || {};
     window.APP = APP;
 
+    /**
+     * Parse a DB/API timestamp (stored UTC, naive MySQL datetime) into a Date.
+     */
+    APP.parseUtcDate = function (ts) {
+        if (ts == null || ts === '') return null;
+        if (ts instanceof Date) {
+            return isNaN(ts.getTime()) ? null : ts;
+        }
+        var s = String(ts).trim();
+        if (!s) return null;
+
+        if (/^\d{10,13}$/.test(s)) {
+            var n = parseInt(s, 10);
+            if (s.length <= 10) n *= 1000;
+            var fromEpoch = new Date(n);
+            return isNaN(fromEpoch.getTime()) ? null : fromEpoch;
+        }
+
+        // Already has zone
+        if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) {
+            var withZone = new Date(s);
+            return isNaN(withZone.getTime()) ? null : withZone;
+        }
+
+        // Naive MySQL / ISO → treat as UTC
+        var normalized = s.replace(' ', 'T');
+        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(normalized)) {
+            if (normalized.length === 16) normalized += ':00';
+            var asUtc = new Date(normalized + 'Z');
+            return isNaN(asUtc.getTime()) ? null : asUtc;
+        }
+
+        var fallback = new Date(s);
+        return isNaN(fallback.getTime()) ? null : fallback;
+    };
+
+    /**
+     * Interpret datetime-local / wall-clock string as APP.timezone → Date.
+     */
+    APP.parseAppLocalInput = function (localStr) {
+        var m = String(localStr || '').trim().match(
+            /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/
+        );
+        if (!m) return null;
+
+        var y = +m[1];
+        var mo = +m[2] - 1;
+        var d = +m[3];
+        var h = +m[4];
+        var mi = +m[5];
+        var sec = +(m[6] || 0);
+        var tz = String(APP.timezone || 'UTC').trim() || 'UTC';
+
+        var want = Date.UTC(y, mo, d, h, mi, sec);
+        var fmt;
+        try {
+            fmt = new Intl.DateTimeFormat('en-US', {
+                timeZone: tz,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+        } catch (e) {
+            return new Date(want);
+        }
+
+        function asUtcMs(ms) {
+            var parts = {};
+            fmt.formatToParts(new Date(ms)).forEach(function (p) {
+                if (p.type !== 'literal') parts[p.type] = p.value;
+            });
+            var hour = parseInt(parts.hour, 10);
+            if (hour === 24) hour = 0;
+            return Date.UTC(
+                parseInt(parts.year, 10),
+                parseInt(parts.month, 10) - 1,
+                parseInt(parts.day, 10),
+                hour,
+                parseInt(parts.minute, 10),
+                parseInt(parts.second, 10)
+            );
+        }
+
+        var guess = want;
+        for (var i = 0; i < 3; i++) {
+            guess = guess + (want - asUtcMs(guess));
+        }
+        return new Date(guess);
+    };
+
+    /**
+     * Format stored UTC datetime in APP.timezone.
+     * style: 'datetime' | 'time' | 'date' | Intl options object
+     */
+    APP.formatDateTime = function (ts, style) {
+        var d = APP.parseUtcDate(ts);
+        if (!d) return ts == null || ts === '' ? '' : String(ts);
+
+        var tz = String(APP.timezone || 'UTC').trim() || 'UTC';
+        var opts;
+
+        if (style && typeof style === 'object') {
+            opts = Object.assign({ timeZone: tz }, style);
+        } else if (style === 'time') {
+            opts = { timeZone: tz, hour: '2-digit', minute: '2-digit' };
+        } else if (style === 'date') {
+            opts = { timeZone: tz, day: '2-digit', month: 'short', year: 'numeric' };
+        } else {
+            opts = {
+                timeZone: tz,
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            };
+        }
+
+        try {
+            return new Intl.DateTimeFormat(undefined, opts).format(d);
+        } catch (e) {
+            try {
+                opts.timeZone = 'UTC';
+                return new Intl.DateTimeFormat(undefined, opts).format(d);
+            } catch (e2) {
+                return d.toISOString();
+            }
+        }
+    };
+
+    APP.formatTime = function (ts) {
+        return APP.formatDateTime(ts, 'time');
+    };
+
     function csrfToken() {
         return $('meta[name="csrf-token"]').attr('content') || APP.csrfToken || '';
     }
@@ -306,7 +445,7 @@
                 '<i class="fas fa-' + notifIconClass(n.type) + ' me-2"></i>' +
                 notifEsc(n.title || 'Notification') +
                 (n.message ? ('<div class="small text-muted text-truncate" style="max-width:16rem">' + notifEsc(n.message) + '</div>') : '') +
-                '<span class="float-end text-muted text-sm">' + notifEsc(n.created_at || '') + '</span>' +
+                '<span class="float-end text-muted text-sm">' + notifEsc(APP.formatDateTime(n.created_at || '')) + '</span>' +
                 '</a><div class="dropdown-divider"></div>';
             if (id > 0) LiveNotif.knownIds[id] = true;
         });

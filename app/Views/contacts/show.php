@@ -88,7 +88,7 @@
                     <div id="contactNotesExisting">
                     <?php foreach ($notes as $note): ?>
                         <div class="border-bottom py-2">
-                            <small class="text-muted"><?= esc($note['created_at'] ?? '') ?> · <?= esc($note['user_name'] ?? '') ?></small>
+                            <small class="text-muted"><?= esc(format_app_datetime($note['created_at'] ?? null)) ?> · <?= esc($note['user_name'] ?? '') ?></small>
                             <div><?= esc($note['note'] ?? $note['content'] ?? '') ?></div>
                         </div>
                     <?php endforeach; ?>
@@ -117,7 +117,7 @@
                             <?php if (! empty($messages)): ?>
                                 <?php foreach ($messages as $msg): ?>
                                     <tr>
-                                        <td class="text-muted small"><?= esc($msg['created_at'] ?? '') ?></td>
+                                        <td class="text-muted small"><?= esc(format_app_datetime($msg['created_at'] ?? null)) ?></td>
                                         <td><?= esc($msg['direction'] ?? '') ?></td>
                                         <td><?= esc($msg['message_type'] ?? $msg['type'] ?? '') ?></td>
                                         <td><?= esc(mb_strimwidth($msg['body'] ?? $msg['content'] ?? '', 0, 80, '…')) ?></td>

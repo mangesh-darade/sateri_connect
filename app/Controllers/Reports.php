@@ -18,12 +18,20 @@ class Reports extends BaseController
             return $denied;
         }
 
-        $from       = (string) ($this->request->getGet('from') ?: date('Y-m-01'));
-        $to         = (string) ($this->request->getGet('to') ?: date('Y-m-d'));
+        $from = (string) ($this->request->getGet('from') ?: '');
+        $to   = (string) ($this->request->getGet('to') ?: '');
+        if ($from === '') {
+            $from = (new \DateTimeImmutable('now', \App\Libraries\AppDateTime::appZone()))
+                ->modify('first day of this month')->format('Y-m-d');
+        }
+        if ($to === '') {
+            $to = app_today_ymd();
+        }
         $campaignId = $this->request->getGet('campaign_id');
         $campaignId = ($campaignId !== null && $campaignId !== '') ? (int) $campaignId : null;
+        [$fromUtc, $toUtc] = app_range_bounds_utc($from, $to);
 
-        $summary = $this->deliveryStats($from . ' 00:00:00', $to . ' 23:59:59', $campaignId);
+        $summary = $this->deliveryStats($fromUtc, $toUtc, $campaignId);
         $daily   = $this->dailyDelivery($from, $to, $campaignId);
 
         $trendLabels    = [];
@@ -42,7 +50,7 @@ class Reports extends BaseController
 
         // Prefer live message aggregates for the selected period when possible;
         // fall back to denormalized campaign counters for the table.
-        $campaignStats = $this->campaignBreakdown($from . ' 00:00:00', $to . ' 23:59:59', $campaignId, $campaigns);
+        $campaignStats = $this->campaignBreakdown($fromUtc, $toUtc, $campaignId, $campaigns);
 
         $filters = [
             'from'        => $from,
@@ -95,12 +103,20 @@ class Reports extends BaseController
             return $denied;
         }
 
-        $from       = (string) ($this->request->getGet('from') ?: date('Y-m-01'));
-        $to         = (string) ($this->request->getGet('to') ?: date('Y-m-d'));
+        $from = (string) ($this->request->getGet('from') ?: '');
+        $to   = (string) ($this->request->getGet('to') ?: '');
+        if ($from === '') {
+            $from = (new \DateTimeImmutable('now', \App\Libraries\AppDateTime::appZone()))
+                ->modify('first day of this month')->format('Y-m-d');
+        }
+        if ($to === '') {
+            $to = app_today_ymd();
+        }
         $campaignId = $this->request->getGet('campaign_id');
         $campaignId = ($campaignId !== null && $campaignId !== '') ? (int) $campaignId : null;
+        [$fromUtc, $toUtc] = app_range_bounds_utc($from, $to);
 
-        $stats = $this->deliveryStats($from . ' 00:00:00', $to . ' 23:59:59', $campaignId);
+        $stats = $this->deliveryStats($fromUtc, $toUtc, $campaignId);
         $daily = $this->dailyDelivery($from, $to, $campaignId);
 
         if ($this->request->isAJAX()) {
@@ -122,11 +138,19 @@ class Reports extends BaseController
             return $denied;
         }
 
-        $from       = (string) ($this->request->getGet('from') ?: date('Y-m-01'));
-        $to         = (string) ($this->request->getGet('to') ?: date('Y-m-d'));
+        $from = (string) ($this->request->getGet('from') ?: '');
+        $to   = (string) ($this->request->getGet('to') ?: '');
+        if ($from === '') {
+            $from = (new \DateTimeImmutable('now', \App\Libraries\AppDateTime::appZone()))
+                ->modify('first day of this month')->format('Y-m-d');
+        }
+        if ($to === '') {
+            $to = app_today_ymd();
+        }
         $campaignId = $this->request->getGet('campaign_id');
         $campaignId = ($campaignId !== null && $campaignId !== '') ? (int) $campaignId : null;
-        $stats      = $this->deliveryStats($from . ' 00:00:00', $to . ' 23:59:59', $campaignId);
+        [$fromUtc, $toUtc] = app_range_bounds_utc($from, $to);
+        $stats      = $this->deliveryStats($fromUtc, $toUtc, $campaignId);
         $app        = (string) service('settingsService')->get('app_name', 'WhatsApp Automation');
 
         $html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Delivery Report</title>'
@@ -134,7 +158,7 @@ class Reports extends BaseController
             . 'h1{font-size:20px}table{border-collapse:collapse;width:100%;margin-top:16px}'
             . 'th,td{border:1px solid #ccc;padding:8px;text-align:left}th{background:#f5f5f5}</style></head><body>'
             . '<h1>' . esc($app) . ' — Delivery Report</h1>'
-            . '<p>Period: ' . esc($from) . ' to ' . esc($to) . '</p>'
+            . '<p>Period: ' . esc($from) . ' to ' . esc($to) . ' (' . esc(settings_timezone()) . ')</p>'
             . '<table><thead><tr><th>Metric</th><th>Count</th></tr></thead><tbody>';
 
         foreach ($stats as $key => $value) {
@@ -142,12 +166,12 @@ class Reports extends BaseController
         }
 
         $html .= '</tbody></table><p style="margin-top:24px;font-size:12px;color:#666">Generated '
-            . date('Y-m-d H:i:s') . '</p></body></html>';
+            . esc(format_app_datetime(app_now_storage())) . '</p></body></html>';
 
         // HTML download labeled as PDF report (printable). True PDF libs optional later.
         return $this->response
             ->setHeader('Content-Type', 'text/html; charset=UTF-8')
-            ->setHeader('Content-Disposition', 'attachment; filename="delivery_report_' . date('Ymd') . '.html"')
+            ->setHeader('Content-Disposition', 'attachment; filename="delivery_report_' . app_today_ymd() . '.html"')
             ->setBody($html);
     }
 
@@ -157,9 +181,16 @@ class Reports extends BaseController
             return $denied;
         }
 
-        $type       = (string) ($this->request->getGet('type') ?: 'delivery');
-        $from       = (string) ($this->request->getGet('from') ?: date('Y-m-01'));
-        $to         = (string) ($this->request->getGet('to') ?: date('Y-m-d'));
+        $type = (string) ($this->request->getGet('type') ?: 'delivery');
+        $from = (string) ($this->request->getGet('from') ?: '');
+        $to   = (string) ($this->request->getGet('to') ?: '');
+        if ($from === '') {
+            $from = (new \DateTimeImmutable('now', \App\Libraries\AppDateTime::appZone()))
+                ->modify('first day of this month')->format('Y-m-d');
+        }
+        if ($to === '') {
+            $to = app_today_ymd();
+        }
         $campaignId = $this->request->getGet('campaign_id');
         $campaignId = ($campaignId !== null && $campaignId !== '') ? (int) $campaignId : null;
 
@@ -177,10 +208,10 @@ class Reports extends BaseController
                     $r['read_count'],
                     $r['failed_count'],
                     $r['reply_count'],
-                    $r['created_at'],
+                    '"' . format_app_datetime($r['created_at'] ?? null, 'Y-m-d H:i:s', '') . '"',
                 ]) . "\n";
             }
-            $filename = 'campaigns_report_' . date('Ymd') . '.csv';
+            $filename = 'campaigns_report_' . str_replace('-', '', app_today_ymd()) . '.csv';
         } else {
             $daily = $this->dailyDelivery($from, $to, $campaignId);
             $csv   = "date,sent,delivered,read,failed,replies\n";
@@ -194,7 +225,7 @@ class Reports extends BaseController
                     $row['replies'],
                 ]) . "\n";
             }
-            $filename = 'delivery_report_' . date('Ymd') . '.csv';
+            $filename = 'delivery_report_' . str_replace('-', '', app_today_ymd()) . '.csv';
         }
 
         return $this->response
@@ -239,16 +270,22 @@ class Reports extends BaseController
      */
     protected function dailyDelivery(string $from, string $to, ?int $campaignId = null): array
     {
-        $start = strtotime($from);
-        $end   = strtotime($to);
-        if ($start === false || $end === false) {
+        try {
+            $start = new \DateTimeImmutable($from, \App\Libraries\AppDateTime::appZone());
+            $end   = new \DateTimeImmutable($to, \App\Libraries\AppDateTime::appZone());
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        if ($end < $start) {
             return [];
         }
 
         $out = [];
-        for ($ts = $start; $ts <= $end; $ts += 86400) {
-            $day   = date('Y-m-d', $ts);
-            $stats = $this->deliveryStats($day . ' 00:00:00', $day . ' 23:59:59', $campaignId);
+        for ($d = $start; $d <= $end; $d = $d->modify('+1 day')) {
+            $day = $d->format('Y-m-d');
+            [$dayStart, $dayEnd] = app_day_bounds_utc($day);
+            $stats = $this->deliveryStats($dayStart, $dayEnd, $campaignId);
             $out[] = array_merge(['date' => $day], $stats);
         }
 

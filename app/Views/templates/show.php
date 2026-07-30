@@ -37,7 +37,7 @@
                     <dt class="col-sm-4 text-muted">Provider ID</dt>
                     <dd class="col-sm-8"><code><?= esc($t['meta_id'] ?? '') ?></code></dd>
                     <dt class="col-sm-4 text-muted">Synced</dt>
-                    <dd class="col-sm-8"><?= esc($t['synced_at'] ?? '—') ?></dd>
+                    <dd class="col-sm-8"><?= esc(format_app_datetime($t['synced_at'] ?? null)) ?></dd>
                 </dl>
             </div>
         </div>
