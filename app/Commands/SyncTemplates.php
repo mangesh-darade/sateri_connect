@@ -34,6 +34,7 @@ class SyncTemplates extends BaseCommand
             $model = model(TemplateModel::class);
             $synced = 0;
             $now    = date('Y-m-d H:i:s');
+            $seen   = [];
 
             foreach ($data as $tpl) {
                 if (! is_array($tpl) || empty($tpl['name'])) {
@@ -48,6 +49,7 @@ class SyncTemplates extends BaseCommand
                 $componentsList = is_array($components) ? $components : [];
                 $parsed = $this->parseComponents($componentsList);
                 $templateType = $this->detectTemplateType($tpl, $componentsList);
+                $seen[] = strtolower(trim($name)) . '|' . strtolower(trim($language));
 
                 $row = [
                     'meta_id'        => $metaId,
@@ -82,7 +84,11 @@ class SyncTemplates extends BaseCommand
                 $synced++;
             }
 
+            $disabled = $model->disableMissingFromSync($seen);
             CLI::write("Synced {$synced} template(s).", 'green');
+            if ($disabled > 0) {
+                CLI::write("Disabled {$disabled} local template(s) not returned by {$provider}.", 'yellow');
+            }
         } catch (Throwable $e) {
             CLI::error('Template sync failed: ' . $e->getMessage());
 

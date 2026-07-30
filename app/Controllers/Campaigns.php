@@ -660,22 +660,18 @@ class Campaigns extends BaseController
             ],
         ];
 
-        if ($mediaUrl !== '') {
+        $headerType = strtolower(trim((string) ($template['header_type'] ?? '')));
+        // Only IMAGE/VIDEO/DOCUMENT headers accept a media link at send time.
+        // TEXT/NONE templates must not get a header component (breaks Cheerio/Meta).
+        if ($mediaUrl !== '' && in_array($headerType, ['image', 'video', 'document'], true)) {
             $payload['header_media_url'] = $mediaUrl;
-            $payload['components'] = [[
-                'type' => 'header',
+            $payload['components']      = [[
+                'type'       => 'header',
                 'parameters' => [[
-                    'type' => strtolower((string) ($template['header_type'] ?? 'image')) ?: 'image',
-                    'image' => ['link' => $mediaUrl],
+                    'type'     => $headerType,
+                    $headerType => ['link' => $mediaUrl],
                 ]],
             ]];
-            // Prefer generic link shape; QueueService/provider may normalize.
-            $headerType = strtolower((string) ($template['header_type'] ?? 'image'));
-            if ($headerType === 'video') {
-                $payload['components'][0]['parameters'][0] = ['type' => 'video', 'video' => ['link' => $mediaUrl]];
-            } elseif ($headerType === 'document') {
-                $payload['components'][0]['parameters'][0] = ['type' => 'document', 'document' => ['link' => $mediaUrl]];
-            }
         }
 
         try {

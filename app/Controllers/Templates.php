@@ -57,6 +57,7 @@ class Templates extends BaseController
             $model  = model(TemplateModel::class);
             $synced = 0;
             $now    = date('Y-m-d H:i:s');
+            $seen   = [];
 
             foreach ($data as $tpl) {
                 if (! is_array($tpl) || empty($tpl['name'])) {
@@ -69,6 +70,7 @@ class Templates extends BaseController
                 $name     = (string) $tpl['name'];
                 $language = (string) ($tpl['language'] ?? 'en');
                 $templateType = $this->detectTemplateTypeFromComponents($tpl, $componentsList);
+                $seen[] = strtolower(trim($name)) . '|' . strtolower(trim($language));
 
                 $row = [
                     'meta_id'        => $metaId !== '' ? $metaId : null,
@@ -103,13 +105,20 @@ class Templates extends BaseController
                 $synced++;
             }
 
-            (new ActivityLogger())->log('sync', 'templates', "Synced {$synced} templates from Cheerio");
-
-            if ($this->request->isAJAX()) {
-                return $this->jsonResponse(true, ['synced' => $synced], "Synced {$synced} template(s).");
+            $disabled = $model->disableMissingFromSync($seen);
+            $provider = service('settingsService')->getWhatsAppProvider();
+            $msg = "Synced {$synced} template(s) from {$provider}.";
+            if ($disabled > 0) {
+                $msg .= " Disabled {$disabled} not returned by provider.";
             }
 
-            return redirect()->to('/templates')->with('success', "Synced {$synced} template(s).");
+            (new ActivityLogger())->log('sync', 'templates', $msg);
+
+            if ($this->request->isAJAX()) {
+                return $this->jsonResponse(true, ['synced' => $synced, 'disabled' => $disabled], $msg);
+            }
+
+            return redirect()->to('/templates')->with('success', $msg);
         } catch (Throwable $e) {
             log_message('error', 'Template sync failed: {msg}', ['msg' => $e->getMessage()]);
 

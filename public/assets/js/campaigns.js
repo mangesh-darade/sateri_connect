@@ -358,13 +358,20 @@
             $('#cwPreviewBody').html('<strong>' + esc(subject) + '</strong><hr class="border-secondary my-2">' + (html || '<em>No HTML</em>'));
             return;
         }
-        $('#cwUploadBox, #cwVarMapWrap').removeClass('d-none');
+        $('#cwVarMapWrap').removeClass('d-none');
         var tpl = state.template || {};
         var needsMedia = !!tpl.needs_media;
-        $('#cwUploadTitle').text(needsMedia ? 'Upload media here' : 'Optional media');
-        $('#cwUploadHint').text(needsMedia
-            ? 'Drag & drop or click — required for this template header (' + (tpl.header_type || 'media') + ')'
-            : 'Drag & drop or click to choose file (optional)');
+        // Media upload only for IMAGE/VIDEO/DOCUMENT headers — TEXT/NONE templates ignore it.
+        $('#cwUploadBox').toggleClass('d-none', !needsMedia);
+        if (!needsMedia) {
+            state.mediaUrl = '';
+            $('#cwMediaUrl').val('');
+            $('#cwMediaFile').val('');
+            $('#cwMediaStatus').addClass('d-none').text('');
+        } else {
+            $('#cwUploadTitle').text('Upload media here');
+            $('#cwUploadHint').text('Drag & drop or click — required for this template header (' + (tpl.header_type || 'media') + ')');
+        }
         renderVariableMap(tpl.variables || []);
         updateWaPreview();
     }
@@ -544,7 +551,9 @@
         if (state.channel === 'whatsapp') {
             payload.template_id = state.templateId;
             payload.variables = collectVariables();
-            payload.header_media_url = String($('#cwMediaUrl').val() || state.mediaUrl || '').trim();
+            if (state.template && state.template.needs_media) {
+                payload.header_media_url = String($('#cwMediaUrl').val() || state.mediaUrl || '').trim();
+            }
         } else {
             payload.subject = String($('#cwEmailSubject').val() || '').trim();
             payload.html_content = String($('#cwEmailHtml').val() || '');

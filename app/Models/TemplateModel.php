@@ -121,4 +121,40 @@ class TemplateModel extends Model
             ->orderBy('name', 'ASC')
             ->findAll();
     }
+
+    /**
+     * After a full provider sync, disable local APPROVED templates that the
+     * active provider did not return (e.g. Meta hello_world after switching to Cheerio).
+     *
+     * @param list<string> $seenKeys Keys of "name|language" returned by the provider
+     *
+     * @return int Number of templates marked DISABLED
+     */
+    public function disableMissingFromSync(array $seenKeys): int
+    {
+        $seen = [];
+        foreach ($seenKeys as $key) {
+            $seen[(string) $key] = true;
+        }
+
+        if ($seen === []) {
+            return 0;
+        }
+
+        $approved = $this->whereIn('status', ['APPROVED', 'approved'])->findAll();
+        $disabled = 0;
+
+        foreach ($approved as $row) {
+            $key = strtolower(trim((string) ($row['name'] ?? ''))) . '|' . strtolower(trim((string) ($row['language'] ?? '')));
+            if ($key === '|' || isset($seen[$key])) {
+                continue;
+            }
+
+            if ($this->update((int) $row['id'], ['status' => 'DISABLED'])) {
+                $disabled++;
+            }
+        }
+
+        return $disabled;
+    }
 }

@@ -405,6 +405,9 @@ class MetaCloudAPI
     }
 
     /**
+     * List all message templates for the WABA (paginated).
+     * Full pagination is required so sync prune does not disable templates beyond page 1.
+     *
      * @return array<string, mixed>
      */
     public function getTemplates(?string $wabaId = null): array
@@ -414,18 +417,38 @@ class MetaCloudAPI
             throw new RuntimeException('Meta WABA ID is required to list templates.');
         }
 
-        $result = $this->request('GET', $waba . '/message_templates', [
-            'limit' => 100,
-        ]);
+        $all    = [];
+        $after  = null;
+        $guard  = 0;
+        $lastRaw = [];
 
-        $data = $result['data'] ?? [];
-        if (! is_array($data)) {
-            $data = [];
-        }
+        do {
+            $query = ['limit' => 100];
+            if (is_string($after) && $after !== '') {
+                $query['after'] = $after;
+            }
+
+            $result = $this->request('GET', $waba . '/message_templates', $query);
+            $lastRaw = $result;
+            $rows    = $result['data'] ?? [];
+            if (is_array($rows)) {
+                foreach ($rows as $row) {
+                    $all[] = $row;
+                }
+            }
+
+            $after = $result['paging']['cursors']['after'] ?? null;
+            if (! is_string($after) || $after === '') {
+                $after = null;
+            }
+            $guard++;
+        } while ($after !== null && $guard < 50);
 
         return [
-            'data'     => $data,
-            'raw'      => $result,
+            'data'     => $all,
+            'raw'      => $lastRaw,
+            'paging'   => ['cursors' => ['after' => null]],
+            'total'    => count($all),
             'provider' => 'meta',
         ];
     }

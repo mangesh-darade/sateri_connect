@@ -41,6 +41,7 @@ class Templates extends BaseApiController
             $model  = model(TemplateModel::class);
             $synced = 0;
             $now    = date('Y-m-d H:i:s');
+            $seen   = [];
 
             foreach ($data as $tpl) {
                 if (! is_array($tpl) || empty($tpl['name'])) {
@@ -51,6 +52,7 @@ class Templates extends BaseApiController
                 $name     = (string) $tpl['name'];
                 $language = (string) ($tpl['language'] ?? 'en');
                 $components = is_array($tpl['components'] ?? null) ? $tpl['components'] : [];
+                $seen[] = strtolower(trim($name)) . '|' . strtolower(trim($language));
 
                 $parsed = $this->parseComponents($components);
 
@@ -83,7 +85,12 @@ class Templates extends BaseApiController
                 $synced++;
             }
 
-            return $this->respondSuccess(['synced' => $synced], "Synced {$synced} template(s).");
+            $disabled = $model->disableMissingFromSync($seen);
+
+            return $this->respondSuccess(
+                ['synced' => $synced, 'disabled' => $disabled],
+                "Synced {$synced} template(s)." . ($disabled > 0 ? " Disabled {$disabled} not on provider." : '')
+            );
         } catch (Throwable $e) {
             return $this->respondError($e->getMessage(), [], 500);
         }
