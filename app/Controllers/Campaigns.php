@@ -996,6 +996,9 @@ class Campaigns extends BaseController
         if (($channel === '' || $channel === 'email' || $channel === 'all') && db_connect()->tableExists('email_html_campaigns')) {
             $em = model(EmailHtmlCampaignModel::class)->orderBy('id', 'DESC')->findAll(200);
             foreach ($em as $c) {
+                if (! is_array($c) || ! isset($c['id'])) {
+                    continue;
+                }
                 $rows[] = [
                     'id'            => (int) $c['id'],
                     'channel'       => 'email',

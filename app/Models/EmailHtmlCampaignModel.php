@@ -70,9 +70,19 @@ class EmailHtmlCampaignModel extends Model
             }
         };
 
-        if (isset($data['data'][0]) && is_array($data['data'][0])) {
+        // Empty findAll() returns [] — do not treat it as a single row (would invent a fake row without id).
+        if ($data['data'] === [] || $data['data'] === null) {
+            return $data;
+        }
+
+        $isCollection = array_is_list($data['data'])
+            && (isset($data['data'][0]) ? is_array($data['data'][0]) : false);
+
+        if ($isCollection) {
             foreach ($data['data'] as &$row) {
-                $decode($row);
+                if (is_array($row)) {
+                    $decode($row);
+                }
             }
             unset($row);
         } elseif (is_array($data['data'])) {
