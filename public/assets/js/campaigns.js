@@ -363,13 +363,22 @@
         $('#cwVarMapWrap').removeClass('d-none');
         var tpl = state.template || {};
         var needsMedia = !!tpl.needs_media;
-        // Media upload only for IMAGE/VIDEO/DOCUMENT headers — TEXT/NONE templates ignore it.
-        $('#cwUploadBox').toggleClass('d-none', !needsMedia);
-        if (!needsMedia) {
+        var mediaOptional = !!tpl.media_optional;
+        var showMedia = needsMedia || mediaOptional;
+        // IMAGE/VIDEO/DOCUMENT: show upload. If approved sample exists, upload is optional.
+        $('#cwUploadBox').toggleClass('d-none', !showMedia);
+        $('#cwMediaCol').toggleClass('d-none', !showMedia);
+        if (!showMedia) {
             state.mediaUrl = '';
+            state.mediaId = '';
+            state.mediaMime = '';
             $('#cwMediaUrl').val('');
             $('#cwMediaFile').val('');
             $('#cwMediaStatus').addClass('d-none').text('');
+        } else if (mediaOptional) {
+            $('#cwUploadTitle').text('Replace header media (optional)');
+            $('#cwUploadHint').text('Approved template already has ' + (tpl.header_type || 'media')
+                + ' sample. Leave empty to use that sample, or upload to override.');
         } else {
             $('#cwUploadTitle').text('Upload media here');
             $('#cwUploadHint').text('Drag & drop or click — required for this template header (' + (tpl.header_type || 'media') + ')');
@@ -386,6 +395,8 @@
         var html = '';
         if (media) {
             html += '<div class="mb-2 small text-info">[Media attached]</div>';
+        } else if (tpl.has_sample_media || tpl.media_optional) {
+            html += '<div class="mb-2 small text-muted">[Using approved template sample media]</div>';
         }
         html += esc(body).replace(/\n/g, '<br>');
         if (footer) {
@@ -467,9 +478,9 @@
             return true;
         }
         if (step === 4) {
-            if (state.channel === 'whatsapp' && state.template && state.template.needs_media) {
+            if (state.channel === 'whatsapp' && state.template && state.template.needs_media && !state.template.has_sample_media) {
                 var url = String($('#cwMediaUrl').val() || state.mediaUrl || '').trim();
-                if (isBadMediaUrl(url)) {
+                if (isBadMediaUrl(url) && !state.mediaId) {
                     $('#cwMediaUrl').addClass('is-invalid');
                     $('#cwMediaUrlError').removeClass('d-none');
                     return showWizardError('Upload or paste a valid media URL for this template header.', $('#cwMediaUrl'));
@@ -561,6 +572,18 @@
                 if (state.mediaMime) {
                     payload.header_media_mime = String(state.mediaMime).trim();
                 }
+            } else if (state.template && state.template.media_optional) {
+                var overrideUrl = String($('#cwMediaUrl').val() || state.mediaUrl || '').trim();
+                if (overrideUrl || state.mediaId) {
+                    payload.header_media_url = overrideUrl;
+                    if (state.mediaId) {
+                        payload.header_media_id = String(state.mediaId).trim();
+                    }
+                    if (state.mediaMime) {
+                        payload.header_media_mime = String(state.mediaMime).trim();
+                    }
+                }
+                // No override → send uses approved template sample automatically.
             }
         } else {
             payload.subject = String($('#cwEmailSubject').val() || '').trim();

@@ -428,19 +428,25 @@ class Campaigns extends BaseController
         $templateCards = [];
         foreach ($templates as $tpl) {
             $headerType = strtolower((string) ($tpl['header_type'] ?? 'none'));
-            $needsMedia = in_array($headerType, ['image', 'video', 'document'], true);
+            $isMediaHeader = in_array($headerType, ['image', 'video', 'document'], true);
+            $sampleMedia = trim((string) ($tpl['header_content'] ?? $tpl['header'] ?? ''));
+            $hasSampleMedia = $isMediaHeader && $sampleMedia !== '';
+            // Re-upload only required when the approved template has no usable sample media.
+            $needsMedia = $isMediaHeader && ! $hasSampleMedia;
             $templateCards[] = [
-                'id'          => (int) $tpl['id'],
-                'name'        => (string) ($tpl['name'] ?? ''),
-                'language'    => (string) ($tpl['language'] ?? 'en_US'),
-                'category'    => strtoupper((string) ($tpl['category'] ?? '')),
-                'status'      => strtoupper((string) ($tpl['status'] ?? '')),
-                'body'        => (string) ($tpl['body'] ?? ''),
-                'footer'      => (string) ($tpl['footer'] ?? ''),
-                'header_type' => $headerType !== '' ? $headerType : 'none',
-                'header'      => (string) ($tpl['header_content'] ?? $tpl['header'] ?? ''),
-                'needs_media' => $needsMedia,
-                'variables'   => $this->normalizeTemplateVariables($tpl['variables'] ?? null, (string) ($tpl['body'] ?? '')),
+                'id'               => (int) $tpl['id'],
+                'name'             => (string) ($tpl['name'] ?? ''),
+                'language'         => (string) ($tpl['language'] ?? 'en_US'),
+                'category'         => strtoupper((string) ($tpl['category'] ?? '')),
+                'status'           => strtoupper((string) ($tpl['status'] ?? '')),
+                'body'             => (string) ($tpl['body'] ?? ''),
+                'footer'           => (string) ($tpl['footer'] ?? ''),
+                'header_type'      => $headerType !== '' ? $headerType : 'none',
+                'header'           => $sampleMedia,
+                'has_sample_media' => $hasSampleMedia,
+                'needs_media'      => $needsMedia,
+                'media_optional'   => $isMediaHeader && $hasSampleMedia,
+                'variables'        => $this->normalizeTemplateVariables($tpl['variables'] ?? null, (string) ($tpl['body'] ?? '')),
             ];
         }
 
