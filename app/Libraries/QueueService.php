@@ -142,6 +142,7 @@ class QueueService
                     if (method_exists($this->campaigns, 'updateStats')) {
                         $this->campaigns->updateStats((int) $item['campaign_id']);
                     }
+                    service('campaignService')->completeIfFinished((int) $item['campaign_id']);
                 }
 
                 log_message('error', 'Queue item {id} failed: {msg}', [
@@ -404,6 +405,8 @@ class QueueService
         if (method_exists($this->campaigns, 'updateStats')) {
             $this->campaigns->updateStats($campaignId);
         }
+
+        service('campaignService')->completeIfFinished($campaignId);
     }
 
     protected function updateCampaignContactStatus(

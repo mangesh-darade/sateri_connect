@@ -386,8 +386,22 @@
             $('#cwMediaUrlError').addClass('d-none');
             $('#cwMediaUrl').removeClass('is-invalid');
             $('#cwUploadTitle').text('Replace header media (optional)');
-            $('#cwUploadHint').text('Approved template already has ' + (tpl.header_type || 'media')
+            $('#cwUploadHint').text('Approved template already has a reusable ' + (tpl.header_type || 'media')
                 + ' sample. Leave empty to use that sample, or upload to override.');
+        } else if (needsMedia) {
+            state.mediaUrl = '';
+            state.mediaId = '';
+            state.mediaMime = '';
+            $('#cwMediaUrl').val('');
+            $('#cwMediaFile').val('');
+            $('#cwMediaStatus').addClass('d-none').text('');
+            $('#cwUploadTitle').text('Upload ' + String(tpl.header_type || 'media').toUpperCase() + ' file');
+            var why = tpl.has_sample_media
+                ? 'Meta approval sample cannot be reused at send time. Upload the '
+                    + String(tpl.header_type || 'media').toUpperCase()
+                    + ' again (PDF for document, MP4 for video, image for image).'
+                : 'Required for this template header (' + (tpl.header_type || 'media') + ')';
+            $('#cwUploadHint').text(why);
         } else {
             $('#cwUploadTitle').text('Upload media here');
             $('#cwUploadHint').text('Drag & drop or click — required for this template header (' + (tpl.header_type || 'media') + ')');

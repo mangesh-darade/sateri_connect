@@ -5,7 +5,6 @@ namespace App\Commands;
 use App\Libraries\CampaignService;
 use App\Libraries\EmailCampaignService;
 use App\Libraries\QueueService;
-use App\Models\CampaignModel;
 use CodeIgniter\CLI\BaseCommand;
 use CodeIgniter\CLI\CLI;
 use Throwable;
@@ -34,21 +33,9 @@ class ProcessCampaigns extends BaseCommand
                 CLI::write("Processed {$emailStarted} scheduled email campaign(s).", 'green');
             }
 
-            // Mark completed campaigns that have no remaining pending/processing items
-            $running = model(CampaignModel::class)->where('status', 'running')->findAll();
-            foreach ($running as $campaign) {
-                $remaining = db_connect()->table('message_queue')
-                    ->where('campaign_id', (int) $campaign['id'])
-                    ->whereIn('status', ['pending', 'processing'])
-                    ->countAllResults();
-
-                if ($remaining === 0) {
-                    model(CampaignModel::class)->update((int) $campaign['id'], [
-                        'status'       => 'completed',
-                        'completed_at' => date('Y-m-d H:i:s'),
-                    ]);
-                    CLI::write('Campaign #' . $campaign['id'] . ' marked completed.', 'green');
-                }
+            $completed = $campaignService->completeFinishedCampaigns();
+            if ($completed > 0) {
+                CLI::write("Marked {$completed} campaign(s) completed.", 'green');
             }
 
             $stats = (new QueueService())->processBatch($queueLimit);
@@ -58,6 +45,11 @@ class ProcessCampaigns extends BaseCommand
                 $stats['sent'],
                 $stats['failed']
             ), 'yellow');
+
+            $completedAfter = $campaignService->completeFinishedCampaigns();
+            if ($completedAfter > 0) {
+                CLI::write("Marked {$completedAfter} campaign(s) completed after queue.", 'green');
+            }
         } catch (Throwable $e) {
             CLI::error('Campaign processing failed: ' . $e->getMessage());
 

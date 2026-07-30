@@ -149,12 +149,128 @@ class CampaignService
                 ]);
                 $queued['flush_error'] = $e->getMessage();
             }
+
+            // Do not leave the campaign "Running" with retrying pending rows after Send now.
+            $this->failRemainingCampaignQueue(
+                $campaignId,
+                'Send failed during campaign start (not retried automatically).'
+            );
         }
+
+        if (method_exists($this->campaigns, 'updateStats')) {
+            $this->campaigns->updateStats($campaignId);
+        }
+
+        $queued['completed'] = $this->completeIfFinished($campaignId);
+        $fresh = $this->campaigns->find($campaignId);
+        $queued['status'] = (string) ($fresh['status'] ?? 'running');
+        if ($queued['status'] === 'completed') {
+            $queued['completed'] = true;
+        }
+        $queued['sent']   = (int) ($fresh['sent_count'] ?? ($queued['sent'] ?? 0));
+        $queued['failed'] = (int) ($fresh['failed_count'] ?? ($queued['failed'] ?? 0));
 
         // Fire "Campaign Sent" automations for each audience contact (capped for safety).
         $this->fireCampaignSentTriggers($campaignId, $contactIds, $tagIds, $allActive);
 
         return $queued;
+    }
+
+    /**
+     * After an interactive Send now flush, convert leftover pending rows to failed
+     * so the campaign can move to completed instead of sitting in Running.
+     */
+    protected function failRemainingCampaignQueue(int $campaignId, string $error): void
+    {
+        $db = db_connect();
+        $pending = $db->table('message_queue')
+            ->where('campaign_id', $campaignId)
+            ->whereIn('status', ['pending', 'processing'])
+            ->get()
+            ->getResultArray();
+
+        foreach ($pending as $row) {
+            $db->table('message_queue')->where('id', (int) $row['id'])->update([
+                'status'        => 'failed',
+                'error_message' => $error . (trim((string) ($row['error_message'] ?? '')) !== ''
+                    ? (' Previous: ' . $row['error_message'])
+                    : ''),
+                'processed_at'  => date('Y-m-d H:i:s'),
+                'updated_at'    => date('Y-m-d H:i:s'),
+            ]);
+
+            $contactId = (int) ($row['contact_id'] ?? 0);
+            if ($contactId > 0) {
+                $cc = $this->campaignContacts
+                    ->where('campaign_id', $campaignId)
+                    ->where('contact_id', $contactId)
+                    ->first();
+                if (is_array($cc) && in_array((string) ($cc['status'] ?? ''), ['queued', 'pending', 'processing'], true)) {
+                    $this->campaignContacts->update((int) $cc['id'], [
+                        'status'        => 'failed',
+                        'error_message' => $error,
+                    ]);
+                }
+            }
+        }
+    }
+
+    /**
+     * Mark a running campaign completed when no queue work remains.
+     */
+    public function completeIfFinished(int $campaignId): bool
+    {
+        $campaign = $this->campaigns->find($campaignId);
+        if ($campaign === null || (string) ($campaign['status'] ?? '') !== 'running') {
+            return false;
+        }
+
+        $remaining = db_connect()->table('message_queue')
+            ->where('campaign_id', $campaignId)
+            ->whereIn('status', ['pending', 'processing'])
+            ->countAllResults();
+
+        if ($remaining > 0) {
+            return false;
+        }
+
+        // Still running with zero recipients queued → keep running only if nothing was attempted.
+        $total = (int) ($campaign['total_contacts'] ?? 0);
+        if ($total <= 0) {
+            $total = db_connect()->table('campaign_contacts')
+                ->where('campaign_id', $campaignId)
+                ->countAllResults();
+        }
+        if ($total <= 0) {
+            return false;
+        }
+
+        if (method_exists($this->campaigns, 'updateStats')) {
+            $this->campaigns->updateStats($campaignId);
+        }
+
+        return (bool) $this->campaigns->update($campaignId, [
+            'status'       => 'completed',
+            'completed_at' => date('Y-m-d H:i:s'),
+        ]);
+    }
+
+    /**
+     * Complete every running campaign that has drained its queue.
+     *
+     * @return int Number marked completed
+     */
+    public function completeFinishedCampaigns(): int
+    {
+        $done = 0;
+        $running = $this->campaigns->where('status', 'running')->findAll();
+        foreach ($running as $campaign) {
+            if ($this->completeIfFinished((int) $campaign['id'])) {
+                $done++;
+            }
+        }
+
+        return $done;
     }
 
     /**

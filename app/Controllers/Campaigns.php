@@ -430,9 +430,9 @@ class Campaigns extends BaseController
             $headerType = strtolower((string) ($tpl['header_type'] ?? 'none'));
             $isMediaHeader = in_array($headerType, ['image', 'video', 'document'], true);
             $sampleMedia = trim((string) ($tpl['header_content'] ?? $tpl['header'] ?? ''));
-            $hasSampleMedia = $isMediaHeader && $sampleMedia !== '';
-            // Re-upload only required when the approved template has no usable sample media.
-            $needsMedia = $isMediaHeader && ! $hasSampleMedia;
+            // Meta/WhatsApp approval samples (scontent.whatsapp.net) are often not reusable at send time.
+            $hasReusableSample = $isMediaHeader && $this->isReusableTemplateSampleMedia($sampleMedia);
+            $needsMedia = $isMediaHeader && ! $hasReusableSample;
             $templateCards[] = [
                 'id'               => (int) $tpl['id'],
                 'name'             => (string) ($tpl['name'] ?? ''),
@@ -443,9 +443,10 @@ class Campaigns extends BaseController
                 'footer'           => (string) ($tpl['footer'] ?? ''),
                 'header_type'      => $headerType !== '' ? $headerType : 'none',
                 'header'           => $sampleMedia,
-                'has_sample_media' => $hasSampleMedia,
+                'has_sample_media' => $sampleMedia !== '' && $isMediaHeader,
+                'has_reusable_sample' => $hasReusableSample,
                 'needs_media'      => $needsMedia,
-                'media_optional'   => $isMediaHeader && $hasSampleMedia,
+                'media_optional'   => $isMediaHeader && $hasReusableSample,
                 'variables'        => $this->normalizeTemplateVariables($tpl['variables'] ?? null, (string) ($tpl['body'] ?? '')),
             ];
         }
@@ -963,18 +964,21 @@ class Campaigns extends BaseController
             $result = service('campaignService')->start($id, $contactIds, $tagIds, false);
 
             return $this->jsonResponse(true, [
-                'id'       => $id,
-                'channel'  => 'whatsapp',
-                'status'   => 'running',
-                'queued'   => $result['queued'] ?? 0,
-                'sent'     => $result['sent'] ?? 0,
-                'failed'   => $result['failed'] ?? 0,
-                'contacts' => $result['contacts'] ?? 0,
-                'redirect' => site_url('campaigns/' . $id),
-            ], 'Campaign started. Sent ' . (int) ($result['sent'] ?? 0)
-                . ' / queued ' . (int) ($result['queued'] ?? 0)
-                . (! empty($result['failed']) ? (', failed ' . (int) $result['failed']) : '')
-                . '.');
+                'id'        => $id,
+                'channel'   => 'whatsapp',
+                'status'    => (string) ($result['status'] ?? 'running'),
+                'queued'    => $result['queued'] ?? 0,
+                'sent'      => $result['sent'] ?? 0,
+                'failed'    => $result['failed'] ?? 0,
+                'completed' => ! empty($result['completed']),
+                'contacts'  => $result['contacts'] ?? 0,
+                'redirect'  => site_url('campaigns/' . $id),
+            ], ! empty($result['completed'])
+                ? ('Campaign completed. Sent ' . (int) ($result['sent'] ?? 0) . '.')
+                : ('Campaign started. Sent ' . (int) ($result['sent'] ?? 0)
+                    . ' / queued ' . (int) ($result['queued'] ?? 0)
+                    . (! empty($result['failed']) ? (', failed ' . (int) $result['failed']) : '')
+                    . '.'));
         } catch (Throwable $e) {
             return $this->jsonResponse(false, null, $e->getMessage(), [], 400);
         }
@@ -1410,6 +1414,37 @@ class Campaigns extends BaseController
             || $host === 'localhost'
             || $host === '127.0.0.1'
             || str_ends_with($host, '.local');
+    }
+
+    /**
+     * Approval-sample URLs from Meta CDN/localhost cannot be relied on at send time.
+     * Only stable public HTTPS samples (or empty → force upload) are treated as reusable.
+     */
+    protected function isReusableTemplateSampleMedia(string $sample): bool
+    {
+        $sample = trim($sample);
+        if ($sample === '' || ! filter_var($sample, FILTER_VALIDATE_URL)) {
+            return false;
+        }
+        if ($this->isLocalMediaUrl($sample)) {
+            return false;
+        }
+
+        $host = strtolower((string) (parse_url($sample, PHP_URL_HOST) ?: ''));
+        if ($host === '') {
+            return false;
+        }
+
+        // Meta template example handles expire / are not fetchable by Cheerio send.
+        foreach (['whatsapp.net', 'fbcdn.net', 'facebook.com', 'scontent.'] as $blocked) {
+            if (str_contains($host, $blocked)) {
+                return false;
+            }
+        }
+
+        $scheme = strtolower((string) (parse_url($sample, PHP_URL_SCHEME) ?: ''));
+
+        return $scheme === 'https';
     }
 
     protected function okOrRedirect(string $url, string $message): ResponseInterface
