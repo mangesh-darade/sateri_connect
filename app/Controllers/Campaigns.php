@@ -673,9 +673,25 @@ class Campaigns extends BaseController
         ];
 
         $headerType = strtolower(trim((string) ($template['header_type'] ?? '')));
+        $isMediaHeader = in_array($headerType, ['image', 'video', 'document'], true);
+        $sampleMedia = trim((string) ($template['header_content'] ?? $template['header'] ?? ''));
+        $needsUpload = $isMediaHeader && ! $this->isReusableTemplateSampleMedia($sampleMedia);
+
+        // Block drafts that would fail at send (Meta CDN samples are not reusable).
+        if ($needsUpload && $mediaUrl === '' && $mediaId === '') {
+            return $this->jsonResponse(
+                false,
+                null,
+                'Template "' . ($template['name'] ?? '') . '" requires a '
+                . strtoupper($headerType) . ' header upload. The Meta approval sample cannot be reused at send time.',
+                [],
+                422
+            );
+        }
+
         // Only IMAGE/VIDEO/DOCUMENT headers accept a media link at send time.
         // TEXT/NONE templates must not get a header component (breaks Cheerio/Meta).
-        if (($mediaUrl !== '' || $mediaId !== '') && in_array($headerType, ['image', 'video', 'document'], true)) {
+        if (($mediaUrl !== '' || $mediaId !== '') && $isMediaHeader) {
             if ($mediaId === '' && $mediaUrl !== '') {
                 $resolved = $this->resolveCampaignHeaderMedia($mediaUrl);
                 $mediaId   = (string) ($resolved['wa_media_id'] ?? '');

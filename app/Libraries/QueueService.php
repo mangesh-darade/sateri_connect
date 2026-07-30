@@ -116,7 +116,8 @@ class QueueService
                 $this->updateCampaignOnSuccess($item, $waId);
                 $stats['sent']++;
             } catch (Throwable $e) {
-                $attempts = ((int) ($item['attempts'] ?? 0));
+                // Count this attempt before deciding retry vs final failure.
+                $attempts = ((int) ($item['attempts'] ?? 0)) + 1;
                 $max      = (int) ($item['max_attempts'] ?? 3);
                 $status   = $attempts >= $max ? 'failed' : 'pending';
 
@@ -131,14 +132,18 @@ class QueueService
                     ]);
                 }
 
-                if ($status === 'failed' && ! empty($item['campaign_id'])) {
+                // Always surface the real send error on the campaign recipient row.
+                if (! empty($item['campaign_id'])) {
                     $this->updateCampaignContactStatus(
                         (int) $item['campaign_id'],
                         (int) $item['contact_id'],
-                        'failed',
+                        $status === 'failed' ? 'failed' : 'queued',
                         null,
                         $e->getMessage()
                     );
+                }
+
+                if ($status === 'failed' && ! empty($item['campaign_id'])) {
                     if (method_exists($this->campaigns, 'updateStats')) {
                         $this->campaigns->updateStats((int) $item['campaign_id']);
                     }

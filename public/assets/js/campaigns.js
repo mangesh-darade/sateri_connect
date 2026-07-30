@@ -503,12 +503,17 @@
             return true;
         }
         if (step === 4) {
-            if (state.channel === 'whatsapp' && state.template && state.template.needs_media && !state.template.has_sample_media) {
+            // needs_media already means Meta sample is not reusable — require upload even if has_sample_media.
+            if (state.channel === 'whatsapp' && state.template && state.template.needs_media) {
                 var url = String($('#cwMediaUrl').val() || state.mediaUrl || '').trim();
                 if (isBadMediaUrl(url) && !state.mediaId) {
                     $('#cwMediaUrl').addClass('is-invalid');
                     $('#cwMediaUrlError').removeClass('d-none');
-                    return showWizardError('Upload or paste a valid media URL for this template header.', $('#cwMediaUrl'));
+                    var ht = String(state.template.header_type || 'media').toUpperCase();
+                    return showWizardError(
+                        'Upload a ' + ht + ' file for this template. The Meta approval sample cannot be reused at send time.',
+                        $('#cwMediaUrl')
+                    );
                 }
                 state.mediaUrl = url;
             }

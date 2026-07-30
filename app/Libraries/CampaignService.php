@@ -190,11 +190,18 @@ class CampaignService
             ->getResultArray();
 
         foreach ($pending as $row) {
+            $previous = trim((string) ($row['error_message'] ?? ''));
+            // Prefer the real provider/validation error over the generic flush message.
+            $fullError = $previous !== '' ? $previous : $error;
+            if ($previous !== '' && ! str_contains($previous, 'campaign start')) {
+                $fullError = $previous;
+            } elseif ($previous !== '') {
+                $fullError = $error . ' Previous: ' . $previous;
+            }
+
             $db->table('message_queue')->where('id', (int) $row['id'])->update([
                 'status'        => 'failed',
-                'error_message' => $error . (trim((string) ($row['error_message'] ?? '')) !== ''
-                    ? (' Previous: ' . $row['error_message'])
-                    : ''),
+                'error_message' => $fullError,
                 'processed_at'  => date('Y-m-d H:i:s'),
                 'updated_at'    => date('Y-m-d H:i:s'),
             ]);
@@ -208,7 +215,7 @@ class CampaignService
                 if (is_array($cc) && in_array((string) ($cc['status'] ?? ''), ['queued', 'pending', 'processing'], true)) {
                     $this->campaignContacts->update((int) $cc['id'], [
                         'status'        => 'failed',
-                        'error_message' => $error,
+                        'error_message' => $fullError,
                     ]);
                 }
             }
