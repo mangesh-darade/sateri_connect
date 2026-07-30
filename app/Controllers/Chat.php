@@ -907,6 +907,17 @@ class Chat extends BaseController
                     continue;
                 }
 
+                // Skip Meta-era outbound rows — Cheerio status API 404s on foreign wamids.
+                $payload = $row['payload'] ?? null;
+                if (is_string($payload)) {
+                    $decoded = json_decode($payload, true);
+                    $payload = is_array($decoded) ? $decoded : null;
+                }
+                if (is_array($payload) && ! array_key_exists('flag', $payload) && empty($payload['provider'])) {
+                    // Meta Cloud send payloads are flat (contacts/messages only).
+                    continue;
+                }
+
                 try {
                     $driver = $api->getDriver();
                     if (! method_exists($driver, 'resolveDeliveryStatus')) {
@@ -929,8 +940,13 @@ class Chat extends BaseController
                 $oldRank = $rank[$old] ?? 0;
                 $newRank = $rank[$newStatus] ?? 0;
 
-                // Allow failed anytime; otherwise only upgrade
-                if ($newStatus !== 'failed' && $newRank <= $oldRank) {
+                // Only upgrade ticks (sent → delivered → read). Never apply Cheerio "failed"
+                // from status poll when the message was already accepted (false failedAt races).
+                // Real delivery failures still arrive via webhook with error details.
+                if ($newStatus === 'failed') {
+                    continue;
+                }
+                if ($newRank <= $oldRank) {
                     continue;
                 }
 

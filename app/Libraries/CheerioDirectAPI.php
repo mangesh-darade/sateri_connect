@@ -1065,6 +1065,9 @@ class CheerioDirectAPI
 
     /**
      * Map Cheerio status API response → local status (sent|delivered|read|failed).
+     *
+     * Cheerio sometimes returns a stale failedAt that is earlier than sentAt (race on their side).
+     * Always pick the chronologically latest timestamp; on ties prefer the higher delivery rank.
      */
     public function normalizeMessageStatus(array $response): ?string
     {
@@ -1072,23 +1075,56 @@ class CheerioDirectAPI
         $times = is_array($data['status_updatedAt'] ?? null) ? $data['status_updatedAt'] : [];
 
         if ($times !== []) {
-            if (! empty($times['failedAt'])) {
-                return 'failed';
+            // Higher rank wins on equal timestamps.
+            $candidates = [
+                'failedAt'   => ['status' => 'failed', 'rank' => 1],
+                'queueAt'    => ['status' => 'sent', 'rank' => 2],
+                'sentAt'     => ['status' => 'sent', 'rank' => 3],
+                'deliveryAt' => ['status' => 'delivered', 'rank' => 4],
+                'readAt'     => ['status' => 'read', 'rank' => 5],
+            ];
+
+            $bestStatus = null;
+            $bestTs     = null;
+            $bestRank   = -1;
+
+            foreach ($candidates as $key => $meta) {
+                $raw = $times[$key] ?? null;
+                if ($raw === null || $raw === '' || $raw === false) {
+                    continue;
+                }
+                $ts = strtotime((string) $raw);
+                if ($ts === false) {
+                    continue;
+                }
+                if (
+                    $bestTs === null
+                    || $ts > $bestTs
+                    || ($ts === $bestTs && $meta['rank'] > $bestRank)
+                ) {
+                    $bestTs     = $ts;
+                    $bestRank   = $meta['rank'];
+                    $bestStatus = $meta['status'];
+                }
             }
-            if (! empty($times['readAt'])) {
-                return 'read';
-            }
-            if (! empty($times['deliveryAt'])) {
-                return 'delivered';
-            }
-            if (! empty($times['sentAt']) || ! empty($times['queueAt'])) {
-                return 'sent';
+
+            if ($bestStatus !== null) {
+                return $bestStatus;
             }
         }
 
-        $raw = strtolower((string) ($data['status'] ?? $response['status'] ?? ''));
+        $raw = strtolower((string) ($data['status'] ?? ''));
         if (in_array($raw, ['sent', 'delivered', 'read', 'failed'], true)) {
             return $raw;
+        }
+
+        // Do not treat HTTP/wrapper numeric status (e.g. 200) as a delivery state.
+        $wrapper = $response['status'] ?? null;
+        if (is_string($wrapper)) {
+            $wrapper = strtolower($wrapper);
+            if (in_array($wrapper, ['sent', 'delivered', 'read', 'failed'], true)) {
+                return $wrapper;
+            }
         }
 
         return null;
