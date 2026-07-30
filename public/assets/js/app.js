@@ -333,6 +333,55 @@
             document.title = LiveNotif.titleBase;
             LiveNotif.stopTitleFlash();
         }
+        LiveNotif.setInboxBadges(count);
+    };
+
+    /** Sidebar Team Inbox + mobile Inbox badge (no page refresh). */
+    LiveNotif.setInboxBadges = function (count) {
+        count = parseInt(count, 10) || 0;
+        var label = count > 99 ? '99+' : String(count);
+
+        var $menuLabel = $('.app-sidebar-item[data-menu-label="team inbox"] .elint-menu-label');
+        if ($menuLabel.length) {
+            var $menuBadge = $menuLabel.siblings('.elint-menu-badge');
+            if (count > 0) {
+                if (!$menuBadge.length) {
+                    $menuBadge = $('<span class="elint-menu-badge" data-live-badge="inbox"></span>');
+                    $menuLabel.after($menuBadge);
+                }
+                $menuBadge.attr('data-live-badge', 'inbox').text(label);
+            } else {
+                $menuBadge.remove();
+            }
+        }
+
+        var $mobileLink = $('.mobile-bottom-nav a[href*="chat"]').first();
+        if ($mobileLink.length) {
+            var $wrap = $mobileLink.find('.mobile-bottom-nav__icon-wrap');
+            if (!$wrap.length) {
+                $wrap = $mobileLink;
+            }
+            var $mobBadge = $wrap.find('.mobile-bottom-nav__badge');
+            if (count > 0) {
+                if (!$mobBadge.length) {
+                    $mobBadge = $('<span class="mobile-bottom-nav__badge" data-live-badge="inbox"></span>');
+                    $wrap.append($mobBadge);
+                }
+                $mobBadge.attr('data-live-badge', 'inbox').text(label);
+            } else {
+                $mobBadge.remove();
+            }
+        }
+    };
+
+    /** Apply unread count returned from chat mark-read (immediate, no wait for poll). */
+    LiveNotif.applyUnreadFromServer = function (count) {
+        if (typeof count === 'undefined' || count === null) {
+            LiveNotif.poll();
+            return;
+        }
+        LiveNotif.setBadge(count);
+        LiveNotif.poll();
     };
 
     LiveNotif.playBeep = function () {
@@ -534,8 +583,21 @@
 
         $(document).on('click', '#navNotifList .nav-notif-item', function () {
             var id = parseInt($(this).attr('data-id'), 10) || 0;
+            var $item = $(this);
             if (id > 0) {
-                APP.post((APP.baseUrl || '') + '/notifications/' + id + '/read', {}).fail(function () {});
+                // Optimistic: drop count immediately (no refresh)
+                var cur = parseInt($('#navNotifBadge').text(), 10) || 0;
+                if (!$('#navNotifBadge').hasClass('d-none') && cur > 0) {
+                    LiveNotif.setBadge(cur - 1);
+                }
+                $item.next('.dropdown-divider').remove();
+                $item.remove();
+                if (!$('#navNotifList .nav-notif-item').length) {
+                    LiveNotif.renderList([]);
+                }
+                APP.post((APP.baseUrl || '') + '/notifications/' + id + '/read', {}).done(function () {
+                    LiveNotif.poll();
+                }).fail(function () {});
             }
         });
     };

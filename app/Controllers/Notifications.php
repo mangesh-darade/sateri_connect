@@ -24,10 +24,7 @@ class Notifications extends BaseController
 
         $model  = model(NotificationModel::class);
         $unread = $model->getUnreadForUser($uid, $limit);
-        $count  = (int) model(NotificationModel::class)
-            ->where('user_id', $uid)
-            ->where('is_read', 0)
-            ->countAllResults();
+        $count  = $model->countUnreadForUser($uid);
 
         $fresh = [];
         if ($sinceId > 0) {

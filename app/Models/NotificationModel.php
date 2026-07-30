@@ -69,6 +69,61 @@ class NotificationModel extends Model
     }
 
     /**
+     * Mark unread chat notifications for a contact as read (link contains contact_id=N).
+     *
+     * @return int Number of rows marked read
+     */
+    public function markChatNotificationsReadForContact(int $userId, int $contactId): int
+    {
+        if ($userId <= 0 || $contactId <= 0) {
+            return 0;
+        }
+
+        $rows = $this->where('user_id', $userId)
+            ->where('is_read', 0)
+            ->groupStart()
+                ->where('type', 'chat')
+                ->orLike('link', 'chat?', 'after')
+                ->orLike('link', '/chat?', 'both')
+            ->groupEnd()
+            ->findAll(200);
+
+        $ids = [];
+        $needle = 'contact_id=' . $contactId;
+        foreach ($rows as $row) {
+            $link = (string) ($row['link'] ?? '');
+            if ($link === '' || ! str_contains($link, $needle)) {
+                continue;
+            }
+            // Avoid contact_id=12 matching contact_id=123
+            if (preg_match('/(?:[?&])contact_id=' . preg_quote((string) $contactId, '/') . '(?:&|$)/', $link) !== 1) {
+                continue;
+            }
+            $ids[] = (int) ($row['id'] ?? 0);
+        }
+
+        $ids = array_values(array_filter($ids));
+        if ($ids === []) {
+            return 0;
+        }
+
+        $this->whereIn('id', $ids)->set(['is_read' => 1])->update();
+
+        return count($ids);
+    }
+
+    public function countUnreadForUser(int $userId): int
+    {
+        if ($userId <= 0) {
+            return 0;
+        }
+
+        return (int) $this->where('user_id', $userId)
+            ->where('is_read', 0)
+            ->countAllResults();
+    }
+
+    /**
      * Create an unread notification for a user.
      *
      * @return int|false Insert id

@@ -401,6 +401,10 @@
                     '</div>';
             } else {
                 list.forEach(function (c) {
+                    // Open thread: never show unread on the active conversation
+                    if (String(c.contact_id) === String(Chat.contactId)) {
+                        c.unread_count = 0;
+                    }
                     unreadTotal += c.unread_count > 0 ? c.unread_count : 0;
                     var active = String(c.contact_id) === String(Chat.contactId) ? ' active' : '';
                     var hasUnread = c.unread_count > 0;
@@ -452,6 +456,57 @@
         });
     };
 
+    Chat.clearConversationUnreadUi = function (contactId) {
+        var id = String(contactId || '');
+        if (!id) return;
+        var cleared = 0;
+        var $item = $('#chatConvList .chat-conv-item[data-contact-id="' + id + '"]');
+        if ($item.length) {
+            var $badge = $item.find('.chat-unread');
+            if ($badge.length) {
+                cleared = parseInt($badge.text(), 10) || 0;
+                $badge.remove();
+            }
+            $item.removeClass('has-unread');
+            $item.find('.chat-flag-new').remove();
+        }
+        if (Array.isArray(Chat.currentConversations)) {
+            Chat.currentConversations.forEach(function (c) {
+                if (String(c.contact_id) === id) {
+                    cleared = cleared || (parseInt(c.unread_count, 10) || 0);
+                    c.unread_count = 0;
+                }
+            });
+            Chat._convSig = '';
+        }
+        if (cleared > 0) {
+            var $total = $('#chatSidebarUnreadCount');
+            if ($total.length) {
+                var curText = String($total.text() || '');
+                var m = curText.match(/(\d+)/);
+                var cur = m ? (parseInt(m[1], 10) || 0) : 0;
+                $total.text('Unread ' + Math.max(0, cur - cleared));
+            }
+        }
+    };
+
+    Chat.markConversationRead = function (contactId) {
+        contactId = parseInt(contactId, 10) || 0;
+        if (contactId <= 0) return;
+        Chat.clearConversationUnreadUi(contactId);
+        APP.post(base() + '/chat/mark-read', { contact_id: contactId })
+            .done(function (res) {
+                var data = (res && res.data) || {};
+                if (window.APP && APP.LiveNotif && APP.LiveNotif.applyUnreadFromServer) {
+                    APP.LiveNotif.applyUnreadFromServer(data.unread_notifications);
+                } else if (window.APP && APP.LiveNotif && APP.LiveNotif.setBadge
+                    && typeof data.unread_notifications !== 'undefined') {
+                    APP.LiveNotif.setBadge(data.unread_notifications);
+                }
+            })
+            .fail(function () {});
+    };
+
     Chat.loadMessages = function (contactId, silent) {
         Chat.contactId = contactId;
         var params = {};
@@ -486,7 +541,7 @@
                 Chat.lastMessageId = msgs.length ? parseInt(msgs[msgs.length - 1].id, 10) || 0 : 0;
                 renderNotes(payload && payload.notes ? payload.notes : []);
                 scrollBottom();
-                APP.post(base() + '/chat/mark-read', { contact_id: contactId }).fail(function () {});
+                Chat.markConversationRead(contactId);
             } else if (msgs.length) {
                 var hadInbound = false;
                 msgs.forEach(function (m) {
@@ -501,13 +556,17 @@
                 });
                 scrollBottom();
                 if (hadInbound) {
+                    // Viewing this thread — mark read so list/bell counts drop without refresh
+                    Chat.markConversationRead(contactId);
                     try {
                         if (window.APP && APP.LiveNotif && APP.LiveNotif.playBeep) {
                             APP.LiveNotif.playBeep();
                         }
                     } catch (e) { /* ignore */ }
                     if (!document.hidden) {
-                        // Soft cue without blocking UI
+                        if (window.APP && APP.toast) {
+                            APP.toast('New message', 'info');
+                        }
                     } else if (window.APP && APP.LiveNotif && APP.LiveNotif.flashTitle) {
                         APP.LiveNotif.flashTitle('New chat message');
                     }
@@ -536,7 +595,8 @@
             mobile: $item.attr('data-mobile') || $item.data('mobile')
         });
         $('.chat-conv-item').removeClass('active');
-        $item.addClass('active').find('.chat-unread').remove();
+        $item.addClass('active');
+        Chat.clearConversationUnreadUi(id);
         Chat.lastMessageId = 0;
         $('#chatNotesPanel').removeClass('open');
         Chat.loadMessages(id, false);

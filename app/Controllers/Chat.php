@@ -657,7 +657,17 @@ class Chat extends BaseController
             }
         }
 
-        return $this->jsonResponse(true, null, 'Marked as read.');
+        // Soft-notification bell / sidebar: clear chat alerts for this contact without refresh
+        $uid           = (int) ($this->userId() ?? 0);
+        $notifModel    = model(\App\Models\NotificationModel::class);
+        $notifCleared  = $uid > 0 ? $notifModel->markChatNotificationsReadForContact($uid, $contactId) : 0;
+        $unreadNotifs  = $uid > 0 ? $notifModel->countUnreadForUser($uid) : 0;
+
+        return $this->jsonResponse(true, [
+            'contact_id'              => $contactId,
+            'notifications_cleared'   => $notifCleared,
+            'unread_notifications'    => $unreadNotifs,
+        ], 'Marked as read.');
     }
 
     public function addNote(): ResponseInterface
