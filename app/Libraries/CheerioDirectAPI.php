@@ -225,6 +225,7 @@ class CheerioDirectAPI
         }
 
         $components = $this->ensureTemplateComponents($templateName, $language, $components);
+        $components = $this->rewriteLocalHeaderMediaToIds($components);
 
         $data = [
             'name'       => $templateName,
@@ -236,6 +237,101 @@ class CheerioDirectAPI
             'to'   => $phone,
             'data' => $data,
         ]);
+    }
+
+    /**
+     * Localhost /media/serve links are not reachable by WhatsApp. Prefer uploaded provider media IDs.
+     *
+     * @param list<array<string, mixed>> $components
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function rewriteLocalHeaderMediaToIds(array $components): array
+    {
+        foreach ($components as &$component) {
+            if (! is_array($component) || strtolower((string) ($component['type'] ?? '')) !== 'header') {
+                continue;
+            }
+            $params = $component['parameters'] ?? null;
+            if (! is_array($params)) {
+                continue;
+            }
+            foreach ($params as &$param) {
+                if (! is_array($param)) {
+                    continue;
+                }
+                foreach (['image', 'video', 'document'] as $mediaType) {
+                    if (! is_array($param[$mediaType] ?? null)) {
+                        continue;
+                    }
+                    $link = trim((string) ($param[$mediaType]['link'] ?? ''));
+                    $id   = trim((string) ($param[$mediaType]['id'] ?? ''));
+                    if ($id !== '' || $link === '' || ! $this->isNonPublicMediaUrl($link)) {
+                        continue;
+                    }
+                    $resolvedId = $this->resolveLocalMediaUrlToProviderId($link);
+                    if ($resolvedId === '') {
+                        throw new RuntimeException(
+                            'Template header media uses a local URL that WhatsApp cannot fetch ('
+                            . $link . '). Re-upload the header media in the campaign wizard.'
+                        );
+                    }
+                    $param[$mediaType] = ['id' => $resolvedId];
+                }
+            }
+            unset($param);
+            $component['parameters'] = array_values($params);
+        }
+        unset($component);
+
+        return array_values($components);
+    }
+
+    protected function isNonPublicMediaUrl(string $url): bool
+    {
+        $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?: ''));
+
+        return $host === ''
+            || $host === 'localhost'
+            || $host === '127.0.0.1'
+            || str_ends_with($host, '.local');
+    }
+
+    protected function resolveLocalMediaUrlToProviderId(string $url): string
+    {
+        $filename = '';
+        if (preg_match('#/media/serve/([^/?#]+)#', $url, $m)) {
+            $filename = basename(rawurldecode($m[1]));
+        }
+
+        $row = null;
+        if ($filename !== '') {
+            $row = model(\App\Models\MediaModel::class)->where('filename', $filename)->orderBy('id', 'DESC')->first();
+        }
+        if (! is_array($row)) {
+            $row = model(\App\Models\MediaModel::class)->where('url', $url)->orderBy('id', 'DESC')->first();
+        }
+        if (! is_array($row)) {
+            return '';
+        }
+
+        $waId = trim((string) ($row['wa_media_id'] ?? ''));
+        if ($waId !== '') {
+            return $waId;
+        }
+
+        $path = WRITEPATH . ltrim(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, (string) ($row['path'] ?? '')), DIRECTORY_SEPARATOR);
+        if (! is_file($path)) {
+            return '';
+        }
+
+        $uploaded = $this->uploadMedia($path, (string) ($row['mime_type'] ?? 'application/octet-stream'));
+        $waId     = trim((string) ($uploaded['id'] ?? ''));
+        if ($waId !== '') {
+            model(\App\Models\MediaModel::class)->update((int) $row['id'], ['wa_media_id' => $waId]);
+        }
+
+        return $waId;
     }
 
     /**

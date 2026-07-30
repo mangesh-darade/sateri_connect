@@ -276,7 +276,10 @@ class Campaigns extends BaseController
             $tagIds     = $audience['tag_ids'] !== [] ? $audience['tag_ids'] : null;
             $result     = service('campaignService')->start($id, $contactIds, $tagIds, $audience['all']);
 
-            return $this->okOrRedirect('/campaigns/' . $id, 'Campaign started. Queued ' . $result['queued'] . ' messages.');
+            return $this->okOrRedirect('/campaigns/' . $id, 'Campaign started. Sent '
+                . (int) ($result['sent'] ?? 0) . ' / queued ' . (int) ($result['queued'] ?? 0)
+                . (! empty($result['failed']) ? (', failed ' . (int) $result['failed']) : '')
+                . '.');
         } catch (Throwable $e) {
             return $this->failOrRedirect($e->getMessage());
         }
@@ -624,6 +627,8 @@ class Campaigns extends BaseController
         $attributes = $this->parseAttributesFromInput($input);
         $variables  = is_array($input['variables'] ?? null) ? $input['variables'] : [];
         $mediaUrl   = trim((string) ($input['header_media_url'] ?? $input['media_url'] ?? ''));
+        $mediaId    = trim((string) ($input['header_media_id'] ?? $input['wa_media_id'] ?? ''));
+        $mediaMime  = strtolower(trim((string) ($input['header_media_mime'] ?? '')));
 
         if ($name === '' || mb_strlen($name) > 30) {
             return $this->jsonResponse(false, null, 'Campaign name is required (max 30 characters).', [], 422);
@@ -663,15 +668,65 @@ class Campaigns extends BaseController
         $headerType = strtolower(trim((string) ($template['header_type'] ?? '')));
         // Only IMAGE/VIDEO/DOCUMENT headers accept a media link at send time.
         // TEXT/NONE templates must not get a header component (breaks Cheerio/Meta).
-        if ($mediaUrl !== '' && in_array($headerType, ['image', 'video', 'document'], true)) {
+        if (($mediaUrl !== '' || $mediaId !== '') && in_array($headerType, ['image', 'video', 'document'], true)) {
+            if ($mediaId === '' && $mediaUrl !== '') {
+                $resolved = $this->resolveCampaignHeaderMedia($mediaUrl);
+                $mediaId   = (string) ($resolved['wa_media_id'] ?? '');
+                $mediaMime = $mediaMime !== '' ? $mediaMime : (string) ($resolved['mime_type'] ?? '');
+                if ($mediaUrl === '' && ! empty($resolved['url'])) {
+                    $mediaUrl = (string) $resolved['url'];
+                }
+            }
+
+            if ($mediaMime !== '') {
+                $mimeOk = match ($headerType) {
+                    'image'    => str_starts_with($mediaMime, 'image/'),
+                    'video'    => str_starts_with($mediaMime, 'video/'),
+                    'document' => $mediaMime === 'application/pdf'
+                        || str_contains($mediaMime, 'document')
+                        || $mediaMime === 'application/msword',
+                    default    => true,
+                };
+                if (! $mimeOk) {
+                    return $this->jsonResponse(
+                        false,
+                        null,
+                        'Template "' . ($template['name'] ?? '') . '" needs a '
+                        . strtoupper($headerType) . ' header file. Uploaded type was '
+                        . $mediaMime . '. For DOCUMENT templates upload a PDF.',
+                        [],
+                        422
+                    );
+                }
+            }
+
             $payload['header_media_url'] = $mediaUrl;
-            $payload['components']      = [[
-                'type'       => 'header',
-                'parameters' => [[
-                    'type'     => $headerType,
-                    $headerType => ['link' => $mediaUrl],
-                ]],
-            ]];
+            if ($mediaId !== '') {
+                $payload['header_media_id'] = $mediaId;
+                $payload['components']      = [[
+                    'type'       => 'header',
+                    'parameters' => [[
+                        'type'      => $headerType,
+                        $headerType => ['id' => $mediaId],
+                    ]],
+                ]];
+            } elseif ($mediaUrl !== '' && ! $this->isLocalMediaUrl($mediaUrl)) {
+                $payload['components'] = [[
+                    'type'       => 'header',
+                    'parameters' => [[
+                        'type'      => $headerType,
+                        $headerType => ['link' => $mediaUrl],
+                    ]],
+                ]];
+            } else {
+                return $this->jsonResponse(
+                    false,
+                    null,
+                    'Header media must be uploaded so WhatsApp can fetch it. Localhost URLs cannot be delivered.',
+                    [],
+                    422
+                );
+            }
         }
 
         try {
@@ -906,9 +961,14 @@ class Campaigns extends BaseController
                 'channel'  => 'whatsapp',
                 'status'   => 'running',
                 'queued'   => $result['queued'] ?? 0,
+                'sent'     => $result['sent'] ?? 0,
+                'failed'   => $result['failed'] ?? 0,
                 'contacts' => $result['contacts'] ?? 0,
                 'redirect' => site_url('campaigns/' . $id),
-            ], 'Campaign started. Queued ' . ($result['queued'] ?? 0) . ' messages.');
+            ], 'Campaign started. Sent ' . (int) ($result['sent'] ?? 0)
+                . ' / queued ' . (int) ($result['queued'] ?? 0)
+                . (! empty($result['failed']) ? (', failed ' . (int) $result['failed']) : '')
+                . '.');
         } catch (Throwable $e) {
             return $this->jsonResponse(false, null, $e->getMessage(), [], 400);
         }
@@ -1257,7 +1317,10 @@ class Campaigns extends BaseController
 
             return redirect()->to('/campaigns/' . $id)->with(
                 'success',
-                'Campaign started. Queued ' . $result['queued'] . ' messages.'
+                'Campaign started. Sent ' . (int) ($result['sent'] ?? 0)
+                . ' / queued ' . (int) ($result['queued'] ?? 0)
+                . (! empty($result['failed']) ? (', failed ' . (int) $result['failed']) : '')
+                . '.'
             );
         }
 
@@ -1279,6 +1342,68 @@ class Campaigns extends BaseController
         $campaign['tag_ids']      = array_map('intval', $audience['tag_ids'] ?? []);
 
         return $campaign;
+    }
+
+    /**
+     * Resolve a campaign header media URL (often localhost /media/serve/…) to a stored media row.
+     *
+     * @return array{wa_media_id?: string, mime_type?: string, url?: string}
+     */
+    protected function resolveCampaignHeaderMedia(string $mediaUrl): array
+    {
+        $mediaUrl = trim($mediaUrl);
+        if ($mediaUrl === '') {
+            return [];
+        }
+
+        $filename = '';
+        if (preg_match('#/media/serve/([^/?#]+)#', $mediaUrl, $m)) {
+            $filename = basename(rawurldecode($m[1]));
+        }
+
+        $model = model(\App\Models\MediaModel::class);
+        $row   = null;
+        if ($filename !== '') {
+            $row = $model->where('filename', $filename)->orderBy('id', 'DESC')->first();
+        }
+        if ($row === null) {
+            $row = $model->where('url', $mediaUrl)->orderBy('id', 'DESC')->first();
+        }
+        if (! is_array($row)) {
+            return [];
+        }
+
+        $waId = trim((string) ($row['wa_media_id'] ?? ''));
+        if ($waId === '') {
+            $path = WRITEPATH . ltrim(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, (string) ($row['path'] ?? '')), DIRECTORY_SEPARATOR);
+            if (is_file($path)) {
+                try {
+                    $uploaded = service('whatsApp')->uploadMedia($path, (string) ($row['mime_type'] ?? 'application/octet-stream'));
+                    $waId     = trim((string) ($uploaded['id'] ?? $uploaded['media_id'] ?? ''));
+                    if ($waId !== '') {
+                        $model->update((int) $row['id'], ['wa_media_id' => $waId]);
+                    }
+                } catch (Throwable $e) {
+                    log_message('warning', 'Campaign header media re-upload failed: {msg}', ['msg' => $e->getMessage()]);
+                }
+            }
+        }
+
+        return [
+            'wa_media_id' => $waId,
+            'mime_type'   => (string) ($row['mime_type'] ?? ''),
+            'url'         => (string) ($row['url'] ?? $mediaUrl),
+        ];
+    }
+
+    protected function isLocalMediaUrl(string $url): bool
+    {
+        $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?: ''));
+
+        return $host === ''
+            || $host === 'localhost'
+            || $host === '127.0.0.1'
+            || str_ends_with($host, '.local');
     }
 
     protected function okOrRedirect(string $url, string $message): ResponseInterface

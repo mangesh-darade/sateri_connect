@@ -18,6 +18,8 @@
         audience: { total: 0, phone_count: 0, email_count: 0, contact_ids: [] },
         campaignId: 0,
         mediaUrl: '',
+        mediaId: '',
+        mediaMime: '',
         variables: {}
     };
 
@@ -553,6 +555,12 @@
             payload.variables = collectVariables();
             if (state.template && state.template.needs_media) {
                 payload.header_media_url = String($('#cwMediaUrl').val() || state.mediaUrl || '').trim();
+                if (state.mediaId) {
+                    payload.header_media_id = String(state.mediaId).trim();
+                }
+                if (state.mediaMime) {
+                    payload.header_media_mime = String(state.mediaMime).trim();
+                }
             }
         } else {
             payload.subject = String($('#cwEmailSubject').val() || '').trim();
@@ -929,6 +937,8 @@
                     return;
                 }
                 state.mediaUrl = url;
+                state.mediaId = String(data.wa_media_id || data.media_id || '').trim();
+                state.mediaMime = String(data.mime_type || file.type || '').trim();
                 $('#cwMediaUrl').val(url);
                 $status.removeClass('text-muted').addClass('text-success').text('Uploaded: ' + (data.filename || file.name));
                 updateWaPreview();

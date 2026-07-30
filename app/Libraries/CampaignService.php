@@ -135,6 +135,22 @@ class CampaignService
             'queued'      => $queued,
         ]);
 
+        // Flush immediately so "Send now" does not wait for cron / inbound webhook.
+        $queuedCount = (int) ($queued['queued'] ?? 0);
+        if ($queuedCount > 0) {
+            try {
+                $stats = service('queueService')->processBatch(max(50, min(500, $queuedCount)));
+                $queued['sent']   = (int) ($stats['sent'] ?? 0);
+                $queued['failed'] = (int) ($stats['failed'] ?? 0);
+            } catch (\Throwable $e) {
+                log_message('error', 'Campaign #{id} immediate queue flush failed: {msg}', [
+                    'id'  => $campaignId,
+                    'msg' => $e->getMessage(),
+                ]);
+                $queued['flush_error'] = $e->getMessage();
+            }
+        }
+
         // Fire "Campaign Sent" automations for each audience contact (capped for safety).
         $this->fireCampaignSentTriggers($campaignId, $contactIds, $tagIds, $allActive);
 
