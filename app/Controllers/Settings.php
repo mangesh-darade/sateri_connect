@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Libraries\ActivityLogger;
+use App\Libraries\TimeZoneOptions;
 use CodeIgniter\HTTP\ResponseInterface;
 use Config\Services;
 
@@ -117,6 +118,7 @@ class Settings extends BaseController
                     && $publicBase !== ''
                     && str_starts_with($publicBase, 'https://'),
             ],
+            'timezoneOptions' => (new TimeZoneOptions())->grouped(),
         ];
 
         return $this->render('settings/index', $data);

@@ -109,6 +109,8 @@
     background: var(--wa-green);
     color: #fff;
 }
+.guide-export-actions { display: inline-flex; gap: .5rem; flex-wrap: wrap; }
+.guide-export-actions .btn { white-space: nowrap; }
 @media (max-width: 991px) {
     .guide-layout { flex-direction: column; }
     .guide-toc { width: 100%; position: static; max-height: 220px; }
@@ -119,11 +121,22 @@
 <?= $this->section('header_actions') ?>
 <?php
 $guideType = $guideType ?? 'local';
-$isProd = $guideType === 'production';
+$guideNav = $guideNav ?? [
+    ['type' => 'local', 'label' => 'Local'],
+    ['type' => 'production', 'label' => 'Production'],
+];
 ?>
 <div class="guide-switch guide-switch-header">
-    <a href="<?= site_url('guide/local') ?>" class="<?= ! $isProd ? 'active' : '' ?>">Local</a>
-    <a href="<?= site_url('guide/production') ?>" class="<?= $isProd ? 'active' : '' ?>">Production</a>
+    <?php foreach ($guideNav as $nav): ?>
+        <?php $navType = (string) ($nav['type'] ?? 'local'); ?>
+        <a href="<?= site_url('guide/' . $navType) ?>" class="<?= $guideType === $navType ? 'active' : '' ?>">
+            <?= esc($nav['label'] ?? $navType) ?>
+        </a>
+    <?php endforeach; ?>
+</div>
+<div class="guide-export-actions">
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="guideDownloadPdf">Download PDF</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="guideDownloadDoc">Download DOC</button>
 </div>
 <a href="<?= site_url('guide/automations') ?>" class="btn btn-sm btn-outline-secondary">Automations guide</a>
 <?= $this->endSection() ?>
@@ -150,4 +163,85 @@ $guideType = $guideType ?? 'local';
         <?= $guideHtml ?>
     </article>
 </div>
+<?= $this->endSection() ?>
+
+<?= $this->section('scripts') ?>
+<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+<script>
+(function () {
+    const article = document.querySelector('.guide-body');
+    const pdfBtn = document.getElementById('guideDownloadPdf');
+    const docBtn = document.getElementById('guideDownloadDoc');
+    const guideType = <?= json_encode($guideType) ?>;
+    const guideTitle = <?= json_encode((string) ($title ?? 'Guide')) ?>;
+
+    if (!article) {
+        return;
+    }
+
+    const slugify = (value) => String(value || 'guide')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'guide';
+
+    const fileBase = slugify(guideTitle || guideType || 'guide');
+
+    if (pdfBtn) {
+        pdfBtn.addEventListener('click', async function () {
+            const original = pdfBtn.innerHTML;
+            pdfBtn.disabled = true;
+            pdfBtn.textContent = 'Preparing PDF...';
+            try {
+                await html2pdf().set({
+                    margin: [10, 10, 10, 10],
+                    filename: fileBase + '.pdf',
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak: { mode: ['css', 'legacy'] }
+                }).from(article).save();
+            } finally {
+                pdfBtn.disabled = false;
+                pdfBtn.innerHTML = original;
+            }
+        });
+    }
+
+    if (docBtn) {
+        docBtn.addEventListener('click', function () {
+            const docHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>${guideTitle}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 24px; color: #222; }
+        img { max-width: 100%; height: auto; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ccc; padding: 6px 8px; vertical-align: top; }
+        pre { background: #f5f5f5; padding: 12px; white-space: pre-wrap; }
+        code { font-family: Consolas, monospace; }
+        blockquote { border-left: 4px solid #2a9d8f; margin: 1rem 0; padding: .5rem 1rem; background: #f4fbfa; }
+    </style>
+</head>
+<body>
+    <h1>${guideTitle}</h1>
+    ${article.innerHTML}
+</body>
+</html>`;
+
+            const blob = new Blob(['\ufeff', docHtml], { type: 'application/msword' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileBase + '.doc';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+        });
+    }
+})();
+</script>
 <?= $this->endSection() ?>

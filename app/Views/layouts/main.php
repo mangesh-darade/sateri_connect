@@ -372,7 +372,14 @@
                     'label' => 'Setup Workspace',
                     'icon' => 'wrench',
                     'url' => site_url('guide/local'),
-                    'match' => ['guide', 'guide/local', 'guide/production', 'guide/automations'],
+                    'match' => ['guide', 'guide/local', 'guide/production', 'guide/meta-official', 'guide/meta-screenshots', 'guide/automations'],
+                    'children' => [
+                        ['label' => 'Local Guide', 'icon' => 'monitor-smartphone', 'url' => site_url('guide/local'), 'match' => ['guide/local']],
+                        ['label' => 'Production Guide', 'icon' => 'server', 'url' => site_url('guide/production'), 'match' => ['guide/production']],
+                        ['label' => 'Meta Publish Guide', 'icon' => 'book-open', 'url' => site_url('guide/meta-official'), 'match' => ['guide/meta-official']],
+                        ['label' => 'Meta Screenshot Guide', 'icon' => 'image', 'url' => site_url('guide/meta-screenshots'), 'match' => ['guide/meta-screenshots']],
+                        ['label' => 'Automations Guide', 'icon' => 'bot', 'url' => site_url('guide/automations'), 'match' => ['guide/automations']],
+                    ],
                 ];
             }
             if ($systemItems !== []) {

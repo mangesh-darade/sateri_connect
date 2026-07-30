@@ -346,6 +346,7 @@ class Install extends Controller
             'csrfName'  => csrf_token(),
             'csrfToken' => csrf_hash(),
             'webhookUrl'=> site_url('webhooks'),
+            'timezoneOptions' => (new \App\Libraries\TimeZoneOptions())->grouped(),
         ]);
     }
 

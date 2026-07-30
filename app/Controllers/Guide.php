@@ -7,7 +7,7 @@ namespace App\Controllers;
 use CodeIgniter\HTTP\ResponseInterface;
 
 /**
- * In-app guides (Local + Production) from markdown + screenshots.
+ * In-app guides from markdown + screenshots.
  */
 class Guide extends BaseController
 {
@@ -24,6 +24,16 @@ class Guide extends BaseController
             'file'     => 'GUIDE_PRODUCTION.md',
             'title'    => 'Production Guide',
             'subtitle' => 'Put the app live on a real server with HTTPS and your WhatsApp provider (Cheerio or Meta).',
+        ],
+        'meta-official' => [
+            'file'     => 'META_OFFICIAL_DEVELOPER_TO_PUBLISH_GUIDE.md',
+            'title'    => 'Meta Publish Guide',
+            'subtitle' => 'Official Meta path from developer account to App Review, Advanced Access, Live mode, and production.',
+        ],
+        'meta-screenshots' => [
+            'file'     => 'META_OFFICIAL_SCREENSHOT_GUIDE.md',
+            'title'    => 'Meta Screenshot Guide',
+            'subtitle' => 'Visual walkthrough for Meta setup, webhook validation, template sync, and go-live checks.',
         ],
         'automations' => [
             'file'     => '',
@@ -64,6 +74,7 @@ class Guide extends BaseController
                 'pageTitle'  => $meta['title'],
                 'subtitle'   => $meta['subtitle'],
                 'guideType'  => $type,
+                'guideNav'   => $this->guideTabs(),
                 'guideTitle' => $meta['title'],
                 'guideSub'   => $meta['subtitle'],
                 'guideHtml'  => '<div class="alert alert-warning">Guide file not found (<code>docs/'
@@ -75,9 +86,16 @@ class Guide extends BaseController
         $markdown  = (string) file_get_contents($path);
         $imageBase = rtrim(base_url('assets/guide'), '/') . '/';
 
-        $markdown = preg_replace(
+        $markdown = preg_replace_callback(
             '#\!\[([^\]]*)\]\(images/([^)\s]+)\)#',
-            '![$1](' . $imageBase . '$2)',
+            static function (array $m) use ($imageBase): string {
+                $file = $m[2] ?? '';
+                $published = ROOTPATH . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'guide'
+                    . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $file);
+                $version = is_file($published) ? ('?v=' . (string) filemtime($published)) : '';
+
+                return '![' . ($m[1] ?? '') . '](' . $imageBase . $file . $version . ')';
+            },
             $markdown
         ) ?? $markdown;
 
@@ -91,6 +109,7 @@ class Guide extends BaseController
             'pageTitle'  => $meta['title'],
             'subtitle'   => $meta['subtitle'],
             'guideType'  => $type,
+            'guideNav'   => $this->guideTabs(),
             'guideTitle' => $meta['title'],
             'guideSub'   => $meta['subtitle'],
             'guideHtml'  => $this->markdownToHtml($markdown),
@@ -141,6 +160,19 @@ class Guide extends BaseController
             'flows'         => $flows,
             'stats'         => $stats,
         ]);
+    }
+
+    /**
+     * @return list<array{type: string, label: string}>
+     */
+    protected function guideTabs(): array
+    {
+        return [
+            ['type' => 'local', 'label' => 'Local'],
+            ['type' => 'production', 'label' => 'Production'],
+            ['type' => 'meta-official', 'label' => 'Meta Guide'],
+            ['type' => 'meta-screenshots', 'label' => 'Meta Screens'],
+        ];
     }
 
     protected function markdownToHtml(string $markdown): string

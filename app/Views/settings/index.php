@@ -15,6 +15,7 @@ $smtp     = $smtp ?? [];
 $sendgrid = $sendgrid ?? [];
 $cheerioEmail = $cheerioEmail ?? [];
 $webhook  = $webhook ?? [];
+$timezoneOptions = $timezoneOptions ?? [];
 $val = static function (array $source, string $key, string $default = '') {
     return esc(old($key) ?? ($source[$key] ?? $default));
 };
@@ -559,7 +560,19 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Timezone</label>
-                                    <input type="text" name="app_timezone" class="form-control" value="<?= $val($app, 'app_timezone', 'UTC') ?>" placeholder="Asia/Kolkata">
+                                    <?php $selectedTimezone = (string) (old('app_timezone') ?? ($app['app_timezone'] ?? 'UTC')); ?>
+                                    <select name="app_timezone" class="form-select">
+                                        <?php foreach ($timezoneOptions as $group => $options): ?>
+                                            <optgroup label="<?= esc($group) ?>">
+                                                <?php foreach ($options as $option): ?>
+                                                    <option value="<?= esc($option['value']) ?>" <?= $selectedTimezone === $option['value'] ? 'selected' : '' ?>>
+                                                        <?= esc($option['label']) ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </optgroup>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <div class="form-text">Full timezone list with UTC offsets for all regions/countries.</div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Support / App Email</label>

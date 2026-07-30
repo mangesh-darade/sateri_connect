@@ -5,6 +5,7 @@
 <p class="text-muted mb-3">Choose Cheerio or Meta. You can change this later in Settings.</p>
 <form action="<?= site_url('install/cheerio') ?>" method="post">
     <?= csrf_field() ?>
+    <?php $timezoneOptions = $timezoneOptions ?? []; ?>
     <div class="mb-3">
         <label class="form-label">Provider</label>
         <select name="whatsapp_provider" class="form-select" id="installProvider">
@@ -57,6 +58,28 @@
                 <label class="form-label">App Secret</label>
                 <input type="password" name="meta_webhook_secret" class="form-control" value="<?= esc(old('meta_webhook_secret') ?? '') ?>" autocomplete="off">
             </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mt-1">
+        <div class="col-md-6">
+            <label class="form-label">Application name</label>
+            <input type="text" name="app_name" class="form-control" value="<?= esc(old('app_name') ?? 'WhatsApp Automation') ?>">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Timezone</label>
+            <?php $selectedTimezone = (string) (old('app_timezone') ?? 'UTC'); ?>
+            <select name="app_timezone" class="form-select">
+                <?php foreach ($timezoneOptions as $group => $options): ?>
+                    <optgroup label="<?= esc($group) ?>">
+                        <?php foreach ($options as $option): ?>
+                            <option value="<?= esc($option['value']) ?>" <?= $selectedTimezone === $option['value'] ? 'selected' : '' ?>>
+                                <?= esc($option['label']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </optgroup>
+                <?php endforeach; ?>
+            </select>
         </div>
     </div>
 
