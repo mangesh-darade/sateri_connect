@@ -530,6 +530,31 @@ class MetaCloudAPI
     }
 
     /**
+     * Register a business phone number for Cloud API (two-step PIN).
+     *
+     * @return array<string, mixed>
+     */
+    public function registerPhoneNumber(?string $phoneNumberId = null, ?string $pin = null): array
+    {
+        $this->loadCredentials();
+        $pnid = trim((string) ($phoneNumberId ?: $this->phoneNumberId));
+        if ($pnid === '') {
+            throw new RuntimeException('Meta Phone Number ID is required to register.');
+        }
+
+        $meta = $this->settings->getMetaConfig();
+        $pin  = trim((string) ($pin ?: ($meta['two_step_pin'] ?? '')));
+        if (preg_match('/^\d{6}$/', $pin) !== 1) {
+            throw new RuntimeException('Set a 6-digit Meta two-step PIN in Settings before registering.');
+        }
+
+        return $this->request('POST', $pnid . '/register', [
+            'messaging_product' => 'whatsapp',
+            'pin'               => $pin,
+        ]);
+    }
+
+    /**
      * Point this WABA's inbound webhooks at our public callback (Cloudflare / production HTTPS).
      *
      * Without override_callback_uri, Meta may keep events on the DevX test app and
@@ -574,7 +599,253 @@ class MetaCloudAPI
             'subscribed_apps'       => $this->request('GET', $this->wabaId . '/subscribed_apps'),
             'raw'                   => $result,
             'provider'              => 'meta',
+            'webhook_fields'        => $this->diagnoseAndEnsureWebhookFields($callback, $token),
         ];
+    }
+
+    /**
+     * Ensure Meta App webhook subscription includes `messages` (required for Live Chat inbound).
+     *
+     * URL verify alone is not enough — without field subscribe, Meta never POSTs customer replies.
+     *
+     * @return array{
+     *   ok: bool,
+     *   messages_subscribed: bool,
+     *   fields: list<string>,
+     *   auto_fixed: bool,
+     *   detail: string,
+     *   error: ?string,
+     *   app_id: string
+     * }
+     */
+    public function diagnoseAndEnsureWebhookFields(?string $callbackUrl = null, ?string $verifyToken = null): array
+    {
+        $this->loadCredentials();
+        $meta       = $this->settings->getMetaConfig();
+        $appId      = trim((string) ($meta['app_id'] ?? ''));
+        $appSecret  = trim((string) ($meta['app_secret'] ?? ''));
+        $verify     = trim((string) ($verifyToken ?: ($meta['verify_token'] ?? '')));
+        $callback   = trim((string) ($callbackUrl ?? ''));
+
+        if ($callback === '') {
+            $base = rtrim((string) $this->settings->get('webhook_public_base', ''), '/');
+            $path = parse_url(site_url('webhooks'), PHP_URL_PATH) ?: '/webhooks';
+            $callback = $base !== '' ? $base . $path : '';
+        }
+
+        if ($appId === '') {
+            $appId = $this->resolveMetaAppIdFromWaba();
+            if ($appId !== '') {
+                $this->settings->setMetaConfig(['app_id' => $appId]);
+            }
+        }
+
+        $empty = static function (string $detail, ?string $error = null) use ($appId): array {
+            return [
+                'ok'                   => false,
+                'messages_subscribed'  => false,
+                'fields'               => [],
+                'auto_fixed'           => false,
+                'detail'               => $detail,
+                'error'                => $error,
+                'app_id'               => $appId,
+            ];
+        };
+
+        if ($appId === '') {
+            return $empty(
+                'Meta App ID missing',
+                'Save Meta App ID in Settings → Meta, then Test connection. Without it we cannot check messages field subscribe.'
+            );
+        }
+        if ($appSecret === '') {
+            return $empty(
+                'Meta App Secret missing',
+                'Save App Secret in Settings → Meta. Required to subscribe webhook fields (messages).'
+            );
+        }
+        if ($callback === '' || ! str_starts_with($callback, 'https://')) {
+            return $empty(
+                'Public HTTPS webhook URL missing',
+                'Set Cloudflare/ngrok URL in Settings → Webhooks (Step 2).'
+            );
+        }
+        if ($verify === '') {
+            return $empty(
+                'Verify token missing',
+                'Generate verify token in Settings → Webhooks (Step 1).'
+            );
+        }
+
+        try {
+            $current = $this->appGraphRequest('GET', $appId . '/subscriptions', [], $appId, $appSecret);
+            $fields  = $this->extractSubscriptionFieldNames($current);
+            $hasMessages = in_array('messages', $fields, true);
+
+            if ($hasMessages) {
+                return [
+                    'ok'                  => true,
+                    'messages_subscribed' => true,
+                    'fields'              => $fields,
+                    'auto_fixed'          => false,
+                    'detail'              => 'messages subscribed (' . implode(', ', $fields) . ')',
+                    'error'               => null,
+                    'app_id'              => $appId,
+                ];
+            }
+
+            // Auto-repair: subscribe required fields (URL verify without fields = silent inbound failure).
+            $desired = 'messages,message_template_status_update,account_update';
+            $post    = $this->appGraphRequest('POST', $appId . '/subscriptions', [
+                'object'       => 'whatsapp_business_account',
+                'callback_url' => $callback,
+                'verify_token' => $verify,
+                'fields'       => $desired,
+            ], $appId, $appSecret);
+
+            $after  = $this->appGraphRequest('GET', $appId . '/subscriptions', [], $appId, $appSecret);
+            $fields = $this->extractSubscriptionFieldNames($after);
+            $ok     = in_array('messages', $fields, true);
+
+            if (! $ok) {
+                return [
+                    'ok'                  => false,
+                    'messages_subscribed' => false,
+                    'fields'              => $fields,
+                    'auto_fixed'          => false,
+                    'detail'              => 'Could not subscribe messages field',
+                    'error'               => 'Open Meta App → WhatsApp → Configuration → Webhook fields → Subscribe messages. '
+                        . 'Raw: ' . json_encode($post),
+                    'app_id'              => $appId,
+                ];
+            }
+
+            return [
+                'ok'                  => true,
+                'messages_subscribed' => true,
+                'fields'              => $fields,
+                'auto_fixed'          => true,
+                'detail'              => 'Auto-subscribed messages (' . implode(', ', $fields) . ')',
+                'error'               => null,
+                'app_id'              => $appId,
+            ];
+        } catch (Throwable $e) {
+            return $empty(
+                'Webhook fields check failed',
+                $this->humanizeWebhookFieldsError($e->getMessage())
+            );
+        }
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function extractSubscriptionFieldNames(array $subscriptionsPayload): array
+    {
+        $names = [];
+        $rows  = $subscriptionsPayload['data'] ?? [];
+        if (! is_array($rows)) {
+            return [];
+        }
+        foreach ($rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $fields = $row['fields'] ?? [];
+            if (! is_array($fields)) {
+                continue;
+            }
+            foreach ($fields as $field) {
+                if (is_array($field) && isset($field['name'])) {
+                    $names[] = (string) $field['name'];
+                } elseif (is_string($field) && $field !== '') {
+                    $names[] = $field;
+                }
+            }
+        }
+
+        return array_values(array_unique($names));
+    }
+
+    protected function resolveMetaAppIdFromWaba(): string
+    {
+        if ($this->wabaId === '' || $this->accessToken === '') {
+            return '';
+        }
+        try {
+            $subs = $this->request('GET', $this->wabaId . '/subscribed_apps');
+            $rows = $subs['data'] ?? [];
+            if (! is_array($rows) || $rows === []) {
+                return '';
+            }
+            $first = $rows[0] ?? [];
+            if (! is_array($first)) {
+                return '';
+            }
+            $id = (string) ($first['whatsapp_business_api_data']['id'] ?? '');
+
+            return $id;
+        } catch (Throwable $e) {
+            return '';
+        }
+    }
+
+    /**
+     * App-token Graph calls (app_id|app_secret) — required for /{app-id}/subscriptions.
+     *
+     * @param array<string, mixed> $data
+     *
+     * @return array<string, mixed>
+     */
+    protected function appGraphRequest(
+        string $method,
+        string $endpoint,
+        array $data,
+        string $appId,
+        string $appSecret
+    ): array {
+        $method = strtoupper($method);
+        $url    = $this->buildUrl($endpoint);
+        $token  = $appId . '|' . $appSecret;
+        $client = Services::curlrequest($this->baseCurlOptions(), null, null, false);
+
+        $options = [
+            'headers' => ['Accept' => 'application/json'],
+        ];
+        if ($method === 'GET') {
+            $options['query'] = array_merge($data, ['access_token' => $token]);
+        } else {
+            $options['form_params'] = array_merge($data, ['access_token' => $token]);
+        }
+
+        $response = $client->request($method, $url, $options);
+        $status   = $response->getStatusCode();
+        $body     = (string) $response->getBody();
+        $decoded  = json_decode($body, true);
+        if (! is_array($decoded)) {
+            $decoded = ['raw' => $body];
+        }
+
+        if ($status < 200 || $status >= 300) {
+            $msg = (string) ($decoded['error']['message'] ?? ('HTTP ' . $status));
+            throw new RuntimeException('Meta app subscriptions API: ' . $msg, $status);
+        }
+
+        return $decoded;
+    }
+
+    protected function humanizeWebhookFieldsError(string $raw): string
+    {
+        $lower = strtolower($raw);
+        if (str_contains($lower, 'permissions') || str_contains($lower, '1929002')) {
+            return 'Meta rejected field subscribe (permissions). In App Dashboard → WhatsApp → Configuration, '
+                . 'manually Subscribe the messages field. Raw: ' . $raw;
+        }
+        if (str_contains($lower, 'application secret') || str_contains($lower, 'app access_token')) {
+            return 'App Secret invalid or missing. Paste the correct App Secret from Meta App settings. Raw: ' . $raw;
+        }
+
+        return $raw;
     }
 
     /**
@@ -610,8 +881,8 @@ class MetaCloudAPI
                 : 'Needed for template sync (WhatsApp Business Account ID)',
         ];
 
-        $info    = null;
-        $apiOk   = false;
+        $info      = null;
+        $apiOk     = false;
         $apiDetail = 'Skipped until token + Phone Number ID are set.';
 
         if ($this->accessToken !== '' && $this->phoneNumberId !== '') {
@@ -633,6 +904,7 @@ class MetaCloudAPI
 
         $webhookOk = false;
         $webhookDetail = 'Skipped';
+        $fieldsDiag = null;
         if ($apiOk && $this->wabaId !== '') {
             try {
                 $sub = $this->subscribeWabaWebhook();
@@ -640,15 +912,38 @@ class MetaCloudAPI
                 $webhookDetail = $webhookOk
                     ? ('WABA → ' . ($sub['callback'] ?? ''))
                     : 'Subscribe failed';
+                $fieldsDiag = is_array($sub['webhook_fields'] ?? null) ? $sub['webhook_fields'] : null;
             } catch (Throwable $e) {
                 $webhookDetail = $e->getMessage();
             }
         }
+        if ($fieldsDiag === null && $apiOk) {
+            $fieldsDiag = $this->diagnoseAndEnsureWebhookFields();
+        }
+
         $checklist[] = [
             'id'     => 'waba_webhook',
             'label'  => 'WABA webhook override',
             'ok'     => $webhookOk,
             'detail' => $webhookDetail,
+        ];
+
+        $fieldsOk = is_array($fieldsDiag) && ! empty($fieldsDiag['messages_subscribed']);
+        $fieldsDetail = is_array($fieldsDiag)
+            ? (string) ($fieldsDiag['detail'] ?? '')
+            : 'Not checked';
+        if (is_array($fieldsDiag) && ! empty($fieldsDiag['error'])) {
+            $fieldsDetail = (string) $fieldsDiag['error'];
+        } elseif (is_array($fieldsDiag) && ! empty($fieldsDiag['auto_fixed'])) {
+            $fieldsDetail = 'Fixed automatically: ' . $fieldsDetail;
+        }
+        $checklist[] = [
+            'id'     => 'webhook_fields',
+            'label'  => 'Webhook field: messages',
+            'ok'     => $fieldsOk,
+            'detail' => $fieldsDetail !== ''
+                ? $fieldsDetail
+                : 'Meta App must Subscribe the messages field or Live Chat will never receive replies',
         ];
 
         $ok = $apiOk;
@@ -658,15 +953,24 @@ class MetaCloudAPI
                 break;
             }
         }
+        if ($apiOk && ! $fieldsOk) {
+            $ok = false;
+        }
+
+        $message = $ok
+            ? ('Meta Cloud API OK — ' . $apiDetail . ($webhookOk ? ' · webhook pinned' : '')
+                . ($fieldsOk ? ' · messages subscribed' : ''))
+            : (! $fieldsOk && is_array($fieldsDiag) && ! empty($fieldsDiag['error'])
+                ? (string) $fieldsDiag['error']
+                : $apiDetail);
 
         return [
-            'ok'        => $ok,
-            'provider'  => 'meta',
-            'message'   => $ok
-                ? ('Meta Cloud API OK — ' . $apiDetail . ($webhookOk ? ' · webhook pinned' : ''))
-                : $apiDetail,
-            'info'      => $info,
-            'checklist' => $checklist,
+            'ok'             => $ok,
+            'provider'       => 'meta',
+            'message'        => $message,
+            'info'           => $info,
+            'checklist'      => $checklist,
+            'webhook_fields' => $fieldsDiag,
         ];
     }
 

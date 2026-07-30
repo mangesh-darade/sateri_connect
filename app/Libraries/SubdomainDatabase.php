@@ -131,6 +131,11 @@ class SubdomainDatabase
             return 'localhost';
         }
 
+        // Local webhook tunnels (cloudflared / ngrok / similar): Host is public, DB is still local.
+        if (self::isLocalTunnelHost($host)) {
+            return 'localhost';
+        }
+
         $parts = explode('.', $host);
         $count = count($parts);
 
@@ -147,5 +152,29 @@ class SubdomainDatabase
         }
 
         return $parts[0];
+    }
+
+    /**
+     * Public reverse-tunnel hostnames used for local Meta/Cheerio webhook delivery.
+     */
+    protected static function isLocalTunnelHost(string $host): bool
+    {
+        $suffixes = [
+            '.trycloudflare.com',
+            '.cfargotunnel.com',
+            '.ngrok-free.app',
+            '.ngrok-free.dev',
+            '.ngrok.io',
+            '.ngrok.app',
+            '.loca.lt',
+        ];
+
+        foreach ($suffixes as $suffix) {
+            if (str_ends_with($host, $suffix)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

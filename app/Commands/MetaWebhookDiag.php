@@ -13,7 +13,7 @@ class MetaWebhookDiag extends BaseCommand
 {
     protected $group       = 'WhatsApp';
     protected $name        = 'whatsapp:webhook-fix';
-    protected $description = 'Subscribe WABA to app webhook with override callback URI.';
+    protected $description = 'Pin WABA webhook + ensure Meta App messages field is subscribed.';
 
     public function run(array $params)
     {
@@ -23,27 +23,37 @@ class MetaWebhookDiag extends BaseCommand
         $waba     = (string) ($meta['waba_id'] ?? '');
         $base     = rtrim((string) $settings->get('webhook_public_base', ''), '/');
         $localPath = parse_url(site_url('webhooks'), PHP_URL_PATH) ?: '/webhooks';
-        $callback = $base . $localPath;
-        $verify   = (string) ($meta['verify_token'] ?? '');
+        $callback = trim((string) ($params[0] ?? ''));
+        if ($callback === '') {
+            $callback = $base . $localPath;
+        }
+        $verify = trim((string) ($params[1] ?? ''));
+        if ($verify === '') {
+            $verify = (string) ($meta['verify_token'] ?? '');
+        }
 
-        if ($waba === '' || $base === '' || $verify === '') {
-            CLI::error('Need waba_id, webhook_public_base, meta verify token.');
+        if ($waba === '' || $callback === '' || $verify === '') {
+            CLI::error('Need waba_id, callback URL (or webhook_public_base), and meta verify token.');
+            CLI::write('Usage: php spark whatsapp:webhook-fix [callbackUrl] [verifyToken]');
 
             return;
         }
 
-        CLI::write('app callback override → ' . $callback);
-        CLI::write('verify_token set len=' . strlen($verify));
+        CLI::write('callback → ' . $callback);
+        CLI::write('app_secret set=' . (trim((string) ($meta['app_secret'] ?? '')) !== '' ? 'yes' : 'NO'));
+        CLI::write('app_id=' . (string) ($meta['app_id'] ?? '(empty)'));
 
-        // Meta: pin WABA webhooks to our public HTTPS URL (required for Cloud API inbound).
-        $result = $api->request('POST', $waba . '/subscribed_apps', [
-            'override_callback_uri' => $callback,
-            'verify_token'          => $verify,
-        ]);
-        CLI::write(json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-
-        $subs = $api->request('GET', $waba . '/subscribed_apps');
-        CLI::write('--- subscribed_apps ---');
-        CLI::write(json_encode($subs, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        try {
+            $result = $api->subscribeWabaWebhook($callback, $verify);
+            CLI::write(json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+            $fields = $result['webhook_fields'] ?? null;
+            if (is_array($fields) && empty($fields['messages_subscribed'])) {
+                CLI::error('messages field NOT subscribed: ' . (string) ($fields['error'] ?? $fields['detail'] ?? ''));
+            } elseif (is_array($fields) && ! empty($fields['auto_fixed'])) {
+                CLI::write('Auto-fixed: subscribed messages field.');
+            }
+        } catch (\Throwable $e) {
+            CLI::error($e->getMessage());
+        }
     }
 }

@@ -60,6 +60,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('settings/test-email', 'Settings::testEmail', ['filter' => 'csrf']);
     $routes->post('settings/test-cheerio', 'Settings::testCheerio', ['filter' => 'csrf']);
     $routes->post('settings/test-meta', 'Settings::testMeta', ['filter' => 'csrf']);
+    $routes->post('settings/embedded-signup', 'Settings::embeddedSignup', ['filter' => 'csrf']);
     $routes->post('settings/test-page-messaging', 'Settings::testPageMessaging', ['filter' => 'csrf']);
     $routes->post('settings/test-whatsapp', 'Settings::testCheerio', ['filter' => 'csrf']); // active provider via UI uses specific buttons
     $routes->post('settings/setup-webhook', 'Settings::setupWebhook', ['filter' => 'csrf']);

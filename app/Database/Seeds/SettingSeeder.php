@@ -56,6 +56,30 @@ class SettingSeeder extends Seeder
                 'is_encrypted' => 0,
             ],
             [
+                'key'          => 'meta_app_id',
+                'value'        => '',
+                'group'        => 'meta',
+                'is_encrypted' => 0,
+            ],
+            [
+                'key'          => 'meta_embedded_config_id',
+                'value'        => '',
+                'group'        => 'meta',
+                'is_encrypted' => 0,
+            ],
+            [
+                'key'          => 'meta_business_id',
+                'value'        => '',
+                'group'        => 'meta',
+                'is_encrypted' => 0,
+            ],
+            [
+                'key'          => 'meta_two_step_pin',
+                'value'        => '',
+                'group'        => 'meta',
+                'is_encrypted' => 1,
+            ],
+            [
                 'key'          => 'meta_api_version',
                 'value'        => 'v21.0',
                 'group'        => 'meta',

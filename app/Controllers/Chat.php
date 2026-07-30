@@ -177,7 +177,10 @@ class Chat extends BaseController
                 $rowChannel = (string) ($row['channel'] ?? $row['contact_channel'] ?? 'whatsapp');
                 $rawStatus  = (string) ($row['status'] ?? 'open');
                 $status     = \App\Libraries\InboxStatus::normalize($rawStatus);
-                $within24h  = is_within_24h_window($row['last_reply_at'] ?? null);
+                $within24h  = contact_within_24h_window([
+                    'id'            => (int) ($row['contact_id'] ?? 0),
+                    'last_reply_at' => $row['last_reply_at'] ?? null,
+                ], false);
                 $frtDue     = $hasFrt ? ($row['frt_due_at'] ?? null) : null;
                 $frtExceeded = false;
                 if ($frtDue !== null && $frtDue !== '') {
@@ -283,7 +286,7 @@ class Chat extends BaseController
                 'conversation'    => $conversation,
                 'messages'        => $messages,
                 'notes'           => $notes,
-                'within_24h'      => is_within_24h_window($contact['last_reply_at'] ?? null),
+                'within_24h'      => contact_within_24h_window($contact, true),
                 'status_updates'  => $statusUpdates,
             ]);
         } catch (Throwable $e) {
@@ -315,7 +318,7 @@ class Chat extends BaseController
         }
 
         $channel = strtolower(trim((string) ($contact['channel'] ?? 'whatsapp'))) ?: 'whatsapp';
-        $within24h = is_within_24h_window($contact['last_reply_at'] ?? null);
+        $within24h = contact_within_24h_window($contact, true);
 
         if ($channel !== 'whatsapp' && $messageType === 'template') {
             return $this->jsonResponse(false, null, 'Templates are only available on WhatsApp.', [], 422);

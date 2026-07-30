@@ -54,6 +54,61 @@ if (! function_exists('is_within_24h_window')) {
     }
 }
 
+if (! function_exists('contact_within_24h_window')) {
+    /**
+     * Resolve 24h window from contact.last_reply_at, with fallback to latest inbound message.
+     * Also backfills last_reply_at when inbound exists but the column is empty/stale.
+     *
+     * @param array<string, mixed>|null $contact
+     */
+    function contact_within_24h_window(?array $contact, bool $repair = true): bool
+    {
+        if ($contact === null) {
+            return false;
+        }
+
+        $contactId = (int) ($contact['id'] ?? 0);
+        $lastReply = $contact['last_reply_at'] ?? null;
+
+        if (is_within_24h_window($lastReply)) {
+            return true;
+        }
+
+        if ($contactId <= 0) {
+            return false;
+        }
+
+        try {
+            $row = model(\App\Models\MessageModel::class)
+                ->select('created_at')
+                ->where('contact_id', $contactId)
+                ->where('direction', 'inbound')
+                ->orderBy('id', 'DESC')
+                ->first();
+        } catch (Throwable $e) {
+            return false;
+        }
+
+        $inboundAt = is_array($row) ? ($row['created_at'] ?? null) : null;
+        if (! is_within_24h_window($inboundAt)) {
+            return false;
+        }
+
+        if ($repair) {
+            try {
+                model(\App\Models\ContactModel::class)->update($contactId, [
+                    'last_reply_at'   => $inboundAt,
+                    'last_message_at' => $inboundAt,
+                ]);
+            } catch (Throwable $e) {
+                // Non-fatal — window is still open for this request.
+            }
+        }
+
+        return true;
+    }
+}
+
 if (! function_exists('wa_status_badge')) {
     /**
      * Return a Bootstrap badge HTML snippet for a WhatsApp / queue status.

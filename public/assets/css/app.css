@@ -2700,6 +2700,12 @@ table.dataTable tbody td { vertical-align: middle; }
     align-items: stretch;
     animation: wp-fade .28s ease;
 }
+.wp-embed-card {
+    border: 1px solid rgba(37, 211, 102, 0.28);
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(37, 211, 102, 0.08), rgba(7, 94, 84, 0.04));
+    padding: 0.95rem 1rem;
+}
 @keyframes wp-fade {
     from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: translateY(0); }

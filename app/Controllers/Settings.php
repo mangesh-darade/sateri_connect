@@ -56,6 +56,9 @@ class Settings extends BaseController
         $metaDisplay['access_token']      = $this->maskSecret($meta['access_token']);
         $metaDisplay['app_secret']        = $this->maskSecret($meta['app_secret']);
         $metaDisplay['page_access_token'] = $this->maskSecret((string) ($meta['page_access_token'] ?? ''));
+        $metaDisplay['two_step_pin']      = $this->maskSecret((string) ($meta['two_step_pin'] ?? ''));
+
+        $embeddedSignup = (new \App\Libraries\MetaEmbeddedSignup($settings))->clientConfig();
 
         $localCallback  = site_url('webhooks');
         $publicBase     = rtrim((string) $settings->get('webhook_public_base', ''), '/');
@@ -71,6 +74,7 @@ class Settings extends BaseController
             'emailProvider' => $emailProvider,
             'cheerio'   => $cheerioDisplay,
             'meta'      => $metaDisplay,
+            'embeddedSignup' => $embeddedSignup,
             'sendgrid'  => $sendGridDisplay,
             'cheerioEmail' => $settings->getCheerioEmailConfig(),
             'campaigns' => model(\App\Models\CampaignModel::class)
@@ -207,6 +211,8 @@ class Settings extends BaseController
                 $meta = [
                     'phone_number_id'         => trim((string) $this->request->getPost('meta_phone_number_id')),
                     'waba_id'                 => trim((string) $this->request->getPost('meta_waba_id')),
+                    'app_id'                  => trim((string) $this->request->getPost('meta_app_id')),
+                    'embedded_config_id'      => trim((string) $this->request->getPost('meta_embedded_config_id')),
                     'api_version'             => trim((string) $this->request->getPost('meta_api_version')) ?: 'v21.0',
                     'verify_token'            => $this->request->getPost('meta_webhook_verify_token'),
                     'page_id'                 => trim((string) $this->request->getPost('meta_page_id')),
@@ -228,6 +234,14 @@ class Settings extends BaseController
                 $pageToken = trim((string) $this->request->getPost('meta_page_access_token'));
                 if ($pageToken !== '' && ! str_contains($pageToken, '•')) {
                     $meta['page_access_token'] = $pageToken;
+                }
+
+                $pin = trim((string) $this->request->getPost('meta_two_step_pin'));
+                if ($pin !== '' && ! str_contains($pin, '•')) {
+                    if (preg_match('/^\d{6}$/', $pin) !== 1) {
+                        return $this->jsonResponse(false, null, 'Meta two-step PIN must be exactly 6 digits.', [], 422);
+                    }
+                    $meta['two_step_pin'] = $pin;
                 }
 
                 $settings->setMetaConfig(array_filter(
@@ -388,6 +402,57 @@ class Settings extends BaseController
         return $this->testProviderConnection('meta');
     }
 
+    /**
+     * Complete Meta Embedded Signup: exchange code → store token/WABA/phone → register → webhooks.
+     */
+    public function embeddedSignup(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('settings.edit')) {
+            return $denied;
+        }
+
+        $json = $this->safeGetJSON();
+        $code = trim((string) ($this->request->getPost('code') ?? ($json['code'] ?? '')));
+        $wabaId = trim((string) ($this->request->getPost('waba_id') ?? ($json['waba_id'] ?? '')));
+        $phoneNumberId = trim((string) (
+            $this->request->getPost('phone_number_id') ?? ($json['phone_number_id'] ?? '')
+        ));
+        $businessId = trim((string) (
+            $this->request->getPost('business_id') ?? ($json['business_id'] ?? '')
+        ));
+        $pin = trim((string) ($this->request->getPost('pin') ?? ($json['pin'] ?? '')));
+
+        if ($code === '') {
+            return $this->jsonResponse(false, null, 'Missing Embedded Signup auth code.', [], 422);
+        }
+
+        try {
+            $result = (new \App\Libraries\MetaEmbeddedSignup(service('settingsService')))->complete(
+                $code,
+                $wabaId,
+                $phoneNumberId,
+                $businessId !== '' ? $businessId : null,
+                preg_match('/^\d{6}$/', $pin) === 1 ? $pin : null
+            );
+
+            (new ActivityLogger())->log('update', 'settings', 'WhatsApp connected via Meta Embedded Signup', [
+                'waba_id'         => $result['waba_id'] ?? '',
+                'phone_number_id' => $result['phone_number_id'] ?? '',
+                'warnings'        => $result['warnings'] ?? [],
+            ]);
+
+            $msg = 'WhatsApp connected. Access token, WABA ID, and Phone Number ID saved.';
+            $warnings = $result['warnings'] ?? [];
+            if (is_array($warnings) && $warnings !== []) {
+                $msg .= ' Notes: ' . implode(' · ', $warnings);
+            }
+
+            return $this->jsonResponse(true, $result, $msg);
+        } catch (\Throwable $e) {
+            return $this->jsonResponse(false, null, $e->getMessage(), [], 500);
+        }
+    }
+
     public function testPageMessaging(): ResponseInterface
     {
         if ($denied = $this->requirePermission('settings.view')) {
@@ -483,7 +548,7 @@ class Settings extends BaseController
                     return $this->jsonResponse(
                         false,
                         null,
-                        'Paste your ngrok HTTPS URL, e.g. https://xxxx.ngrok-free.app',
+                        'Paste HTTPS URL (base or full callback), e.g. https://xxxx.trycloudflare.com',
                         [],
                         422
                     );
@@ -514,6 +579,19 @@ class Settings extends BaseController
                     $msg .= ' Meta WABA override pinned to this URL.';
                 } elseif (is_array($metaSubscribe) && isset($metaSubscribe['error'])) {
                     $msg .= ' (Meta subscribe warning: ' . $metaSubscribe['error'] . ')';
+                }
+
+                $fields = is_array($metaSubscribe['webhook_fields'] ?? null)
+                    ? $metaSubscribe['webhook_fields']
+                    : null;
+                if (is_array($fields)) {
+                    if (! empty($fields['auto_fixed'])) {
+                        $msg .= ' Subscribed Meta webhook field: messages.';
+                    } elseif (empty($fields['messages_subscribed']) && ! empty($fields['error'])) {
+                        $msg .= ' WARNING: ' . $fields['error'];
+                    } elseif (! empty($fields['messages_subscribed'])) {
+                        $msg .= ' messages field OK.';
+                    }
                 }
 
                 return $this->jsonResponse(true, [

@@ -29,7 +29,7 @@ WhatsApp Automation Platform (`whstapp`) — full documentation set.
 | 8 | [DEPLOYMENT.md](DEPLOYMENT.md) | Production checklist |
 | — | [schema.sql](schema.sql) | Database schema reference |
 
-Legacy stubs (redirect to Cheerio docs): `META_CONFIGURATION.md`, `META_FLOW.md`, `META_TESTING.md`.
+Meta publish / go-live: **[META_PUBLISH_GO_LIVE.md](META_PUBLISH_GO_LIVE.md)** · API test calls: **[META_APP_REVIEW_API_TESTING.md](META_APP_REVIEW_API_TESTING.md)** · also `META_TESTING.md`, `META_CONFIGURATION.md`, `META_FLOW.md`.
 
 ---
 

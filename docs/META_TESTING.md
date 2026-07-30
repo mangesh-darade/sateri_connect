@@ -1,9 +1,13 @@
-# Meta testing (removed)
+# Meta testing
 
-Use Cheerio connection test instead:
+For **publish / go-live (all steps in English)**:
 
-1. Settings → Cheerio API → paste API key  
-2. Click **Test Cheerio Connection**  
-3. Templates → Sync  
+→ **[META_PUBLISH_GO_LIVE.md](META_PUBLISH_GO_LIVE.md)**
 
-Details: [CHEERIO_CONFIGURATION.md](CHEERIO_CONFIGURATION.md)
+For **App Review / Permissions API test calls** (Graph API Explorer):
+
+→ **[META_APP_REVIEW_API_TESTING.md](META_APP_REVIEW_API_TESTING.md)**
+
+For connecting Meta as the messaging provider in this app:
+
+→ [META_PROVIDER_SETUP_GUIDE.md](META_PROVIDER_SETUP_GUIDE.md) · [META_CONFIGURATION.md](META_CONFIGURATION.md) · [META_FLOW.md](META_FLOW.md)

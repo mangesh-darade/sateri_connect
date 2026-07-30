@@ -290,7 +290,7 @@ class QueueService
         $type    = (string) ($item['message_type'] ?? ($payload['type'] ?? 'text'));
 
         // WhatsApp policy: free-form outbound only inside the 24h customer-care window.
-        if ($type !== 'template' && ! is_within_24h_window($contact['last_reply_at'] ?? null)) {
+        if ($type !== 'template' && ! contact_within_24h_window($contact, true)) {
             throw new RuntimeException(
                 'Outside the 24-hour messaging window. Only template messages can be sent.'
             );
