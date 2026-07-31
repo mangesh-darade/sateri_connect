@@ -752,6 +752,11 @@ class Templates extends BaseController
                 }
             }
 
+            $placementError = $this->validateBodyVariablePlacement($body);
+            if ($placementError !== null) {
+                return $this->invalidTemplateInput($placementError);
+            }
+
             $ratioError = $this->validateBodyVariableRatio($body);
             if ($ratioError !== null) {
                 return $this->invalidTemplateInput($ratioError);
@@ -1114,23 +1119,63 @@ class Templates extends BaseController
     /**
      * WhatsApp rejects bodies where variables are too dense vs fixed words
      * (error_subcode 2388293 / "Parameters words ratio exceeds limit").
+     *
+     * Meta counts whitespace-separated tokens and requires
+     * words + parameters >= (3 x parameters) + 1. A variable glued to a word
+     * (`order{{1}}`) counts as one token, so it does not help the ratio.
      */
     protected function validateBodyVariableRatio(string $body): ?string
     {
-        $placeholders = $this->extractPlaceholders($body);
-        $varCount     = count($placeholders);
+        $varCount = count($this->extractPlaceholders($body));
         if ($varCount === 0) {
             return null;
         }
 
-        $plain = trim(preg_replace('/\{\{\s*\d+\s*\}\}/', ' ', $body) ?? $body);
-        $plain = preg_replace('/\s+/', ' ', $plain) ?? $plain;
-        $words = $plain === '' ? [] : preg_split('/\s+/', $plain, -1, PREG_SPLIT_NO_EMPTY);
-        $wordCount = is_array($words) ? count($words) : 0;
+        $tokenCount = $this->countBodyTokens($body);
+        $required   = ($varCount * 3) + 1;
 
-        // Require at least ~3 fixed words per variable (Meta/Cheerio ratio rule).
-        if ($wordCount < ($varCount * 3)) {
-            return 'This template has too many variables for its length. Add more body text or reduce variables (WhatsApp requires enough normal words around each {{n}}).';
+        if ($tokenCount < $required) {
+            return sprintf(
+                'This template has too many variables for its length. WhatsApp needs at least %d words for %d variable%s, but this body has %d. Add more text or use fewer variables.',
+                $required,
+                $varCount,
+                $varCount === 1 ? '' : 's',
+                $tokenCount
+            );
+        }
+
+        return null;
+    }
+
+    protected function countBodyTokens(string $body): int
+    {
+        $normalized = trim(preg_replace('/\s+/', ' ', $body) ?? $body);
+        if ($normalized === '') {
+            return 0;
+        }
+
+        $tokens = preg_split('/\s+/', $normalized, -1, PREG_SPLIT_NO_EMPTY);
+
+        return is_array($tokens) ? count($tokens) : 0;
+    }
+
+    /**
+     * Meta rejects templates that open or close with a variable
+     * (error_subcode 2388299 / "Leading or trailing parameters not allowed").
+     */
+    protected function validateBodyVariablePlacement(string $body): ?string
+    {
+        $trimmed = trim($body);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        if (preg_match('/^\{\{\s*\d+\s*\}\}/', $trimmed)) {
+            return 'The message body cannot start with a variable. Add some text before it.';
+        }
+
+        if (preg_match('/\{\{\s*\d+\s*\}\}$/', $trimmed)) {
+            return 'The message body cannot end with a variable. Add some text after it.';
         }
 
         return null;

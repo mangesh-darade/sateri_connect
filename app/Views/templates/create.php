@@ -200,11 +200,9 @@ $categories = [
                                 </div>
                                 <div class="form-text mt-2">
                                     Use <code>{{1}}</code>, <code>{{2}}</code> for variables. <?= esc($providerShort) ?> must approve before you can send.
-                                    Keep enough normal words around variables — WhatsApp rejects templates with too many variables for short body text.
+                                    WhatsApp needs at least <strong>(3 &times; variables) + 1</strong> words in the body, and the body cannot start or end with a variable.
                                 </div>
-                                <div class="alert alert-warning py-2 px-3 small mt-2 mb-0 d-none" id="templateVarRatioWarning">
-                                    Too many variables for this body length. Add more text or reduce variables before submitting.
-                                </div>
+                                <div class="alert alert-warning py-2 px-3 small mt-2 mb-0 d-none" id="templateVarRatioWarning"></div>
                             </div>
                             <div class="col-12 d-none" id="templateExamplesWrap">
                                 <input type="hidden" name="body_examples" id="templateExamplesInput" value="<?= esc(old('body_examples') ?? '', 'attr') ?>">
@@ -671,14 +669,36 @@ $(function () {
         return nums;
     }
 
-    function isBodyVariableRatioTooHigh() {
+    // WhatsApp counts whitespace-separated tokens and needs words + variables >= (3 x variables) + 1.
+    function getBodyRatioState() {
         var placeholders = getBodyPlaceholders();
-        if (!placeholders.length) {
-            return false;
+        var text = String($body.val() || '').replace(/\s+/g, ' ').trim();
+        var tokens = text ? text.split(' ') : [];
+
+        return {
+            variables: placeholders.length,
+            words: tokens.length,
+            required: placeholders.length ? (placeholders.length * 3) + 1 : 0
+        };
+    }
+
+    function isBodyVariableRatioTooHigh() {
+        var state = getBodyRatioState();
+        return state.variables > 0 && state.words < state.required;
+    }
+
+    function getBodyVariablePlacementError() {
+        var text = String($body.val() || '').trim();
+        if (!text) {
+            return '';
         }
-        var plain = String($body.val() || '').replace(/\{\{\s*\d+\s*\}\}/g, ' ').replace(/\s+/g, ' ').trim();
-        var words = plain ? plain.split(' ') : [];
-        return words.length < (placeholders.length * 3);
+        if (/^\{\{\s*\d+\s*\}\}/.test(text)) {
+            return 'The message body cannot start with a variable. Add some text before it.';
+        }
+        if (/\{\{\s*\d+\s*\}\}$/.test(text)) {
+            return 'The message body cannot end with a variable. Add some text after it.';
+        }
+        return '';
     }
 
     function updateVarRatioWarning() {
@@ -686,11 +706,24 @@ $(function () {
         if (!$warn.length) {
             return;
         }
-        if (isBodyVariableRatioTooHigh()) {
-            $warn.removeClass('d-none');
-        } else {
-            $warn.addClass('d-none');
+
+        var placement = getBodyVariablePlacementError();
+        if (placement) {
+            $warn.text(placement).removeClass('d-none');
+            return;
         }
+
+        var state = getBodyRatioState();
+        if (state.variables > 0 && state.words < state.required) {
+            $warn.text(
+                'WhatsApp needs at least ' + state.required + ' words for ' + state.variables
+                + ' variable' + (state.variables === 1 ? '' : 's') + '. This body has ' + state.words
+                + '. Add more text or use fewer variables.'
+            ).removeClass('d-none');
+            return;
+        }
+
+        $warn.addClass('d-none');
     }
 
     function getExampleMap() {
@@ -1384,9 +1417,20 @@ $(function () {
                     return;
                 }
             }
-            if (isBodyVariableRatioTooHigh()) {
+            var placementError = getBodyVariablePlacementError();
+            if (placementError) {
                 updateVarRatioWarning();
-                APP.toast('Too many variables for this body length. Add more text or reduce variables.', 'error');
+                APP.toast(placementError, 'error');
+                return;
+            }
+            if (isBodyVariableRatioTooHigh()) {
+                var state = getBodyRatioState();
+                updateVarRatioWarning();
+                APP.toast(
+                    'WhatsApp needs at least ' + state.required + ' words for ' + state.variables
+                    + ' variable' + (state.variables === 1 ? '' : 's') + '. This body has ' + state.words + '.',
+                    'error'
+                );
                 return;
             }
         }
