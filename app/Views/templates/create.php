@@ -1082,9 +1082,12 @@ $(function () {
             $previewHeader.text(($header.val() || '').trim());
             $previewHeaderMeta.text('').addClass('d-none');
         } else if (['image', 'video', 'document'].indexOf(headerType) !== -1) {
-            $previewHeader.text('');
+            var sampleUrl = ($headerMediaPreviewUrl.val() || '').trim()
+                || ($headerMediaManualUrl.val() || '').trim();
+            $previewHeader.html(APP.templateHeaderPreviewHtml(headerType, sampleUrl));
             $previewHeaderMeta
-                .text(headerType.charAt(0).toUpperCase() + headerType.slice(1) + ' header sample: ' + (($headerMediaPreviewUrl.val() || '').trim() || ($headerMediaManualUrl.val() || '').trim() || 'Not set'))
+                .text(headerType.charAt(0).toUpperCase() + headerType.slice(1)
+                    + ' header sample: ' + (sampleUrl ? 'uploaded' : 'Not set'))
                 .removeClass('d-none');
         } else {
             $previewHeader.text('');

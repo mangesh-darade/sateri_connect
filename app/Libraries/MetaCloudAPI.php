@@ -69,16 +69,58 @@ class MetaCloudAPI
                 ];
 
                 if ($isMultipart && $data !== null) {
+                    // CodeIgniter CurlRequest expects CURLFile values keyed by field name.
+                    // Guzzle-style ['contents'=>..., 'headers'=>...] arrays cause "Array to string conversion".
                     $multipart = [];
                     foreach ($data as $name => $value) {
-                        if (is_array($value) && isset($value['contents'])) {
-                            $multipart[] = array_merge(['name' => $name], $value);
-                        } else {
-                            $multipart[] = [
-                                'name'     => $name,
-                                'contents' => is_scalar($value) ? (string) $value : json_encode($value),
-                            ];
+                        if ($value instanceof \CURLFile) {
+                            $multipart[$name] = $value;
+                            continue;
                         }
+
+                        if (is_array($value) && array_key_exists('contents', $value)) {
+                            $contents = $value['contents'];
+                            $filename = (string) ($value['filename'] ?? $name);
+                            $mime     = 'application/octet-stream';
+                            if (isset($value['headers']['Content-Type']) && is_string($value['headers']['Content-Type'])) {
+                                $mime = $value['headers']['Content-Type'];
+                            }
+
+                            if (is_resource($contents)) {
+                                $meta = stream_get_meta_data($contents);
+                                $uri  = is_string($meta['uri'] ?? null) ? $meta['uri'] : '';
+                                if ($uri !== '' && is_file($uri)) {
+                                    $multipart[$name] = new \CURLFile($uri, $mime, $filename);
+                                } else {
+                                    $tmp = tempnam(sys_get_temp_dir(), 'meta_up_');
+                                    if ($tmp === false) {
+                                        throw new RuntimeException('Unable to create temp file for media upload.');
+                                    }
+                                    $out = fopen($tmp, 'wb');
+                                    if ($out === false) {
+                                        throw new RuntimeException('Unable to open temp file for media upload.');
+                                    }
+                                    stream_copy_to_stream($contents, $out);
+                                    fclose($out);
+                                    $multipart[$name] = new \CURLFile($tmp, $mime, $filename);
+                                }
+                            } elseif (is_string($contents) && is_file($contents)) {
+                                $multipart[$name] = new \CURLFile($contents, $mime, $filename);
+                            } elseif (is_string($contents)) {
+                                $tmp = tempnam(sys_get_temp_dir(), 'meta_up_');
+                                if ($tmp === false || file_put_contents($tmp, $contents) === false) {
+                                    throw new RuntimeException('Unable to stage media upload contents.');
+                                }
+                                $multipart[$name] = new \CURLFile($tmp, $mime, $filename);
+                            } else {
+                                throw new RuntimeException('Unsupported multipart file contents for field: ' . $name);
+                            }
+                            continue;
+                        }
+
+                        $multipart[$name] = is_scalar($value) || $value === null
+                            ? (string) $value
+                            : (string) json_encode($value);
                     }
                     $options['multipart'] = $multipart;
                 } elseif ($data !== null) {
@@ -303,10 +345,7 @@ class MetaCloudAPI
 
     protected function resolveLocalMediaUrlToProviderId(string $url): string
     {
-        $filename = '';
-        if (preg_match('#/media/serve/([^/?#]+)#', $url, $m)) {
-            $filename = basename(rawurldecode($m[1]));
-        }
+        $filename = LocalMediaUrl::filenameFromUrl($url);
 
         $row = null;
         if ($filename !== '') {
@@ -552,23 +591,86 @@ class MetaCloudAPI
     public function uploadMedia(string $filePath, string $mimeType): array
     {
         $this->ensureConfigured(true);
-        if (! is_file($filePath)) {
+        if (! is_file($filePath) || ! is_readable($filePath)) {
             throw new RuntimeException('Media file not found: ' . $filePath);
         }
 
-        $result = $this->request('POST', $this->phoneNumberId . '/media', [
+        // Use native cURL + CURLFile. CodeIgniter CurlRequest multipart is easy to
+        // misconfigure and previously caused "Array to string conversion" here.
+        $url = $this->buildUrl($this->phoneNumberId . '/media');
+        $ch  = curl_init($url);
+        if ($ch === false) {
+            throw new RuntimeException('Unable to initialize media upload request.');
+        }
+
+        $postFields = [
             'messaging_product' => 'whatsapp',
             'type'              => $mimeType,
-            'file'              => [
-                'contents' => fopen($filePath, 'r'),
-                'filename' => basename($filePath),
-                'headers'  => ['Content-Type' => $mimeType],
+            'file'              => new \CURLFile($filePath, $mimeType, basename($filePath)),
+        ];
+
+        $curlOpts = [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $postFields,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER     => [
+                'Authorization: Bearer ' . $this->accessToken,
+                'Accept: application/json',
             ],
-        ], true);
+            CURLOPT_TIMEOUT        => (int) ($this->config->defaultTimeout ?: 60),
+        ];
+
+        // Match request() / Cheerio SSL handling — WAMP often has empty curl.cainfo.
+        $verify = $this->resolveSslVerify();
+        if ($verify === false) {
+            $curlOpts[CURLOPT_SSL_VERIFYPEER] = false;
+            $curlOpts[CURLOPT_SSL_VERIFYHOST] = 0;
+        } elseif (is_string($verify)) {
+            $curlOpts[CURLOPT_SSL_VERIFYPEER] = true;
+            $curlOpts[CURLOPT_SSL_VERIFYHOST] = 2;
+            $curlOpts[CURLOPT_CAINFO]         = $verify;
+        } else {
+            $curlOpts[CURLOPT_SSL_VERIFYPEER] = true;
+            $curlOpts[CURLOPT_SSL_VERIFYHOST] = 2;
+        }
+
+        curl_setopt_array($ch, $curlOpts);
+
+        $body = curl_exec($ch);
+        $errno = curl_errno($ch);
+        $error = curl_error($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($body === false || $errno !== 0) {
+            throw new RuntimeException(
+                'Meta media upload failed: ' . $this->humanizeConnectionError($error !== '' ? $error : 'cURL error ' . $errno)
+            );
+        }
+
+        $decoded = json_decode((string) $body, true);
+        if (! is_array($decoded)) {
+            $decoded = ['raw' => $body];
+        }
+
+        if ($status < 200 || $status >= 300) {
+            log_message('error', 'MetaCloudAPI media upload error body: {body}', [
+                'body' => mb_substr((string) $body, 0, 4000),
+            ]);
+            throw new RuntimeException(
+                'Meta WhatsApp API error: HTTP ' . $status . ': ' . $this->extractApiError($decoded),
+                $status
+            );
+        }
+
+        $mediaId = trim((string) ($decoded['id'] ?? ''));
+        if ($mediaId === '') {
+            throw new RuntimeException('Meta media upload did not return a media ID.');
+        }
 
         return [
-            'id'     => (string) ($result['id'] ?? ''),
-            'raw'    => $result,
+            'id'       => $mediaId,
+            'raw'      => $decoded,
             'provider' => 'meta',
         ];
     }
@@ -708,7 +810,17 @@ class MetaCloudAPI
                         ? (string) ($example['header_handle'][0] ?? '')
                         : (string) $example['header_handle'];
 
-                    $handle = $this->resolveTemplateHeaderHandle($sample, $format);
+                    // Cheerio-only keys are stripped below, but they still point at the
+                    // same upload and make the handle lookup work on localhost.
+                    $fallbacks = [];
+                    foreach (['header_url', 'link'] as $key) {
+                        $value = $component['example'][$key] ?? null;
+                        if (is_string($value) && trim($value) !== '') {
+                            $fallbacks[] = trim($value);
+                        }
+                    }
+
+                    $handle = $this->resolveTemplateHeaderHandle($sample, $format, $fallbacks);
                     if ($handle === '') {
                         unset($example['header_handle']);
                     } else {
@@ -742,14 +854,28 @@ class MetaCloudAPI
      * Graph only accepts a Resumable Upload handle as a media header sample —
      * a media ID or public URL is reported back as "missing sample parameter".
      */
-    protected function resolveTemplateHeaderHandle(string $sample, string $format): string
+    protected function resolveTemplateHeaderHandle(string $sample, string $format, array $fallbackSamples = []): string
     {
         $sample = trim($sample);
         if ($sample === '' || $this->looksLikeUploadHandle($sample)) {
             return $sample;
         }
 
-        [$path, $mime, $isTemp] = $this->resolveSampleFile($sample, $format);
+        $path = '';
+        $mime = '';
+        $isTemp = false;
+        foreach (array_merge([$sample], $fallbackSamples) as $candidate) {
+            $candidate = trim((string) $candidate);
+            if ($candidate === '') {
+                continue;
+            }
+
+            [$path, $mime, $isTemp] = $this->resolveSampleFile($candidate, $format);
+            if ($path !== '') {
+                break;
+            }
+        }
+
         if ($path === '') {
             throw new RuntimeException(
                 'Could not read the header sample file for this template. Re-upload the header media and try again.'
@@ -824,10 +950,17 @@ class MetaCloudAPI
             return $row;
         }
 
-        $filename = '';
-        if (preg_match('#/media/serve/([^/?\#]+)#', $sample, $m)) {
-            $filename = basename(rawurldecode($m[1]));
-        } elseif (! preg_match('#^https?://#i', $sample)) {
+        // On localhost the stored sample is the provider media ID, because the
+        // /media/serve URL is not reachable by Meta.
+        if (! preg_match('#^https?://#i', $sample)) {
+            $row = $model->where('wa_media_id', $sample)->orderBy('id', 'DESC')->first();
+            if (is_array($row)) {
+                return $row;
+            }
+        }
+
+        $filename = LocalMediaUrl::filenameFromUrl($sample);
+        if ($filename === '' && ! preg_match('#^https?://#i', $sample)) {
             $filename = basename($sample);
         }
 
@@ -1659,7 +1792,7 @@ class MetaCloudAPI
                 isset($error['message']) ? (string) $error['message'] : null,
                 isset($error['error_user_title']) ? (string) $error['error_user_title'] : null,
                 isset($error['error_user_msg']) ? (string) $error['error_user_msg'] : null,
-                isset($error['error_data']['details']) ? (string) $error['error_data']['details'] : null,
+                $this->stringifyErrorDetails($error['error_data']['details'] ?? null),
             ]);
 
             return implode(' | ', $parts) ?: 'Unknown error';
@@ -1675,5 +1808,22 @@ class MetaCloudAPI
         }
 
         return 'Unknown error';
+    }
+
+    protected function stringifyErrorDetails(mixed $details): ?string
+    {
+        if ($details === null || $details === '') {
+            return null;
+        }
+        if (is_string($details)) {
+            return $details;
+        }
+        if (is_scalar($details)) {
+            return (string) $details;
+        }
+
+        $json = json_encode($details);
+
+        return is_string($json) ? $json : null;
     }
 }

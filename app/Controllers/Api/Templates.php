@@ -132,9 +132,7 @@ class Templates extends BaseApiController
                     break;
                 case 'BODY':
                     $result['body'] = $component['text'] ?? null;
-                    if (! empty($component['example']['body_text'][0]) && is_array($component['example']['body_text'][0])) {
-                        $result['variables'] = $component['example']['body_text'][0];
-                    }
+                    $result['variables'] = \App\Libraries\WhatsAppTemplateVariables::identitiesFromComponents([$component]);
                     break;
                 case 'FOOTER':
                     $result['footer'] = $component['text'] ?? null;

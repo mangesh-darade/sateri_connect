@@ -433,6 +433,11 @@ class Campaigns extends BaseController
             // Meta/WhatsApp approval samples (scontent.whatsapp.net) are often not reusable at send time.
             $hasReusableSample = $isMediaHeader && $this->isReusableTemplateSampleMedia($sampleMedia);
             $needsMedia = $isMediaHeader && ! $hasReusableSample;
+            $variableDefinitions = \App\Libraries\WhatsAppTemplateVariables::definitionsForTemplate(
+                $tpl['variables'] ?? null,
+                (string) ($tpl['body'] ?? ''),
+                $tpl['raw_payload'] ?? null
+            );
             $templateCards[] = [
                 'id'               => (int) $tpl['id'],
                 'name'             => (string) ($tpl['name'] ?? ''),
@@ -447,7 +452,10 @@ class Campaigns extends BaseController
                 'has_reusable_sample' => $hasReusableSample,
                 'needs_media'      => $needsMedia,
                 'media_optional'   => $isMediaHeader && $hasReusableSample,
-                'variables'        => $this->normalizeTemplateVariables($tpl['variables'] ?? null, (string) ($tpl['body'] ?? '')),
+                'media_accept'     => \App\Libraries\WhatsAppTemplateMedia::acceptAttribute($headerType),
+                'media_expected'   => \App\Libraries\WhatsAppTemplateMedia::expectedLabel($headerType),
+                'variables'        => array_column($variableDefinitions, 'key'),
+                'variable_definitions' => $variableDefinitions,
             ];
         }
 
@@ -652,6 +660,30 @@ class Campaigns extends BaseController
             return $this->jsonResponse(false, null, 'Template not found.', [], 404);
         }
 
+        $variableDefinitions = \App\Libraries\WhatsAppTemplateVariables::definitionsForTemplate(
+            $template['variables'] ?? null,
+            (string) ($template['body'] ?? ''),
+            $template['raw_payload'] ?? null
+        );
+        $variables = \App\Libraries\WhatsAppTemplateVariables::applyMappingDefaults(
+            $variables,
+            $variableDefinitions
+        );
+        $missingVariables = array_values(array_diff(
+            array_column($variableDefinitions, 'key'),
+            array_keys($variables)
+        ));
+        if ($missingVariables !== []) {
+            return $this->jsonResponse(
+                false,
+                null,
+                'Map every template variable before continuing: {{'
+                    . implode('}}, {{', $missingVariables) . '}}.',
+                ['variables' => 'Select a contact field or enter a custom value for every variable.'],
+                422
+            );
+        }
+
         $preview = service('campaignService')->previewAudience([$tagId], [], $attributes, false);
         if ($preview['total'] === 0) {
             return $this->jsonResponse(false, null, 'No contacts matched this label/filters.', [], 422);
@@ -701,26 +733,18 @@ class Campaigns extends BaseController
                 }
             }
 
-            if ($mediaMime !== '') {
-                $mimeOk = match ($headerType) {
-                    'image'    => str_starts_with($mediaMime, 'image/'),
-                    'video'    => str_starts_with($mediaMime, 'video/'),
-                    'document' => $mediaMime === 'application/pdf'
-                        || str_contains($mediaMime, 'document')
-                        || $mediaMime === 'application/msword',
-                    default    => true,
-                };
-                if (! $mimeOk) {
-                    return $this->jsonResponse(
-                        false,
-                        null,
-                        'Template "' . ($template['name'] ?? '') . '" needs a '
-                        . strtoupper($headerType) . ' header file. Uploaded type was '
-                        . $mediaMime . '. For DOCUMENT templates upload a PDF.',
-                        [],
-                        422
-                    );
-                }
+            if (! \App\Libraries\WhatsAppTemplateMedia::matchesHeaderType($headerType, $mediaMime)) {
+                return $this->jsonResponse(
+                    false,
+                    null,
+                    \App\Libraries\WhatsAppTemplateMedia::mismatchMessage(
+                        (string) ($template['name'] ?? ''),
+                        $headerType,
+                        $mediaMime
+                    ),
+                    [],
+                    422
+                );
             }
 
             $payload['header_media_url'] = $mediaUrl;
@@ -1196,33 +1220,10 @@ class Campaigns extends BaseController
      */
     protected function normalizeTemplateVariables(mixed $variables, string $body = ''): array
     {
-        if (is_string($variables) && $variables !== '') {
-            $decoded   = json_decode($variables, true);
-            $variables = is_array($decoded) ? $decoded : null;
-        }
-        if (is_array($variables) && $variables !== []) {
-            $out = [];
-            foreach ($variables as $key => $value) {
-                if (is_int($key) || ctype_digit((string) $key)) {
-                    $out[] = (string) (is_scalar($value) && ! is_bool($value) && (string) $value !== '' ? $value : $key);
-                } elseif (is_string($value) && preg_match('/^\d+$/', $value)) {
-                    $out[] = $value;
-                } else {
-                    $out[] = (string) $key;
-                }
-            }
-
-            return array_values(array_unique($out));
-        }
-
-        if ($body !== '' && preg_match_all('/\{\{\s*(\d+)\s*\}\}/', $body, $m)) {
-            $nums = array_map('intval', $m[1]);
-            sort($nums);
-
-            return array_map('strval', array_values(array_unique($nums)));
-        }
-
-        return [];
+        return array_column(
+            \App\Libraries\WhatsAppTemplateVariables::definitionsForTemplate($variables, $body),
+            'key'
+        );
     }
 
     protected function ensureEmailScheduledAtColumn(): void
@@ -1382,10 +1383,7 @@ class Campaigns extends BaseController
             return [];
         }
 
-        $filename = '';
-        if (preg_match('#/media/serve/([^/?#]+)#', $mediaUrl, $m)) {
-            $filename = basename(rawurldecode($m[1]));
-        }
+        $filename = \App\Libraries\LocalMediaUrl::filenameFromUrl($mediaUrl);
 
         $model = model(\App\Models\MediaModel::class);
         $row   = null;
@@ -1424,12 +1422,7 @@ class Campaigns extends BaseController
 
     protected function isLocalMediaUrl(string $url): bool
     {
-        $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?: ''));
-
-        return $host === ''
-            || $host === 'localhost'
-            || $host === '127.0.0.1'
-            || str_ends_with($host, '.local');
+        return \App\Libraries\LocalMediaUrl::isLocalHost($url);
     }
 
     /**

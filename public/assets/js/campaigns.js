@@ -55,10 +55,24 @@
         return false;
     }
 
+    function isLocalMediaUrl(url) {
+        url = String(url || '').trim();
+        if (!url) return false;
+        try {
+            var host = String((new URL(url, window.location.origin)).hostname || '').toLowerCase();
+            return host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local');
+        } catch (e) {
+            return /localhost|127\.0\.0\.1/i.test(url);
+        }
+    }
+
     function apiErrorMessage(xhr, fallback) {
         if (xhr && xhr.responseJSON) {
             if (xhr.responseJSON.message) {
                 return String(xhr.responseJSON.message);
+            }
+            if (xhr.responseJSON.error && xhr.responseJSON.error.technical) {
+                return String(xhr.responseJSON.error.technical);
             }
             if (xhr.responseJSON.errors && typeof xhr.responseJSON.errors === 'object') {
                 var first = Object.values(xhr.responseJSON.errors)[0];
@@ -302,6 +316,7 @@
         }
         state.templateId = parseInt(id, 10);
         state.template = tpl;
+        state.variables = {};
         renderTemplateCards($('#cwTemplateSearch').val() || '');
         setStep(4);
     }
@@ -314,13 +329,25 @@
             return;
         }
         variables.forEach(function (v) {
-            var key = String(v);
-            var selected = state.variables[key] || 'name';
+            var definition = (v && typeof v === 'object') ? v : { key: String(v) };
+            var key = String(definition.key || '');
+            if (!key) return;
+            var example = String(definition.example || '');
+            var suggested = String(definition.suggested_source || '');
+            var selected = Object.prototype.hasOwnProperty.call(state.variables, key)
+                ? String(state.variables[key] || '')
+                : suggested;
+            var customValue = selected === 'custom'
+                ? example
+                : ((selected && ['name','mobile','email','custom'].indexOf(selected) === -1) ? selected : '');
             var row =
                 '<div class="row g-2 mb-2 align-items-center">' +
-                '<div class="col-4"><code>{{' + esc(key) + '}}</code></div>' +
+                '<div class="col-4"><code>{{' + esc(key) + '}}</code>' +
+                (example ? '<div class="small text-muted text-break">Example: ' + esc(example) + '</div>' : '') +
+                '</div>' +
                 '<div class="col-8">' +
                 '<select class="form-select form-select-sm cw-var-source" data-var="' + esc(key) + '">' +
+                '<option value=""' + (selected === '' ? ' selected' : '') + '>Select contact field…</option>' +
                 '<option value="name"' + (selected === 'name' ? ' selected' : '') + '>Contact Name</option>' +
                 '<option value="mobile"' + (selected === 'mobile' ? ' selected' : '') + '>Mobile</option>' +
                 '<option value="email"' + (selected === 'email' ? ' selected' : '') + '>Email</option>' +
@@ -329,7 +356,7 @@
                 '<input type="text" class="form-control form-control-sm mt-1 cw-var-custom' +
                 (selected === 'custom' || (selected && ['name','mobile','email','custom'].indexOf(selected) === -1) ? '' : ' d-none') +
                 '" data-var="' + esc(key) + '" placeholder="Custom value" value="' +
-                esc((selected && ['name','mobile','email','custom'].indexOf(selected) === -1) ? selected : '') + '">' +
+                esc(customValue) + '">' +
                 '</div></div>';
             $wrap.append(row);
         });
@@ -368,6 +395,7 @@
         // IMAGE/VIDEO/DOCUMENT: show upload. If approved sample exists, upload is optional.
         $('#cwUploadBox').toggleClass('d-none', !showMedia);
         $('#cwMediaCol').toggleClass('d-none', !showMedia);
+        $('#cwMediaFile').attr('accept', tpl.media_accept || 'image/png,image/jpeg,image/webp,video/mp4,application/pdf');
         if (!showMedia) {
             state.mediaUrl = '';
             state.mediaId = '';
@@ -396,18 +424,43 @@
             $('#cwMediaFile').val('');
             $('#cwMediaStatus').addClass('d-none').text('');
             $('#cwUploadTitle').text('Upload ' + String(tpl.header_type || 'media').toUpperCase() + ' file');
+            var expected = tpl.media_expected || 'a supported media file';
             var why = tpl.has_sample_media
-                ? 'Meta approval sample cannot be reused at send time. Upload the '
-                    + String(tpl.header_type || 'media').toUpperCase()
-                    + ' again (PDF for document, MP4 for video, image for image).'
-                : 'Required for this template header (' + (tpl.header_type || 'media') + ')';
+                ? 'Meta approval sample cannot be reused at send time. Upload ' + expected + ' again.'
+                : 'This template header needs ' + expected + '.';
             $('#cwUploadHint').text(why);
         } else {
             $('#cwUploadTitle').text('Upload media here');
             $('#cwUploadHint').text('Drag & drop or click — required for this template header (' + (tpl.header_type || 'media') + ')');
         }
-        renderVariableMap(tpl.variables || []);
+        renderVariableMap(tpl.variable_definitions || tpl.variables || []);
         updateWaPreview();
+    }
+
+    /**
+     * Mirrors WhatsAppTemplateMedia::matchesHeaderType so a wrong file is caught
+     * before it is uploaded, instead of failing when the wizard is submitted.
+     *
+     * @return {string} empty when the file fits the template header
+     */
+    function headerMediaMismatch(mime) {
+        var tpl = state.template || {};
+        var headerType = String(tpl.header_type || '').toLowerCase();
+        mime = String(mime || '').toLowerCase();
+        if (!mime || ['image', 'video', 'document'].indexOf(headerType) === -1) {
+            return '';
+        }
+
+        var ok = headerType === 'image' ? mime.indexOf('image/') === 0
+            : headerType === 'video' ? mime.indexOf('video/') === 0
+                : mime === 'application/pdf' || mime.indexOf('document') !== -1 || mime === 'application/msword';
+        if (ok) {
+            return '';
+        }
+
+        return 'Template "' + (tpl.name || 'this template') + '" has a ' + headerType.toUpperCase()
+            + ' header, so it needs ' + (tpl.media_expected || 'a supported media file')
+            + '. You uploaded ' + mime + '.';
     }
 
     function updateWaPreview() {
@@ -506,12 +559,14 @@
             // needs_media already means Meta sample is not reusable — require upload even if has_sample_media.
             if (state.channel === 'whatsapp' && state.template && state.template.needs_media) {
                 var url = String($('#cwMediaUrl').val() || state.mediaUrl || '').trim();
-                if (isBadMediaUrl(url) && !state.mediaId) {
+                if ((isBadMediaUrl(url) || (isLocalMediaUrl(url) && !state.mediaId)) && !state.mediaId) {
                     $('#cwMediaUrl').addClass('is-invalid');
                     $('#cwMediaUrlError').removeClass('d-none');
                     var ht = String(state.template.header_type || 'media').toUpperCase();
                     return showWizardError(
-                        'Upload a ' + ht + ' file for this template. The Meta approval sample cannot be reused at send time.',
+                        url && isLocalMediaUrl(url)
+                            ? 'Upload the ' + ht + ' again. Localhost media URLs cannot be sent via Meta — WhatsApp needs a Meta media ID.'
+                            : 'Upload a ' + ht + ' file for this template. The Meta approval sample cannot be reused at send time.',
                         $('#cwMediaUrl')
                     );
                 }
@@ -519,7 +574,10 @@
             }
             var missingVar = null;
             $('#cwVariableMap .cw-var-source').each(function () {
-                if ($(this).val() === 'custom') {
+                if (!$(this).val()) {
+                    $(this).addClass('is-invalid');
+                    missingVar = $(this);
+                } else if ($(this).val() === 'custom') {
                     var key = $(this).data('var');
                     var $custom = $('#cwVariableMap .cw-var-custom[data-var="' + key + '"]');
                     if (!String($custom.val() || '').trim()) {
@@ -529,7 +587,7 @@
                 }
             });
             if (missingVar) {
-                return showWizardError('Enter custom values for all mapped variables.', missingVar);
+                return showWizardError('Select a contact field or enter a custom value for every variable.', missingVar);
             }
             collectVariables();
             return true;
@@ -646,7 +704,12 @@
                 deferred.resolve(res);
             })
             .fail(function (xhr) {
-                showWizardError(apiErrorMessage(xhr, 'Could not save campaign.'));
+                var msg = apiErrorMessage(xhr, 'Could not save campaign.');
+                var mediaRelated = /media|upload|header|localhost/i.test(msg);
+                showWizardError(msg, mediaRelated ? $('#cwMediaUrl') : null);
+                if (mediaRelated) {
+                    $('#cwMediaUrlError').removeClass('d-none');
+                }
                 deferred.reject(xhr);
             })
             .always(function () {
@@ -782,17 +845,25 @@
         variables.forEach(function (v, idx) {
             var key = typeof v === 'string' ? v : (v.name || v.key || ('var' + (idx + 1)));
             var label = typeof v === 'string' ? v : (v.label || key);
+            var example = typeof v === 'object' ? String(v.example || '') : '';
+            var selected = typeof v === 'object' ? String(v.suggested_source || '') : '';
             var row =
                 '<div class="row var-map-row">' +
-                '<div class="col-md-4"><label class="mb-0 fw-semibold">{{' + esc(label) + '}}</label></div>' +
+                '<div class="col-md-4"><label class="mb-0 fw-semibold">{{' + esc(label) + '}}</label>' +
+                (example ? '<div class="small text-muted text-break">Example: ' + esc(example) + '</div>' : '') +
+                '</div>' +
                 '<div class="col-md-8">' +
                 '<select class="form-select form-select-sm var-source" name="variables[' + esc(key) + ']" data-var="' + esc(key) + '">' +
-                '<option value="name">Contact Name</option>' +
-                '<option value="mobile">Mobile</option>' +
-                '<option value="email">Email</option>' +
-                '<option value="custom">Custom value…</option>' +
+                '<option value=""' + (selected === '' ? ' selected' : '') + '>Select contact field…</option>' +
+                '<option value="name"' + (selected === 'name' ? ' selected' : '') + '>Contact Name</option>' +
+                '<option value="mobile"' + (selected === 'mobile' ? ' selected' : '') + '>Mobile</option>' +
+                '<option value="email"' + (selected === 'email' ? ' selected' : '') + '>Email</option>' +
+                '<option value="custom"' + (selected === 'custom' ? ' selected' : '') + '>Custom value…</option>' +
                 '</select>' +
-                '<input type="text" class="form-control form-control-sm mt-1 var-custom d-none" name="variables_custom[' + esc(key) + ']" placeholder="Custom value" data-var="' + esc(key) + '">' +
+                '<input type="text" class="form-control form-control-sm mt-1 var-custom' +
+                (selected === 'custom' ? '' : ' d-none') +
+                '" name="variables_custom[' + esc(key) + ']" placeholder="Custom value" data-var="' +
+                esc(key) + '" value="' + esc(selected === 'custom' ? example : '') + '">' +
                 '</div></div>';
             $wrap.append(row);
         });
@@ -805,7 +876,7 @@
         }
         APP.get(base() + '/templates/' + templateId + '/preview').done(function (res) {
             var tpl = res.data || res.template || res;
-            var vars = tpl.variables || [];
+            var vars = tpl.variable_definitions || tpl.variables || [];
             if (typeof vars === 'string') {
                 try { vars = JSON.parse(vars); } catch (e) { vars = []; }
             }
@@ -971,6 +1042,12 @@
                 toast('Unsupported file type. Use PNG, JPEG, WEBP, MP4, or PDF.', 'error');
                 return;
             }
+            var mismatch = headerMediaMismatch(mime);
+            if (mismatch) {
+                $('#cwMediaStatus').removeClass('d-none text-muted text-success').addClass('text-danger').text(mismatch);
+                toast(mismatch, 'error');
+                return;
+            }
             if (file.size > 16 * 1024 * 1024) {
                 toast('File exceeds 16MB limit.', 'error');
                 return;
@@ -1017,8 +1094,13 @@
                 toast('Media uploaded.', 'success');
             }).fail(function (xhr) {
                 var err = (xhr.responseJSON && xhr.responseJSON.message) || 'Upload failed';
+                state.mediaUrl = '';
+                state.mediaId = '';
+                state.mediaMime = '';
+                $('#cwMediaUrl').val('').addClass('is-invalid');
+                $('#cwMediaUrlError').removeClass('d-none');
                 $status.removeClass('text-muted').addClass('text-danger').text(err);
-                toast(err, 'error');
+                showWizardError(err, $('#cwMediaUrl'));
             });
         }
 

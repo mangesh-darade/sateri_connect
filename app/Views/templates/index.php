@@ -149,7 +149,8 @@ sort($templateLanguages);
                             data-name="<?= esc($tpl['name'], 'attr') ?>"
                             data-body="<?= esc($tpl['body'] ?? '', 'attr') ?>"
                             data-footer="<?= esc($tpl['footer'] ?? '', 'attr') ?>"
-                            data-header="<?= esc($tpl['header_content'] ?? '', 'attr') ?>">
+                            data-header="<?= esc($tpl['header_content'] ?? '', 'attr') ?>"
+                            data-header-type="<?= esc($tpl['header_type'] ?? '', 'attr') ?>">
                             <i class="fas fa-eye"></i> Preview
                         </button>
                         <a href="<?= site_url('templates/' . (int) $tpl['id']) ?>" class="btn btn-sm btn-wa">Details</a>
@@ -248,7 +249,7 @@ sort($templateLanguages);
             </div>
             <div class="modal-body" style="background:var(--wa-chat-bg)">
                 <div class="msg-bubble" style="background:var(--wa-bubble-out);display:inline-block;max-width:100%">
-                    <div class="fw-semibold" id="tplPreviewHeader"></div>
+                    <div id="tplPreviewHeader"></div>
                     <div id="tplPreviewBody" style="white-space:pre-wrap"></div>
                     <div class="small text-muted" id="tplPreviewFooter"></div>
                 </div>
@@ -451,7 +452,9 @@ $(function () {
     $('.btn-preview-tpl').on('click', function () {
         var $b = $(this);
         $('#tplPreviewTitle').text($b.data('name'));
-        $('#tplPreviewHeader').text($b.data('header') || '');
+        $('#tplPreviewHeader').html(
+            APP.templateHeaderPreviewHtml($b.data('header-type'), $b.data('header'))
+        );
         $('#tplPreviewBody').text($b.data('body') || '');
         $('#tplPreviewFooter').text($b.data('footer') || '');
         if (window.APP && typeof APP.showModal === 'function') {

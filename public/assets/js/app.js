@@ -214,6 +214,58 @@
         }
     };
 
+    APP.escapeHtml = function (value) {
+        return $('<div>').text(value == null ? '' : String(value)).html();
+    };
+
+    /**
+     * Render a WhatsApp template header for preview.
+     *
+     * Media headers store a CDN sample URL in header_content, so printing it
+     * raw shows an unreadable link instead of the media the customer will see.
+     *
+     * @returns {string} HTML safe to inject
+     */
+    APP.templateHeaderPreviewHtml = function (headerType, headerContent) {
+        var type = String(headerType || '').toLowerCase();
+        var content = String(headerContent || '').trim();
+        if (content === '') {
+            return '';
+        }
+
+        var isUrl = /^https?:\/\//i.test(content);
+        if (type === 'text' || (type === '' && !isUrl)) {
+            return '<div class="fw-semibold">' + APP.escapeHtml(content) + '</div>';
+        }
+
+        if (type === '' && isUrl) {
+            if (/\.(jpe?g|png|webp|gif)(\?|$)/i.test(content)) {
+                type = 'image';
+            } else if (/\.(mp4|3gp|mov)(\?|$)/i.test(content)) {
+                type = 'video';
+            } else {
+                type = 'document';
+            }
+        }
+
+        var safeUrl = APP.escapeHtml(content);
+        var label = type.charAt(0).toUpperCase() + type.slice(1) + ' header';
+
+        if (type === 'image') {
+            return '<img src="' + safeUrl + '" alt="' + APP.escapeHtml(label)
+                + '" class="img-fluid rounded mb-2" style="max-height:220px">';
+        }
+
+        if (type === 'video') {
+            return '<video src="' + safeUrl + '" controls preload="metadata"'
+                + ' class="rounded mb-2" style="max-width:100%;max-height:220px"></video>';
+        }
+
+        return '<a href="' + safeUrl + '" target="_blank" rel="noopener"'
+            + ' class="d-inline-flex align-items-center gap-2 border rounded px-2 py-1 mb-2 text-decoration-none">'
+            + '<i class="fas fa-file-lines"></i><span>' + APP.escapeHtml(label) + '</span></a>';
+    };
+
     /**
      * Wire a click/drag-drop upload box to a hidden file input.
      *

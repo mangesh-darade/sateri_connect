@@ -47,14 +47,10 @@
             <div class="panel-head"><h3>Preview</h3></div>
             <div class="panel-body" style="background:var(--wa-chat-bg);border-radius:0 0 var(--radius) var(--radius)">
                 <div class="msg-bubble inbound" style="display:inline-block;max-width:100%">
-                    <?php if (in_array(strtolower((string) ($t['header_type'] ?? '')), ['image', 'video', 'document'], true) && ! empty($t['header_content'])): ?>
-                        <div class="small text-muted mb-2">
-                            <?= esc(ucfirst((string) ($t['header_type'] ?? 'media'))) ?> header sample:
-                            <a href="<?= esc((string) $t['header_content']) ?>" target="_blank" rel="noopener">Open media</a>
-                        </div>
-                    <?php elseif (! empty($t['header_content'])): ?>
-                        <div class="fw-bold mb-1"><?= esc($t['header_content']) ?></div>
-                    <?php endif; ?>
+                    <?= view('partials/template_header_preview', [
+                        'headerType'    => $t['header_type'] ?? '',
+                        'headerContent' => $t['header_content'] ?? '',
+                    ]) ?>
                     <div><?= nl2br(esc($t['body'] ?? '')) ?></div>
                     <?php if (! empty($t['footer'])): ?>
                         <div class="text-muted small mt-1"><?= esc($t['footer']) ?></div>

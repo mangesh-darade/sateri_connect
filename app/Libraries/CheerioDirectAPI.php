@@ -418,10 +418,7 @@ class CheerioDirectAPI
 
     protected function resolveLocalMediaUrlToProviderId(string $url): string
     {
-        $filename = '';
-        if (preg_match('#/media/serve/([^/?#]+)#', $url, $m)) {
-            $filename = basename(rawurldecode($m[1]));
-        }
+        $filename = LocalMediaUrl::filenameFromUrl($url);
 
         $row = null;
         if ($filename !== '') {

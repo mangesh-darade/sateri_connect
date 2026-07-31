@@ -1043,10 +1043,14 @@ class CampaignService
         foreach ($keys as $key) {
             $source = $variableMap[$key];
             $text   = $this->resolveVariableValue($source, $contact);
-            $parameters[] = [
+            $parameter = [
                 'type' => 'text',
                 'text' => $text !== '' ? $text : '-',
             ];
+            if (! ctype_digit((string) $key)) {
+                $parameter['parameter_name'] = (string) $key;
+            }
+            $parameters[] = $parameter;
         }
 
         if ($parameters === []) {

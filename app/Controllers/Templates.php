@@ -282,14 +282,12 @@ class Templates extends BaseController
             $i++;
         }
 
-        $variables = $template['variables'] ?? null;
-        if (is_string($variables)) {
-            $decoded   = json_decode($variables, true);
-            $variables = is_array($decoded) ? $decoded : null;
-        }
-        if (! is_array($variables) || $variables === []) {
-            $variables = $this->extractPlaceholders((string) ($template['body'] ?? ''));
-        }
+        $variableDefinitions = \App\Libraries\WhatsAppTemplateVariables::definitionsForTemplate(
+            $template['variables'] ?? null,
+            (string) ($template['body'] ?? ''),
+            $template['raw_payload'] ?? null
+        );
+        $variables = array_column($variableDefinitions, 'key');
 
         return $this->jsonResponse(true, [
             'id'           => (int) $template['id'],
@@ -304,6 +302,7 @@ class Templates extends BaseController
             'buttons'      => $template['buttons'],
             'status'       => $template['status'],
             'variables'    => $variables,
+            'variable_definitions' => $variableDefinitions,
         ]);
     }
 
@@ -382,12 +381,14 @@ class Templates extends BaseController
         $fullPath  = $this->uploadPath . $newName;
         $publicUrl = site_url('media/serve/' . $newName);
         $waMediaId = '';
+        $providerUploadError = '';
 
         try {
             $uploaded = service('whatsApp')->uploadMedia($fullPath, $mime);
             $waMediaId = trim((string) ($uploaded['id'] ?? $uploaded['media_id'] ?? ''));
         } catch (Throwable $e) {
-            log_message('warning', 'Template header media provider upload failed: {msg}', ['msg' => $e->getMessage()]);
+            $providerUploadError = $e->getMessage();
+            log_message('warning', 'Template header media provider upload failed: {msg}', ['msg' => $providerUploadError]);
         }
 
         $id = model(MediaModel::class)->insert([
@@ -403,6 +404,25 @@ class Templates extends BaseController
 
         if (! $id) {
             return $this->jsonResponse(false, null, 'Failed to save uploaded media.', [], 500);
+        }
+
+        // Meta (and local serve URLs) cannot use localhost links at send time — require a provider media ID.
+        $provider = strtolower((string) service('settingsService')->getWhatsAppProvider());
+        if ($waMediaId === '' && ($provider === 'meta' || \App\Libraries\LocalMediaUrl::isLocalHost($publicUrl))) {
+            return $this->jsonResponse(
+                false,
+                [
+                    'id'          => (int) $id,
+                    'url'         => $publicUrl,
+                    'preview_url' => $publicUrl,
+                    'filename'    => $file->getClientName(),
+                ],
+                $providerUploadError !== ''
+                    ? ('Media saved locally, but WhatsApp upload failed: ' . $providerUploadError)
+                    : 'Media saved locally, but WhatsApp did not return a media ID. Check Meta Phone Number ID / Access Token, then upload again.',
+                [],
+                422
+            );
         }
 
         return $this->jsonResponse(true, [
@@ -1218,13 +1238,8 @@ class Templates extends BaseController
                     break;
                 case 'BODY':
                     $result['body'] = $component['text'] ?? null;
-                    if (! empty($component['example']['body_text'][0]) && is_array($component['example']['body_text'][0])) {
-                        $result['variables'] = $component['example']['body_text'][0];
-                    } elseif (is_string($result['body']) && preg_match_all('/\{\{\s*(\d+)\s*\}\}/', $result['body'], $m)) {
-                        $nums = array_map('intval', $m[1]);
-                        sort($nums);
-                        $result['variables'] = array_map('strval', array_values(array_unique($nums)));
-                    }
+                    // Store placeholder identities, never provider example values.
+                    $result['variables'] = \App\Libraries\WhatsAppTemplateVariables::identitiesFromComponents([$component]);
                     break;
                 case 'FOOTER':
                     $result['footer'] = $component['text'] ?? null;
