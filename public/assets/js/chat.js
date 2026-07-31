@@ -239,7 +239,22 @@
         $wrap.removeClass('d-none');
     }
 
+    Chat._templateHeader = {
+        needed: false,
+        type: '',
+        mediaId: '',
+        mediaUrl: '',
+        uploading: false,
+        ready: false
+    };
+
     Chat.loadTemplateVars = function (templateId) {
+        Chat._templateHeader = { needed: false, type: '', mediaId: '', mediaUrl: '', uploading: false, ready: false };
+        $('#templateHeaderMediaFile').val('');
+        $('#templateHeaderMediaStatus').addClass('d-none').removeClass('text-success text-danger text-muted').text('');
+        $('#templateHeaderMediaWrap').addClass('d-none');
+        $('#btnSendTemplate').prop('disabled', false);
+
         if (!templateId) {
             renderTemplateVariableFields([]);
             return;
@@ -247,8 +262,88 @@
         APP.get(base() + '/templates/' + templateId + '/preview').done(function (res) {
             var data = (res && res.data) ? res.data : res;
             renderTemplateVariableFields((data && data.variables) || []);
+
+            var headerType = String((data && data.header_type) || '').toLowerCase();
+            var needsUpload = !!(data && data.needs_header_upload);
+            if (!needsUpload && ['image', 'video', 'document'].indexOf(headerType) !== -1) {
+                // Fallback when older preview payloads omit the flag.
+                needsUpload = true;
+            }
+            if (needsUpload && ['image', 'video', 'document'].indexOf(headerType) !== -1) {
+                Chat._templateHeader.needed = true;
+                Chat._templateHeader.type = headerType;
+                $('#templateHeaderMediaLabel').text('Header ' + headerType);
+                $('#templateHeaderMediaHint').text(
+                    'Template "' + ((data && data.name) || '') + '" requires a '
+                    + headerType.toUpperCase()
+                    + ' header. Meta approval samples cannot be reused — upload a file, then Send.'
+                );
+                var accept = headerType === 'video'
+                    ? 'video/mp4,video/3gpp'
+                    : (headerType === 'document' ? 'application/pdf' : 'image/jpeg,image/png,image/webp,image/gif');
+                $('#templateHeaderMediaFile').attr('accept', accept);
+                $('#templateHeaderMediaWrap').removeClass('d-none');
+            }
         }).fail(function () {
             renderTemplateVariableFields([]);
+        });
+    };
+
+    Chat.sendTemplate = function (templateId, variables) {
+        if (!Chat.contactId || !templateId) return;
+
+        if (Chat._templateHeader.needed && !Chat._templateHeader.mediaId && !Chat._templateHeader.mediaUrl) {
+            var fileEl = document.getElementById('templateHeaderMediaFile');
+            if (!fileEl || !fileEl.files || !fileEl.files.length) {
+                APP.toast('Upload a ' + (Chat._templateHeader.type || 'media') + ' header file first', 'error');
+                return;
+            }
+        }
+
+        var fd = new FormData();
+        fd.append('contact_id', String(Chat.contactId));
+        fd.append('type', 'template');
+        fd.append('template_id', String(templateId));
+        Object.keys(variables || {}).forEach(function (k) {
+            fd.append('variables[' + k + ']', variables[k]);
+        });
+        if (Chat._templateHeader.mediaId) {
+            fd.append('header_media_id', Chat._templateHeader.mediaId);
+        }
+        if (Chat._templateHeader.mediaUrl) {
+            fd.append('header_media_url', Chat._templateHeader.mediaUrl);
+        }
+        var fileInput = document.getElementById('templateHeaderMediaFile');
+        if (fileInput && fileInput.files && fileInput.files[0] && !Chat._templateHeader.mediaId) {
+            fd.append('header_media', fileInput.files[0]);
+        }
+        fd.append(APP.csrfName || 'csrf_test_name', $('meta[name="csrf-token"]').attr('content'));
+
+        $('#btnSendTemplate').prop('disabled', true);
+        $.ajax({
+            url: base() + '/chat/send',
+            method: 'POST',
+            data: fd,
+            processData: false,
+            contentType: false,
+            dataType: 'json'
+        }).done(function () {
+            if (window.APP && typeof APP.hideModal === 'function') {
+                APP.hideModal('#templateReplyModal');
+            } else {
+                var el = document.getElementById('templateReplyModal');
+                if (el && window.bootstrap) {
+                    bootstrap.Modal.getOrCreateInstance(el).hide();
+                }
+            }
+            Chat._templateHeader = { needed: false, type: '', mediaId: '', mediaUrl: '', uploading: false, ready: false };
+            $('#templateHeaderMediaFile').val('');
+            Chat.loadMessages(Chat.contactId, false);
+            APP.toast('Template sent');
+        }).fail(function (xhr) {
+            APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Template send failed', 'error');
+        }).always(function () {
+            $('#btnSendTemplate').prop('disabled', false);
         });
     };
 
@@ -671,29 +766,6 @@
         });
     };
 
-    Chat.sendTemplate = function (templateId, variables) {
-        if (!Chat.contactId || !templateId) return;
-        APP.post(base() + '/chat/send', {
-            contact_id: Chat.contactId,
-            type: 'template',
-            template_id: templateId,
-            variables: variables || {}
-        }).done(function () {
-            if (window.APP && typeof APP.hideModal === 'function') {
-                APP.hideModal('#templateReplyModal');
-            } else {
-                var el = document.getElementById('templateReplyModal');
-                if (el && window.bootstrap) {
-                    bootstrap.Modal.getOrCreateInstance(el).hide();
-                }
-            }
-            Chat.loadMessages(Chat.contactId, false);
-            APP.toast('Template sent');
-        }).fail(function (xhr) {
-            APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Template send failed', 'error');
-        });
-    };
-
     Chat.addNote = function () {
         if (!Chat.contactId) return;
         var note = ($('#chatNoteInput').val() || '').trim();
@@ -1057,10 +1129,94 @@
         $('#templateSelect').on('change', function () {
             Chat.loadTemplateVars($(this).val());
         });
+        $('#templateHeaderMediaFile').on('change', function () {
+            Chat._templateHeader.mediaId = '';
+            Chat._templateHeader.mediaUrl = '';
+            Chat._templateHeader.ready = false;
+            var file = this.files && this.files[0];
+            if (!file) {
+                $('#templateHeaderMediaStatus').addClass('d-none').text('');
+                return;
+            }
+            $('#templateHeaderMediaStatus')
+                .removeClass('d-none text-success text-danger')
+                .addClass('text-muted')
+                .html('<i class="fas fa-spinner fa-spin me-1"></i>Uploading ' + escapeHtml(file.name) + '…');
+            Chat._templateHeader.uploading = true;
+            $('#btnSendTemplate').prop('disabled', true);
+
+            var fd = new FormData();
+            fd.append('file', file);
+            fd.append(APP.csrfName || 'csrf_test_name', $('meta[name="csrf-token"]').attr('content'));
+            $.ajax({
+                url: base() + '/templates/header-media',
+                method: 'POST',
+                data: fd,
+                processData: false,
+                contentType: false,
+                dataType: 'json'
+            }).done(function (res) {
+                if (res && res.success === false) {
+                    Chat._templateHeader.ready = false;
+                    $('#templateHeaderMediaStatus')
+                        .removeClass('text-muted text-success')
+                        .addClass('text-danger')
+                        .html('<i class="fas fa-times-circle me-1"></i>' + escapeHtml(res.message || 'Header upload failed'));
+                    APP.toast(res.message || 'Header upload failed', 'error');
+                    return;
+                }
+                var data = (res && res.data) ? res.data : res;
+                var mediaId = String((data && data.wa_media_id) || '').trim();
+                var mediaUrl = String((data && (data.preview_url || data.url || data.source)) || '').trim();
+                Chat._templateHeader.mediaId = mediaId;
+                Chat._templateHeader.mediaUrl = mediaUrl;
+                Chat._templateHeader.ready = !!(mediaId || mediaUrl);
+
+                if (!Chat._templateHeader.ready) {
+                    $('#templateHeaderMediaStatus')
+                        .removeClass('text-muted text-success')
+                        .addClass('text-danger')
+                        .html('<i class="fas fa-times-circle me-1"></i>Upload finished but no media id/url returned');
+                    APP.toast('Header upload incomplete — try another image', 'error');
+                    return;
+                }
+
+                $('#templateHeaderMediaStatus')
+                    .removeClass('d-none text-muted text-danger')
+                    .addClass('text-success')
+                    .html('<i class="fas fa-check-circle me-1"></i>Uploaded ✓ ' + escapeHtml(file.name || 'header media')
+                        + (mediaId ? ' (media ready)' : ''));
+                APP.toast('Header media uploaded — you can Send now', 'success');
+            }).fail(function (xhr) {
+                Chat._templateHeader.mediaId = '';
+                Chat._templateHeader.mediaUrl = '';
+                Chat._templateHeader.ready = false;
+                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Header upload failed';
+                $('#templateHeaderMediaStatus')
+                    .removeClass('d-none text-muted text-success')
+                    .addClass('text-danger')
+                    .html('<i class="fas fa-times-circle me-1"></i>' + escapeHtml(msg));
+                APP.toast(msg, 'error');
+            }).always(function () {
+                Chat._templateHeader.uploading = false;
+                $('#btnSendTemplate').prop('disabled', false);
+            });
+        });
         $('#btnSendTemplate').on('click', function () {
             var id = $('#templateSelect').val();
             if (!id) {
                 APP.toast('Select a template', 'error');
+                return;
+            }
+            if (Chat._templateHeader.uploading) {
+                APP.toast('Upload still running — wait for Uploaded ✓', 'warning');
+                return;
+            }
+            if (Chat._templateHeader.needed && !Chat._templateHeader.ready
+                && !(document.getElementById('templateHeaderMediaFile')
+                    && document.getElementById('templateHeaderMediaFile').files
+                    && document.getElementById('templateHeaderMediaFile').files.length)) {
+                APP.toast('Pehle header image upload kara — Uploaded ✓ dikhe nantar Send', 'error');
                 return;
             }
             Chat.sendTemplate(id, collectTemplateVariables());

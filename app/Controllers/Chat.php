@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Libraries\ActivityLogger;
+use App\Libraries\CheerioDirectAPI;
+use App\Libraries\WhatsAppTemplatePayload;
 use App\Models\ContactModel;
 use App\Models\ConversationModel;
 use App\Models\InternalNoteModel;
+use App\Models\MediaModel;
 use App\Models\MessageModel;
 use App\Models\TemplateModel;
 use App\Models\UserModel;
@@ -471,6 +474,7 @@ class Chat extends BaseController
 
                 if ($messageType === 'template') {
                     $templateId = (int) ($input['template_id'] ?? 0);
+                    $tpl        = null;
                     if ($templateId > 0) {
                         $tpl = model(TemplateModel::class)->find($templateId);
                         if ($tpl === null) {
@@ -494,6 +498,15 @@ class Chat extends BaseController
                     }
                     if ($components === [] && is_array($input['variables'] ?? null)) {
                         $components = $this->variablesToComponents((array) $input['variables'], $contact);
+                    }
+
+                    // IMAGE/VIDEO/DOCUMENT templates need real header media (Cheerio/Meta).
+                    // Meta approval CDN samples are not reusable at send time.
+                    if (is_array($tpl)) {
+                        $headerComponents = $this->buildTemplateHeaderComponents($tpl, $input);
+                        if ($headerComponents !== []) {
+                            $components = array_merge($headerComponents, $components);
+                        }
                     }
                 }
 
@@ -819,6 +832,72 @@ class Chat extends BaseController
     }
 
     /**
+     * Build HEADER media component for IMAGE/VIDEO/DOCUMENT templates.
+     *
+     * Both Cheerio and Meta accept Meta-style header components (id or public link).
+     * Sample CDN URLs (scontent.whatsapp.net) are not reusable at send time.
+     *
+     * @param array<string, mixed> $template
+     * @param array<string, mixed> $input
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function buildTemplateHeaderComponents(array $template, array $input): array
+    {
+        $headerType = WhatsAppTemplatePayload::headerTypeFromTemplate($template);
+        if ($headerType === '') {
+            return [];
+        }
+
+        // Already supplied by client as full components.
+        $existing = $input['components'] ?? null;
+        if (is_array($existing) && WhatsAppTemplatePayload::hasMediaHeader($existing)) {
+            return [];
+        }
+
+        $mediaId  = trim((string) ($input['header_media_id'] ?? $input['wa_media_id'] ?? ''));
+        $mediaUrl = trim((string) ($input['header_media_url'] ?? $input['media_url'] ?? ''));
+
+        $file = $this->request->getFile('header_media')
+            ?? $this->request->getFile('header_file');
+        if (($mediaId === '' && $mediaUrl === '') && $file !== null && $file->isValid()) {
+            $mime = (string) ($file->getMimeType() ?: 'application/octet-stream');
+            $dir  = WRITEPATH . 'uploads/media/';
+            if (! is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+            $newName = $file->getRandomName();
+            $file->move($dir, $newName);
+            $fullPath  = $dir . $newName;
+            $publicUrl = site_url('media/serve/' . $newName);
+
+            try {
+                $uploaded = service('whatsApp')->uploadMedia($fullPath, $mime);
+                $mediaId  = trim((string) ($uploaded['id'] ?? $uploaded['media_id'] ?? ''));
+            } catch (Throwable $e) {
+                log_message('warning', 'Chat template header upload failed: {msg}', ['msg' => $e->getMessage()]);
+            }
+
+            model(MediaModel::class)->insert([
+                'filename'      => $newName,
+                'original_name' => $file->getClientName(),
+                'mime_type'     => $mime,
+                'size'          => $file->getSize(),
+                'path'          => 'uploads/media/' . $newName,
+                'wa_media_id'   => $mediaId !== '' ? $mediaId : null,
+                'url'           => $publicUrl,
+                'uploaded_by'   => $this->userId(),
+            ]);
+
+            $mediaUrl = $publicUrl;
+        }
+
+        $header = WhatsAppTemplatePayload::buildHeaderComponent($headerType, $mediaId, $mediaUrl);
+
+        return $header !== null ? [$header] : [];
+    }
+
+    /**
      * Convert simple variable map to WhatsApp template BODY components.
      *
      * @param array<string, mixed> $variables
@@ -897,8 +976,7 @@ class Chat extends BaseController
             'failed'    => 4,
         ];
 
-        $api = service('whatsApp');
-        $api->forceProvider('cheerio');
+        $api = new CheerioDirectAPI();
 
         try {
             foreach ($rows as $row) {
@@ -919,11 +997,10 @@ class Chat extends BaseController
                 }
 
                 try {
-                    $driver = $api->getDriver();
-                    if (! method_exists($driver, 'resolveDeliveryStatus')) {
+                    if (! method_exists($api, 'resolveDeliveryStatus')) {
                         break;
                     }
-                    $newStatus = $driver->resolveDeliveryStatus($wamid);
+                    $newStatus = $api->resolveDeliveryStatus($wamid);
                 } catch (Throwable $e) {
                     log_message('debug', 'Cheerio status poll failed for {id}: {msg}', [
                         'id'  => $row['id'] ?? 0,
@@ -952,8 +1029,8 @@ class Chat extends BaseController
 
                 model(MessageModel::class)->update((int) $row['id'], ['status' => $newStatus]);
             }
-        } finally {
-            $api->clearForcedProvider();
+        } catch (Throwable $e) {
+            log_message('debug', 'Cheerio status poll aborted: {msg}', ['msg' => $e->getMessage()]);
         }
     }
 }

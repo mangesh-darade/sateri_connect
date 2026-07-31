@@ -16,6 +16,8 @@ use Config\WhatsApp as WhatsAppConfig;
  *
  * @method array sendText(string $to, string $text, bool $previewUrl = false)
  * @method array sendTemplate(string $to, string $templateName, string $language, array $components = [])
+ * @method array sendBulkCampaign(string $campaignName, string $templateName, string $language, array $recipients, int $batchSize = 100)
+ * @method array getCampaignSummary(string $id)
  * @method array ensureTemplateComponents(string $templateName, string $language, array $components)
  * @method array sendImage(string $to, string $linkOrId, ?string $caption = null, bool $byId = false)
  * @method array sendDocument(string $to, string $linkOrId, ?string $caption = null, ?string $filename = null, bool $byId = false)

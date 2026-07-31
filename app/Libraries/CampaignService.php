@@ -105,6 +105,9 @@ class CampaignService
     /**
      * Start a campaign: queue recipients and mark running.
      *
+     * Cheerio + template campaigns use POST /v1/whatsapp/multiple (bulk).
+     * Meta (and non-template) keep the local queue + per-message send path.
+     *
      * @param list<int>|null $contactIds Optional explicit contact IDs
      * @param list<int>|null $tagIds     Optional tag filters
      */
@@ -128,39 +131,45 @@ class CampaignService
             throw new RuntimeException('Select an audience (all contacts, specific contacts, or tags) before starting.');
         }
 
-        $queued = $this->queueRecipients($campaignId, $contactIds, $tagIds, $allActive);
+        $useCheerioBulk = $this->shouldDispatchViaCheerioBulk($campaign);
 
-        $this->campaigns->update($campaignId, [
-            'status'         => 'running',
-            'started_at'     => date('Y-m-d H:i:s'),
-            'total_contacts' => $queued['contacts'],
-        ]);
+        if ($useCheerioBulk) {
+            $queued = $this->dispatchCheerioBulkCampaign($campaignId, $contactIds, $tagIds, $allActive);
+        } else {
+            $queued = $this->queueRecipients($campaignId, $contactIds, $tagIds, $allActive);
 
-        $this->logger->log('start', 'campaigns', 'Campaign started', [
-            'campaign_id' => $campaignId,
-            'queued'      => $queued,
-        ]);
+            $this->campaigns->update($campaignId, [
+                'status'         => 'running',
+                'started_at'     => date('Y-m-d H:i:s'),
+                'total_contacts' => $queued['contacts'],
+            ]);
 
-        // Flush immediately so "Send now" does not wait for cron / inbound webhook.
-        $queuedCount = (int) ($queued['queued'] ?? 0);
-        if ($queuedCount > 0) {
-            try {
-                $stats = service('queueService')->processBatch(max(50, min(500, $queuedCount)));
-                $queued['sent']   = (int) ($stats['sent'] ?? 0);
-                $queued['failed'] = (int) ($stats['failed'] ?? 0);
-            } catch (\Throwable $e) {
-                log_message('error', 'Campaign #{id} immediate queue flush failed: {msg}', [
-                    'id'  => $campaignId,
-                    'msg' => $e->getMessage(),
-                ]);
-                $queued['flush_error'] = $e->getMessage();
+            $this->logger->log('start', 'campaigns', 'Campaign started', [
+                'campaign_id' => $campaignId,
+                'queued'      => $queued,
+            ]);
+
+            // Flush immediately so "Send now" does not wait for cron / inbound webhook.
+            $queuedCount = (int) ($queued['queued'] ?? 0);
+            if ($queuedCount > 0) {
+                try {
+                    $stats = service('queueService')->processBatch(max(50, min(500, $queuedCount)));
+                    $queued['sent']   = (int) ($stats['sent'] ?? 0);
+                    $queued['failed'] = (int) ($stats['failed'] ?? 0);
+                } catch (\Throwable $e) {
+                    log_message('error', 'Campaign #{id} immediate queue flush failed: {msg}', [
+                        'id'  => $campaignId,
+                        'msg' => $e->getMessage(),
+                    ]);
+                    $queued['flush_error'] = $e->getMessage();
+                }
+
+                // Do not leave the campaign "Running" with retrying pending rows after Send now.
+                $this->failRemainingCampaignQueue(
+                    $campaignId,
+                    'Send failed during campaign start (not retried automatically).'
+                );
             }
-
-            // Do not leave the campaign "Running" with retrying pending rows after Send now.
-            $this->failRemainingCampaignQueue(
-                $campaignId,
-                'Send failed during campaign start (not retried automatically).'
-            );
         }
 
         if (method_exists($this->campaigns, 'updateStats')) {
@@ -180,6 +189,186 @@ class CampaignService
         $this->fireCampaignSentTriggers($campaignId, $contactIds, $tagIds, $allActive);
 
         return $queued;
+    }
+
+    /**
+     * Cheerio template campaigns should use the native bulk/campaign API.
+     *
+     * @param array<string, mixed> $campaign
+     */
+    protected function shouldDispatchViaCheerioBulk(array $campaign): bool
+    {
+        $messageType = (string) ($campaign['message_type'] ?? 'template');
+        if ($messageType !== 'template') {
+            return false;
+        }
+
+        return (new SettingsService())->isCheerioProvider();
+    }
+
+    /**
+     * Dispatch a template campaign via Cheerio POST /v1/whatsapp/multiple.
+     *
+     * @param list<int>|null $contactIds
+     * @param list<int>|null $tagIds
+     *
+     * @return array{contacts: int, queued: int, sent?: int, failed?: int, batches?: int, flush_error?: string}
+     */
+    protected function dispatchCheerioBulkCampaign(
+        int $campaignId,
+        ?array $contactIds,
+        ?array $tagIds,
+        bool $allActive
+    ): array {
+        $campaign = $this->requireCampaign($campaignId);
+        $contacts = $this->resolveContacts($contactIds, $tagIds, $allActive);
+
+        $basePayload = $this->buildSendPayload($campaign);
+        $variableMap = $this->decodeVariables($campaign['variables'] ?? null);
+        $templateName = trim((string) ($basePayload['template_name'] ?? $basePayload['name'] ?? ''));
+        $language     = trim((string) ($basePayload['language'] ?? 'en'));
+        if ($language === '') {
+            $language = 'en';
+        }
+
+        if ($templateName === '') {
+            throw new RuntimeException('Cheerio bulk campaign requires an approved template.');
+        }
+
+        $templateRow = ! empty($campaign['template_id'])
+            ? $this->templates->find((int) $campaign['template_id'])
+            : null;
+        $headerType  = WhatsAppTemplatePayload::headerTypeFromTemplate(
+            is_array($templateRow) ? $templateRow : null
+        );
+
+        // Dedicated Cheerio client — never mutate the shared Meta/Cheerio facade.
+        $api            = new CheerioDirectAPI();
+        $recipients     = [];
+        $contactByPhone = [];
+        $skippedNoPhone = 0;
+
+        foreach ($contacts as $contact) {
+            $contactId = (int) ($contact['id'] ?? 0);
+            $phone     = $api->normalizePhone((string) ($contact['mobile'] ?? ''));
+
+            $existing = $this->campaignContacts
+                ->where('campaign_id', $campaignId)
+                ->where('contact_id', $contactId)
+                ->first();
+
+            if ($existing === null) {
+                $this->campaignContacts->insert([
+                    'campaign_id' => $campaignId,
+                    'contact_id'  => $contactId,
+                    'status'      => 'queued',
+                ]);
+            } else {
+                $this->campaignContacts->update((int) $existing['id'], ['status' => 'queued']);
+            }
+
+            if ($phone === '') {
+                $skippedNoPhone++;
+                $this->markCampaignContactStatus($campaignId, $contactId, 'failed', 'Contact has no valid mobile number.');
+                continue;
+            }
+
+            $components = $this->buildTemplateComponents(
+                $variableMap,
+                $contact,
+                $basePayload['components'] ?? null
+            );
+            $components = WhatsAppTemplatePayload::mergeHeaderFromPayload(
+                $components,
+                $basePayload,
+                $headerType
+            );
+
+            $recipients[] = [
+                'to'         => $phone,
+                'components' => $components,
+            ];
+            $contactByPhone[$phone] = $contactId;
+        }
+
+        $this->campaigns->update($campaignId, [
+            'status'         => 'running',
+            'started_at'     => date('Y-m-d H:i:s'),
+            'total_contacts' => count($contacts),
+        ]);
+
+        $result = [
+            'contacts' => count($contacts),
+            'queued'   => count($recipients),
+            'sent'     => 0,
+            'failed'   => $skippedNoPhone,
+            'batches'  => 0,
+            'dispatch' => 'cheerio_bulk',
+        ];
+
+        $this->logger->log('start', 'campaigns', 'Campaign started via Cheerio bulk API', [
+            'campaign_id' => $campaignId,
+            'recipients'  => count($recipients),
+            'skipped'     => $skippedNoPhone,
+        ]);
+
+        if ($recipients === []) {
+            return $result;
+        }
+
+        $campaignName = trim((string) ($campaign['name'] ?? '')) !== ''
+            ? (string) $campaign['name']
+            : ('campaign-' . $campaignId);
+
+        try {
+            $bulk = $api->sendBulkCampaign($campaignName, $templateName, $language, $recipients);
+            $result['batches'] = (int) ($bulk['batches'] ?? 0);
+            $result['sent']    = (int) ($bulk['recipient_count'] ?? count($recipients));
+
+            foreach ($contactByPhone as $contactId) {
+                $this->markCampaignContactStatus($campaignId, $contactId, 'sent');
+            }
+        } catch (\Throwable $e) {
+            log_message('error', 'Campaign #{id} Cheerio bulk send failed: {msg}', [
+                'id'  => $campaignId,
+                'msg' => $e->getMessage(),
+            ]);
+            $result['flush_error'] = $e->getMessage();
+            $result['failed']      = count($recipients) + $skippedNoPhone;
+            $result['sent']        = 0;
+
+            foreach ($contactByPhone as $contactId) {
+                $this->markCampaignContactStatus($campaignId, $contactId, 'failed', $e->getMessage());
+            }
+        }
+
+        return $result;
+    }
+
+    protected function markCampaignContactStatus(
+        int $campaignId,
+        int $contactId,
+        string $status,
+        ?string $error = null
+    ): void {
+        $row = $this->campaignContacts
+            ->where('campaign_id', $campaignId)
+            ->where('contact_id', $contactId)
+            ->first();
+
+        if ($row === null) {
+            return;
+        }
+
+        $data = ['status' => $status];
+        if ($status === 'sent') {
+            $data['sent_at'] = date('Y-m-d H:i:s');
+        }
+        if ($error !== null && $error !== '') {
+            $data['error_message'] = $error;
+        }
+
+        $this->campaignContacts->update((int) $row['id'], $data);
     }
 
     /**
@@ -427,6 +616,12 @@ class CampaignService
         $messageType = (string) ($campaign['message_type'] ?? 'template');
         $basePayload = $this->buildSendPayload($campaign);
         $variableMap = $this->decodeVariables($campaign['variables'] ?? null);
+        $templateRow = ! empty($campaign['template_id'])
+            ? $this->templates->find((int) $campaign['template_id'])
+            : null;
+        $headerType  = WhatsAppTemplatePayload::headerTypeFromTemplate(
+            is_array($templateRow) ? $templateRow : null
+        );
         $queued      = 0;
         $db          = db_connect();
 
@@ -460,7 +655,11 @@ class CampaignService
 
             $payload = $basePayload;
             if ($messageType === 'template') {
-                $payload['components'] = $this->buildTemplateComponents($variableMap, $contact, $payload['components'] ?? null);
+                $payload['components'] = WhatsAppTemplatePayload::mergeHeaderFromPayload(
+                    $this->buildTemplateComponents($variableMap, $contact, $payload['components'] ?? null),
+                    $basePayload,
+                    $headerType
+                );
             }
 
             $this->queue->enqueue(
@@ -807,7 +1006,8 @@ class CampaignService
      * - {"1":"{{name}}","2":"Hello"}
      * - already-valid template components list
      *
-     * Cheerio template/send uses the same component object shape as WhatsApp Cloud API.
+     * Both Meta Graph and Cheerio Direct use the same component object shape
+     * (header / body / button + parameters). Provider envelopes differ only at send time.
      *
      * @param array<string, mixed>      $variableMap
      * @param array<string, mixed>      $contact

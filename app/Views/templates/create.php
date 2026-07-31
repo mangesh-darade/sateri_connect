@@ -121,9 +121,29 @@ $categories = [
                         <div class="row g-3">
                             <div class="col-12">
                                 <div class="template-basics-summary mb-3">
-                                    <div><span class="text-muted">Category:</span> <strong id="templateSummaryCategory">Marketing</strong></div>
-                                    <div><span class="text-muted">Type:</span> <strong id="templateSummaryType">Default</strong></div>
-                                    <div><span class="text-muted">Language:</span> <strong id="templateSummaryLanguage">English</strong></div>
+                                    <div>
+                                        <label class="form-label text-muted mb-1" for="templateSummaryCategory">Category</label>
+                                        <select id="templateSummaryCategory" class="form-select form-select-sm">
+                                            <?php foreach ($categories as $value => $meta): ?>
+                                                <option value="<?= esc($value, 'attr') ?>" <?= $selectedCategory === $value ? 'selected' : '' ?>><?= esc($meta['label']) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="form-label text-muted mb-1" for="templateSummaryType">Type</label>
+                                        <select id="templateSummaryType" class="form-select form-select-sm">
+                                            <option value="default" <?= $selectedType === 'default' ? 'selected' : '' ?>>Default</option>
+                                            <option value="carousel" <?= $selectedType === 'carousel' ? 'selected' : '' ?>>Carousel</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="form-label text-muted mb-1" for="templateSummaryLanguage">Language</label>
+                                        <select id="templateSummaryLanguage" class="form-select form-select-sm">
+                                            <?php foreach ($languages as $code => $label): ?>
+                                                <option value="<?= esc($code, 'attr') ?>" <?= $selectedLanguage === $code ? 'selected' : '' ?>><?= esc($label) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                             <div class="col-md-4" id="templateDefaultHeaderTypeWrap">
@@ -203,54 +223,18 @@ $categories = [
                                 <hr class="my-1">
                                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                                     <div>
-                                        <label class="form-label mb-0">CTA Button</label>
-                                        <div class="small text-muted">Add one call-to-action button to the template.</div>
+                                        <label class="form-label mb-0">Buttons</label>
+                                        <div class="small text-muted">Add Quick Reply, website, or phone buttons (max 10). Up to 2 website and 1 phone.</div>
                                     </div>
                                 </div>
                             </div>
                             <div class="col-12" id="templateDefaultCtaBuilderWrap">
-                                <input type="hidden" name="cta_type" id="templateCtaTypeInput" value="<?= esc(old('cta_type') ?? '', 'attr') ?>">
+                                <input type="hidden" name="template_buttons" id="templateButtonsInput" value="">
                                 <div class="d-flex flex-wrap gap-2 align-items-center" id="templateCtaActions">
                                     <button type="button" class="btn btn-outline-secondary btn-sm" id="templateAddButtonBtn">Add Button</button>
-                                    <span class="small text-muted">Add one website or phone CTA button.</span>
+                                    <span class="small text-muted" id="templateButtonsHint">Click Add Button to add another button.</span>
                                 </div>
-                                <div class="template-cta-card d-none mt-3" id="templateCtaBuilder">
-                                    <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
-                                        <strong>Call to Action Button</strong>
-                                        <button type="button" class="btn btn-link btn-sm text-danger p-0" id="templateRemoveButtonBtn">Remove</button>
-                                    </div>
-                                    <div class="row g-3">
-                                        <div class="col-md-4">
-                                            <label class="form-label">Button Type</label>
-                                            <select id="templateCtaTypeSelect" class="form-select">
-                                                <option value="url" <?= (old('cta_type') ?? '') === 'url' ? 'selected' : '' ?>>Visit Website</option>
-                                                <option value="phone_number" <?= (old('cta_type') ?? '') === 'phone_number' ? 'selected' : '' ?>>Call Phone Number</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-8">
-                                            <label class="form-label">Button Text</label>
-                                            <input type="text" name="cta_button_text" id="templateCtaButtonTextInput" class="form-control" maxlength="25"
-                                                   value="<?= esc(old('cta_button_text') ?? '') ?>" placeholder="Track order">
-                                        </div>
-                                    </div>
-                                    <div class="mt-3" id="templateCtaUrlWrap">
-                                        <label class="form-label">CTA URL</label>
-                                        <input type="text" name="cta_url" id="templateCtaUrlInput" class="form-control"
-                                               value="<?= esc(old('cta_url') ?? '') ?>" placeholder="https://example.com/orders/{{1}}">
-                                        <div class="form-text">You can use one dynamic placeholder like <code>{{1}}</code> in the URL.</div>
-                                    </div>
-                                    <div class="mt-3 d-none" id="templateCtaUrlExampleWrap">
-                                        <label class="form-label">CTA URL Example</label>
-                                        <input type="url" name="cta_url_example" id="templateCtaUrlExampleInput" class="form-control"
-                                               value="<?= esc(old('cta_url_example') ?? '') ?>" placeholder="https://example.com/orders/ORD-1001">
-                                        <div class="form-text">Required when CTA URL contains a placeholder.</div>
-                                    </div>
-                                    <div class="mt-3 d-none" id="templateCtaPhoneWrap">
-                                        <label class="form-label">CTA Phone Number</label>
-                                        <input type="text" name="cta_phone_number" id="templateCtaPhoneInput" class="form-control"
-                                               value="<?= esc(old('cta_phone_number') ?? '') ?>" placeholder="+919876543210">
-                                    </div>
-                                </div>
+                                <div class="d-flex flex-column gap-3 mt-3" id="templateButtonsList"></div>
                             </div>
 
                             <div class="col-12 d-none" id="templateCarouselWrap">
@@ -415,6 +399,13 @@ $categories = [
     border-radius: 1rem;
     padding: .95rem 1rem;
 }
+.template-basics-summary .form-label {
+    font-size: .78rem;
+    font-weight: 500;
+}
+.template-basics-summary .form-select {
+    background-color: #fff;
+}
 .template-body-editor {
     border: 1px solid #e5e0f5;
     border-radius: 1rem;
@@ -578,20 +569,24 @@ $(function () {
     var $headerMediaManualUrl = $('#templateHeaderMediaManualUrlInput');
     var $footer = $('#templateFooterInput');
     var $examples = $('#templateExamplesInput');
-    var $ctaType = $('#templateCtaTypeInput');
-    var $ctaTypeSelect = $('#templateCtaTypeSelect');
-    var $ctaText = $('#templateCtaButtonTextInput');
-    var $ctaUrl = $('#templateCtaUrlInput');
-    var $ctaUrlExample = $('#templateCtaUrlExampleInput');
-    var $ctaPhone = $('#templateCtaPhoneInput');
+    var $buttonsInput = $('#templateButtonsInput');
+    var $buttonsList = $('#templateButtonsList');
     var $carouselCardsInput = $('#templateCarouselCardsInput');
     var $carouselList = $('#templateCarouselCardsList');
     var currentStep = 1;
+    var MAX_TEMPLATE_BUTTONS = 10;
+    var MAX_URL_BUTTONS = 2;
+    var MAX_PHONE_BUTTONS = 1;
+    var templateButtons = [];
     var carouselCards = [
         emptyCarouselCard(),
         emptyCarouselCard()
     ];
     var activeCardUploadIndex = null;
+
+    var $summaryCategory = $('#templateSummaryCategory');
+    var $summaryType = $('#templateSummaryType');
+    var $summaryLanguage = $('#templateSummaryLanguage');
 
     var languageLabels = <?= json_encode($languages) ?>;
     var categoryLabels = {
@@ -599,6 +594,16 @@ $(function () {
         UTILITY: 'Utility',
         AUTHENTICATION: 'Authentication'
     };
+
+    function emptyTemplateButton() {
+        return {
+            type: 'quick_reply',
+            text: '',
+            url: '',
+            url_example: '',
+            phone_number: ''
+        };
+    }
 
     function emptyCarouselCard() {
         return {
@@ -793,16 +798,123 @@ $(function () {
         $('#templateHeaderUploadHelp').text('Upload ' + type + ' here. Media size limit 16MB.');
     }
 
-    function updateCtaFields() {
-        var type = $ctaType.val() || '';
-        var isUrl = type === 'url';
-        var isPhone = type === 'phone_number';
-        var needsUrlExample = /\{\{\s*\d+\s*\}\}/.test($ctaUrl.val() || '');
+    function buttonTypeLabel(type) {
+        if (type === 'url') {
+            return 'Visit Website';
+        }
+        if (type === 'phone_number') {
+            return 'Call Phone Number';
+        }
+        return 'Quick Reply';
+    }
 
-        $('#templateCtaUrlWrap').toggleClass('d-none', !isUrl);
-        $('#templateCtaPhoneWrap').toggleClass('d-none', !isPhone);
-        $('#templateCtaUrlExampleWrap').toggleClass('d-none', !(isUrl && needsUrlExample));
-        $('#templateCtaBuilder').toggleClass('d-none', type === '');
+    function buttonTypeIcon(type) {
+        if (type === 'url') {
+            return 'fas fa-arrow-up-right-from-square';
+        }
+        if (type === 'phone_number') {
+            return 'fas fa-phone';
+        }
+        return 'fas fa-reply';
+    }
+
+    function countButtonsByType(type) {
+        return templateButtons.filter(function (btn) {
+            return (btn.type || '') === type;
+        }).length;
+    }
+
+    function escAttr(value) {
+        return $('<div>').text(value == null ? '' : String(value)).html();
+    }
+
+    function syncTemplateButtonsInput() {
+        $buttonsInput.val(JSON.stringify(templateButtons));
+    }
+
+    function readTemplateButtonsFromDom() {
+        $buttonsList.find('[data-button-index]').each(function () {
+            var $card = $(this);
+            var index = parseInt($card.attr('data-button-index'), 10);
+            if (!templateButtons[index]) {
+                return;
+            }
+
+            // Fields absent for the current type keep their stored value, so switching
+            // type back and forth does not lose what the user already typed.
+            function pick(selector, current) {
+                var $field = $card.find(selector);
+                return $field.length ? ($field.val() || '').trim() : (current || '');
+            }
+
+            templateButtons[index].type = $card.find('.js-btn-type').val() || 'quick_reply';
+            templateButtons[index].text = pick('.js-btn-text', templateButtons[index].text);
+            templateButtons[index].url = pick('.js-btn-url', templateButtons[index].url);
+            templateButtons[index].url_example = pick('.js-btn-url-example', templateButtons[index].url_example);
+            templateButtons[index].phone_number = pick('.js-btn-phone', templateButtons[index].phone_number);
+        });
+        syncTemplateButtonsInput();
+    }
+
+    function canAddTemplateButton() {
+        return templateButtons.length < MAX_TEMPLATE_BUTTONS;
+    }
+
+    function renderTemplateButtons() {
+        var html = '';
+        templateButtons.forEach(function (btn, index) {
+            var type = btn.type || 'quick_reply';
+            var needsExample = /\{\{\s*\d+\s*\}\}/.test(btn.url || '');
+
+            // Only the fields the selected type actually needs are rendered.
+            var typeFields = '';
+            if (type === 'url') {
+                typeFields = ''
+                    + '<div class="col-12 js-btn-url-wrap"><label class="form-label">CTA URL</label>'
+                    +   '<input type="text" class="form-control js-btn-url" value="' + escAttr(btn.url) + '" placeholder="https://example.com/orders/{{1}}">'
+                    +   '<div class="form-text">You can use one dynamic placeholder like <code>{{1}}</code> in the URL.</div></div>'
+                    + '<div class="col-12' + (needsExample ? '' : ' d-none') + ' js-btn-url-example-wrap"><label class="form-label">CTA URL Example</label>'
+                    +   '<input type="url" class="form-control js-btn-url-example" value="' + escAttr(btn.url_example) + '" placeholder="https://example.com/orders/ORD-1001">'
+                    +   '<div class="form-text">Required when CTA URL contains a placeholder.</div></div>';
+            } else if (type === 'phone_number') {
+                typeFields = ''
+                    + '<div class="col-12 js-btn-phone-wrap"><label class="form-label">CTA Phone Number</label>'
+                    +   '<input type="text" class="form-control js-btn-phone" value="' + escAttr(btn.phone_number) + '" placeholder="+919876543210"></div>';
+            } else {
+                typeFields = '<div class="col-12"><div class="form-text mt-0">Quick Reply needs button text only. The reply text comes back as an inbound message.</div></div>';
+            }
+
+            html += ''
+                + '<div class="template-cta-card" data-button-index="' + index + '">'
+                +   '<div class="d-flex justify-content-between align-items-center gap-2 mb-3">'
+                +     '<strong>' + buttonTypeLabel(type) + ' Button</strong>'
+                +     '<button type="button" class="btn btn-link btn-sm text-danger p-0 js-remove-template-button">Remove</button>'
+                +   '</div>'
+                +   '<div class="row g-3">'
+                +     '<div class="col-md-4"><label class="form-label">Button Type</label>'
+                +       '<select class="form-select js-btn-type">'
+                +         '<option value="quick_reply"' + (type === 'quick_reply' ? ' selected' : '') + '>Quick Reply</option>'
+                +         '<option value="url"' + (type === 'url' ? ' selected' : '') + '>Visit Website</option>'
+                +         '<option value="phone_number"' + (type === 'phone_number' ? ' selected' : '') + '>Call Phone Number</option>'
+                +       '</select></div>'
+                +     '<div class="col-md-8"><label class="form-label">Button Text</label>'
+                +       '<input type="text" class="form-control js-btn-text" maxlength="25" value="' + escAttr(btn.text) + '" placeholder="' + (type === 'quick_reply' ? 'Yes' : 'Track order') + '"></div>'
+                +     typeFields
+                +   '</div>'
+                + '</div>';
+        });
+        $buttonsList.html(html);
+        syncTemplateButtonsInput();
+        $('#templateAddButtonBtn').prop('disabled', !canAddTemplateButton());
+        $('#templateButtonsHint').text(
+            templateButtons.length
+                ? (templateButtons.length + ' / ' + MAX_TEMPLATE_BUTTONS + ' buttons · up to ' + MAX_URL_BUTTONS + ' website, ' + MAX_PHONE_BUTTONS + ' phone')
+                : 'Click Add Button to add Quick Reply, website, or phone.'
+        );
+    }
+
+    function updateCtaFields() {
+        renderTemplateButtons();
     }
 
     function syncCarouselCardsInput() {
@@ -889,9 +1001,7 @@ $(function () {
             .toggleClass('d-none', carousel);
         $('#templateCarouselWrap').toggleClass('d-none', !carousel);
         if (carousel) {
-            $category.val('MARKETING');
-            $('[data-category-card]').removeClass('is-selected');
-            $('[data-category-card][data-value="MARKETING"]').addClass('is-selected');
+            applyCategory('MARKETING');
             renderCarouselCards();
         } else {
             updateHeaderFields();
@@ -935,7 +1045,6 @@ $(function () {
         }
 
         var headerType = $headerType.val() || 'none';
-        var ctaType = $ctaType.val() || '';
         if (headerType === 'text') {
             $previewHeader.text(($header.val() || '').trim());
             $previewHeaderMeta.text('').addClass('d-none');
@@ -950,19 +1059,42 @@ $(function () {
         }
 
         $('#templatePreviewFooter').text(($footer.val() || '').trim());
-        if (ctaType === 'url' && ($ctaText.val() || '').trim()) {
-            $previewButtons.html('<span class="template-preview-button"><i class="fas fa-arrow-up-right-from-square me-1"></i>' + $('<div>').text($ctaText.val()).html() + '</span>').removeClass('d-none');
-        } else if (ctaType === 'phone_number' && ($ctaText.val() || '').trim()) {
-            $previewButtons.html('<span class="template-preview-button"><i class="fas fa-phone me-1"></i>' + $('<div>').text($ctaText.val()).html() + '</span>').removeClass('d-none');
+        readTemplateButtonsFromDom();
+        if (templateButtons.length) {
+            var buttonsHtml = templateButtons.map(function (btn) {
+                var label = (btn.text || '').trim() || buttonTypeLabel(btn.type || 'quick_reply');
+                return '<span class="template-preview-button"><i class="' + buttonTypeIcon(btn.type || 'quick_reply') + ' me-1"></i>'
+                    + $('<div>').text(label).html() + '</span>';
+            }).join('');
+            $previewButtons.html(buttonsHtml).removeClass('d-none');
         } else {
             $previewButtons.html('').addClass('d-none');
         }
     }
 
+    function applyCategory(value, fromSummary) {
+        value = String(value || '').toUpperCase();
+        if (!categoryLabels[value]) {
+            return;
+        }
+        if (isCarousel() && value !== 'MARKETING') {
+            APP.toast('Carousel templates must use Marketing category.', 'info');
+            value = 'MARKETING';
+        }
+        $category.val(value);
+        $summaryCategory.val(value);
+        $('[data-category-card]').removeClass('is-selected');
+        $('[data-category-card][data-value="' + value + '"]').addClass('is-selected');
+        updateNextButton();
+        if (!fromSummary) {
+            updateSummary();
+        }
+    }
+
     function updateSummary() {
-        $('#templateSummaryCategory').text(categoryLabels[$category.val()] || '-');
-        $('#templateSummaryType').text(($type.val() || '').replace(/^./, function (m) { return m.toUpperCase(); }) || '-');
-        $('#templateSummaryLanguage').text(languageLabels[$language.val()] || $language.val() || '-');
+        $summaryCategory.val($category.val() || 'MARKETING');
+        $summaryType.val($type.val() || 'default');
+        $summaryLanguage.val($language.val() || 'en_US');
     }
 
     function updateNextButton() {
@@ -1007,16 +1139,7 @@ $(function () {
     }
 
     $('[data-category-card]').on('click', function () {
-        if (isCarousel() && $(this).data('value') !== 'MARKETING') {
-            APP.toast('Carousel templates must use Marketing category.', 'info');
-            return;
-        }
-        var value = $(this).data('value');
-        $category.val(value);
-        $('[data-category-card]').removeClass('is-selected');
-        $(this).addClass('is-selected');
-        updateNextButton();
-        updateSummary();
+        applyCategory($(this).data('value'));
     });
 
     $name.on('input', function () {
@@ -1035,14 +1158,26 @@ $(function () {
 
     $type.add($language).on('change', function () {
         if (isCarousel()) {
-            $category.val('MARKETING');
-            $('[data-category-card]').removeClass('is-selected');
-            $('[data-category-card][data-value="MARKETING"]').addClass('is-selected');
+            applyCategory('MARKETING');
         }
         updateModeUi();
         updateNextButton();
         updateSummary();
         updatePreview();
+    });
+
+    $summaryCategory.on('change', function () {
+        applyCategory($(this).val(), true);
+        updateModeUi();
+        updatePreview();
+    });
+
+    $summaryType.on('change', function () {
+        $type.val($(this).val()).trigger('change');
+    });
+
+    $summaryLanguage.on('change', function () {
+        $language.val($(this).val()).trigger('change');
     });
 
     $('#templateNextBtn').on('click', function () {
@@ -1059,12 +1194,6 @@ $(function () {
 
     $headerType.on('change', function () {
         updateHeaderFields();
-        updatePreview();
-    });
-
-    $ctaTypeSelect.on('change', function () {
-        $ctaType.val($(this).val());
-        updateCtaFields();
         updatePreview();
     });
 
@@ -1086,21 +1215,54 @@ $(function () {
     });
 
     $('#templateAddButtonBtn').on('click', function () {
-        if (!$ctaType.val()) {
-            $ctaType.val('url');
-            $ctaTypeSelect.val('url');
+        readTemplateButtonsFromDom();
+        if (!canAddTemplateButton()) {
+            APP.toast('You can add up to ' + MAX_TEMPLATE_BUTTONS + ' buttons.', 'info');
+            return;
         }
-        updateCtaFields();
+        var nextType = 'quick_reply';
+        if (countButtonsByType('url') < MAX_URL_BUTTONS && templateButtons.length === 0) {
+            nextType = 'url';
+        }
+        var btn = emptyTemplateButton();
+        btn.type = nextType;
+        templateButtons.push(btn);
+        renderTemplateButtons();
         updatePreview();
     });
 
-    $('#templateRemoveButtonBtn').on('click', function () {
-        $ctaType.val('');
-        $ctaText.val('');
-        $ctaUrl.val('');
-        $ctaUrlExample.val('');
-        $ctaPhone.val('');
-        updateCtaFields();
+    $buttonsList.on('click', '.js-remove-template-button', function () {
+        readTemplateButtonsFromDom();
+        var index = parseInt($(this).closest('[data-button-index]').attr('data-button-index'), 10);
+        if (isNaN(index)) {
+            return;
+        }
+        templateButtons.splice(index, 1);
+        renderTemplateButtons();
+        updatePreview();
+    });
+
+    $buttonsList.on('change', '.js-btn-type', function () {
+        readTemplateButtonsFromDom();
+        var index = parseInt($(this).closest('[data-button-index]').attr('data-button-index'), 10);
+        var type = $(this).val() || 'quick_reply';
+        if (type === 'url' && countButtonsByType('url') > MAX_URL_BUTTONS) {
+            APP.toast('WhatsApp allows max ' + MAX_URL_BUTTONS + ' website buttons.', 'info');
+            templateButtons[index].type = 'quick_reply';
+        } else if (type === 'phone_number' && countButtonsByType('phone_number') > MAX_PHONE_BUTTONS) {
+            APP.toast('WhatsApp allows max ' + MAX_PHONE_BUTTONS + ' phone button.', 'info');
+            templateButtons[index].type = 'quick_reply';
+        }
+        renderTemplateButtons();
+        updatePreview();
+    });
+
+    $buttonsList.on('input', 'input', function () {
+        readTemplateButtonsFromDom();
+        var $card = $(this).closest('[data-button-index]');
+        var btn = templateButtons[parseInt($card.attr('data-button-index'), 10)] || {};
+        var needsExample = btn.type === 'url' && /\{\{\s*\d+\s*\}\}/.test(btn.url || '');
+        $card.find('.js-btn-url-example-wrap').toggleClass('d-none', !needsExample);
         updatePreview();
     });
 
@@ -1156,11 +1318,12 @@ $(function () {
         });
     });
 
-    $('#templateHeaderChooseFileBtn, #templateHeaderUploadBox').on('click', function (e) {
-        if ($(e.target).is('#templateHeaderToggleManualBtn')) {
-            return;
-        }
-        $('#templateHeaderMediaFileInput').trigger('click');
+    APP.bindUploadBox({
+        box: '#templateHeaderUploadBox',
+        input: '#templateHeaderMediaFileInput',
+        chooseBtn: '#templateHeaderChooseFileBtn',
+        ignore: '#templateHeaderToggleManualBtn',
+        onFile: uploadHeaderMediaFile
     });
 
     $('#templateHeaderToggleManualBtn').on('click', function () {
@@ -1175,13 +1338,12 @@ $(function () {
         updatePreview();
     });
 
-    $('#templateHeaderMediaFileInput').on('change', function () {
-        var file = this.files && this.files[0] ? this.files[0] : null;
+    function uploadHeaderMediaFile(file) {
         if (!file) {
             return;
         }
         var $status = $('#templateHeaderUploadStatus');
-        $status.removeClass('d-none text-success').addClass('text-muted').text('Uploading ' + file.name + '...');
+        $status.removeClass('d-none text-success text-danger').addClass('text-muted').text('Uploading ' + file.name + '...');
         uploadMediaFile(file, function (data) {
             $headerMediaSource.val(data.source || data.url || '');
             $headerMediaPreviewUrl.val(data.preview_url || data.url || '');
@@ -1189,13 +1351,12 @@ $(function () {
             $status.removeClass('text-muted').addClass('text-success').text('Uploaded: ' + (data.filename || file.name));
             updatePreview();
         }).fail(function () {
-            $status.addClass('d-none').text('');
+            $status.removeClass('text-muted').addClass('text-danger').text('Upload failed. Try again or use a media URL.');
         });
-    });
+    }
 
-    $header.add($body).add($footer).add($examples).add($ctaText).add($ctaUrl).add($ctaUrlExample).add($ctaPhone).on('input', function () {
+    $header.add($body).add($footer).add($examples).on('input', function () {
         updateExamplesVisibility();
-        updateCtaFields();
         $('#templateBodyCount').text(String($body.val() || '').length);
         $('#templateFooterCount').text(String($footer.val() || '').length);
         updateVarRatioWarning();
@@ -1207,6 +1368,8 @@ $(function () {
         $name.val(sanitizeName($name.val(), true));
         $('#templateNameCount').text($name.val().length);
         syncExamplesCsv();
+        readTemplateButtonsFromDom();
+        syncTemplateButtonsInput();
         if (isCarousel()) {
             readCarouselCardsFromDom();
             syncCarouselCardsInput();
@@ -1260,15 +1423,12 @@ $(function () {
     $('#templateNameCount').text($name.val().length);
     $('#templateBodyCount').text(String($body.val() || '').length);
     $('#templateFooterCount').text(String($footer.val() || '').length);
-    if ($ctaType.val()) {
-        $ctaTypeSelect.val($ctaType.val());
-    }
     updateNextButton();
     updateSummary();
     updateModeUi();
     updateHeaderFields();
     updateExamplesVisibility();
-    updateCtaFields();
+    renderTemplateButtons();
     updateVarRatioWarning();
     updatePreview();
 });

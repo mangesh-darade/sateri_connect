@@ -208,7 +208,10 @@ class CheerioDirectAPI
     }
 
     /**
-     * Send a template message.
+     * Send a single template message.
+     *
+     * Cheerio Direct API: POST /v1/whatsapp/template/send
+     * Body: { to, data: { name, language: { code }, components } }
      *
      * Always sends a `components` array (Cheerio crashes on undefined.forEach).
      * Auto-fills IMAGE/VIDEO/DOCUMENT header from the local template example when missing.
@@ -224,19 +227,135 @@ class CheerioDirectAPI
             throw new RuntimeException('Recipient phone number is required.');
         }
 
-        $components = $this->ensureTemplateComponents($templateName, $language, $components);
-        $components = $this->rewriteLocalHeaderMediaToIds($components);
-
-        $data = [
-            'name'       => $templateName,
-            'language'   => ['code' => $language !== '' ? $language : 'en'],
-            'components' => array_values($components),
-        ];
+        $lang = $language !== '' ? $language : 'en';
 
         return $this->request('POST', 'v1/whatsapp/template/send', [
             'to'   => $phone,
-            'data' => $data,
+            'data' => [
+                'name'       => $templateName,
+                'language'   => ['code' => $lang],
+                'components' => $this->prepareTemplateComponents($templateName, $lang, $components),
+            ],
         ]);
+    }
+
+    /**
+     * Send a bulk template campaign (Cheerio Direct API campaign).
+     *
+     * Cheerio Direct API: POST /v1/whatsapp/multiple
+     * Body: {
+     *   campaignName,
+     *   template: { name, language: { code } },
+     *   data: [{ messaging_product, to, type: template, template: { components } }, ...]
+     * }
+     *
+     * @param list<array{to: string, components?: list<array<string, mixed>>}> $recipients
+     *
+     * @return array{
+     *     batches: int,
+     *     recipient_count: int,
+     *     responses: list<array<string, mixed>>
+     * }
+     */
+    public function sendBulkCampaign(
+        string $campaignName,
+        string $templateName,
+        string $language,
+        array $recipients,
+        int $batchSize = 100
+    ): array {
+        $campaignName = trim($campaignName);
+        $templateName = trim($templateName);
+        $lang         = $language !== '' ? $language : 'en';
+
+        if ($campaignName === '') {
+            throw new RuntimeException('Campaign name is required for Cheerio bulk send.');
+        }
+        if ($templateName === '') {
+            throw new RuntimeException('Template name is required for Cheerio bulk send.');
+        }
+
+        $batchSize = max(1, min(200, $batchSize));
+        $rows      = [];
+
+        foreach ($recipients as $recipient) {
+            if (! is_array($recipient)) {
+                continue;
+            }
+            $phone = $this->normalizePhone((string) ($recipient['to'] ?? ''));
+            if ($phone === '') {
+                continue;
+            }
+
+            $components = is_array($recipient['components'] ?? null)
+                ? $recipient['components']
+                : [];
+
+            $rows[] = [
+                'messaging_product' => 'whatsapp',
+                'to'                => $phone,
+                'type'              => 'template',
+                'template'          => [
+                    'components' => $this->prepareTemplateComponents($templateName, $lang, $components),
+                ],
+            ];
+        }
+
+        if ($rows === []) {
+            throw new RuntimeException('No valid recipients for Cheerio bulk campaign.');
+        }
+
+        $responses = [];
+        $chunks    = array_chunk($rows, $batchSize);
+
+        foreach ($chunks as $chunk) {
+            $responses[] = $this->request('POST', 'v1/whatsapp/multiple', [
+                'campaignName' => $campaignName,
+                'template'     => [
+                    'name'     => $templateName,
+                    'language' => ['code' => $lang],
+                ],
+                'data'         => array_values($chunk),
+            ]);
+        }
+
+        return [
+            'batches'         => count($chunks),
+            'recipient_count' => count($rows),
+            'responses'       => $responses,
+        ];
+    }
+
+    /**
+     * Campaign / announcement summary analytics.
+     *
+     * Cheerio Direct API: GET /v1/analytics/summary/:id
+     *
+     * @return array<string, mixed>
+     */
+    public function getCampaignSummary(string $id): array
+    {
+        $id = trim($id);
+        if ($id === '') {
+            throw new RuntimeException('Campaign analytics id is required.');
+        }
+
+        return $this->request('GET', 'v1/analytics/summary/' . rawurlencode($id));
+    }
+
+    /**
+     * Normalize + auto-fill template components for send / bulk payloads.
+     *
+     * @param list<array<string, mixed>> $components
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function prepareTemplateComponents(string $templateName, string $language, array $components): array
+    {
+        $components = $this->ensureTemplateComponents($templateName, $language, $components);
+        $components = $this->rewriteLocalHeaderMediaToIds($components);
+
+        return array_values($components);
     }
 
     /**
@@ -400,8 +519,10 @@ class CheerioDirectAPI
             throw new RuntimeException(
                 'Template "' . $templateName . '" requires a '
                 . strtoupper($headerType)
-                . ' header at send time. The Meta approval sample cannot be reused'
-                . ($headerType === 'document' ? ' — upload a PDF in the campaign wizard.' : ' — upload matching media in the campaign wizard.')
+                . ' header at send time. WhatsApp sample CDN URLs cannot be reused'
+                . ' — upload a matching '
+                . strtoupper($headerType)
+                . ' in Chat → Send Template (or the campaign wizard), then send again.'
             );
         }
 

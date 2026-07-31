@@ -214,6 +214,78 @@
         }
     };
 
+    /**
+     * Wire a click/drag-drop upload box to a hidden file input.
+     *
+     * The file input usually lives inside the box, so a plain re-trigger would
+     * bubble back into the box handler and recurse until the stack overflows.
+     *
+     * options: { box, input, chooseBtn, ignore, onFile, dropZone }
+     */
+    APP.bindUploadBox = function (options) {
+        options = options || {};
+
+        var $box = $(options.box);
+        var $input = $(options.input);
+        if (!$box.length || !$input.length) {
+            return;
+        }
+
+        var chooseSelector = options.chooseBtn || '';
+        var ignoreSelector = [options.input, chooseSelector, options.ignore, 'a, button, input, textarea, select']
+            .filter(Boolean)
+            .join(', ');
+
+        function openPicker() {
+            $input.trigger('click');
+        }
+
+        function handleFile(file) {
+            if (file && typeof options.onFile === 'function') {
+                options.onFile(file);
+            }
+        }
+
+        if (chooseSelector) {
+            $(chooseSelector).on('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                openPicker();
+            });
+        }
+
+        $box.on('click', function (e) {
+            if ($(e.target).closest(ignoreSelector).length) {
+                return;
+            }
+            openPicker();
+        });
+
+        $input.on('change', function () {
+            handleFile(this.files && this.files[0] ? this.files[0] : null);
+            $(this).val('');
+        });
+
+        $box.on('dragenter dragover', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            $(this).addClass('is-dragover');
+        }).on('dragleave dragend drop', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            $(this).removeClass('is-dragover');
+        }).on('drop', function (e) {
+            var dt = e.originalEvent && e.originalEvent.dataTransfer;
+            handleFile(dt && dt.files && dt.files[0] ? dt.files[0] : null);
+        });
+
+        if (options.dropZone) {
+            $(options.dropZone).on('dragover drop', function (e) {
+                e.preventDefault();
+            });
+        }
+    };
+
     APP.confirm = function (options) {
         options = options || {};
         return Swal.fire({

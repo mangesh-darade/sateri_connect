@@ -1022,49 +1022,14 @@
             });
         }
 
-        $('#cwChooseFileBtn').on('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            $('#cwMediaFile').trigger('click');
-        });
-
-        $('#cwUploadBox').on('click', function (e) {
-            if ($(e.target).closest('#cwMediaUrl, #cwChooseFileBtn, #cwMediaFile, .btn').length) {
-                return;
-            }
-            $('#cwMediaFile').trigger('click');
-        });
-
-        $('#cwMediaFile').on('change', function () {
-            var file = this.files && this.files[0] ? this.files[0] : null;
-            uploadCampaignMediaFile(file);
-        });
-
-        // Drag & drop onto upload box
-        $('#cwUploadBox').on('dragenter dragover', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            $(this).addClass('is-dragover');
-        }).on('dragleave dragend', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            $(this).removeClass('is-dragover');
-        }).on('drop', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            $(this).removeClass('is-dragover');
-            var dt = e.originalEvent && e.originalEvent.dataTransfer;
-            var file = dt && dt.files && dt.files[0] ? dt.files[0] : null;
-            if (!file) {
-                toast('No file dropped.', 'error');
-                return;
-            }
-            uploadCampaignMediaFile(file);
-        });
-
-        // Prevent browser from opening the file when dropped outside the box but inside the modal
-        $('#campaignWizardModal').on('dragover drop', function (e) {
-            e.preventDefault();
+        APP.bindUploadBox({
+            box: '#cwUploadBox',
+            input: '#cwMediaFile',
+            chooseBtn: '#cwChooseFileBtn',
+            ignore: '#cwMediaUrl',
+            onFile: uploadCampaignMediaFile,
+            // Stop the browser opening a file dropped elsewhere in the modal
+            dropZone: '#campaignWizardModal'
         });
 
         $(document).on('change', '.cw-var-source', function () {

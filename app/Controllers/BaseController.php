@@ -150,6 +150,24 @@ abstract class BaseController extends Controller
         return redirect()->to('/dashboard')->with('error', 'You do not have permission to access this resource.');
     }
 
+    /**
+     * @param list<string> $permissions
+     */
+    protected function requireAnyPermission(array $permissions): ?ResponseInterface
+    {
+        foreach ($permissions as $permission) {
+            if (is_string($permission) && $permission !== '' && can($permission)) {
+                return null;
+            }
+        }
+
+        if ($this->request->isAJAX()) {
+            return $this->jsonResponse(false, null, 'Permission denied.', [], 403);
+        }
+
+        return redirect()->to('/dashboard')->with('error', 'You do not have permission to access this resource.');
+    }
+
     protected function userId(): ?int
     {
         $id = $this->session->get('user_id');

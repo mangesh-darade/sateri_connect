@@ -297,6 +297,7 @@ class Templates extends BaseController
             'language'     => $template['language'],
             'header'       => $template['header_content'],
             'header_type'  => $template['header_type'] ?? null,
+            'needs_header_upload' => $this->templateNeedsHeaderUpload($template),
             'body'         => $body,
             'body_raw'     => $template['body'] ?? '',
             'footer'       => $template['footer'],
@@ -306,9 +307,45 @@ class Templates extends BaseController
         ]);
     }
 
+    /**
+     * IMAGE/VIDEO/DOCUMENT headers need a real send-time media file when the
+     * stored sample is a Meta CDN / localhost URL (not fetchable by WhatsApp).
+     *
+     * @param array<string, mixed> $template
+     */
+    protected function templateNeedsHeaderUpload(array $template): bool
+    {
+        $headerType = strtolower(trim((string) ($template['header_type'] ?? '')));
+        if (! in_array($headerType, ['image', 'video', 'document'], true)) {
+            return false;
+        }
+
+        $sample = trim((string) ($template['header_content'] ?? ''));
+        if ($sample === '') {
+            return true;
+        }
+
+        $host = strtolower((string) (parse_url($sample, PHP_URL_HOST) ?: ''));
+        if (
+            $host === ''
+            || $host === 'localhost'
+            || $host === '127.0.0.1'
+            || str_ends_with($host, '.local')
+            || str_contains($host, 'whatsapp.net')
+            || str_contains($host, 'fbcdn.net')
+            || str_contains($host, 'facebook.com')
+            || str_contains($host, 'scontent.')
+        ) {
+            return true;
+        }
+
+        return false;
+    }
+
     public function uploadHeaderMedia(): ResponseInterface
     {
-        if ($denied = $this->requirePermission('templates.create')) {
+        // Chat agents send media headers without templates.create.
+        if ($denied = $this->requireAnyPermission(['templates.create', 'chat.send'])) {
             return $denied;
         }
 
@@ -474,13 +511,7 @@ class Templates extends BaseController
             ];
         }
 
-        $buttons = $this->buildCtaButtons(
-            (string) ($input['cta_type'] ?? ''),
-            (string) ($input['cta_button_text'] ?? ''),
-            (string) ($input['cta_url'] ?? ''),
-            (string) ($input['cta_url_example'] ?? ''),
-            (string) ($input['cta_phone_number'] ?? '')
-        );
+        $buttons = $this->buildButtonsFromInput(is_array($input['template_buttons'] ?? null) ? $input['template_buttons'] : []);
         if ($buttons !== []) {
             $components[] = [
                 'type'    => 'BUTTONS',
@@ -562,6 +593,51 @@ class Templates extends BaseController
     }
 
     /**
+     * Build Meta/Cheerio BUTTONS payload from the multi-button create form.
+     *
+     * @param list<array<string, mixed>> $items
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function buildButtonsFromInput(array $items): array
+    {
+        $buttons = [];
+
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
+            $type = strtolower(trim((string) ($item['type'] ?? '')));
+            $text = trim((string) ($item['text'] ?? ''));
+            if ($type === '' || $text === '') {
+                continue;
+            }
+
+            if ($type === 'quick_reply') {
+                $buttons[] = [
+                    'type' => 'QUICK_REPLY',
+                    'text' => $text,
+                ];
+                continue;
+            }
+
+            $built = $this->buildCtaButtons(
+                $type,
+                $text,
+                trim((string) ($item['url'] ?? '')),
+                trim((string) ($item['url_example'] ?? '')),
+                trim((string) ($item['phone_number'] ?? ''))
+            );
+            if ($built !== []) {
+                $buttons[] = $built[0];
+            }
+        }
+
+        return $buttons;
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     protected function buildCtaButtons(
@@ -573,6 +649,13 @@ class Templates extends BaseController
     ): array {
         if ($ctaType === '' || $ctaButtonText === '') {
             return [];
+        }
+
+        if ($ctaType === 'quick_reply') {
+            return [[
+                'type' => 'QUICK_REPLY',
+                'text' => $ctaButtonText,
+            ]];
         }
 
         if ($ctaType === 'url') {
@@ -613,11 +696,7 @@ class Templates extends BaseController
      *     body: string,
      *     footer: string,
      *     body_examples: string,
-     *     cta_type: string,
-     *     cta_button_text: string,
-     *     cta_url: string,
-     *     cta_url_example: string,
-     *     cta_phone_number: string,
+     *     template_buttons: list<array<string, mixed>>,
      *     carousel_cards: list<array<string, mixed>>
      * }
      */
@@ -634,12 +713,23 @@ class Templates extends BaseController
         $body         = trim((string) $this->request->getPost('body'));
         $footer       = trim((string) $this->request->getPost('footer'));
         $examples     = trim((string) $this->request->getPost('body_examples'));
-        $ctaType      = strtolower(trim((string) $this->request->getPost('cta_type')));
-        $ctaButtonText = trim((string) $this->request->getPost('cta_button_text'));
-        $ctaUrl       = trim((string) $this->request->getPost('cta_url'));
-        $ctaUrlExample = trim((string) $this->request->getPost('cta_url_example'));
-        $ctaPhoneNumber = trim((string) $this->request->getPost('cta_phone_number'));
+        $templateButtons = $this->parseTemplateButtonsInput($this->request->getPost('template_buttons'));
         $carouselCards = $this->parseCarouselCardsInput($this->request->getPost('carousel_cards'));
+
+        // Backward compatibility for older single-CTA posts.
+        if ($templateButtons === []) {
+            $legacyType = strtolower(trim((string) $this->request->getPost('cta_type')));
+            $legacyText = trim((string) $this->request->getPost('cta_button_text'));
+            if ($legacyType !== '' && $legacyText !== '') {
+                $templateButtons[] = [
+                    'type'         => $legacyType,
+                    'text'         => $legacyText,
+                    'url'          => trim((string) $this->request->getPost('cta_url')),
+                    'url_example'  => trim((string) $this->request->getPost('cta_url_example')),
+                    'phone_number' => trim((string) $this->request->getPost('cta_phone_number')),
+                ];
+            }
+        }
 
         if ($name === '' || $body === '') {
             return $this->invalidTemplateInput('Name and body are required.');
@@ -692,11 +782,7 @@ class Templates extends BaseController
             $headerMediaSource = '';
             $headerMediaPreviewUrl = '';
             $footer = '';
-            $ctaType = '';
-            $ctaButtonText = '';
-            $ctaUrl = '';
-            $ctaUrlExample = '';
-            $ctaPhoneNumber = '';
+            $templateButtons = [];
         } else {
             $carouselCards = [];
 
@@ -721,30 +807,9 @@ class Templates extends BaseController
                 $headerMediaPreviewUrl = '';
             }
 
-            if ($ctaType !== '' && ! in_array($ctaType, ['url', 'phone_number'], true)) {
-                return $this->invalidTemplateInput('Invalid CTA type.');
-            }
-
-            if ($ctaType !== '' && $ctaButtonText === '') {
-                return $this->invalidTemplateInput('CTA button text is required.');
-            }
-
-            if ($ctaType === 'url') {
-                if ($ctaUrl === '' || ! filter_var(str_replace('{{1}}', 'sample', $ctaUrl), FILTER_VALIDATE_URL)) {
-                    return $this->invalidTemplateInput('A valid CTA URL is required.');
-                }
-                if (preg_match('/\{\{\s*\d+\s*\}\}/', $ctaUrl) && $ctaUrlExample === '') {
-                    return $this->invalidTemplateInput('CTA URL example is required when the URL has a placeholder.');
-                }
-                $ctaPhoneNumber = '';
-            }
-
-            if ($ctaType === 'phone_number') {
-                if ($ctaPhoneNumber === '' || ! preg_match('/^\+?[0-9]{7,15}$/', $ctaPhoneNumber)) {
-                    return $this->invalidTemplateInput('A valid CTA phone number is required.');
-                }
-                $ctaUrl = '';
-                $ctaUrlExample = '';
+            $buttonError = $this->validateTemplateButtons($templateButtons);
+            if ($buttonError !== null) {
+                return $this->invalidTemplateInput($buttonError);
             }
         }
 
@@ -761,13 +826,105 @@ class Templates extends BaseController
             'body'          => $body,
             'footer'        => $footer,
             'body_examples' => $examples,
-            'cta_type'      => $ctaType,
-            'cta_button_text' => $ctaButtonText,
-            'cta_url'       => $ctaUrl,
-            'cta_url_example' => $ctaUrlExample,
-            'cta_phone_number' => $ctaPhoneNumber,
+            'template_buttons' => $templateButtons,
             'carousel_cards' => $carouselCards,
         ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    protected function parseTemplateButtonsInput(mixed $raw): array
+    {
+        if (is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            $raw = is_array($decoded) ? $decoded : [];
+        }
+
+        if (! is_array($raw)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($raw as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            $type = strtolower(trim((string) ($item['type'] ?? '')));
+            $text = trim((string) ($item['text'] ?? ''));
+            if ($type === '' && $text === '') {
+                continue;
+            }
+            $out[] = [
+                'type'         => $type,
+                'text'         => $text,
+                'url'          => trim((string) ($item['url'] ?? '')),
+                'url_example'  => trim((string) ($item['url_example'] ?? '')),
+                'phone_number' => trim((string) ($item['phone_number'] ?? '')),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * WhatsApp Cloud API limits: max 10 buttons, 2 URL, 1 phone number.
+     *
+     * @param list<array<string, mixed>> $buttons
+     */
+    protected function validateTemplateButtons(array $buttons): ?string
+    {
+        if (count($buttons) > 10) {
+            return 'You can add at most 10 buttons.';
+        }
+
+        $urlCount = 0;
+        $phoneCount = 0;
+
+        foreach ($buttons as $index => $button) {
+            $n = $index + 1;
+            $type = strtolower(trim((string) ($button['type'] ?? '')));
+            $text = trim((string) ($button['text'] ?? ''));
+
+            if (! in_array($type, ['quick_reply', 'url', 'phone_number'], true)) {
+                return "Button {$n}: invalid button type.";
+            }
+            if ($text === '') {
+                return "Button {$n}: button text is required.";
+            }
+            if (mb_strlen($text) > 25) {
+                return "Button {$n}: button text must be 25 characters or fewer.";
+            }
+
+            if ($type === 'url') {
+                $urlCount++;
+                $url = trim((string) ($button['url'] ?? ''));
+                $urlExample = trim((string) ($button['url_example'] ?? ''));
+                if ($url === '' || ! filter_var(str_replace('{{1}}', 'sample', $url), FILTER_VALIDATE_URL)) {
+                    return "Button {$n}: a valid CTA URL is required.";
+                }
+                if (preg_match('/\{\{\s*\d+\s*\}\}/', $url) && $urlExample === '') {
+                    return "Button {$n}: CTA URL example is required when the URL has a placeholder.";
+                }
+            }
+
+            if ($type === 'phone_number') {
+                $phoneCount++;
+                $phone = trim((string) ($button['phone_number'] ?? ''));
+                if ($phone === '' || ! preg_match('/^\+?[0-9]{7,15}$/', $phone)) {
+                    return "Button {$n}: a valid CTA phone number is required.";
+                }
+            }
+        }
+
+        if ($urlCount > 2) {
+            return 'WhatsApp allows at most 2 Visit Website buttons.';
+        }
+        if ($phoneCount > 1) {
+            return 'WhatsApp allows at most 1 Call Phone Number button.';
+        }
+
+        return null;
     }
 
     /**
@@ -902,11 +1059,8 @@ class Templates extends BaseController
      *     body: string,
      *     footer: string,
      *     body_examples: string,
-     *     cta_type: string,
-     *     cta_button_text: string,
-     *     cta_url: string,
-     *     cta_url_example: string,
-     *     cta_phone_number: string
+     *     template_buttons: list<array<string, mixed>>,
+     *     carousel_cards: list<array<string, mixed>>
      * }
      */
     protected function invalidTemplateInput(string $message): array
@@ -924,11 +1078,7 @@ class Templates extends BaseController
             'body'          => '',
             'footer'        => '',
             'body_examples' => '',
-            'cta_type'      => '',
-            'cta_button_text' => '',
-            'cta_url'       => '',
-            'cta_url_example' => '',
-            'cta_phone_number' => '',
+            'template_buttons' => [],
             'carousel_cards' => [],
         ];
     }

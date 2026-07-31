@@ -261,9 +261,24 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
                 <select id="templateSelect" class="form-select">
                     <option value="">Select…</option>
                     <?php foreach (($templates ?? []) as $tpl): ?>
-                        <option value="<?= (int) $tpl['id'] ?>"><?= esc($tpl['name']) ?> (<?= esc($tpl['language'] ?? '') ?>)</option>
+                        <?php
+                        $ht = strtolower((string) ($tpl['header_type'] ?? ''));
+                        ?>
+                        <option
+                            value="<?= (int) $tpl['id'] ?>"
+                            data-header-type="<?= esc($ht) ?>"
+                            data-name="<?= esc((string) ($tpl['name'] ?? '')) ?>"
+                        ><?= esc($tpl['name']) ?> (<?= esc($tpl['language'] ?? '') ?>)</option>
                     <?php endforeach; ?>
                 </select>
+                <div id="templateHeaderMediaWrap" class="mt-3 d-none">
+                    <label class="form-label mb-1" id="templateHeaderMediaLabel">Header image</label>
+                    <input type="file" id="templateHeaderMediaFile" class="form-control" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/3gpp,application/pdf">
+                    <div class="form-text" id="templateHeaderMediaHint">
+                        This template needs media in the header. Meta’s approval sample cannot be reused — upload a file to send.
+                    </div>
+                    <div id="templateHeaderMediaStatus" class="small text-muted mt-1 d-none"></div>
+                </div>
                 <div id="templateVarsWrap" class="mt-3 d-none">
                     <label class="form-label mb-1">Variables</label>
                     <div id="templateVarsFields"></div>

@@ -102,15 +102,21 @@ class ContactModel extends Model
     /**
      * @return array<string, mixed>|null
      */
-    public function findByMobile(string $mobile): ?array
+    public function findByMobile(string $mobile, bool $withDeleted = false): ?array
     {
         $normalized = preg_replace('/\D+/', '', $mobile) ?? $mobile;
-        $row        = $this->groupStart()
+
+        $builder = $this->groupStart()
             ->where('mobile', $mobile)
             ->orWhere('mobile', $normalized)
             ->groupEnd()
-            ->where('channel', 'whatsapp')
-            ->first();
+            ->where('channel', 'whatsapp');
+
+        if ($withDeleted) {
+            $builder->withDeleted();
+        }
+
+        $row = $builder->first();
 
         return is_array($row) ? $row : null;
     }
@@ -120,7 +126,7 @@ class ContactModel extends Model
      *
      * @return array<string, mixed>|null
      */
-    public function findByChannelExternalId(string $channel, string $externalId): ?array
+    public function findByChannelExternalId(string $channel, string $externalId, bool $withDeleted = false): ?array
     {
         $channel    = strtolower(trim($channel));
         $externalId = trim($externalId);
@@ -128,33 +134,90 @@ class ContactModel extends Model
             return null;
         }
 
-        $row = $this->where('channel', $channel)
-            ->where('external_id', $externalId)
-            ->first();
+        $builder = $this->where('channel', $channel)
+            ->where('external_id', $externalId);
+
+        if ($withDeleted) {
+            $builder->withDeleted();
+        }
+
+        $row = $builder->first();
 
         return is_array($row) ? $row : null;
     }
 
     /**
+     * Clear the soft-delete flag so a previously removed contact becomes visible again.
+     */
+    public function restoreContact(int $id): bool
+    {
+        return $this->db->table($this->table)
+            ->where('id', $id)
+            ->update([
+                $this->deletedField => null,
+                $this->updatedField => date('Y-m-d H:i:s'),
+            ]);
+    }
+
+    /**
      * Upsert contact for any inbox channel.
+     *
+     * Soft-deleted rows still hold the unique (channel, external_id) key, so they are
+     * matched and revived instead of inserted again.
      *
      * @param array<string, mixed> $extra
      *
      * @return array<string, mixed>
      */
-    public function findOrCreateForChannel(string $channel, string $externalId, array $extra = []): array
+    public function findOrCreateForChannel(string $channel, string $externalId, array $extra = [], ?bool &$wasCreated = null): array
     {
         $channel    = strtolower(trim($channel)) ?: 'whatsapp';
         $externalId = trim($externalId);
-        $existing   = $this->findByChannelExternalId($channel, $externalId);
+        $wasCreated = false;
+
+        // Legacy/manually added rows have no external_id, so mobile is the only way to reach them.
+        $byMobile = $channel === 'whatsapp' && $externalId !== '';
+
+        $existing = $this->findByChannelExternalId($channel, $externalId);
+        if ($existing === null && $byMobile) {
+            $existing = $this->findByMobile($externalId);
+        }
+        // Only fall back to soft-deleted rows once no live contact matches.
+        if ($existing === null) {
+            $existing = $this->findByChannelExternalId($channel, $externalId, true);
+        }
+        if ($existing === null && $byMobile) {
+            $existing = $this->findByMobile($externalId, true);
+        }
 
         if ($existing !== null) {
+            $contactId = (int) $existing['id'];
+            $revived   = ! empty($existing[$this->deletedField]);
+
+            if ($revived) {
+                $this->restoreContact($contactId);
+                $existing[$this->deletedField] = null;
+            }
+
             $updates = [];
             if (! empty($extra['name']) && empty($existing['name'])) {
                 $updates['name'] = $extra['name'];
             }
+            if (empty($existing['channel'])) {
+                $updates['channel'] = $channel;
+            }
+            if (empty($existing['external_id']) && $externalId !== '') {
+                $updates['external_id'] = $externalId;
+            }
+            if ($channel === 'whatsapp' && empty($existing['mobile'])) {
+                $updates['mobile'] = $extra['mobile'] ?? $externalId;
+            }
+            if ($revived && ($existing['status'] ?? '') !== 'active') {
+                $updates['status'] = 'active';
+            }
+
             if ($updates !== []) {
-                $this->update((int) $existing['id'], $updates);
+                $this->update($contactId, $updates);
                 $existing = array_merge($existing, $updates);
             }
 
@@ -169,8 +232,9 @@ class ContactModel extends Model
             'status'      => 'active',
         ], $extra);
 
-        $id      = (int) $this->insert($row);
-        $created = $this->find($id);
+        $id         = (int) $this->insert($row);
+        $wasCreated = true;
+        $created    = $this->find($id);
 
         return is_array($created) ? $created : array_merge($row, ['id' => $id]);
     }

@@ -148,29 +148,77 @@ class MetaCloudAPI
     }
 
     /**
+     * Meta Graph API: POST /{phone-number-id}/messages
+     * Body: { messaging_product, to, type: template, template: { name, language, components? } }
+     *
+     * No Cheerio auto-fill — caller must supply required header/body/button components.
+     *
      * @param list<array<string, mixed>> $components
      *
      * @return array<string, mixed>
      */
     public function sendTemplate(string $to, string $templateName, string $language, array $components = []): array
     {
+        $lang = $language !== '' ? $language : 'en_US';
+        $components = $this->prepareTemplateComponents($templateName, $lang, $components);
+
         $payload = [
             'type'     => 'template',
             'template' => [
                 'name'     => $templateName,
-                'language' => ['code' => $language !== '' ? $language : 'en'],
+                'language' => ['code' => $lang],
             ],
         ];
 
         if ($components !== []) {
-            $payload['template']['components'] = array_values($components);
+            $payload['template']['components'] = $components;
         }
 
         return $this->sendMessage($to, $payload);
     }
 
     /**
-     * Meta does not need Cheerio-style component auto-fill; pass-through.
+     * Cheerio-only bulk campaign API. Meta campaigns use the local message queue.
+     *
+     * @param list<array{to: string, components?: list<array<string, mixed>>}> $recipients
+     *
+     * @return array<string, mixed>
+     *
+     * @throws RuntimeException
+     */
+    public function sendBulkCampaign(
+        string $campaignName,
+        string $templateName,
+        string $language,
+        array $recipients,
+        int $batchSize = 100
+    ): array {
+        unset($campaignName, $templateName, $language, $recipients, $batchSize);
+
+        throw new RuntimeException(
+            'Bulk campaign send (/v1/whatsapp/multiple) is Cheerio-only. Use the local queue for Meta campaigns.'
+        );
+    }
+
+    /**
+     * Cheerio-only campaign analytics.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws RuntimeException
+     */
+    public function getCampaignSummary(string $id): array
+    {
+        unset($id);
+
+        throw new RuntimeException(
+            'Campaign summary analytics is Cheerio-only (GET /v1/analytics/summary/:id).'
+        );
+    }
+
+    /**
+     * Meta Graph prepare: rewrite local media URLs → media ids, validate required header.
+     * Does NOT auto-fill body/button/carousel samples (that is Cheerio-only).
      *
      * @param list<array<string, mixed>> $components
      *
@@ -178,7 +226,169 @@ class MetaCloudAPI
      */
     public function ensureTemplateComponents(string $templateName, string $language, array $components): array
     {
+        return $this->prepareTemplateComponents($templateName, $language, $components);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $components
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function prepareTemplateComponents(string $templateName, string $language, array $components): array
+    {
+        $components = array_values(array_filter($components, 'is_array'));
+        $components = $this->rewriteLocalHeaderMediaToIds($components);
+        $this->assertRequiredMediaHeader($templateName, $language, $components);
+
         return array_values($components);
+    }
+
+    /**
+     * Localhost /media/serve links are not reachable by WhatsApp. Prefer uploaded Meta media IDs.
+     *
+     * @param list<array<string, mixed>> $components
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function rewriteLocalHeaderMediaToIds(array $components): array
+    {
+        foreach ($components as &$component) {
+            if (! is_array($component) || strtolower((string) ($component['type'] ?? '')) !== 'header') {
+                continue;
+            }
+            $params = $component['parameters'] ?? null;
+            if (! is_array($params)) {
+                continue;
+            }
+            foreach ($params as &$param) {
+                if (! is_array($param)) {
+                    continue;
+                }
+                foreach (['image', 'video', 'document'] as $mediaType) {
+                    if (! is_array($param[$mediaType] ?? null)) {
+                        continue;
+                    }
+                    $link = trim((string) ($param[$mediaType]['link'] ?? ''));
+                    $id   = trim((string) ($param[$mediaType]['id'] ?? ''));
+                    if ($id !== '' || $link === '' || ! $this->isNonPublicMediaUrl($link)) {
+                        continue;
+                    }
+                    $resolvedId = $this->resolveLocalMediaUrlToProviderId($link);
+                    if ($resolvedId === '') {
+                        throw new RuntimeException(
+                            'Template header media uses a local URL that WhatsApp cannot fetch ('
+                            . $link . '). Re-upload the header media, then send again.'
+                        );
+                    }
+                    $param[$mediaType] = ['id' => $resolvedId];
+                }
+            }
+            unset($param);
+            $component['parameters'] = array_values($params);
+        }
+        unset($component);
+
+        return array_values($components);
+    }
+
+    protected function isNonPublicMediaUrl(string $url): bool
+    {
+        $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?: ''));
+
+        return $host === ''
+            || $host === 'localhost'
+            || $host === '127.0.0.1'
+            || str_ends_with($host, '.local');
+    }
+
+    protected function resolveLocalMediaUrlToProviderId(string $url): string
+    {
+        $filename = '';
+        if (preg_match('#/media/serve/([^/?#]+)#', $url, $m)) {
+            $filename = basename(rawurldecode($m[1]));
+        }
+
+        $row = null;
+        if ($filename !== '') {
+            $row = model(\App\Models\MediaModel::class)->where('filename', $filename)->orderBy('id', 'DESC')->first();
+        }
+        if (! is_array($row)) {
+            $row = model(\App\Models\MediaModel::class)->where('url', $url)->orderBy('id', 'DESC')->first();
+        }
+        if (! is_array($row)) {
+            return '';
+        }
+
+        $waId = trim((string) ($row['wa_media_id'] ?? ''));
+        if ($waId !== '') {
+            return $waId;
+        }
+
+        $path = WRITEPATH . ltrim(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, (string) ($row['path'] ?? '')), DIRECTORY_SEPARATOR);
+        if (! is_file($path)) {
+            return '';
+        }
+
+        $uploaded = $this->uploadMedia($path, (string) ($row['mime_type'] ?? 'application/octet-stream'));
+        $waId     = trim((string) ($uploaded['id'] ?? ''));
+        if ($waId !== '') {
+            model(\App\Models\MediaModel::class)->update((int) $row['id'], ['wa_media_id' => $waId]);
+        }
+
+        return $waId;
+    }
+
+    /**
+     * Meta requires the caller to supply media headers — no Cheerio-style sample auto-fill.
+     *
+     * @param list<array<string, mixed>> $components
+     */
+    protected function assertRequiredMediaHeader(string $templateName, string $language, array $components): void
+    {
+        if (WhatsAppTemplatePayload::hasMediaHeader($components)) {
+            return;
+        }
+
+        $tpl = $this->findLocalTemplate($templateName, $language);
+        if ($tpl === null) {
+            return;
+        }
+
+        $templateType = strtolower((string) ($tpl['template_type'] ?? 'default'));
+        if ($templateType === 'carousel') {
+            return;
+        }
+
+        $headerType = WhatsAppTemplatePayload::headerTypeFromTemplate($tpl);
+        if ($headerType === '') {
+            return;
+        }
+
+        throw new RuntimeException(
+            'Template "' . $templateName . '" requires a '
+            . strtoupper($headerType)
+            . ' header at send time (Meta Cloud API). Upload matching media in Chat → Send Template'
+            . ' or the campaign wizard, then send again.'
+        );
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    protected function findLocalTemplate(string $name, string $language): ?array
+    {
+        $name = trim($name);
+        if ($name === '') {
+            return null;
+        }
+
+        $model = model(\App\Models\TemplateModel::class);
+        $row   = $model->where('name', $name)->where('language', $language)->first();
+        if (! is_array($row) && $language !== '') {
+            $row = $model->where('name', $name)->orderBy('id', 'DESC')->first();
+        }
+
+        return is_array($row) ? $row : null;
     }
 
     /**

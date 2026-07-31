@@ -60,7 +60,10 @@ check('Templates has store()', str_contains($controller, 'function store('));
 check('Templates has uploadHeaderMedia()', str_contains($controller, 'function uploadHeaderMedia('));
 check('Templates validates template_type', str_contains($controller, "in_array(\$templateType, ['default', 'carousel'], true)"));
 check('Templates validates header type', str_contains($controller, "in_array(\$headerType, ['none', 'text', 'image', 'video', 'document'], true)"));
-check('Templates validates CTA type', str_contains($controller, "in_array(\$ctaType, ['url', 'phone_number'], true)"));
+check('Templates validates button types', str_contains($controller, "in_array(\$type, ['quick_reply', 'url', 'phone_number'], true)"));
+check('Templates supports Quick Reply buttons', str_contains($controller, "'type' => 'QUICK_REPLY'"));
+check('Templates builds buttons from multi-button input', str_contains($controller, 'function buildButtonsFromInput('));
+check('Templates validates max 10 buttons', str_contains($controller, 'You can add at most 10 buttons.'));
 check('Templates supports AJAX success response', str_contains($controller, "if (\$this->request->isAJAX())"));
 check('Templates inserts template_type', str_contains($controller, "'template_type'  => \$input['template_type']"));
 check('Templates builds buttons component', str_contains($controller, "'type'    => 'BUTTONS'"));
@@ -73,6 +76,7 @@ check('Templates emits CAROUSEL component', str_contains($controller, "'type'  =
 $view = file_get_contents($root . '/app/Views/templates/create.php');
 check('view has step 1 basics', str_contains($view, '1. Basics'));
 check('view has step 2 content', str_contains($view, '2. Content'));
+check('view has step 2 basics dropdowns', str_contains($view, 'id="templateSummaryCategory"') && str_contains($view, 'id="templateSummaryType"') && str_contains($view, 'id="templateSummaryLanguage"'));
 check('view has template type select', str_contains($view, 'Select template type'));
 check('view has language select', str_contains($view, 'Select language'));
 check('view has header type select', str_contains($view, 'Header Type'));
@@ -83,6 +87,8 @@ check('view has per-variable example chips', str_contains($view, 'template-var-c
 check('view has body format toolbar', str_contains($view, 'js-body-format'));
 check('view has phone message preview', str_contains($view, 'Message Preview'));
 check('view has CTA type field', str_contains($view, 'Button Type'));
+check('view has Quick Reply button type', str_contains($view, 'Quick Reply'));
+check('view has multi-button list', str_contains($view, 'id="templateButtonsList"') && str_contains($view, 'name="template_buttons"'));
 check('view has CTA phone field', str_contains($view, 'CTA Phone Number'));
 check('view has add button CTA builder', str_contains($view, 'Add Button'));
 check('view has carousel cards builder', str_contains($view, 'Carousel Cards'));

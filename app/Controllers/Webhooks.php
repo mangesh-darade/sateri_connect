@@ -455,34 +455,26 @@ class Webhooks extends Controller
         }
 
         $contactModel = model(ContactModel::class);
-        $contact      = $contactModel->findByMobile($from);
         $isNewContact = false;
 
-        if ($contact === null) {
+        try {
+            // Also matches soft-deleted rows and revives them, so a number that was removed
+            // from Contacts still lands back in the inbox when it messages again.
             $contact = $contactModel->findOrCreateForChannel('whatsapp', $from, [
                 'name'   => $profileName,
                 'mobile' => $from,
+            ], $isNewContact);
+        } catch (Throwable $e) {
+            log_message('error', 'Inbound contact resolve failed for {from}: {msg}', [
+                'from' => $from,
+                'msg'  => $e->getMessage(),
             ]);
-            $contactId    = (int) $contact['id'];
-            $isNewContact = true;
-        } else {
-            $contactId = (int) $contact['id'];
-            $updates   = [];
-            if ($profileName && empty($contact['name'])) {
-                $updates['name'] = $profileName;
-            }
-            if (empty($contact['channel'])) {
-                $updates['channel'] = 'whatsapp';
-            }
-            if (empty($contact['external_id'])) {
-                $updates['external_id'] = $from;
-            }
-            if ($updates !== []) {
-                $contactModel->update($contactId, $updates);
-            }
+
+            return;
         }
 
-        if ($contact === null) {
+        $contactId = (int) ($contact['id'] ?? 0);
+        if ($contactId <= 0) {
             return;
         }
 
