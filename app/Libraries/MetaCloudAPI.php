@@ -674,7 +674,53 @@ class MetaCloudAPI
             throw new RuntimeException('Meta WABA ID is required to create templates.');
         }
 
+        if (is_array($payload['components'] ?? null)) {
+            $payload['components'] = $this->normalizeCreateComponents($payload['components']);
+        }
+
         return $this->request('POST', $this->wabaId . '/message_templates', $payload);
+    }
+
+    /**
+     * Graph rejects unknown example keys (Cheerio uses `header_url` / `link`),
+     * so only Meta's documented example fields are forwarded.
+     *
+     * @param list<array<string, mixed>> $components
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function normalizeCreateComponents(array $components): array
+    {
+        $allowedExampleKeys = ['header_handle', 'header_text', 'header_text_named_params', 'body_text', 'body_text_named_params'];
+
+        foreach ($components as $index => $component) {
+            if (! is_array($component)) {
+                continue;
+            }
+
+            if (is_array($component['example'] ?? null)) {
+                $example = array_intersect_key($component['example'], array_flip($allowedExampleKeys));
+
+                if ($example === []) {
+                    unset($component['example']);
+                } else {
+                    $component['example'] = $example;
+                }
+            }
+
+            if (is_array($component['cards'] ?? null)) {
+                foreach ($component['cards'] as $cardIndex => $card) {
+                    if (is_array($card) && is_array($card['components'] ?? null)) {
+                        $card['components'] = $this->normalizeCreateComponents($card['components']);
+                        $component['cards'][$cardIndex] = $card;
+                    }
+                }
+            }
+
+            $components[$index] = $component;
+        }
+
+        return $components;
     }
 
     /**

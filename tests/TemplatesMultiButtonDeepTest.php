@@ -181,6 +181,67 @@ foreach ($noButtons as $component) {
 }
 check('no BUTTONS component when empty', ! $hasButtons);
 
+echo "\n-- Meta Graph create payload normalization --\n";
+$meta = new App\Libraries\MetaCloudAPI();
+$normalize = new ReflectionMethod(App\Libraries\MetaCloudAPI::class, 'normalizeCreateComponents');
+$normalize->setAccessible(true);
+
+$normalized = $normalize->invoke($meta, [
+    [
+        'type'    => 'HEADER',
+        'format'  => 'IMAGE',
+        'example' => [
+            'header_handle' => ['https://cdn.example.com/logo.png'],
+            'header_url'    => 'https://cdn.example.com/logo.png',
+            'link'          => 'https://cdn.example.com/logo.png',
+        ],
+    ],
+    ['type' => 'BODY', 'text' => 'mangesh {{1}} done. this', 'example' => ['body_text' => [['Ravi']]]],
+    [
+        'type'    => 'BUTTONS',
+        'buttons' => [
+            ['type' => 'QUICK_REPLY', 'text' => 'Yes'],
+            ['type' => 'URL', 'text' => 'Track', 'url' => 'https://ex.com/{{1}}', 'example' => ['https://ex.com/1']],
+        ],
+    ],
+    [
+        'type'  => 'CAROUSEL',
+        'cards' => [
+            ['components' => [[
+                'type'    => 'HEADER',
+                'format'  => 'IMAGE',
+                'example' => [
+                    'header_handle' => ['https://cdn.example.com/c1.png'],
+                    'link'          => 'https://cdn.example.com/c1.png',
+                ],
+            ]]],
+        ],
+    ],
+]);
+
+check('drops Cheerio-only link key from header example', ! array_key_exists('link', $normalized[0]['example']));
+check('drops Cheerio-only header_url key', ! array_key_exists('header_url', $normalized[0]['example']));
+check('keeps header_handle for Meta', ($normalized[0]['example']['header_handle'][0] ?? '') === 'https://cdn.example.com/logo.png');
+check('keeps body_text example', ($normalized[1]['example']['body_text'][0][0] ?? '') === 'Ravi');
+check('keeps URL button example list', ($normalized[2]['buttons'][1]['example'][0] ?? '') === 'https://ex.com/1');
+check('normalizes carousel card headers', ! array_key_exists('link', $normalized[3]['cards'][0]['components'][0]['example'] ?? ['link' => 1]));
+
+$textHeader = $normalize->invoke($meta, [[
+    'type'    => 'HEADER',
+    'format'  => 'TEXT',
+    'text'    => 'Hi {{1}}',
+    'example' => ['header_text' => ['Ravi'], 'link' => 'https://x.com'],
+]]);
+check('keeps header_text example', ($textHeader[0]['example']['header_text'][0] ?? '') === 'Ravi'
+    && ! array_key_exists('link', $textHeader[0]['example']));
+
+$onlyBadKeys = $normalize->invoke($meta, [[
+    'type'    => 'HEADER',
+    'format'  => 'IMAGE',
+    'example' => ['link' => 'https://x.com'],
+]]);
+check('removes example entirely when no Meta keys remain', ! array_key_exists('example', $onlyBadKeys[0]));
+
 echo "\n-- view / controller wiring --\n";
 $view = file_get_contents(dirname(FCPATH) . '/app/Views/templates/create.php') ?: '';
 $ctrl = file_get_contents(dirname(FCPATH) . '/app/Controllers/Templates.php') ?: '';
@@ -189,6 +250,9 @@ check('view has Quick Reply helper copy', str_contains($view, 'Quick Reply needs
 check('view posts template_buttons JSON', str_contains($view, 'name="template_buttons"') && str_contains($view, 'syncTemplateButtonsInput'));
 check('controller accepts template_buttons post', str_contains($ctrl, "getPost('template_buttons')"));
 check('controller keeps legacy cta_* fallback', str_contains($ctrl, "getPost('cta_type')") && str_contains($ctrl, 'Backward compatibility'));
+
+$cheerio = file_get_contents(dirname(FCPATH) . '/app/Libraries/CheerioDirectAPI.php') ?: '';
+check('Cheerio createTemplate untouched by Meta normalization', ! str_contains($cheerio, 'normalizeCreateComponents'));
 
 echo "\nPassed: {$pass}  Failed: {$fail}\n";
 exit($fail > 0 ? 1 : 0);
