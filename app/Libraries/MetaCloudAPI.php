@@ -683,7 +683,8 @@ class MetaCloudAPI
 
     /**
      * Graph rejects unknown example keys (Cheerio uses `header_url` / `link`),
-     * so only Meta's documented example fields are forwarded.
+     * so only Meta's documented example fields are forwarded. Media header samples
+     * are also converted to Resumable Upload handles, which Graph requires.
      *
      * @param list<array<string, mixed>> $components
      *
@@ -700,6 +701,20 @@ class MetaCloudAPI
 
             if (is_array($component['example'] ?? null)) {
                 $example = array_intersect_key($component['example'], array_flip($allowedExampleKeys));
+
+                $format = strtoupper((string) ($component['format'] ?? ''));
+                if (in_array($format, ['IMAGE', 'VIDEO', 'DOCUMENT'], true) && isset($example['header_handle'])) {
+                    $sample = is_array($example['header_handle'])
+                        ? (string) ($example['header_handle'][0] ?? '')
+                        : (string) $example['header_handle'];
+
+                    $handle = $this->resolveTemplateHeaderHandle($sample, $format);
+                    if ($handle === '') {
+                        unset($example['header_handle']);
+                    } else {
+                        $example['header_handle'] = [$handle];
+                    }
+                }
 
                 if ($example === []) {
                     unset($component['example']);
@@ -721,6 +736,248 @@ class MetaCloudAPI
         }
 
         return $components;
+    }
+
+    /**
+     * Graph only accepts a Resumable Upload handle as a media header sample —
+     * a media ID or public URL is reported back as "missing sample parameter".
+     */
+    protected function resolveTemplateHeaderHandle(string $sample, string $format): string
+    {
+        $sample = trim($sample);
+        if ($sample === '' || $this->looksLikeUploadHandle($sample)) {
+            return $sample;
+        }
+
+        [$path, $mime, $isTemp] = $this->resolveSampleFile($sample, $format);
+        if ($path === '') {
+            throw new RuntimeException(
+                'Could not read the header sample file for this template. Re-upload the header media and try again.'
+            );
+        }
+
+        try {
+            return $this->uploadResumableFile($path, $mime);
+        } finally {
+            if ($isTemp && is_file($path)) {
+                @unlink($path);
+            }
+        }
+    }
+
+    /**
+     * Graph handles look like `4:<base64 name>:<base64 mime>:AR...` — never a URL or bare media ID.
+     */
+    protected function looksLikeUploadHandle(string $value): bool
+    {
+        if (preg_match('#^https?://#i', $value)) {
+            return false;
+        }
+
+        return (bool) preg_match('/^\d+::?[^:]+:/', $value);
+    }
+
+    /**
+     * @return array{0: string, 1: string, 2: bool} path, mime type, whether the file is temporary
+     */
+    protected function resolveSampleFile(string $sample, string $format): array
+    {
+        $fallbackMime = match ($format) {
+            'VIDEO'    => 'video/mp4',
+            'DOCUMENT' => 'application/pdf',
+            default    => 'image/jpeg',
+        };
+
+        if (is_file($sample)) {
+            return [$sample, $this->detectMimeType($sample, $fallbackMime), false];
+        }
+
+        $row = $this->findMediaRowForSample($sample);
+        if ($row !== null) {
+            $path = WRITEPATH . ltrim(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, (string) ($row['path'] ?? '')), DIRECTORY_SEPARATOR);
+            if (is_file($path)) {
+                $mime = trim((string) ($row['mime_type'] ?? ''));
+
+                return [$path, $mime !== '' ? $mime : $this->detectMimeType($path, $fallbackMime), false];
+            }
+        }
+
+        if (preg_match('#^https?://#i', $sample) && ! $this->isNonPublicMediaUrl($sample)) {
+            $downloaded = $this->downloadSampleToTempFile($sample, $fallbackMime);
+            if ($downloaded !== null) {
+                return [$downloaded[0], $downloaded[1], true];
+            }
+        }
+
+        return ['', $fallbackMime, false];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    protected function findMediaRowForSample(string $sample): ?array
+    {
+        $model = model(\App\Models\MediaModel::class);
+
+        $row = $model->where('url', $sample)->orderBy('id', 'DESC')->first();
+        if (is_array($row)) {
+            return $row;
+        }
+
+        $filename = '';
+        if (preg_match('#/media/serve/([^/?\#]+)#', $sample, $m)) {
+            $filename = basename(rawurldecode($m[1]));
+        } elseif (! preg_match('#^https?://#i', $sample)) {
+            $filename = basename($sample);
+        }
+
+        if ($filename === '') {
+            return null;
+        }
+
+        $row = $model->where('filename', $filename)->orderBy('id', 'DESC')->first();
+
+        return is_array($row) ? $row : null;
+    }
+
+    /**
+     * @return array{0: string, 1: string}|null
+     */
+    protected function downloadSampleToTempFile(string $url, string $fallbackMime): ?array
+    {
+        try {
+            $client   = Services::curlrequest($this->baseCurlOptions(), null, null, false);
+            $response = $client->request('GET', $url);
+            if ($response->getStatusCode() >= 400) {
+                return null;
+            }
+
+            $body = (string) $response->getBody();
+            if ($body === '') {
+                return null;
+            }
+
+            $tmp = tempnam(sys_get_temp_dir(), 'meta_tpl_');
+            if ($tmp === false || file_put_contents($tmp, $body) === false) {
+                return null;
+            }
+
+            $mime = trim(explode(';', $response->getHeaderLine('Content-Type'))[0]);
+
+            return [$tmp, $mime !== '' ? $mime : $fallbackMime];
+        } catch (Throwable $e) {
+            log_message('warning', 'Template sample download failed for {url}: {msg}', [
+                'url' => $url,
+                'msg' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    protected function detectMimeType(string $path, string $fallback): string
+    {
+        if (function_exists('mime_content_type')) {
+            $mime = @mime_content_type($path);
+            if (is_string($mime) && $mime !== '') {
+                return $mime;
+            }
+        }
+
+        return $fallback;
+    }
+
+    /**
+     * Meta Resumable Upload API: create a session, then push the bytes to get the handle.
+     *
+     * @see https://developers.facebook.com/docs/graph-api/guides/upload
+     */
+    public function uploadResumableFile(string $filePath, string $mimeType): string
+    {
+        $this->ensureConfigured(false);
+
+        if (! is_file($filePath)) {
+            throw new RuntimeException('Template sample file not found: ' . $filePath);
+        }
+
+        $appId = $this->resolveAppId();
+        if ($appId === '') {
+            throw new RuntimeException(
+                'Meta App ID is required to upload template header samples. Save it in Settings → WhatsApp Provider → Meta.'
+            );
+        }
+
+        $client = Services::curlrequest($this->baseCurlOptions(), null, null, false);
+
+        $sessionResponse = $client->request('POST', $this->buildUrl($appId . '/uploads'), [
+            'headers' => [
+                'Authorization' => 'OAuth ' . $this->accessToken,
+                'Accept'        => 'application/json',
+            ],
+            'form_params' => [
+                'file_name'   => basename($filePath),
+                'file_length' => (string) filesize($filePath),
+                'file_type'   => $mimeType,
+            ],
+        ]);
+
+        $session   = json_decode((string) $sessionResponse->getBody(), true);
+        $sessionId = is_array($session) ? trim((string) ($session['id'] ?? '')) : '';
+        if ($sessionId === '') {
+            throw new RuntimeException(
+                'Meta could not start the header sample upload: ' . (string) $sessionResponse->getBody()
+            );
+        }
+
+        $uploadResponse = $client->request('POST', $this->buildUrl($sessionId), [
+            'headers' => [
+                'Authorization' => 'OAuth ' . $this->accessToken,
+                'file_offset'   => '0',
+                'Content-Type'  => 'application/octet-stream',
+                'Accept'        => 'application/json',
+            ],
+            'body' => file_get_contents($filePath),
+        ]);
+
+        $uploaded = json_decode((string) $uploadResponse->getBody(), true);
+        $handle   = is_array($uploaded) ? $this->firstUploadHandle((string) ($uploaded['h'] ?? '')) : '';
+        if ($handle === '') {
+            throw new RuntimeException(
+                'Meta did not return a header sample handle: ' . (string) $uploadResponse->getBody()
+            );
+        }
+
+        return $handle;
+    }
+
+    /**
+     * Graph can return several newline-separated handles for one upload; only the first is valid input.
+     */
+    protected function firstUploadHandle(string $raw): string
+    {
+        foreach (preg_split('/\R/', $raw) ?: [] as $line) {
+            $line = trim($line);
+            if ($line !== '') {
+                return $line;
+            }
+        }
+
+        return '';
+    }
+
+    protected function resolveAppId(): string
+    {
+        $meta  = $this->settings->getMetaConfig();
+        $appId = trim((string) ($meta['app_id'] ?? ''));
+
+        if ($appId === '') {
+            $appId = $this->resolveMetaAppIdFromWaba();
+            if ($appId !== '') {
+                $this->settings->setMetaConfig(['app_id' => $appId]);
+            }
+        }
+
+        return $appId;
     }
 
     /**

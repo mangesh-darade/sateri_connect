@@ -186,12 +186,15 @@ $meta = new App\Libraries\MetaCloudAPI();
 $normalize = new ReflectionMethod(App\Libraries\MetaCloudAPI::class, 'normalizeCreateComponents');
 $normalize->setAccessible(true);
 
+// An existing Graph handle passes through untouched, so normalization is testable offline.
+$sampleHandle = '4:MTc4NTQ4NDYwMC5wbmc=:aW1hZ2UvcG5n:ARZpE3BVfgpmx9HEHJ:e:1785830847:1389328076628792:61557688173635:ARat';
+
 $normalized = $normalize->invoke($meta, [
     [
         'type'    => 'HEADER',
         'format'  => 'IMAGE',
         'example' => [
-            'header_handle' => ['https://cdn.example.com/logo.png'],
+            'header_handle' => [$sampleHandle],
             'header_url'    => 'https://cdn.example.com/logo.png',
             'link'          => 'https://cdn.example.com/logo.png',
         ],
@@ -211,7 +214,7 @@ $normalized = $normalize->invoke($meta, [
                 'type'    => 'HEADER',
                 'format'  => 'IMAGE',
                 'example' => [
-                    'header_handle' => ['https://cdn.example.com/c1.png'],
+                    'header_handle' => [$sampleHandle],
                     'link'          => 'https://cdn.example.com/c1.png',
                 ],
             ]]],
@@ -221,10 +224,43 @@ $normalized = $normalize->invoke($meta, [
 
 check('drops Cheerio-only link key from header example', ! array_key_exists('link', $normalized[0]['example']));
 check('drops Cheerio-only header_url key', ! array_key_exists('header_url', $normalized[0]['example']));
-check('keeps header_handle for Meta', ($normalized[0]['example']['header_handle'][0] ?? '') === 'https://cdn.example.com/logo.png');
+check('keeps existing upload handle as-is', ($normalized[0]['example']['header_handle'][0] ?? '') === $sampleHandle);
 check('keeps body_text example', ($normalized[1]['example']['body_text'][0][0] ?? '') === 'Ravi');
 check('keeps URL button example list', ($normalized[2]['buttons'][1]['example'][0] ?? '') === 'https://ex.com/1');
 check('normalizes carousel card headers', ! array_key_exists('link', $normalized[3]['cards'][0]['components'][0]['example'] ?? ['link' => 1]));
+
+$unresolvable = null;
+try {
+    $normalize->invoke($meta, [[
+        'type'    => 'HEADER',
+        'format'  => 'IMAGE',
+        'example' => ['header_handle' => ['https://cdn.invalid.example/never-there.png']],
+    ]]);
+} catch (Throwable $e) {
+    $unresolvable = $e->getMessage();
+}
+check('unresolvable media sample fails with a clear message',
+    is_string($unresolvable) && str_contains($unresolvable, 'Re-upload the header media'));
+
+echo "\n-- Meta upload handle detection --\n";
+$looksLikeHandle = new ReflectionMethod(App\Libraries\MetaCloudAPI::class, 'looksLikeUploadHandle');
+$looksLikeHandle->setAccessible(true);
+$firstHandle = new ReflectionMethod(App\Libraries\MetaCloudAPI::class, 'firstUploadHandle');
+$firstHandle->setAccessible(true);
+
+$realHandle = '4:MTc4NTQ4NDYwMC5wbmc=:aW1hZ2UvcG5n:ARZpE3BVfgpmx9HEHJ:e:1785830847:1389328076628792:61557688173635:ARat';
+check('recognizes Graph upload handle', $looksLikeHandle->invoke($meta, $realHandle) === true);
+check('public URL is not a handle', $looksLikeHandle->invoke($meta, 'https://cdn.example.com/a.png') === false);
+check('bare media id is not a handle', $looksLikeHandle->invoke($meta, '1234567890') === false);
+check('windows path is not a handle', $looksLikeHandle->invoke($meta, 'C:\\wamp64\\a.png') === false);
+check('takes first of newline-separated handles', $firstHandle->invoke($meta, $realHandle . "\n" . $realHandle . 'X') === $realHandle);
+check('empty handle response -> empty string', $firstHandle->invoke($meta, "\n  \n") === '');
+
+$metaSrc = file_get_contents(dirname(FCPATH) . '/app/Libraries/MetaCloudAPI.php') ?: '';
+check('Meta uploads template samples via Resumable Upload API', str_contains($metaSrc, 'function uploadResumableFile(')
+    && str_contains($metaSrc, "'/uploads'") || str_contains($metaSrc, "/uploads'"));
+check('Meta resumable upload uses OAuth + file_offset headers', str_contains($metaSrc, "'OAuth ' . \$this->accessToken")
+    && str_contains($metaSrc, "'file_offset'"));
 
 $textHeader = $normalize->invoke($meta, [[
     'type'    => 'HEADER',
