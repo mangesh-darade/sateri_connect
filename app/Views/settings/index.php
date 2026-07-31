@@ -267,8 +267,19 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                             </button>
                                         </div>
                                         <div id="metaEmbedResult" class="creds-test-result mt-2"></div>
+                                        <div class="alert alert-light border py-2 px-3 small mt-2 mb-0">
+                                            <div class="d-flex flex-wrap align-items-center gap-2">
+                                                <strong>JS SDK host domain:</strong>
+                                                <code id="metaSdkOrigin">—</code>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" id="btnCopySdkOrigin">Copy</button>
+                                            </div>
+                                            <div class="mt-1" id="metaSdkOriginHint">
+                                                Meta checks this exact value. It must appear in Meta App → Facebook Login for Business → Settings →
+                                                <strong>Allowed Domains for the JavaScript SDK</strong>. Subdomains are not covered by the parent domain.
+                                            </div>
+                                        </div>
                                         <div class="form-text mt-2">
-                                            Uses Facebook JS SDK + Embedded Signup <code>config_id</code> (not a plain OAuth link). Domain must be listed under Meta App → Facebook Login for Business → Allowed domains / Valid OAuth redirect URIs (HTTPS).
+                                            Uses Facebook JS SDK + Embedded Signup <code>config_id</code> (not a plain OAuth link).
                                         </div>
                                     </div>
 
@@ -795,7 +806,8 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                         </div>
 
                         <div class="settings-steps" id="webhookSetupWizard"
-                             data-setup-url="<?= site_url('settings/setup-webhook') ?>">
+                             data-setup-url="<?= site_url('settings/setup-webhook') ?>"
+                             data-provider="<?= esc($whProvider) ?>">
                             <div class="settings-step <?= $step1 ? 'is-done' : 'is-pending' ?>">
                                 <div class="settings-step-head">
                                     <span class="settings-step-num">1</span>
@@ -808,8 +820,11 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                 </div>
                                 <div class="settings-step-body">
                                     <p class="small text-muted mb-2">
-                                        Ha token <?= $isWhMeta ? 'Meta App → WhatsApp → Configuration' : 'Cheerio webhook form' ?> madhe paste karaycha.
-                                        App + provider donhi thikani <strong>same</strong> asava.
+                                        <?php if ($isWhMeta): ?>
+                                            हा token Save URL / Save Settings केल्यावर configured Meta App मध्ये API ने sync होतो.
+                                        <?php else: ?>
+                                            हा token Cheerio webhook form मध्ये paste करायचा. App + provider दोन्ही ठिकाणी <strong>same</strong> असावा.
+                                        <?php endif; ?>
                                     </p>
                                     <label class="form-label">Webhook Verify Token</label>
                                     <div class="input-group mb-2">
@@ -884,7 +899,7 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                 <div class="settings-step-head">
                                     <span class="settings-step-num">3</span>
                                     <div class="settings-step-copy">
-                                        <strong><?= $isWhMeta ? 'Meta' : 'Cheerio' ?> madhe paste + test</strong>
+                                        <strong><?= $isWhMeta ? 'Meta API sync + test' : 'Cheerio madhe paste + test' ?></strong>
                                         <span class="badge <?= $step3 ? 'text-bg-success' : 'text-bg-secondary' ?>" id="badgeStep3">
                                             <?= $step3 ? 'Ready' : 'Waiting' ?>
                                         </span>
@@ -911,20 +926,16 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
 
                                     <div class="settings-guide mb-3 small">
                                         <?php if ($isWhMeta): ?>
-                                            <div class="alert alert-warning border-0 py-2 px-3 small mb-3" role="note">
-                                                <strong>Important:</strong> Callback URL verify पुरेसे नाही.
-                                                Meta App → WhatsApp → Configuration → Webhook fields मध्ये
-                                                <code>messages</code> <strong>Subscribe</strong> असावे.
-                                                नसेल तर customer replies Live Chat मध्ये येणार नाहीत (24h lock राहील).
-                                                <strong>Test connection</strong> हे auto-fix करण्याचा प्रयत्न करते.
+                                            <div class="alert alert-info border-0 py-2 px-3 small mb-3" role="note">
+                                                <strong>Automatic Meta setup:</strong> <strong>Save URL</strong> किंवा footer मधील
+                                                <strong>Save Settings</strong> configured App ID/WABA ID साठी Callback URL,
+                                                Verify Token, <code>messages</code> fields आणि WABA override Graph API ने sync करते.
                                             </div>
-                                            <div class="fw-semibold mb-2">Meta App → WhatsApp → Configuration:</div>
+                                            <div class="fw-semibold mb-2">Required Meta credentials:</div>
                                             <ol class="mb-2 ps-3">
-                                                <li>Open <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener">developers.facebook.com</a></li>
-                                                <li><strong>Callback URL</strong> = Copy URL above</li>
-                                                <li><strong>Verify Token</strong> = Step 1 token</li>
-                                                <li>Subscribe fields: <code>messages</code>, <code>message_template_status_update</code>, <code>account_update</code></li>
-                                                <li>Verify / Save · App Secret = Settings → Provider → Meta App Secret</li>
+                                                <li>Access Token, WABA ID, App ID आणि App Secret Settings → Provider मध्ये save असावेत.</li>
+                                                <li>Public callback valid HTTPS असावा आणि Meta verification request ला accessible असावा.</li>
+                                                <li>API warning दिसल्यासच <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener">Meta Dashboard</a> मध्ये manual fallback वापरा.</li>
                                             </ol>
                                         <?php else: ?>
                                             <div class="fw-semibold mb-2">Cheerio / WABA webhook form:</div>
@@ -1004,7 +1015,7 @@ $(function () {
         var $b = $('#' + id);
         $b.removeClass('text-bg-secondary text-bg-success')
             .addClass(done ? 'text-bg-success' : 'text-bg-secondary')
-            .text(done ? (doneText || 'Done') : 'Pending');
+            .text(done ? (doneText || 'Done') : (doneText || 'Pending'));
         var $step = $b.closest('.settings-step');
         if ($step.length) {
             $step.toggleClass('is-done', !!done).toggleClass('is-pending', !done);
@@ -1047,11 +1058,12 @@ $(function () {
         webhookSetup('save_public_url', { webhook_public_base: value })
             .done(function (res) {
                 var data = res.data || {};
+                var remoteConfigured = data.remote_configured !== false;
                 if (data.public_base) $('#webhookPublicBase').val(data.public_base);
                 if (data.public_callback) $('#webhookPublicCallback').val(data.public_callback);
                 setStepBadge('badgeStep2', true);
-                setStepBadge('badgeStep3', true, 'Ready');
-                APP.toast(res.message || 'Public URL saved', 'success');
+                setStepBadge('badgeStep3', remoteConfigured, remoteConfigured ? 'Synced' : 'Warning');
+                APP.toast(res.message || 'Public URL saved', remoteConfigured ? 'success' : 'warning');
             })
             .fail(function (xhr) {
                 APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Save failed', 'error');
@@ -1068,6 +1080,7 @@ $(function () {
         webhookSetup('auto_public_url')
             .done(function (res) {
                 var data = res.data || {};
+                var remoteConfigured = data.remote_configured !== false;
                 if (data.public_base) $('#webhookPublicBase').val(data.public_base);
                 if (data.public_callback) {
                     $('#webhookPublicCallback').val(data.public_callback);
@@ -1081,8 +1094,8 @@ $(function () {
                 }
                 $('#webhookSourceBadge').text(data.source || 'saved');
                 setStepBadge('badgeStep2', true);
-                setStepBadge('badgeStep3', true, 'Ready');
-                APP.toast(res.message || 'Callback auto-saved', 'success');
+                setStepBadge('badgeStep3', remoteConfigured, remoteConfigured ? 'Synced' : 'Warning');
+                APP.toast(res.message || 'Callback auto-saved', remoteConfigured ? 'success' : 'warning');
             })
             .fail(function (xhr) {
                 var data = (xhr.responseJSON && xhr.responseJSON.data) || {};
@@ -1343,6 +1356,30 @@ $(function () {
         var pendingSession = null;
         var pendingCode = null;
         var completing = false;
+
+        // Meta validates the page origin against "Allowed Domains for the JavaScript SDK",
+        // so show the exact string instead of making the admin guess it.
+        (function showSdkOrigin() {
+            var origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
+            $('#metaSdkOrigin').text(origin);
+
+            if (window.location.protocol !== 'https:') {
+                $('#metaSdkOriginHint')
+                    .addClass('text-danger')
+                    .html('<strong>This page is not HTTPS.</strong> Meta only allows the JavaScript SDK login on HTTPS pages. Open Settings over HTTPS before connecting.');
+            }
+
+            $('#btnCopySdkOrigin').on('click', function () {
+                var value = $('#metaSdkOrigin').text();
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(value).then(function () {
+                        APP.toast('Host domain copied. Paste it into Meta → Allowed Domains for the JavaScript SDK.', 'success');
+                    });
+                    return;
+                }
+                window.prompt('Copy this host domain into Meta:', value);
+            });
+        })();
 
         function embedCfg() {
             return {

@@ -132,6 +132,7 @@ class Settings extends BaseController
 
         $settings = service('settingsService');
         $section  = (string) ($this->request->getPost('section') ?? 'all');
+        $metaWebhookSync = null;
 
         try {
             if (in_array($section, ['all', 'email', 'provider'], true)) {
@@ -334,10 +335,50 @@ class Settings extends BaseController
                 $this->applySmtpConfig();
             }
 
+            // Saving Meta/Webhook settings also performs the Graph API equivalent of
+            // Meta Dashboard's "Verify and save" for this configured App + WABA.
+            if (
+                $settings->isMetaProvider()
+                && in_array($section, ['all', 'provider', 'meta', 'webhooks'], true)
+            ) {
+                try {
+                    $resolved = $settings->resolveWebhookPublicConfig();
+                    $callback = trim((string) ($resolved['public_callback'] ?? ''));
+                    $metaWebhookSync = (new \App\Libraries\MetaCloudAPI($settings))
+                        ->subscribeWabaWebhook($callback);
+                } catch (\Throwable $e) {
+                    log_message('warning', 'Settings saved but Meta webhook sync failed: {msg}', [
+                        'msg' => $e->getMessage(),
+                    ]);
+                    $metaWebhookSync = [
+                        'ok'               => false,
+                        'fully_configured' => false,
+                        'error'            => $e->getMessage(),
+                    ];
+                }
+            }
+
             (new ActivityLogger())->log('update', 'settings', 'Settings updated', [
                 'section'  => $section,
                 'provider' => $settings->getWhatsAppProvider(),
+                'meta_webhook_synced' => is_array($metaWebhookSync)
+                    ? ! empty($metaWebhookSync['fully_configured'])
+                    : null,
             ]);
+
+            $saveMessage = 'Settings saved successfully.';
+            if (is_array($metaWebhookSync)) {
+                if (! empty($metaWebhookSync['fully_configured'])) {
+                    $saveMessage .= ' Meta callback URL, verify token, webhook fields, and WABA override were synced.';
+                } else {
+                    $syncError = trim((string) (
+                        $metaWebhookSync['error']
+                        ?? $metaWebhookSync['webhook_fields']['error']
+                        ?? 'Meta did not confirm the complete webhook configuration.'
+                    ));
+                    $saveMessage .= ' Meta webhook sync warning: ' . $syncError;
+                }
+            }
 
             if ($this->request->isAJAX()) {
                 return $this->jsonResponse(true, [
@@ -347,10 +388,11 @@ class Settings extends BaseController
                     'email_provider' => $settings->getEmailProvider(),
                     'email_provider_label' => $this->emailProviderLabel($settings->getEmailProvider()),
                     'section'        => $section,
-                ], 'Settings saved successfully.');
+                    'meta_webhook_sync' => $metaWebhookSync,
+                ], $saveMessage);
             }
 
-            return redirect()->to('/settings')->with('success', 'Settings saved successfully.');
+            return redirect()->to('/settings')->with('success', $saveMessage);
         } catch (\Throwable $e) {
             log_message('error', 'Settings save failed: {msg}', ['msg' => $e->getMessage()]);
 
@@ -580,6 +622,18 @@ class Settings extends BaseController
                 }
 
                 $modeLabel = (($resolved['mode'] ?? '') === 'live') ? 'Live' : 'Local';
+                $remoteConfigured = ! $settings->isMetaProvider()
+                    || (is_array($metaSubscribe) && ! empty($metaSubscribe['fully_configured']));
+                $message = $modeLabel . ' callback auto-detected: ' . $callback;
+                if ($settings->isMetaProvider()) {
+                    $message .= $remoteConfigured
+                        ? ' Meta callback/token synced automatically.'
+                        : ' Meta sync warning: ' . (string) (
+                            $metaSubscribe['error']
+                            ?? $metaSubscribe['webhook_fields']['error']
+                            ?? 'Meta did not confirm the complete webhook configuration.'
+                        );
+                }
 
                 return $this->jsonResponse(true, [
                     'public_base'     => $autoBase,
@@ -587,8 +641,9 @@ class Settings extends BaseController
                     'mode'            => (string) ($resolved['mode'] ?? 'local'),
                     'source'          => (string) ($resolved['source'] ?? 'saved'),
                     'step2_done'      => true,
+                    'remote_configured' => $remoteConfigured,
                     'meta_subscribe'  => $metaSubscribe,
-                ], $modeLabel . ' callback auto-detected: ' . $callback);
+                ], $message);
             }
 
             if ($action === 'save_public_url') {
@@ -626,8 +681,10 @@ class Settings extends BaseController
                 ]);
 
                 $msg = 'Step 2 done — public webhook URL saved.';
-                if (is_array($metaSubscribe) && ! empty($metaSubscribe['ok'])) {
-                    $msg .= ' Meta WABA override pinned to this URL.';
+                $remoteConfigured = ! $settings->isMetaProvider()
+                    || (is_array($metaSubscribe) && ! empty($metaSubscribe['fully_configured']));
+                if (is_array($metaSubscribe) && ! empty($metaSubscribe['fully_configured'])) {
+                    $msg .= ' Meta callback URL, verify token, fields, and WABA override synced.';
                 } elseif (is_array($metaSubscribe) && isset($metaSubscribe['error'])) {
                     $msg .= ' (Meta subscribe warning: ' . $metaSubscribe['error'] . ')';
                 }
@@ -649,6 +706,7 @@ class Settings extends BaseController
                     'public_base'     => $base,
                     'public_callback' => $callback,
                     'step2_done'      => true,
+                    'remote_configured' => $remoteConfigured,
                     'meta_subscribe'  => $metaSubscribe,
                 ], $msg);
             }
@@ -682,7 +740,9 @@ class Settings extends BaseController
                     'expected'    => $challenge,
                     'provider'    => $active['provider'] ?? '',
                 ], $ok
-                    ? ('Step 3 local test OK — now paste URL in ' . $providerLabel . '.')
+                    ? ($settings->isMetaProvider()
+                        ? 'Step 3 local test OK — Save URL will sync it to the configured Meta App automatically.'
+                        : ('Step 3 local test OK — now paste URL in ' . $providerLabel . '.'))
                     : 'Local verify failed (HTTP ' . $status . '). Check Apache / app URL.');
             }
 

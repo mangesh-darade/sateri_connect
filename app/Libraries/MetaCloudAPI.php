@@ -1128,6 +1128,15 @@ class MetaCloudAPI
             throw new RuntimeException('Meta webhook verify token is empty. Generate it in Settings → Webhooks.');
         }
 
+        // Configure the app-level default first. This is the Graph API equivalent of
+        // WhatsApp → Configuration → Callback URL / Verify token → Verify and save.
+        // It also keeps non-overridable template/account events on the current URL.
+        $webhookFields = $this->diagnoseAndEnsureWebhookFields($callback, $token);
+
+        // A WABA must be subscribed before Meta accepts an override callback.
+        // Calling this edge without an override is idempotent for the configured app.
+        $this->request('POST', $this->wabaId . '/subscribed_apps');
+
         $result = $this->request('POST', $this->wabaId . '/subscribed_apps', [
             'override_callback_uri' => $callback,
             'verify_token'          => $token,
@@ -1135,11 +1144,12 @@ class MetaCloudAPI
 
         return [
             'ok'                    => ! empty($result['success']),
+            'fully_configured'      => ! empty($result['success']) && ! empty($webhookFields['ok']),
             'callback'              => $callback,
             'subscribed_apps'       => $this->request('GET', $this->wabaId . '/subscribed_apps'),
             'raw'                   => $result,
             'provider'              => 'meta',
-            'webhook_fields'        => $this->diagnoseAndEnsureWebhookFields($callback, $token),
+            'webhook_fields'        => $webhookFields,
         ];
     }
 
@@ -1217,23 +1227,12 @@ class MetaCloudAPI
         }
 
         try {
-            $current = $this->appGraphRequest('GET', $appId . '/subscriptions', [], $appId, $appSecret);
-            $fields  = $this->extractSubscriptionFieldNames($current);
-            $hasMessages = in_array('messages', $fields, true);
+            $current     = $this->appGraphRequest('GET', $appId . '/subscriptions', [], $appId, $appSecret);
+            $before      = $this->extractSubscriptionFieldNames($current);
+            $hadMessages = in_array('messages', $before, true);
 
-            if ($hasMessages) {
-                return [
-                    'ok'                  => true,
-                    'messages_subscribed' => true,
-                    'fields'              => $fields,
-                    'auto_fixed'          => false,
-                    'detail'              => 'messages subscribed (' . implode(', ', $fields) . ')',
-                    'error'               => null,
-                    'app_id'              => $appId,
-                ];
-            }
-
-            // Auto-repair: subscribe required fields (URL verify without fields = silent inbound failure).
+            // Always POST the subscription. Even when `messages` is already subscribed,
+            // the saved callback URL or verify token may have changed.
             $desired = 'messages,message_template_status_update,account_update';
             $post    = $this->appGraphRequest('POST', $appId . '/subscriptions', [
                 'object'       => 'whatsapp_business_account',
@@ -1263,8 +1262,9 @@ class MetaCloudAPI
                 'ok'                  => true,
                 'messages_subscribed' => true,
                 'fields'              => $fields,
-                'auto_fixed'          => true,
-                'detail'              => 'Auto-subscribed messages (' . implode(', ', $fields) . ')',
+                'auto_fixed'          => ! $hadMessages,
+                'detail'              => ($hadMessages ? 'Callback/token synced; fields OK (' : 'Callback/token synced; subscribed messages (')
+                    . implode(', ', $fields) . ')',
                 'error'               => null,
                 'app_id'              => $appId,
             ];
