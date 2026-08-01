@@ -68,7 +68,7 @@ check('route POST emails/bulk', str_contains($routesFile, "post('emails/bulk', '
 
 $nav = file_get_contents($root . '/app/Views/layouts/main.php');
 check('nav emails.view gate', str_contains($nav, "can('emails.view')"));
-check('nav emails link', str_contains($nav, "site_url('emails')"));
+check('nav emails link', str_contains($nav, "site_url('emails/send')") && str_contains($nav, "site_url('emails/bulk')"));
 
 $seeder = file_get_contents($root . '/app/Database/Seeds/PermissionSeeder.php');
 check('permission emails.view seeded', str_contains($seeder, "'emails.view'"));
