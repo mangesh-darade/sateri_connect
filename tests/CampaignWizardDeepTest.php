@@ -69,7 +69,7 @@ check('JS Schedule first-click reveals picker', str_contains($js, "hasClass('d-n
 check('JS schedule posts to wizard schedule endpoint', (bool) preg_match('#/campaigns/wizard/\' \+ state\.channel \+ \'/\' \+ state\.campaignId \+ \'/schedule#', $js));
 check('JS run posts to wizard run endpoint', (bool) preg_match('#/campaigns/wizard/\' \+ state\.channel \+ \'/\' \+ state\.campaignId \+ \'/run#', $js));
 check('JS has showWizardError + clearWizardErrors', str_contains($js, 'function showWizardError') && str_contains($js, 'function clearWizardErrors'));
-check('JS drag-drop upload wired', str_contains($js, ".on('drop'") && str_contains($js, 'uploadCampaignMediaFile'));
+check('JS drag-drop upload wired', str_contains($js, 'APP.bindUploadBox(') && str_contains($js, 'onFile: uploadCampaignMediaFile'));
 
 // Balanced braces in JS (node --check is authoritative)
 $node = trim((string) shell_exec('where node 2>nul'));

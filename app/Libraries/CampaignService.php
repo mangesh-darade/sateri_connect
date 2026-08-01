@@ -276,7 +276,8 @@ class CampaignService
             $components = $this->buildTemplateComponents(
                 $variableMap,
                 $contact,
-                $basePayload['components'] ?? null
+                $basePayload['components'] ?? null,
+                is_array($templateRow) ? $templateRow : null
             );
             $components = WhatsAppTemplatePayload::mergeHeaderFromPayload(
                 $components,
@@ -656,7 +657,12 @@ class CampaignService
             $payload = $basePayload;
             if ($messageType === 'template') {
                 $payload['components'] = WhatsAppTemplatePayload::mergeHeaderFromPayload(
-                    $this->buildTemplateComponents($variableMap, $contact, $payload['components'] ?? null),
+                    $this->buildTemplateComponents(
+                        $variableMap,
+                        $contact,
+                        $payload['components'] ?? null,
+                        is_array($templateRow) ? $templateRow : null
+                    ),
                     $basePayload,
                     $headerType
                 );
@@ -1015,18 +1021,129 @@ class CampaignService
      *
      * @return list<array<string, mixed>>
      */
-    protected function buildTemplateComponents(array $variableMap, array $contact, mixed $existing = null): array
-    {
-        if (is_array($existing) && $existing !== [] && $this->looksLikeMetaComponents($existing)) {
-            return array_values($existing);
-        }
+    protected function buildTemplateComponents(
+        array $variableMap,
+        array $contact,
+        mixed $existing = null,
+        ?array $template = null
+    ): array {
+        // The wizard stores a HEADER-only component for media templates; that must
+        // not suppress the BODY parameters the template still expects.
+        $prebuilt = is_array($existing) && $existing !== [] && $this->looksLikeMetaComponents($existing)
+            ? array_values(array_filter($existing, 'is_array'))
+            : [];
 
-        if ($variableMap === []) {
-            return [];
+        if ($this->hasBodyComponent($prebuilt)) {
+            return $prebuilt;
         }
 
         if ($this->looksLikeMetaComponents($variableMap)) {
             return array_values($variableMap);
+        }
+
+        // Meta rejects the send (#132000) unless the BODY parameter count matches
+        // the approved template exactly, so the template placeholders — not the
+        // saved campaign map — decide how many parameters are sent.
+        $definitions = $template !== null
+            ? WhatsAppTemplateVariables::definitionsForTemplate(
+                $template['variables'] ?? null,
+                (string) ($template['body'] ?? ''),
+                $template['raw_payload'] ?? null
+            )
+            : [];
+
+        // A known template with no placeholders must send no BODY parameters,
+        // even when an outdated campaign map still holds values.
+        $parameters = $template !== null
+            ? $this->parametersFromDefinitions($definitions, $variableMap, $contact)
+            : $this->parametersFromVariableMap($variableMap, $contact);
+
+        if ($parameters === []) {
+            return $prebuilt;
+        }
+
+        $prebuilt[] = [
+            'type'       => 'body',
+            'parameters' => $parameters,
+        ];
+
+        return $prebuilt;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $components
+     */
+    protected function hasBodyComponent(array $components): bool
+    {
+        foreach ($components as $component) {
+            if (is_array($component) && strtolower((string) ($component['type'] ?? '')) === 'body') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * One parameter per approved template placeholder, in template order.
+     *
+     * @param list<array{key:string,index:int,style:string,example:string,suggested_source:string}> $definitions
+     * @param array<string, mixed> $variableMap
+     * @param array<string, mixed> $contact
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function parametersFromDefinitions(array $definitions, array $variableMap, array $contact): array
+    {
+        $parameters = [];
+
+        foreach ($definitions as $definition) {
+            $key   = (string) ($definition['key'] ?? '');
+            $index = (int) ($definition['index'] ?? 0);
+            if ($key === '') {
+                continue;
+            }
+
+            // Older campaigns stored the map by position even for named templates.
+            $source = $variableMap[$key] ?? $variableMap[(string) $index] ?? null;
+
+            $text = $source !== null ? $this->resolveVariableValue($source, $contact) : '';
+            if ($text === '') {
+                $suggestion = (string) ($definition['suggested_source'] ?? '');
+                if (in_array($suggestion, ['name', 'mobile', 'email'], true)) {
+                    $text = $this->resolveVariableValue($suggestion, $contact);
+                }
+            }
+            if ($text === '') {
+                $text = trim((string) ($definition['example'] ?? ''));
+            }
+
+            $parameter = [
+                'type' => 'text',
+                'text' => $text !== '' ? $text : '-',
+            ];
+            if (($definition['style'] ?? '') === 'named') {
+                $parameter['parameter_name'] = $key;
+            }
+
+            $parameters[] = $parameter;
+        }
+
+        return $parameters;
+    }
+
+    /**
+     * Fallback when the template row is unavailable — trust the saved map.
+     *
+     * @param array<string, mixed> $variableMap
+     * @param array<string, mixed> $contact
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function parametersFromVariableMap(array $variableMap, array $contact): array
+    {
+        if ($variableMap === []) {
+            return [];
         }
 
         // Sort numeric keys so {{1}}, {{2}} stay ordered for BODY parameters.
@@ -1041,8 +1158,7 @@ class CampaignService
 
         $parameters = [];
         foreach ($keys as $key) {
-            $source = $variableMap[$key];
-            $text   = $this->resolveVariableValue($source, $contact);
+            $text = $this->resolveVariableValue($variableMap[$key], $contact);
             $parameter = [
                 'type' => 'text',
                 'text' => $text !== '' ? $text : '-',
@@ -1053,14 +1169,7 @@ class CampaignService
             $parameters[] = $parameter;
         }
 
-        if ($parameters === []) {
-            return [];
-        }
-
-        return [[
-            'type'       => 'body',
-            'parameters' => $parameters,
-        ]];
+        return $parameters;
     }
 
     /**
