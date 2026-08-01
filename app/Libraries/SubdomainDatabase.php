@@ -98,6 +98,23 @@ class SubdomainDatabase
         $db->applyBySubdomain(self::resolve());
     }
 
+    /**
+     * False when the resolved subdomain has no case in Config\Database,
+     * which leaves the tenant credentials blank.
+     */
+    public static function isTenantConfigured(): bool
+    {
+        try {
+            $config = new Database();
+        } catch (\Throwable) {
+            return false;
+        }
+
+        $group = $config->defaultGroup === 'tests' ? $config->tests : $config->default;
+
+        return trim((string) ($group['database'] ?? '')) !== '';
+    }
+
     public static function resolve(): string
     {
         // Optional CLI/dev force of which switch case to use (not connection credentials).

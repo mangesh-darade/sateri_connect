@@ -198,6 +198,13 @@ class ErrorPresenter
             return 'The database server is not reachable. Check that MySQL/MariaDB is running and the hostname/port are correct.';
         }
 
+        // An unmapped subdomain leaves the credentials blank, which otherwise
+        // surfaces as a generic connection failure on every screen.
+        if (! SubdomainDatabase::isTenantConfigured()) {
+            return 'This site is running on the subdomain "' . SubdomainDatabase::resolve()
+                . '", which has no database mapped yet. Add a case for it in Config\\Database::applyBySubdomain().';
+        }
+
         return 'The application could not open a database connection. Check that the database exists and credentials are correct.';
     }
 
