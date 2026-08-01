@@ -7,6 +7,8 @@ namespace App\Controllers;
 use App\Libraries\ActivityLogger;
 use App\Libraries\ContactAttributes;
 use App\Models\ContactModel;
+use App\Models\InternalNoteModel;
+use App\Models\MessageModel;
 use App\Models\TagModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
@@ -118,6 +120,32 @@ class Contacts extends BaseController
             }
             $row['tags'] = $tags;
             unset($row['tags_raw']);
+
+            $cf = $row['custom_fields'] ?? null;
+            if (is_string($cf) && $cf !== '') {
+                $decoded = json_decode($cf, true);
+                $cf = is_array($decoded) ? $decoded : [];
+            }
+            if (! is_array($cf)) {
+                $cf = [];
+            }
+            $clean = [];
+            foreach ($cf as $key => $value) {
+                $key = trim((string) $key);
+                if ($key === '' || str_starts_with($key, '_')) {
+                    continue;
+                }
+                $clean[$key] = is_scalar($value) || $value === null
+                    ? $value
+                    : json_encode($value);
+            }
+            $row['custom_fields'] = $clean;
+
+            foreach (['last_message_at', 'last_reply_at', 'created_at', 'updated_at', 'birthday'] as $dtKey) {
+                if (! empty($row[$dtKey])) {
+                    $row[$dtKey . '_display'] = format_app_datetime($row[$dtKey]);
+                }
+            }
         }
         unset($row);
 
@@ -224,9 +252,28 @@ class Contacts extends BaseController
             return redirect()->to('/contacts')->with('error', 'Contact not found.');
         }
 
+        $messageModel  = model(MessageModel::class);
+        $messagesTotal = $messageModel->where('contact_id', $id)->countAllResults();
+        $messages      = $messageModel
+            ->where('contact_id', $id)
+            ->orderBy('id', 'DESC')
+            ->findAll(100);
+        // Newest first in query; show chronological (oldest → newest) like chat history.
+        $messages = array_reverse($messages);
+
+        $notes = [];
+        try {
+            $notes = model(InternalNoteModel::class)->getForContact($id);
+        } catch (\Throwable $e) {
+            log_message('warning', 'Contact notes load failed: {msg}', ['msg' => $e->getMessage()]);
+        }
+
         return $this->render('contacts/show', [
-            'pageTitle' => 'Contact: ' . ($contact['name'] ?: $contact['mobile']),
-            'contact'   => $contact,
+            'pageTitle'      => 'Contact: ' . ($contact['name'] ?: $contact['mobile']),
+            'contact'        => $contact,
+            'messages'       => $messages,
+            'notes'          => $notes,
+            'messages_total' => $messagesTotal,
         ]);
     }
 
@@ -412,113 +459,88 @@ class Contacts extends BaseController
             return $denied;
         }
 
-        if (strtolower($this->request->getMethod()) !== 'post') {
-            return $this->render('contacts/import', ['pageTitle' => 'Import Contacts']);
+        return $this->render('contacts/import', [
+            'pageTitle' => 'Import Contacts',
+            'groups'    => model(TagModel::class)->orderBy('name', 'ASC')->findAll(),
+        ]);
+    }
+
+    public function importPreview(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('contacts.import')) {
+            return $denied;
         }
 
         $file = $this->request->getFile('file') ?? $this->request->getFile('csv_file');
         if ($file === null || ! $file->isValid()) {
-            return redirect()->back()->with('error', 'Please upload a valid CSV file.');
+            return $this->jsonResponse(false, null, 'Please upload a valid CSV file.', [], 422);
         }
 
-        if ($file->getSize() > 5 * 1024 * 1024) {
-            return redirect()->back()->with('error', 'CSV exceeds 5MB limit.');
+        try {
+            $preview = (new \App\Libraries\ContactImportService())->parseUpload(
+                $file->getTempName(),
+                $file->getClientName()
+            );
+        } catch (\Throwable $e) {
+            return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
         }
 
-        $path = $file->getTempName();
-        $handle = fopen($path, 'rb');
-        if ($handle === false) {
-            return redirect()->back()->with('error', 'Unable to read uploaded file.');
+        return $this->jsonResponse(true, $preview, 'Map CSV columns to CRM fields, then import.');
+    }
+
+    public function importCommit(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('contacts.import')) {
+            return $denied;
         }
 
-        $header = fgetcsv($handle);
-        if ($header === false) {
-            fclose($handle);
+        $token = trim((string) $this->request->getPost('token'));
+        $tagId = (int) ($this->request->getPost('group_id') ?? $this->request->getPost('tag_id') ?? 0);
+        $skipDuplicates = $this->request->getPost('skip_duplicates') !== null
+            && $this->request->getPost('skip_duplicates') !== '0'
+            && $this->request->getPost('skip_duplicates') !== '';
 
-            return redirect()->back()->with('error', 'CSV is empty.');
+        $mappingRaw = $this->request->getPost('mapping');
+        if (is_string($mappingRaw)) {
+            $decoded = json_decode($mappingRaw, true);
+            $mapping = is_array($decoded) ? $decoded : [];
+        } elseif (is_array($mappingRaw)) {
+            $mapping = $mappingRaw;
+        } else {
+            $mapping = [];
         }
 
-        $header = array_map(static fn ($h) => strtolower(trim((string) $h)), $header);
-        $mobileIdx = array_search('mobile', $header, true);
-        if ($mobileIdx === false) {
-            $mobileIdx = array_search('phone', $header, true);
-        }
-        if ($mobileIdx === false) {
-            fclose($handle);
+        /** @var array<string, string> $mapping */
+        $mapping = array_map(static fn ($v) => (string) $v, $mapping);
 
-            return redirect()->back()->with('error', 'CSV must include a mobile or phone column.');
-        }
-
-        $nameIdx    = array_search('name', $header, true);
-        $emailIdx   = array_search('email', $header, true);
-        $countryIdx = array_search('country', $header, true);
-        $notesIdx   = array_search('notes', $header, true);
-        $model      = model(ContactModel::class);
-        $imported   = 0;
-        $skipped    = 0;
-        $errors     = [];
-        $maxRows    = 5000;
-        $rowNum     = 0;
-
-        while (($row = fgetcsv($handle)) !== false) {
-            $rowNum++;
-            if ($rowNum > $maxRows) {
-                $skipped += 1;
-                break;
-            }
-
-            $mobile = normalize_phone((string) ($row[$mobileIdx] ?? ''));
-            if ($mobile === '') {
-                $skipped++;
-                continue;
-            }
-
-            if ($model->findByMobile($mobile) !== null) {
-                $skipped++;
-                continue;
-            }
-
-            $name = $nameIdx !== false ? trim((string) ($row[$nameIdx] ?? '')) : '';
-            // Neutralize CSV formula injection
-            if ($name !== '' && (
-                str_starts_with($name, '=')
-                || str_starts_with($name, '+')
-                || str_starts_with($name, '-')
-                || str_starts_with($name, '@')
-            )) {
-                $name = "'" . $name;
-            }
-
-            $id = $model->insert([
-                'name'    => $name !== '' ? $name : null,
-                'mobile'  => $mobile,
-                'email'   => $emailIdx !== false ? ($row[$emailIdx] ?? null) : null,
-                'country' => $countryIdx !== false ? ($row[$countryIdx] ?? null) : null,
-                'notes'   => $notesIdx !== false ? ($row[$notesIdx] ?? null) : null,
-                'status'  => 'active',
-            ]);
-
-            if ($id) {
-                $imported++;
-            } else {
-                $skipped++;
-                $errors[] = $mobile . ': ' . implode(', ', $model->errors());
-            }
+        try {
+            $result = (new \App\Libraries\ContactImportService())->commit(
+                $token,
+                $mapping,
+                $tagId > 0 ? $tagId : null,
+                $skipDuplicates
+            );
+        } catch (\Throwable $e) {
+            return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
         }
 
-        fclose($handle);
+        (new ActivityLogger())->log('import', 'contacts', "Imported {$result['imported']} contacts", $result);
 
-        (new ActivityLogger())->log('import', 'contacts', "Imported {$imported} contacts", [
-            'imported' => $imported,
-            'skipped'  => $skipped,
-        ]);
-
-        $msg = "Imported {$imported} contact(s). Skipped {$skipped}.";
-        if ($errors !== []) {
-            $msg .= ' Errors: ' . implode('; ', array_slice($errors, 0, 5));
+        $msg = "Imported {$result['imported']} contact(s)";
+        if (($result['updated'] ?? 0) > 0) {
+            $msg .= ", updated {$result['updated']}";
+        }
+        $msg .= ", skipped {$result['skipped']}.";
+        if (($result['custom_fields_created'] ?? []) !== []) {
+            $msg .= ' New CRM fields: ' . implode(', ', $result['custom_fields_created']) . '.';
+        }
+        if (($result['errors'] ?? []) !== []) {
+            $msg .= ' Errors: ' . implode('; ', array_slice($result['errors'], 0, 5));
         }
 
-        return redirect()->to('/contacts')->with('success', $msg);
+        return $this->jsonResponse(true, array_merge($result, [
+            'redirect' => site_url('contacts'),
+        ]), $msg);
     }
 
     public function exportCsv(): ResponseInterface

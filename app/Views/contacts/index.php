@@ -122,6 +122,25 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="contactDetailModal" tabindex="-1" aria-labelledby="contactDetailTitle">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="contactDetailTitle">Contact details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="contactDetailBody">
+                <div class="text-muted">Select a contact row to view details.</div>
+            </div>
+            <div class="modal-footer">
+                <a href="#" class="btn btn-outline-secondary btn-sm" id="contactDetailViewLink"><i class="fas fa-eye me-1"></i> Full page</a>
+                <a href="#" class="btn btn-outline-secondary btn-sm" id="contactDetailEditLink"><i class="fas fa-edit me-1"></i> Edit</a>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>

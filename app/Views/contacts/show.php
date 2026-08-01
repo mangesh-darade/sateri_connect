@@ -44,7 +44,41 @@
         </div>
 
         <div class="dash-panel mt-3">
-            <div class="panel-head"><h3>Attributes</h3></div>
+            <div class="panel-head"><h3>Contact columns</h3></div>
+            <div class="panel-body">
+                <dl class="row mb-0 small">
+                    <dt class="col-5 text-muted">ID</dt>
+                    <dd class="col-7"><?= esc((string) ($contact['id'] ?? '')) ?></dd>
+                    <dt class="col-5 text-muted">Mobile</dt>
+                    <dd class="col-7"><?= esc($contact['mobile'] ?? '—') ?></dd>
+                    <dt class="col-5 text-muted">Email</dt>
+                    <dd class="col-7"><?= esc($contact['email'] ?? '—') ?></dd>
+                    <dt class="col-5 text-muted">Country</dt>
+                    <dd class="col-7"><?= esc($contact['country'] ?? '—') ?></dd>
+                    <dt class="col-5 text-muted">Birthday</dt>
+                    <dd class="col-7"><?= esc($contact['birthday'] ?? '—') ?></dd>
+                    <dt class="col-5 text-muted">Status</dt>
+                    <dd class="col-7"><?= esc($contact['status'] ?? '—') ?></dd>
+                    <dt class="col-5 text-muted">Channel</dt>
+                    <dd class="col-7"><?= esc($contact['channel'] ?? '—') ?></dd>
+                    <dt class="col-5 text-muted">External ID</dt>
+                    <dd class="col-7"><?= esc($contact['external_id'] ?? '—') ?></dd>
+                    <dt class="col-5 text-muted">Assigned to</dt>
+                    <dd class="col-7"><?= esc((string) ($contact['assigned_to'] ?? '—')) ?></dd>
+                    <dt class="col-5 text-muted">Last message</dt>
+                    <dd class="col-7"><?= esc(format_app_datetime($contact['last_message_at'] ?? null) ?: '—') ?></dd>
+                    <dt class="col-5 text-muted">Last reply</dt>
+                    <dd class="col-7"><?= esc(format_app_datetime($contact['last_reply_at'] ?? null) ?: '—') ?></dd>
+                    <dt class="col-5 text-muted">Created</dt>
+                    <dd class="col-7"><?= esc(format_app_datetime($contact['created_at'] ?? null) ?: '—') ?></dd>
+                    <dt class="col-5 text-muted">Updated</dt>
+                    <dd class="col-7"><?= esc(format_app_datetime($contact['updated_at'] ?? null) ?: '—') ?></dd>
+                </dl>
+            </div>
+        </div>
+
+        <div class="dash-panel mt-3">
+            <div class="panel-head"><h3>Custom fields</h3></div>
             <div class="panel-body">
                 <?php
                 $cf = $contact['custom_fields'] ?? [];
@@ -56,14 +90,15 @@
                     $cf = [];
                 }
                 $cf = array_filter($cf, static fn ($v, $k) => ! str_starts_with((string) $k, '_'), ARRAY_FILTER_USE_BOTH);
+                ksort($cf, SORT_NATURAL | SORT_FLAG_CASE);
                 ?>
                 <?php if ($cf === []): ?>
-                    <span class="text-muted">No custom attributes</span>
+                    <span class="text-muted">No custom fields</span>
                 <?php else: ?>
                     <dl class="row mb-0 small">
                         <?php foreach ($cf as $k => $v): ?>
                             <dt class="col-5 text-muted"><?= esc((string) $k) ?></dt>
-                            <dd class="col-7"><?= esc(is_scalar($v) ? (string) $v : json_encode($v)) ?></dd>
+                            <dd class="col-7"><?= esc(is_scalar($v) || $v === null ? (string) $v : json_encode($v)) ?></dd>
                         <?php endforeach; ?>
                     </dl>
                 <?php endif; ?>
@@ -100,11 +135,23 @@
 
     <div class="col-lg-8">
         <div class="dash-panel">
-            <div class="panel-head"><h3>Message history</h3></div>
+            <div class="panel-head d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <h3 class="mb-0">Message history</h3>
+                <div class="d-flex align-items-center gap-2">
+                    <?php if ((int) ($messages_total ?? 0) > 0): ?>
+                        <span class="small text-muted"><?= (int) ($messages_total ?? 0) ?> total<?= count($messages ?? []) < (int) ($messages_total ?? 0) ? ' · latest ' . count($messages ?? []) : '' ?></span>
+                    <?php endif; ?>
+                    <?php if (function_exists('can') && can('chat.view')): ?>
+                        <a href="<?= site_url('chat?contact_id=' . (int) ($contact['id'] ?? 0)) ?>" class="btn btn-sm btn-wa">
+                            <i class="fab fa-whatsapp me-1"></i> Open in chat
+                        </a>
+                    <?php endif; ?>
+                </div>
+            </div>
             <div class="panel-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead>
+                <div class="table-responsive" style="max-height:560px;overflow:auto">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="sticky-top bg-white">
                             <tr>
                                 <th>Time</th>
                                 <th>Direction</th>
@@ -116,16 +163,50 @@
                         <tbody>
                             <?php if (! empty($messages)): ?>
                                 <?php foreach ($messages as $msg): ?>
+                                    <?php
+                                    $direction = strtolower((string) ($msg['direction'] ?? ''));
+                                    $type      = (string) ($msg['message_type'] ?? $msg['type'] ?? 'text');
+                                    $body      = (string) ($msg['content'] ?? $msg['body'] ?? '');
+                                    if ($body === '' && ! empty($msg['media_url'])) {
+                                        $body = '[' . $type . ' media]';
+                                    }
+                                    if ($body === '' && ! empty($msg['campaign_id'])) {
+                                        $body = '[Campaign template #' . (int) $msg['campaign_id'] . ']';
+                                    }
+                                    ?>
                                     <tr>
-                                        <td class="text-muted small"><?= esc(format_app_datetime($msg['created_at'] ?? null)) ?></td>
-                                        <td><?= esc($msg['direction'] ?? '') ?></td>
-                                        <td><?= esc($msg['message_type'] ?? $msg['type'] ?? '') ?></td>
-                                        <td><?= esc(mb_strimwidth($msg['body'] ?? $msg['content'] ?? '', 0, 80, '…')) ?></td>
+                                        <td class="text-muted small text-nowrap"><?= esc(format_app_datetime($msg['created_at'] ?? null) ?: '—') ?></td>
+                                        <td>
+                                            <?php if ($direction === 'inbound'): ?>
+                                                <span class="badge bg-info-subtle text-info-emphasis">Inbound</span>
+                                            <?php elseif ($direction === 'outbound'): ?>
+                                                <span class="badge bg-primary-subtle text-primary-emphasis">Outbound</span>
+                                            <?php else: ?>
+                                                <span class="badge bg-secondary"><?= esc($direction !== '' ? $direction : '—') ?></span>
+                                            <?php endif; ?>
+                                            <?php if (! empty($msg['campaign_id'])): ?>
+                                                <div class="small text-muted mt-1">Campaign #<?= (int) $msg['campaign_id'] ?></div>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="small"><?= esc($type) ?></td>
+                                        <td><?= esc(mb_strimwidth($body, 0, 120, '…')) ?></td>
                                         <td><?= view('partials/status_badge', ['status' => $msg['status'] ?? '']) ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php else: ?>
-                                <tr><td colspan="5"><div class="activity-empty">No messages yet</div></td></tr>
+                                <tr>
+                                    <td colspan="5">
+                                        <div class="activity-empty py-4">
+                                            No WhatsApp messages for this contact yet.
+                                            <?php if (function_exists('can') && can('chat.view')): ?>
+                                                <div class="mt-2">
+                                                    <a href="<?= site_url('chat?contact_id=' . (int) ($contact['id'] ?? 0)) ?>">Open Team Inbox</a>
+                                                    to start a conversation.
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
+                                    </td>
+                                </tr>
                             <?php endif; ?>
                         </tbody>
                     </table>
@@ -144,20 +225,28 @@
         var note = ($('#contactNoteInput').val() || '').trim();
         var contactId = $(this).find('[name="contact_id"]').val();
         if (!note) return;
+        var $btn = $(this).find('button[type="submit"]').prop('disabled', true);
         APP.post(APP.baseUrl + '/chat/note', { contact_id: contactId, note: note })
             .done(function (res) {
                 var n = (res && res.data) ? res.data : {};
+                var text = n.note || note;
+                var when = 'Just now';
                 $('#contactNotesLive').prepend(
                     '<div class="border-bottom py-2">' +
-                    '<small class="text-muted">Just now</small>' +
+                    '<small class="text-muted"></small>' +
                     '<div></div></div>'
                 );
-                $('#contactNotesLive .border-bottom').first().find('div').text(n.note || note);
+                var $row = $('#contactNotesLive .border-bottom').first();
+                $row.find('small').text(when);
+                $row.find('div').text(text);
                 $('#contactNoteInput').val('');
-                APP.toast('Note added');
+                APP.toast(res.message || 'Note added');
             })
             .fail(function (xhr) {
                 APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Failed to add note', 'error');
+            })
+            .always(function () {
+                $btn.prop('disabled', false);
             });
     });
 })(jQuery);
