@@ -108,6 +108,21 @@ $summary = $summary ?? $stats ?? $overview ?? [];
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
             <h2 class="h6 mb-0">Campaign breakdown</h2>
             <div class="d-flex gap-2">
+                <?php
+                $contactsExportQs = http_build_query(array_filter([
+                    'type'        => 'contacts',
+                    'campaign_id' => $campaignFilter !== null && $campaignFilter !== '' ? $campaignFilter : null,
+                ]));
+                ?>
+                <?php if ($campaignFilter !== null && $campaignFilter !== ''): ?>
+                    <a href="<?= site_url('reports/export-excel?' . $contactsExportQs) ?>" class="btn btn-sm btn-outline-secondary" id="reportContactsExcelBtn">
+                        <i class="fas fa-file-csv me-1"></i> Contacts Excel
+                    </a>
+                <?php else: ?>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" disabled title="Select a campaign in the filter first">
+                        <i class="fas fa-file-csv me-1"></i> Contacts Excel
+                    </button>
+                <?php endif; ?>
                 <a href="<?= site_url('reports/campaigns') ?>" class="btn btn-sm btn-outline-secondary">Campaigns</a>
                 <a href="<?= site_url('reports/delivery') ?>" class="btn btn-sm btn-outline-secondary">Delivery</a>
             </div>
@@ -118,7 +133,7 @@ $summary = $summary ?? $stats ?? $overview ?? [];
             </thead>
             <tbody>
                 <?php foreach (($campaign_stats ?? []) as $row): ?>
-                    <tr>
+                    <tr<?= ! empty($row['id']) ? ' data-campaign-id="' . (int) $row['id'] . '"' : '' ?>>
                         <td class="fw-semibold"><?= esc($row['name'] ?? '') ?></td>
                         <td><?= esc((string) ($row['sent_count'] ?? 0)) ?></td>
                         <td><?= esc((string) ($row['delivered_count'] ?? 0)) ?></td>
@@ -131,12 +146,73 @@ $summary = $summary ?? $stats ?? $overview ?? [];
         </table>
     </div>
 </div>
+
+<?php if ($campaignFilter !== null && $campaignFilter !== ''): ?>
+<div class="card mt-3">
+    <div class="card-body py-3">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+            <h2 class="h6 mb-0">Contacts in campaign</h2>
+            <span class="small text-muted" id="reportContactsMeta">Loading…</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle w-100" id="reportCampaignContactsTable">
+                <thead>
+                    <tr>
+                        <th>Contact</th>
+                        <th>Mobile</th>
+                        <th>Status</th>
+                        <th>Sent</th>
+                        <th>Delivered</th>
+                        <th>Read (Opened)</th>
+                        <th>Error</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td colspan="7" class="text-muted">Loading contacts…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 </div>
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
 <script>
 $(function () {
+    var campaignFilter = <?= json_encode($campaignFilter !== null && $campaignFilter !== '' ? (int) $campaignFilter : null) ?>;
+    if (campaignFilter) {
+        $.getJSON(<?= json_encode(site_url('reports/campaign-contacts')) ?>, { campaign_id: campaignFilter, per_page: 500 })
+            .done(function (res) {
+                var data = (res && res.data) ? res.data : res;
+                var rows = (data && data.contacts) ? data.contacts : [];
+                var $tb = $('#reportCampaignContactsTable tbody').empty();
+                $('#reportContactsMeta').text((data.campaign_name || 'Campaign') + ' — ' + (data.total || rows.length) + ' contact(s)');
+                if (!rows.length) {
+                    $tb.append('<tr><td colspan="7" class="text-muted">No contacts in this campaign.</td></tr>');
+                    return;
+                }
+                rows.forEach(function (r) {
+                    $tb.append(
+                        '<tr>'
+                        + '<td>' + $('<div>').text(r.name || '').html() + '</td>'
+                        + '<td>' + $('<div>').text(r.mobile || '').html() + '</td>'
+                        + '<td>' + $('<div>').text(r.status || '').html() + '</td>'
+                        + '<td class="small text-muted">' + $('<div>').text(r.sent_at || '—').html() + '</td>'
+                        + '<td class="small text-muted">' + $('<div>').text(r.delivered_at || '—').html() + '</td>'
+                        + '<td class="small text-muted">' + $('<div>').text(r.read_at || '—').html() + '</td>'
+                        + '<td class="small text-danger">' + $('<div>').text(r.error_message || '').html() + '</td>'
+                        + '</tr>'
+                    );
+                });
+            })
+            .fail(function () {
+                $('#reportCampaignContactsTable tbody').html('<tr><td colspan="7" class="text-danger">Failed to load contacts.</td></tr>');
+                $('#reportContactsMeta').text('Failed to load');
+            });
+    }
+
     var t = document.getElementById('reportTrendChart');
     if (t && window.Chart) {
         new Chart(t.getContext('2d'), {

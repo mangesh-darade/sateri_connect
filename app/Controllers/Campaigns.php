@@ -119,9 +119,9 @@ class Campaigns extends BaseController
         $recipients = model(CampaignContactModel::class)
             ->select('campaign_contacts.*, contacts.name, contacts.mobile')
             ->join('contacts', 'contacts.id = campaign_contacts.contact_id', 'left')
-            ->where('campaign_id', $id)
+            ->where('campaign_contacts.campaign_id', $id)
             ->orderBy('campaign_contacts.id', 'DESC')
-            ->findAll(100);
+            ->findAll(500);
 
         $template = null;
         if (! empty($campaign['template_id'])) {

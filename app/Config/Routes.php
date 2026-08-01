@@ -201,6 +201,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->get('reports', 'Reports::index');
     $routes->get('reports/campaigns', 'Reports::campaigns');
     $routes->get('reports/delivery', 'Reports::delivery');
+    $routes->get('reports/campaign-contacts', 'Reports::campaignContacts');
     $routes->get('reports/export-pdf', 'Reports::exportPdf');
     $routes->get('reports/export-excel', 'Reports::exportExcel');
 

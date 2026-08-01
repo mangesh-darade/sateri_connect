@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\CampaignContactModel;
 use App\Models\CampaignModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
@@ -193,36 +194,68 @@ class Reports extends BaseController
         }
         $campaignId = $this->request->getGet('campaign_id');
         $campaignId = ($campaignId !== null && $campaignId !== '') ? (int) $campaignId : null;
+        [$fromUtc, $toUtc] = app_range_bounds_utc($from, $to);
+        $campaigns = model(CampaignModel::class)->orderBy('created_at', 'DESC')->findAll();
 
-        if ($type === 'campaigns') {
-            $rows = model(CampaignModel::class)->orderBy('id', 'ASC')->findAll();
-            $csv  = "id,name,status,total_contacts,sent_count,delivered_count,read_count,failed_count,reply_count,created_at\n";
+        if ($type === 'contacts') {
+            if ($campaignId === null || $campaignId <= 0) {
+                return $this->response->setStatusCode(422)->setBody('Select a campaign to export contacts.');
+            }
+
+            $rows = $this->campaignContactRows($campaignId);
+            $csv  = "name,mobile,status,sent_at,delivered_at,read_at,error_message\n";
             foreach ($rows as $r) {
                 $csv .= implode(',', [
-                    $r['id'],
-                    '"' . str_replace('"', '""', (string) $r['name']) . '"',
-                    $r['status'],
-                    $r['total_contacts'],
-                    $r['sent_count'],
-                    $r['delivered_count'],
-                    $r['read_count'],
-                    $r['failed_count'],
-                    $r['reply_count'],
-                    '"' . format_app_datetime($r['created_at'] ?? null, 'Y-m-d H:i:s', '') . '"',
+                    $this->csvCell($r['name'] ?? ''),
+                    $this->csvCell($r['mobile'] ?? ''),
+                    $this->csvCell($r['status'] ?? ''),
+                    $this->csvCell(format_app_datetime($r['sent_at'] ?? null, 'Y-m-d H:i:s', '')),
+                    $this->csvCell(format_app_datetime($r['delivered_at'] ?? null, 'Y-m-d H:i:s', '')),
+                    $this->csvCell(format_app_datetime($r['read_at'] ?? null, 'Y-m-d H:i:s', '')),
+                    $this->csvCell($r['error_message'] ?? ''),
+                ]) . "\n";
+            }
+            $filename = 'campaign_' . $campaignId . '_contacts_' . str_replace('-', '', app_today_ymd()) . '.csv';
+        } elseif ($type === 'campaigns') {
+            $breakdown = $this->campaignBreakdown($fromUtc, $toUtc, $campaignId, $campaigns);
+            $csv       = "section,campaign,sent,delivered,read,failed,replies\n";
+            foreach ($breakdown as $r) {
+                $csv .= implode(',', [
+                    'campaign_breakdown',
+                    $this->csvCell($r['name'] ?? ''),
+                    (int) ($r['sent_count'] ?? 0),
+                    (int) ($r['delivered_count'] ?? 0),
+                    (int) ($r['read_count'] ?? 0),
+                    (int) ($r['failed_count'] ?? 0),
+                    (int) ($r['reply_count'] ?? 0),
                 ]) . "\n";
             }
             $filename = 'campaigns_report_' . str_replace('-', '', app_today_ymd()) . '.csv';
         } else {
-            $daily = $this->dailyDelivery($from, $to, $campaignId);
-            $csv   = "date,sent,delivered,read,failed,replies\n";
+            // Default: daily delivery + campaign breakdown, both filter-aware.
+            $daily     = $this->dailyDelivery($from, $to, $campaignId);
+            $breakdown = $this->campaignBreakdown($fromUtc, $toUtc, $campaignId, $campaigns);
+            $csv       = "section,date_or_campaign,sent,delivered,read,failed,replies\n";
             foreach ($daily as $row) {
                 $csv .= implode(',', [
-                    $row['date'],
-                    $row['sent'],
-                    $row['delivered'],
-                    $row['read'],
-                    $row['failed'],
-                    $row['replies'],
+                    'daily_delivery',
+                    $this->csvCell($row['date'] ?? ''),
+                    (int) ($row['sent'] ?? 0),
+                    (int) ($row['delivered'] ?? 0),
+                    (int) ($row['read'] ?? 0),
+                    (int) ($row['failed'] ?? 0),
+                    (int) ($row['replies'] ?? 0),
+                ]) . "\n";
+            }
+            foreach ($breakdown as $r) {
+                $csv .= implode(',', [
+                    'campaign_breakdown',
+                    $this->csvCell($r['name'] ?? ''),
+                    (int) ($r['sent_count'] ?? 0),
+                    (int) ($r['delivered_count'] ?? 0),
+                    (int) ($r['read_count'] ?? 0),
+                    (int) ($r['failed_count'] ?? 0),
+                    (int) ($r['reply_count'] ?? 0),
                 ]) . "\n";
             }
             $filename = 'delivery_report_' . str_replace('-', '', app_today_ymd()) . '.csv';
@@ -232,6 +265,82 @@ class Reports extends BaseController
             ->setHeader('Content-Type', 'text/csv; charset=UTF-8')
             ->setHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
             ->setBody($csv);
+    }
+
+    /**
+     * JSON list of contacts in a campaign with delivery timestamps.
+     */
+    public function campaignContacts(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('reports.view')) {
+            return $denied;
+        }
+
+        $campaignId = (int) ($this->request->getGet('campaign_id') ?? 0);
+        if ($campaignId <= 0) {
+            return $this->jsonResponse(false, null, 'Select a campaign.', [], 422);
+        }
+
+        $campaign = model(CampaignModel::class)->find($campaignId);
+        if ($campaign === null) {
+            return $this->jsonResponse(false, null, 'Campaign not found.', [], 404);
+        }
+
+        $page    = max(1, (int) ($this->request->getGet('page') ?? 1));
+        $perPage = max(1, min(500, (int) ($this->request->getGet('per_page') ?? 100)));
+        $offset  = ($page - 1) * $perPage;
+
+        $model = model(CampaignContactModel::class);
+        $total = $model->where('campaign_id', $campaignId)->countAllResults();
+        $rows  = $model
+            ->select('campaign_contacts.*, contacts.name, contacts.mobile')
+            ->join('contacts', 'contacts.id = campaign_contacts.contact_id', 'left')
+            ->where('campaign_contacts.campaign_id', $campaignId)
+            ->orderBy('campaign_contacts.id', 'DESC')
+            ->findAll($perPage, $offset);
+
+        $out = [];
+        foreach ($rows as $r) {
+            $out[] = [
+                'contact_id'    => (int) ($r['contact_id'] ?? 0),
+                'name'          => (string) ($r['name'] ?? ''),
+                'mobile'        => (string) ($r['mobile'] ?? ''),
+                'status'        => (string) ($r['status'] ?? ''),
+                'sent_at'       => format_app_datetime($r['sent_at'] ?? null),
+                'delivered_at'  => format_app_datetime($r['delivered_at'] ?? null),
+                'read_at'       => format_app_datetime($r['read_at'] ?? null),
+                'error_message' => (string) ($r['error_message'] ?? ''),
+            ];
+        }
+
+        return $this->jsonResponse(true, [
+            'campaign_id'   => $campaignId,
+            'campaign_name' => (string) ($campaign['name'] ?? ''),
+            'total'         => $total,
+            'page'          => $page,
+            'per_page'      => $perPage,
+            'contacts'      => $out,
+        ]);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    protected function campaignContactRows(int $campaignId): array
+    {
+        return model(CampaignContactModel::class)
+            ->select('campaign_contacts.*, contacts.name, contacts.mobile')
+            ->join('contacts', 'contacts.id = campaign_contacts.contact_id', 'left')
+            ->where('campaign_contacts.campaign_id', $campaignId)
+            ->orderBy('campaign_contacts.id', 'DESC')
+            ->findAll();
+    }
+
+    protected function csvCell(mixed $value): string
+    {
+        $text = (string) $value;
+
+        return '"' . str_replace('"', '""', $text) . '"';
     }
 
     /**
@@ -333,6 +442,7 @@ class Reports extends BaseController
 
             $live = $byId[$id] ?? null;
             $out[] = [
+                'id'              => $id,
                 'name'            => (string) ($c['name'] ?? ''),
                 'sent_count'      => (int) ($live['sent_count'] ?? $c['sent_count'] ?? 0),
                 'delivered_count' => (int) ($live['delivered_count'] ?? $c['delivered_count'] ?? 0),

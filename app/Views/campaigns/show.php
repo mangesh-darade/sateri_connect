@@ -97,7 +97,15 @@ $pct = min(100, round(($sent / $total) * 100));
         <div class="table-responsive">
             <table class="table table-hover mb-0" id="campaignContactsTable">
                 <thead>
-                    <tr><th>Contact</th><th>Mobile</th><th>Status</th><th>Sent at</th><th>Error</th></tr>
+                    <tr>
+                        <th>Contact</th>
+                        <th>Mobile</th>
+                        <th>Status</th>
+                        <th>Sent</th>
+                        <th>Delivered</th>
+                        <th>Read (Opened)</th>
+                        <th>Error</th>
+                    </tr>
                 </thead>
                 <tbody>
                     <?php foreach (($recipients ?? $campaign_contacts ?? []) as $r): ?>
@@ -106,6 +114,8 @@ $pct = min(100, round(($sent / $total) * 100));
                             <td><?= esc($r['mobile'] ?? '') ?></td>
                             <td><?= view('partials/status_badge', ['status' => $r['status'] ?? '']) ?></td>
                             <td class="text-muted small"><?= esc(format_app_datetime($r['sent_at'] ?? $r['processed_at'] ?? null)) ?></td>
+                            <td class="text-muted small"><?= esc(format_app_datetime($r['delivered_at'] ?? null)) ?></td>
+                            <td class="text-muted small"><?= esc(format_app_datetime($r['read_at'] ?? null)) ?></td>
                             <td class="small text-danger"><?= esc($r['error_message'] ?? '') ?></td>
                         </tr>
                     <?php endforeach; ?>
