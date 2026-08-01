@@ -53,6 +53,15 @@ class Database extends Config
                 $this->default['port']     = 3306;
                 break;
 
+            case 'demoelintommetaapi':
+                $this->default['hostname'] = 'localhost';
+                $this->default['username'] = 'stadmin_demometaapi';
+                $this->default['password'] = 'sG96cd07$';
+                $this->default['database'] = 'stadmin_demometaapi';
+                $this->default['DBDriver'] = 'MySQLi';
+                $this->default['port']     = 3306;
+                break;
+
             // case 'herbinn':
             //     $this->default['hostname'] = 'localhost';
             //     $this->default['username'] = 'root';

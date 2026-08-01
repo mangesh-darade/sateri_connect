@@ -59,22 +59,31 @@ check(
 );
 
 // An unmapped subdomain must name itself and point at the switch.
-$_SERVER['HTTP_HOST'] = 'demoelintommetaapi.example.com';
-check('unmapped subdomain resolves to its own key', SubdomainDatabase::resolve() === 'demoelintommetaapi');
+$_SERVER['HTTP_HOST'] = 'unmappedclient.example.com';
+check('unmapped subdomain resolves to its own key', SubdomainDatabase::resolve() === 'unmappedclient');
 check('unmapped tenant is reported as unconfigured', ! SubdomainDatabase::isTenantConfigured());
 
 $unmapped = ErrorPresenter::present($generic, 500);
-check('unmapped tenant message names the subdomain', str_contains($unmapped['message'], 'demoelintommetaapi'), $unmapped['message']);
+check('unmapped tenant message names the subdomain', str_contains($unmapped['message'], 'unmappedclient'), $unmapped['message']);
 check('unmapped tenant message points at the switch', str_contains($unmapped['message'], 'applyBySubdomain'), $unmapped['message']);
 check('unmapped tenant still uses the database error screen', $unmapped['kind'] === 'database', (string) $unmapped['kind']);
 
 // A precise server error must not be replaced by the tenant hint.
-$_SERVER['HTTP_HOST'] = 'demoelintommetaapi.example.com';
+$_SERVER['HTTP_HOST'] = 'unmappedclient.example.com';
 $unknownDb = ErrorPresenter::present(new DatabaseException("Unknown database 'stadmin_demo'"), 500);
 check('named missing database wins over the tenant hint', str_contains($unknownDb['message'], 'stadmin_demo'), $unknownDb['message']);
 
 $denied = ErrorPresenter::present(new DatabaseException('Access denied for user'), 500);
 check('access denied wins over the tenant hint', str_contains($denied['message'], 'login failed'), $denied['message']);
+
+// Newly mapped demo tenant must be recognised as configured.
+$_SERVER['HTTP_HOST'] = 'demoelintommetaapi.example.com';
+check('demoelintommetaapi resolves to its own key', SubdomainDatabase::resolve() === 'demoelintommetaapi');
+check('demoelintommetaapi is reported as configured', SubdomainDatabase::isTenantConfigured());
+check(
+    'demoelintommetaapi maps to stadmin_demometaapi',
+    (new \Config\Database())->default['database'] === 'stadmin_demometaapi'
+);
 
 $_SERVER['HTTP_HOST'] = 'localhost';
 
