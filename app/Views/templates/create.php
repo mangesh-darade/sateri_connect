@@ -587,6 +587,20 @@ $(function () {
     var $summaryLanguage = $('#templateSummaryLanguage');
 
     var languageLabels = <?= json_encode($languages) ?>;
+
+    function isPublicMediaUrl(value) {
+        var url = String(value || '').trim();
+        if (!/^https?:\/\//i.test(url)) {
+            return false;
+        }
+        if (/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(url)) {
+            return false;
+        }
+        if (url.indexOf('/media/serve/') !== -1) {
+            return false;
+        }
+        return true;
+    }
     var categoryLabels = {
         MARKETING: 'Marketing',
         UTILITY: 'Utility',
@@ -972,11 +986,15 @@ $(function () {
                 +       '</select></div>'
                 +     '<div class="col-md-8"><label class="form-label">Media Sample</label>'
                 +       '<div class="input-group">'
-                +         '<input type="text" class="form-control js-card-media-url" value="' + $('<div>').text(card.media_preview_url || card.media_source || '').html() + '" placeholder="https://example.com/product.jpg">'
+                +         '<input type="text" class="form-control js-card-media-url" value="'
+                +           $('<div>').text(isPublicMediaUrl(card.media_preview_url || card.media_source || '') ? (card.media_preview_url || card.media_source || '') : '').html()
+                +         '" placeholder="https://example.com/product.jpg">'
                 +         '<button type="button" class="btn btn-outline-secondary js-card-upload-btn">Upload</button>'
                 +         '<input type="file" class="d-none js-card-file" accept="image/*,video/*">'
                 +       '</div>'
-                +       '<div class="small text-muted mt-1">Public URL or uploaded sample for review.</div></div>'
+                +       '<div class="small ' + ((card.media_source || card.media_preview_url) ? 'text-success' : 'text-muted') + ' mt-1 js-card-media-status">'
+                +         ((card.media_source || card.media_preview_url) ? 'Uploaded ✓' : 'Public URL or uploaded sample for review.')
+                +       '</div></div>'
                 +     '<div class="col-12"><label class="form-label">Card Body (optional)</label>'
                 +       '<input type="text" class="form-control js-card-body" maxlength="160" value="' + $('<div>').text(card.body || '').html() + '" placeholder="Product title or offer text">'
                 +     '</div>'
@@ -1009,15 +1027,14 @@ $(function () {
                 return;
             }
             carouselCards[index].media_type = $(this).find('.js-card-media-type').val() || 'image';
-            carouselCards[index].media_preview_url = ($(this).find('.js-card-media-url').val() || '').trim();
-            if (!carouselCards[index].media_source) {
-                carouselCards[index].media_source = carouselCards[index].media_preview_url;
-            } else if (carouselCards[index].media_preview_url) {
-                // keep provider handle if already uploaded and URL still matches preview
-                if (carouselCards[index].media_source.indexOf('http') === 0) {
-                    carouselCards[index].media_source = carouselCards[index].media_preview_url;
+            var typedUrl = ($(this).find('.js-card-media-url').val() || '').trim();
+            if (typedUrl !== '') {
+                carouselCards[index].media_preview_url = typedUrl;
+                if (!carouselCards[index].media_source || String(carouselCards[index].media_source).indexOf('http') === 0) {
+                    carouselCards[index].media_source = typedUrl;
                 }
             }
+            // When the visible URL is empty after a local upload, keep stored media_source / preview.
             carouselCards[index].body = ($(this).find('.js-card-body').val() || '').trim();
             carouselCards[index].cta_type = $(this).find('.js-card-cta-type').val() || '';
             carouselCards[index].cta_button_text = ($(this).find('.js-card-cta-text').val() || '').trim();
@@ -1383,8 +1400,9 @@ $(function () {
         uploadMediaFile(file, function (data) {
             $headerMediaSource.val(data.source || data.url || '');
             $headerMediaPreviewUrl.val(data.preview_url || data.url || '');
-            $headerMediaManualUrl.val(data.preview_url || data.url || '');
-            $status.removeClass('text-muted').addClass('text-success').text('Uploaded: ' + (data.filename || file.name));
+            // Keep the visible URL field empty for local/serve paths — only show success status.
+            $headerMediaManualUrl.val('');
+            $status.removeClass('text-muted').addClass('text-success').text('Uploaded ✓');
             updatePreview();
         }).fail(function () {
             $status.removeClass('text-muted').addClass('text-danger').text('Upload failed. Try again or use a media URL.');

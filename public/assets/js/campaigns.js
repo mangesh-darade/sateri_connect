@@ -1086,10 +1086,14 @@
                 state.mediaUrl = url;
                 state.mediaId = String(data.wa_media_id || data.media_id || '').trim();
                 state.mediaMime = String(data.mime_type || file.type || '').trim();
-                $('#cwMediaUrl').val(url);
+                // Keep the visible URL field blank for local serve paths; state.mediaUrl holds the real value.
+                var showUrl = /^https?:\/\//i.test(url)
+                    && !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(url)
+                    && url.indexOf('/media/serve/') === -1;
+                $('#cwMediaUrl').val(showUrl ? url : '');
                 $('#cwMediaUrlError').addClass('d-none');
                 $('#cwMediaUrl').removeClass('is-invalid');
-                $status.removeClass('text-muted').addClass('text-success').text('Uploaded: ' + (data.filename || file.name));
+                $status.removeClass('text-muted').addClass('text-success').text('Uploaded ✓');
                 updateWaPreview();
                 toast('Media uploaded.', 'success');
             }).fail(function (xhr) {
