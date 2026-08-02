@@ -13,6 +13,7 @@
 ### Browser smoke: **PASS** (34/34 screens HTTP 200, no exceptions)
 ### Visual upgrade (2C): **DONE** (same purple SaaS tokens)
 ### Functional deep: **PASS** with one list-sort fix applied
+### Dummy-data CRUD (create / edit / delete): **PASS** (2026-08-02 evening)
 
 | Area | Score |
 |------|-------|
@@ -24,6 +25,12 @@
 | Notifications poll | **PASS** (`success: true`) |
 | Contacts list newest-first | **FIXED** (was hiding NULL `last_message_at`) |
 | Local DB tenant | **FIXED** (`Database.php` → `apiwa`) |
+| Contacts / Keywords / Automations / Users CRUD | **PASS** |
+| Sequences CRUD (incl. delete) | **PASS** — delete UI aligned to `data-confirm-delete` |
+| Customer groups create + delete | **PASS** (via Add Contacts modal) |
+| Campaigns WA wizard → draft save | **PASS** (label with phones + template) |
+| Settings save | **PASS** |
+| Templates create form load | **PASS** (Meta sync still required for real template create) |
 
 ---
 
@@ -77,6 +84,7 @@ Shared (brand tokens preserved — Onest/DM Sans, `--brand-*`):
 | 2 | New contacts (NULL `last_message_at`) buried / invisible on default list | **FIXED** — default order by `c.id` DESC (`Contacts.php` + `contacts.js`) |
 | 3 | Roles primary Save buried in sticky footer | **FIXED** — `header_actions` + `form="rolesMatrixForm"` |
 | 4 | Duplicate page titles on Import / Email send-bulk | **FIXED** |
+| 5 | Sequences list delete used native `confirm()` form (inconsistent UX) | **FIXED** — SweetAlert `data-confirm-delete` like other modules |
 
 ---
 

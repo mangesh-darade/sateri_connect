@@ -33,15 +33,20 @@
                         <td><?= (int) ($s['active_enrollments'] ?? 0) ?></td>
                         <td><?= ! empty($s['is_active']) ? 'On' : 'Off' ?></td>
                         <td class="text-end">
+                            <div class="table-actions justify-content-end">
                             <?php if (function_exists('can') && can('sequences.edit')): ?>
-                            <a href="<?= site_url('sequences/' . (int) $s['id'] . '/edit') ?>" class="btn btn-sm btn-outline-secondary">Edit</a>
+                            <a href="<?= site_url('sequences/' . (int) $s['id'] . '/edit') ?>" class="btn btn-sm btn-outline-secondary" title="Edit"><i class="fas fa-edit"></i></a>
                             <?php endif; ?>
                             <?php if (function_exists('can') && can('sequences.delete')): ?>
-                            <form action="<?= site_url('sequences/' . (int) $s['id'] . '/delete') ?>" method="post" class="d-inline" onsubmit="return confirm('Delete sequence?');">
-                                <?= csrf_field() ?>
-                                <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
-                            </form>
+                            <button type="button" class="btn btn-sm btn-outline-danger" title="Delete"
+                                    data-confirm-delete
+                                    data-url="<?= site_url('sequences/' . (int) $s['id'] . '/delete') ?>"
+                                    data-title="Delete sequence?"
+                                    data-text="This cannot be undone.">
+                                <i class="fas fa-trash"></i>
+                            </button>
                             <?php endif; ?>
+                            </div>
                         </td>
                     </tr>
                 <?php endforeach; ?>
