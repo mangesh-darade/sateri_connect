@@ -83,13 +83,13 @@ try {
             </tbody>
         </table>
         <?php else: ?>
-            <div class="activity-empty py-5">
-                <i class="fas fa-key"></i>
-                No keywords yet — add one to auto-reply.
-                <?php if (function_exists('can') && can('keywords.create')): ?>
-                    <div class="mt-3"><a href="<?= site_url('keywords/create') ?>" class="btn btn-wa btn-sm">Add keyword</a></div>
-                <?php endif; ?>
-            </div>
+            <?= view('partials/empty_state', [
+                'icon'        => 'key',
+                'title'       => 'No keywords yet',
+                'text'        => 'Add a keyword to auto-reply on inbound WhatsApp messages.',
+                'actionUrl'   => (function_exists('can') && can('keywords.create')) ? site_url('keywords/create') : null,
+                'actionLabel' => (function_exists('can') && can('keywords.create')) ? 'Add keyword' : null,
+            ]) ?>
         <?php endif; ?>
     </div>
 </div>

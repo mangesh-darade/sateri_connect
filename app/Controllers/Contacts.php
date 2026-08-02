@@ -86,7 +86,7 @@ class Contacts extends BaseController
         $applyFilters($builder);
 
         // Match contacts.js column indices: id, name, mobile, email, tags, status, last_message_at, actions
-        $orderCol = (int) ($this->request->getGet('order')[0]['column'] ?? 6);
+        $orderCol = (int) ($this->request->getGet('order')[0]['column'] ?? 0);
         $orderDir = strtolower((string) ($this->request->getGet('order')[0]['dir'] ?? 'desc')) === 'asc' ? 'ASC' : 'DESC';
         $columns  = [
             0 => 'c.id',
@@ -96,9 +96,16 @@ class Contacts extends BaseController
             5 => 'c.status',
             6 => 'c.last_message_at',
         ];
-        $orderBy = $columns[$orderCol] ?? 'c.last_message_at';
+        $orderBy = $columns[$orderCol] ?? 'c.id';
 
-        $rows = $builder->orderBy($orderBy, $orderDir)
+        // Default / activity sort: newest contacts first (NULL last_message_at no longer hides them).
+        if ($orderBy === 'c.last_message_at') {
+            $builder->orderBy('c.id', $orderDir);
+        } else {
+            $builder->orderBy($orderBy, $orderDir)->orderBy('c.id', 'DESC');
+        }
+
+        $rows = $builder
             ->limit($length, $start)
             ->get()
             ->getResultArray();

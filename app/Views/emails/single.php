@@ -13,7 +13,7 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
 $defaultCampaign = $defaultCampaign ?? 'app-direct';
 $campaigns = $campaigns ?? [];
 ?>
-<div class="form-shell form-shell-lg">
+<div class="form-shell form-shell-lg page-stack">
     <?= view('emails/_provider_banner', [
         'provider'       => $provider,
         'providerLabel'  => $providerLabel,
@@ -29,7 +29,6 @@ $campaigns = $campaigns ?? [];
             <?= csrf_field() ?>
             <div class="card-body">
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                    <h5 class="mb-0">Single email</h5>
                     <span class="badge text-bg-dark">Send via <?= esc($providerLabel) ?></span>
                 </div>
                 <div class="row g-3">
@@ -63,7 +62,7 @@ $campaigns = $campaigns ?? [];
                     </div>
                 </div>
             </div>
-            <div class="card-footer d-flex justify-content-end gap-2">
+            <div class="card-footer d-flex flex-wrap gap-2">
                 <a href="<?= site_url('emails') ?>" class="btn btn-outline-secondary">Cancel</a>
                 <button type="submit" class="btn btn-wa" id="btnSendSingle">
                     <i class="fas fa-paper-plane me-1"></i> Send via <?= esc($providerLabel) ?>

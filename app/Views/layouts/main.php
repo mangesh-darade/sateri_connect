@@ -573,8 +573,8 @@
                         <li class="breadcrumb-item active"><?= esc($title ?? '') ?></li>
                     <?php endif; ?>
                 </ol>
-                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-0">
-                    <div class="min-w-0">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-0 page-header-row">
+                    <div class="min-w-0 page-header-title">
                         <h1 class="text-truncate d-inline-flex align-items-center flex-wrap gap-2 mb-0">
                             <?= esc($title ?? 'Dashboard') ?>
                             <?php if (function_exists('whatsapp_provider_short')): ?>
@@ -589,7 +589,7 @@
                         <?php endif; ?>
                     </div>
                     <?php if ($headerActionsHtml !== ''): ?>
-                        <div class="ms-auto d-flex align-items-center justify-content-end gap-2 flex-wrap header-page-actions">
+                        <div class="ms-auto d-flex align-items-center justify-content-end gap-2 flex-wrap header-page-actions" role="toolbar" aria-label="Page actions">
                             <?= $headerActionsHtml ?>
                         </div>
                     <?php endif; ?>

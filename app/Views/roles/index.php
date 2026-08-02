@@ -1,5 +1,11 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_actions') ?>
+<?php if (function_exists('can') && can('roles.edit')): ?>
+<button type="submit" form="rolesMatrixForm" class="btn btn-wa btn-sm"><i class="fas fa-save me-1"></i> Save permissions</button>
+<?php endif; ?>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <?php
 $rolesList = $roles ?? [];
@@ -16,8 +22,11 @@ if (is_array($first) && array_is_list($permissions) && isset($first['slug'])) {
     $grouped = $permissions;
 }
 ?>
+<div class="page-list">
+<div class="page-hint"><i class="fas fa-info-circle"></i><span>System roles stay locked. Toggle module permissions for custom and editable roles, then save.</span></div>
 <div class="card">
-    <form action="<?= site_url('roles/update') ?>" method="post">
+    <div class="card-header"><h2 class="card-title mb-0">Permission matrix</h2></div>
+    <form id="rolesMatrixForm" action="<?= site_url('roles/update') ?>" method="post">
         <?= csrf_field() ?>
         <div class="card-body p-0">
             <div class="roles-matrix-wrap">
@@ -72,12 +81,8 @@ if (is_array($first) && array_is_list($permissions) && isset($first['slug'])) {
             </table>
             </div>
         </div>
-        <?php if (function_exists('can') && can('roles.edit')): ?>
-        <div class="card-footer roles-save-bar">
-            <button type="submit" class="btn btn-wa btn-sm"><i class="fas fa-save me-1"></i> Save permissions</button>
-        </div>
-        <?php endif; ?>
     </form>
+</div>
 </div>
 <?= $this->endSection() ?>
 

@@ -1,5 +1,11 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_actions') ?>
+<?php if (function_exists('can') && can('settings.edit')): ?>
+<button type="submit" form="settingsForm" class="btn btn-wa btn-sm"><i class="fas fa-save me-1"></i> Save settings</button>
+<?php endif; ?>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <?php
 $provider = $provider ?? 'cheerio';

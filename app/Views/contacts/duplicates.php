@@ -7,9 +7,10 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="page-list">
 <div class="card">
     <div class="card-header">
-        <h3 class="card-title">Duplicate mobiles</h3>
+        <h2 class="card-title mb-0">Duplicate mobiles</h2>
     </div>
     <div class="card-body table-responsive p-0">
         <table class="table table-hover mb-0">
@@ -24,7 +25,13 @@
             <tbody>
             <?php if (empty($duplicates)): ?>
                 <tr>
-                    <td colspan="4"><div class="activity-empty">No duplicates found.</div></td>
+                    <td colspan="4">
+                        <?= view('partials/empty_state', [
+                            'icon'  => 'check-circle',
+                            'title' => 'No duplicates found',
+                            'text'  => 'Every mobile number currently maps to a single contact.',
+                        ]) ?>
+                    </td>
                 </tr>
             <?php else: ?>
                 <?php foreach ($duplicates as $row): ?>
@@ -46,5 +53,6 @@
             </tbody>
         </table>
     </div>
+</div>
 </div>
 <?= $this->endSection() ?>

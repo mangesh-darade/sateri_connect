@@ -17,6 +17,7 @@ if (! is_array($selectedTags)) {
     $selectedTags = [];
 }
 ?>
+<div class="page-stack">
 <div class="form-shell">
 <div class="card form-card">
     <form action="<?= $action ?>" method="post">
@@ -140,6 +141,7 @@ if (! is_array($selectedTags)) {
             <a href="<?= site_url('contacts') ?>" class="btn btn-outline-secondary btn-sm">Cancel</a>
         </div>
     </form>
+</div>
 </div>
 </div>
 <?= $this->endSection() ?>

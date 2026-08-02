@@ -3464,35 +3464,43 @@ body.chat-page-active .content-wrapper {
         display: inline-flex !important;
         align-items: center;
         justify-content: center;
-        gap: 0.3rem;
-        min-height: 2rem;
+        gap: 0.35rem;
+        min-height: var(--mobile-action-h) !important;
+        height: var(--mobile-action-h) !important;
         width: auto !important;
-        border-radius: 0.7rem;
-        font-weight: 600;
-        font-size: 0.76rem;
+        min-width: unset !important;
+        max-width: none !important;
+        border-radius: 999px !important;
+        font-weight: 650;
+        font-size: 0.8125rem !important;
         line-height: 1.1;
-        padding: 0.32rem 0.68rem;
-        white-space: nowrap;
-        box-shadow: none;
+        padding: 0.45rem 0.95rem !important;
+        white-space: nowrap !important;
+        box-shadow: 0 1px 2px rgba(26, 18, 40, 0.06);
+        overflow: visible !important;
     }
     .header-page-actions .btn.btn-sm {
-        min-height: 2rem;
-        padding: 0.32rem 0.68rem;
-        font-size: 0.76rem;
+        min-height: var(--mobile-action-h) !important;
+        height: var(--mobile-action-h) !important;
+        padding: 0.45rem 0.95rem !important;
+        font-size: 0.8125rem !important;
     }
-    .header-page-actions > .btn:has(> i:only-child) {
-        width: 2.15rem !important;
-        min-width: 2.15rem;
-        padding-left: 0;
-        padding-right: 0;
+    /* Icon-only ONLY when marked .btn-icon (do NOT use :only-child — text nodes are ignored) */
+    .header-page-actions .btn.btn-icon {
+        width: var(--mobile-action-h, 44px) !important;
+        min-width: var(--mobile-action-h, 44px) !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
     }
     .header-page-actions .btn-wa {
-        box-shadow: 0 2px 8px rgba(142, 83, 247, 0.22);
+        box-shadow: 0 2px 10px rgba(142, 83, 247, 0.28) !important;
     }
     .header-page-actions .btn i,
     .header-page-actions .btn svg {
         flex: 0 0 auto;
+        margin: 0 !important;
     }
+    .header-page-actions .btn .me-1 { margin-right: 0.35rem !important; }
 
     /* Filters: ignore inline max-width from views; tidy mobile grid */
     .page-list > .card > .card-body {
@@ -3834,4 +3842,456 @@ body.chat-page-active .content-wrapper {
     .content > .container-fluid > *,
     .chat-main { animation: none !important; transition: none !important; }
     .mobile-bottom-nav__item { transition: none !important; }
+}
+
+/* ========== Visual upgrade 2026-08 (same brand tokens) ========== */
+:root {
+    --section-gap: 1rem;
+    --shadow: 0 1px 2px rgba(75, 55, 134, 0.05), 0 10px 28px rgba(75, 55, 134, 0.07);
+    --shadow-hover: 0 4px 14px rgba(75, 55, 134, 0.12);
+}
+
+.content-header {
+    padding: 0.85rem 0 0.45rem;
+    border-bottom: 1px solid transparent;
+    background:
+        linear-gradient(180deg, rgba(246, 241, 255, 0.55) 0%, rgba(250, 250, 250, 0) 100%);
+    margin: 0 calc(-1 * var(--page-pad-x)) 0.15rem;
+    padding-left: var(--page-pad-x);
+    padding-right: var(--page-pad-x);
+}
+.content-header .container-fluid {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+.content-header h1 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    line-height: 1.2;
+}
+.content-header .page-subtitle {
+    margin-top: 0.2rem;
+    max-width: 42rem;
+}
+.content-header .breadcrumb {
+    font-size: 0.72rem;
+    margin-bottom: 0.35rem !important;
+    opacity: 0.9;
+}
+.content-header .header-page-actions .btn {
+    transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+}
+.content-header .header-page-actions .btn:hover {
+    transform: translateY(-1px);
+}
+
+.card {
+    transition: box-shadow .18s ease, border-color .18s ease, transform .18s ease;
+}
+.card:hover {
+    box-shadow: var(--shadow);
+    border-color: rgba(142, 83, 247, 0.18);
+}
+.card.form-card:hover,
+.page-list .card:hover {
+    transform: none;
+}
+
+.filter-bar {
+    background: linear-gradient(180deg, #fff 0%, var(--surface-2) 100%);
+    border-color: rgba(75, 55, 134, 0.1);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    gap: 0.5rem;
+    padding: 0.65rem 0.75rem;
+}
+
+.page-hint {
+    border-color: rgba(142, 83, 247, 0.16);
+    background: linear-gradient(90deg, var(--brand-50) 0%, #fff 70%);
+}
+.page-hint > i { color: var(--brand-600); }
+
+/* Shared empty state */
+.page-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 0.45rem;
+    padding: 2.25rem 1.25rem;
+    border-radius: var(--radius);
+    background:
+        radial-gradient(ellipse at 50% 0%, rgba(142, 83, 247, 0.08) 0%, transparent 55%),
+        var(--surface);
+    border: 1px dashed rgba(142, 83, 247, 0.22);
+}
+.page-empty__icon {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(145deg, var(--brand-100), #fff);
+    color: var(--brand-600);
+    font-size: 1.15rem;
+    margin-bottom: 0.25rem;
+    box-shadow: var(--shadow-sm);
+}
+.page-empty__title {
+    font-family: var(--font-display);
+    font-size: 0.98rem;
+    font-weight: 650;
+    color: var(--wa-ink);
+    margin: 0;
+    letter-spacing: -0.02em;
+}
+.page-empty__text {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    margin: 0;
+    max-width: 28rem;
+    line-height: 1.45;
+}
+.page-empty__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    justify-content: center;
+    margin-top: 0.55rem;
+}
+
+.page-list > .card,
+.page-stack > .card {
+    animation: pageRise .28s ease both;
+}
+@keyframes pageRise {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
+}
+
+.kpi-card {
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+}
+
+.table tbody tr {
+    transition: background-color .12s ease;
+}
+.page-list .table thead th {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    font-weight: 650;
+    background: rgba(246, 241, 255, 0.45);
+}
+
+.provider-chip {
+    transition: transform .15s ease, box-shadow .15s ease;
+}
+.provider-chip:hover {
+    transform: translateY(-1px);
+}
+
+.launch-card {
+    background:
+        linear-gradient(180deg, rgba(246, 241, 255, 0.65) 0%, var(--surface) 42%);
+}
+.launch-card:hover {
+    border-color: rgba(142, 83, 247, 0.28);
+}
+
+.activity-empty {
+    color: var(--text-muted);
+    font-size: 0.84rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .page-list > .card,
+    .page-stack > .card,
+    .kpi-card,
+    .content-header .header-page-actions .btn {
+        animation: none !important;
+        transition: none !important;
+        transform: none !important;
+    }
+}
+
+/* ========== Professional UX: desktop + mobile button system ========== */
+:root {
+    --touch-min: 44px; /* iOS/Android comfortable tap */
+    --action-gap: 0.5rem;
+    --mobile-action-h: 44px;
+}
+
+/* Desktop: primary actions stay right, clear hierarchy */
+@media (min-width: 992px) {
+    .content-header > .container-fluid > .d-flex.flex-wrap {
+        align-items: center !important;
+        gap: 0.75rem 1rem !important;
+    }
+    .content-header .header-page-actions {
+        margin-left: auto !important;
+        display: inline-flex !important;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        align-items: center;
+        gap: var(--action-gap);
+        max-width: min(52rem, 62%);
+    }
+    .content-header .header-page-actions .btn {
+        min-height: 2.25rem;
+        padding: 0.4rem 0.9rem;
+        font-weight: 600;
+        border-radius: 10px;
+    }
+    .content-header .header-page-actions .btn-wa {
+        order: 1; /* primary first among peers when flex-wrap reverses visually via DOM order stay */
+        box-shadow: 0 2px 10px rgba(142, 83, 247, 0.28);
+    }
+    .content-header .header-page-actions .btn-outline-secondary {
+        background: #fff;
+    }
+
+    /* Form footers: Cancel left, Save right */
+    .card-footer.d-flex {
+        display: flex !important;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+        gap: var(--action-gap);
+        padding: 0.85rem 1rem;
+        background: linear-gradient(180deg, #fff 0%, var(--surface-2) 100%);
+    }
+    .card-footer.d-flex .btn-link,
+    .card-footer.d-flex .btn-outline-secondary:first-child {
+        margin-right: auto;
+    }
+    .card-footer.d-flex .btn-wa {
+        min-width: 7.5rem;
+    }
+}
+
+/* Shared button polish (Tailwind-like density, still Bootstrap) */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-height: 2.25rem;
+    transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, transform .12s ease, filter .12s ease;
+}
+.btn:active:not(:disabled) {
+    transform: translateY(1px);
+}
+.btn-outline-secondary {
+    background: #fff;
+    border-color: rgba(75, 55, 134, 0.16);
+    color: var(--text);
+}
+.btn-outline-secondary:hover {
+    background: var(--brand-50);
+    border-color: rgba(142, 83, 247, 0.28);
+    color: var(--brand-800);
+}
+
+/* Filter / bulk toolbars */
+.filter-bar {
+    align-items: stretch;
+}
+.filter-bar > .btn,
+.filter-bar-actions .btn {
+    min-height: var(--control-h);
+}
+@media (min-width: 768px) {
+    .filter-bar {
+        align-items: center;
+    }
+    .filter-bar-actions {
+        margin-left: auto;
+    }
+}
+
+/* Table row actions — always right, never cramped */
+.table-actions {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    gap: 0.3rem;
+    white-space: nowrap;
+}
+.table-actions .btn {
+    min-width: 2rem;
+    min-height: 2rem;
+}
+
+/* Mobile + tablet: touch-first actions */
+@media (max-width: 991.98px) {
+    .content-header {
+        position: sticky;
+        top: 0;
+        z-index: 1020;
+        background: rgba(250, 250, 250, 0.92);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 0.35rem;
+        padding-bottom: 0.55rem;
+    }
+    .content-header h1 {
+        font-size: 1.12rem;
+        max-width: 100%;
+    }
+    .content-header .header-page-actions {
+        padding: 0.2rem 0 0.15rem;
+        /* no fade-mask — it clipped trailing button labels */
+        mask-image: none;
+        -webkit-mask-image: none;
+    }
+    .content-header .header-page-actions .btn,
+    .content-header .header-page-actions .btn.btn-sm {
+        min-height: var(--mobile-action-h) !important;
+        height: var(--mobile-action-h) !important;
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        padding: 0.45rem 0.95rem !important;
+        font-size: 0.8125rem !important;
+        border-radius: 999px !important;
+        box-shadow: 0 1px 2px rgba(26, 18, 40, 0.06);
+        overflow: visible !important;
+        white-space: nowrap !important;
+    }
+    .content-header .header-page-actions .btn-wa {
+        box-shadow: 0 2px 10px rgba(142, 83, 247, 0.3) !important;
+    }
+    .content-header .header-page-actions .btn.btn-icon {
+        width: 2.5rem !important;
+        min-width: 2.5rem !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+
+    /* Filters stack: controls then full-width primary Filter */
+    .filter-bar {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.45rem !important;
+        padding: 0.7rem !important;
+    }
+    .filter-bar > .form-select,
+    .filter-bar > .form-control {
+        max-width: none !important;
+        width: 100% !important;
+        flex: none !important;
+        min-height: var(--touch-min);
+    }
+    .filter-bar > .btn.btn-wa,
+    .filter-bar > #btnFilterContacts {
+        grid-column: 1 / -1;
+        width: 100%;
+        min-height: var(--touch-min);
+        border-radius: 12px;
+        justify-content: center;
+    }
+    .filter-bar-actions {
+        grid-column: 1 / -1;
+        margin-left: 0 !important;
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 0.4rem;
+        overflow-x: auto;
+        padding-bottom: 0.1rem;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .filter-bar-actions::-webkit-scrollbar { display: none; }
+    .filter-bar-actions .btn {
+        flex: 0 0 auto;
+        min-height: var(--touch-min);
+        border-radius: 999px;
+        white-space: nowrap;
+    }
+
+    /* Form footers: sticky above bottom nav — Save always reachable */
+    .card-footer.d-flex,
+    .card-footer.roles-save-bar,
+    .settings-footer {
+        position: sticky;
+        bottom: calc(var(--bottom-nav-h, 3.75rem) + env(safe-area-inset-bottom, 0px));
+        z-index: 1015;
+        display: flex !important;
+        flex-direction: row-reverse;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 0.45rem;
+        width: 100%;
+        margin: 0;
+        padding: 0.7rem 0.75rem calc(0.7rem + env(safe-area-inset-bottom, 0px));
+        background: rgba(255, 255, 255, 0.96);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-top: 1px solid var(--border);
+        box-shadow: 0 -8px 24px rgba(26, 18, 40, 0.08);
+    }
+    .card-footer.d-flex .btn,
+    .card-footer.roles-save-bar .btn,
+    .settings-footer .btn {
+        flex: 1 1 0;
+        min-height: var(--mobile-action-h, 44px) !important;
+        height: var(--mobile-action-h, 44px);
+        margin: 0 !important;
+        border-radius: 12px !important;
+        font-weight: 650;
+        font-size: 0.875rem !important;
+        padding: 0.45rem 0.85rem !important;
+    }
+    .card-footer.d-flex .btn-wa,
+    .card-footer.roles-save-bar .btn-wa,
+    .settings-footer .btn-wa {
+        flex: 1.35 1 0;
+        order: 0;
+    }
+    .card-footer.d-flex .btn-link {
+        display: none; /* Cancel already in header Back on most forms */
+    }
+
+    .page-empty__actions .btn {
+        min-height: 2.5rem;
+        min-width: 10rem;
+        border-radius: 12px;
+        padding: 0.45rem 1rem;
+    }
+
+    .table-actions .btn {
+        min-width: 2.5rem;
+        min-height: 2.5rem;
+    }
+
+    /* Keep primary Create/Save visually first in the scroll row */
+    .header-page-actions .btn-wa {
+        order: -1;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .content-header .header-page-actions .btn .btn-label-full {
+        /* reserved if views add span later */
+    }
+    /* Prefer icon+short labels; keep chips readable */
+    .header-page-actions .btn {
+        font-size: 0.78rem !important;
+    }
+}
+
+/* Desktop table density remains professional */
+@media (min-width: 992px) {
+    .page-list .table-actions .btn:hover {
+        transform: translateY(-1px);
+    }
 }

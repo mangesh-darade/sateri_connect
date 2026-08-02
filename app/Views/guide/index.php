@@ -147,6 +147,7 @@ $toc = $toc ?? [];
 $guideHtml = $guideHtml ?? '';
 $guideType = $guideType ?? 'local';
 ?>
+<div class="page-list">
 <div class="guide-layout">
     <aside class="guide-toc d-none d-md-block">
         <h6>On this page</h6>
@@ -162,6 +163,7 @@ $guideType = $guideType ?? 'local';
     <article class="guide-body">
         <?= $guideHtml ?>
     </article>
+</div>
 </div>
 <?= $this->endSection() ?>
 

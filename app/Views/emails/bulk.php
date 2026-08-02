@@ -17,7 +17,7 @@ $contactsWithEmail = $contactsWithEmail ?? [];
 $maxRecipients = (int) ($maxRecipients ?? 100);
 $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
 ?>
-<div class="form-shell form-shell-lg">
+<div class="form-shell form-shell-lg page-stack">
     <?= view('emails/_provider_banner', [
         'provider'       => $provider,
         'providerLabel'  => $providerLabel,
@@ -34,7 +34,6 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
             <?= csrf_field() ?>
             <div class="card-body">
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                    <h5 class="mb-0">Bulk email</h5>
                     <span class="badge text-bg-dark">Send via <?= esc($providerLabel) ?></span>
                 </div>
 
@@ -109,7 +108,7 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
                     </div>
                 </div>
             </div>
-            <div class="card-footer d-flex justify-content-end gap-2">
+            <div class="card-footer d-flex flex-wrap gap-2">
                 <a href="<?= site_url('emails') ?>" class="btn btn-outline-secondary">Cancel</a>
                 <button type="submit" class="btn btn-wa" id="btnSendBulk">
                     <i class="fas fa-mail-bulk me-1"></i> Send bulk via <?= esc($providerLabel) ?>

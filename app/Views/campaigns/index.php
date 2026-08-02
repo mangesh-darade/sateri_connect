@@ -5,7 +5,7 @@
 $canCreateWa = ! empty($canCreateWa);
 $canCreateEmail = ! empty($canCreateEmail);
 ?>
-<button type="button" class="btn btn-outline-secondary btn-sm" id="campaignRefreshBtn" title="Refresh list">
+<button type="button" class="btn btn-outline-secondary btn-sm btn-icon" id="campaignRefreshBtn" title="Refresh list" aria-label="Refresh list">
     <i class="fas fa-sync-alt"></i>
 </button>
 <a href="<?= site_url('reports/campaigns') ?>" class="btn btn-outline-secondary btn-sm">
@@ -154,15 +154,18 @@ $campaigns = $campaigns ?? [];
                 </table>
             </div>
             <?php else: ?>
-                <div class="activity-empty">
-                    <i class="fas fa-bullhorn"></i>
-                    No campaigns yet — create a WhatsApp or Email campaign to start broadcasting.
-                    <?php if ($canCreateWa || $canCreateEmail): ?>
-                        <div class="mt-3">
-                            <button type="button" class="btn btn-wa btn-sm js-open-campaign-wizard" data-channel="<?= $canCreateWa ? 'whatsapp' : 'email' ?>">New campaign</button>
-                        </div>
-                    <?php endif; ?>
-                </div>
+                <?= view('partials/empty_state', [
+                    'icon'        => 'bullhorn',
+                    'title'       => 'No campaigns yet',
+                    'text'        => 'Create a WhatsApp or Email campaign to start broadcasting.',
+                    'actionUrl'   => null,
+                    'actionLabel' => null,
+                ]) ?>
+                <?php if ($canCreateWa || $canCreateEmail): ?>
+                    <div class="text-center mt-n2 mb-3">
+                        <button type="button" class="btn btn-wa btn-sm js-open-campaign-wizard" data-channel="<?= $canCreateWa ? 'whatsapp' : 'email' ?>">New campaign</button>
+                    </div>
+                <?php endif; ?>
             <?php endif; ?>
         </div>
     </div>

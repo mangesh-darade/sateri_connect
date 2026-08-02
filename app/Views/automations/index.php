@@ -76,13 +76,13 @@
             </tbody>
         </table>
         <?php else: ?>
-            <div class="activity-empty py-5">
-                <i class="fas fa-robot"></i>
-                No automations yet — create a workflow to get started.
-                <?php if (function_exists('can') && can('automations.create')): ?>
-                    <div class="mt-3"><a href="<?= site_url('automations/create') ?>" class="btn btn-wa btn-sm">New workflow</a></div>
-                <?php endif; ?>
-            </div>
+            <?= view('partials/empty_state', [
+                'icon'        => 'robot',
+                'title'       => 'No automations yet',
+                'text'        => 'Create a workflow to get started.',
+                'actionUrl'   => (function_exists('can') && can('automations.create')) ? site_url('automations/create') : null,
+                'actionLabel' => (function_exists('can') && can('automations.create')) ? 'New workflow' : null,
+            ]) ?>
         <?php endif; ?>
     </div>
 </div>

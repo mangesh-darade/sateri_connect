@@ -29,6 +29,7 @@ $triggerValue  = $hasFormErrors && old('trigger_type') !== null
     ? (string) old('trigger_type')
     : (string) ($automation['trigger_type'] ?? '');
 ?>
+<div class="page-stack">
 <div class="form-shell form-shell-lg">
 <div class="card form-card" id="automationBuilder">
     <form action="<?= $action ?>" method="post">
@@ -117,9 +118,10 @@ $triggerValue  = $hasFormErrors && old('trigger_type') !== null
             <?php if ($isEdit): ?>
                 <a href="<?= site_url('automations/' . (int) $automation['id'] . '/builder') ?>" class="btn btn-outline-secondary">Open builder</a>
             <?php endif; ?>
-            <a href="<?= site_url('automations') ?>" class="btn btn-link">Cancel</a>
+            <a href="<?= site_url('automations') ?>" class="btn btn-outline-secondary">Cancel</a>
         </div>
     </form>
+</div>
 </div>
 </div>
 <?= $this->endSection() ?>

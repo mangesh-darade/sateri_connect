@@ -65,8 +65,9 @@ $action = $isEdit ? site_url('sequences/' . (int) $sequence['id']) : site_url('s
         </div>
         <button type="button" class="btn btn-sm btn-outline-secondary" id="btnAddSeqStep">Add step</button>
     </div>
-    <div class="card-footer d-flex justify-content-between">
-        <button type="submit" class="btn btn-wa btn-sm">Save sequence</button>
+    <div class="card-footer d-flex flex-wrap gap-2">
+        <button type="submit" class="btn btn-wa btn-sm"><i class="fas fa-save me-1"></i> Save sequence</button>
+        <a href="<?= site_url('sequences') ?>" class="btn btn-outline-secondary btn-sm">Cancel</a>
     </div>
 </form>
 

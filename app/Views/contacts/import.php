@@ -5,10 +5,8 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="page-list">
 <div class="card" id="importStepUpload">
-    <div class="card-header">
-        <h3 class="card-title mb-0">Import contacts</h3>
-    </div>
     <form id="importContactsForm" enctype="multipart/form-data">
         <?= csrf_field() ?>
         <div class="card-body">
@@ -71,6 +69,7 @@
         <button type="button" class="btn btn-wa" id="btnImportCommit"><i class="fas fa-file-import me-1"></i> Import contacts</button>
         <button type="button" class="btn btn-outline-secondary" id="btnImportBack">Back</button>
     </div>
+</div>
 </div>
 <?= $this->endSection() ?>
 

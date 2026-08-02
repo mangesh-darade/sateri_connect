@@ -10,6 +10,7 @@ $formUser = $user ?? $edit_user ?? $userRow ?? $editUser ?? $user_form ?? [];
 $isEdit = ! empty($formUser['id']);
 $action = $isEdit ? site_url('users/' . (int) $formUser['id']) : site_url('users');
 ?>
+<div class="page-stack">
 <div class="form-shell">
 <div class="card form-card">
     <form action="<?= $action ?>" method="post">
@@ -61,6 +62,7 @@ $action = $isEdit ? site_url('users/' . (int) $formUser['id']) : site_url('users
             <a href="<?= site_url('users') ?>" class="btn btn-outline-secondary btn-sm">Cancel</a>
         </div>
     </form>
+</div>
 </div>
 </div>
 <?= $this->endSection() ?>

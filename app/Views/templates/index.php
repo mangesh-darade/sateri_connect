@@ -219,22 +219,20 @@ sort($templateLanguages);
 <?php else: ?>
 <div class="row g-2">
     <div class="col-12">
-        <div class="dash-panel">
-            <div class="activity-empty">
-                <i class="fas fa-file-alt"></i>
-                No templates yet — create one or sync from the active provider.
-                <div class="mt-3 d-flex flex-wrap gap-2 justify-content-center">
-                    <?php if (function_exists('can') && can('templates.create')): ?>
-                        <a href="<?= site_url('templates/create') ?>" class="btn btn-wa btn-sm">Create template</a>
-                    <?php endif; ?>
-                    <?php if (function_exists('can') && can('templates.sync')): ?>
-                        <form action="<?= site_url('templates/sync') ?>" method="post" class="d-inline"><?= csrf_field() ?>
-                            <button type="submit" class="btn btn-outline-secondary btn-sm">Sync templates</button>
-                        </form>
-                    <?php endif; ?>
-                </div>
+        <?= view('partials/empty_state', [
+            'icon'        => 'file-alt',
+            'title'       => 'No templates yet',
+            'text'        => 'Create one or sync from the active WhatsApp provider.',
+            'actionUrl'   => (function_exists('can') && can('templates.create')) ? site_url('templates/create') : null,
+            'actionLabel' => (function_exists('can') && can('templates.create')) ? 'Create template' : null,
+        ]) ?>
+        <?php if (function_exists('can') && can('templates.sync')): ?>
+            <div class="text-center mt-n2 mb-3">
+                <form action="<?= site_url('templates/sync') ?>" method="post" class="d-inline"><?= csrf_field() ?>
+                    <button type="submit" class="btn btn-outline-secondary btn-sm">Sync templates</button>
+                </form>
             </div>
-        </div>
+        <?php endif; ?>
     </div>
 </div>
 <?php endif; ?>

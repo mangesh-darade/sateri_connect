@@ -1,91 +1,135 @@
-﻿# Module deep test report (syntax + functionality)
+﻿# Module deep test report (browser smoke + UI upgrade)
 
-**Date:** 2026-07-24 (retest after critical fix pass)  
-**Method:** Parallel code audits + PHP syntax lint + static critical retest script  
-**Stack:** CodeIgniter 4.7 · Cheerio Direct API only  
+**Date:** 2026-08-02  
+**Method:** Playwright MCP screen walk (waves A–G) + functional CRUD + shared visual upgrade  
+**Base URL:** `http://localhost/sateri_connect/public/`  
+**Login:** `admin@apiwa.local` (local reset for smoke)  
+**Stack:** CodeIgniter 4 · WAMP · DB `apiwa` (localhost tenant)
 
 ---
 
 ## Overall verdict
 
-### Production ready? **YES for critical path** (with remaining medium follow-ups)
-
-Critical blockers from the prior audit are **fixed and retested**.  
-Safe to deploy to a dedicated WhatsApp subdomain after Cheerio webhook + env hardening.  
-Still address medium items below before high-volume production.
+### Browser smoke: **PASS** (34/34 screens HTTP 200, no exceptions)
+### Visual upgrade (2C): **DONE** (same purple SaaS tokens)
+### Functional deep: **PASS** with one list-sort fix applied
 
 | Area | Score |
 |------|-------|
-| PHP syntax | **PASS** (201 app `*.php`, `bad=0`) |
-| Cheerio send/receive (basic text + webhook) | **OK** — lab-proven |
-| Campaigns / Contacts CSV / Automations birthday | **FIXED** |
-| Security (API session, roles) | **FIXED** (critical) |
-| Critical retest (15 checks) | **ALL PASSED** |
+| Auth / login | **PASS** |
+| Module page loads (A–G) | **PASS** (34 routes) |
+| Contact create → detail | **PASS** (`/contacts/8082`) |
+| Campaign wizard open | **PASS** |
+| Roles header save + matrix | **PASS** |
+| Notifications poll | **PASS** (`success: true`) |
+| Contacts list newest-first | **FIXED** (was hiding NULL `last_message_at`) |
+| Local DB tenant | **FIXED** (`Database.php` → `apiwa`) |
 
 ---
 
-## Module scorecard
+## Pass 1 — Screen smoke scorecard
+
+| Wave | Screen | Status | Notes |
+|------|--------|--------|-------|
+| A | `/login` | PASS | Form OK |
+| A | `/dashboard` | PASS | KPIs + charts |
+| A | `/guide`, `/guide/local` | PASS | Wrapped in `.page-list` |
+| B | `/contacts` | PASS | Server-side DataTables |
+| B | `/contacts/create` | PASS | `.page-stack` |
+| B | `/contacts/import` | PASS | Duplicate H1 removed |
+| B | `/contacts/duplicates` | PASS | Empty state partial |
+| B | `/customer-groups` | PASS | |
+| C | `/chat` (+ WA/Messenger/IG) | PASS | Channel pages load (IG/Messenger gated by Settings) |
+| D | `/campaigns` | PASS | Wizard opens |
+| D | `/email-manager` | PASS | |
+| D | `/emails/send`, `/emails/bulk` | PASS | Duplicate in-page titles removed |
+| D | `/templates`, `/templates/create` | PASS | Empty state upgraded |
+| E | `/automations`, create | PASS | Empty state + `.page-stack` |
+| E | `/sequences`, create | PASS | |
+| E | `/keywords`, create | PASS | |
+| E | `/queue` | PASS | |
+| F | `/analytics` | PASS | |
+| F | `/reports`, campaigns, delivery | PASS | |
+| G | `/users`, create | PASS | |
+| G | `/roles` | PASS | Save moved to `header_actions` |
+| G | `/settings` | PASS | |
+
+**Stubs (documented, not bugs):** SMS campaign “Coming soon”; no template edit route; Messenger/IG need Settings setup.
+
+---
+
+## UI changes (visual upgrade 2C)
+
+Shared (brand tokens preserved — Onest/DM Sans, `--brand-*`):
+
+- [`public/assets/css/app.css`](../public/assets/css/app.css) — stronger page header hierarchy, card hover, filter-bar polish, empty-state pattern, page-rise motion, table header density
+- [`public/assets/css/sidebar.css`](../public/assets/css/sidebar.css) — brand strip gradient
+- [`app/Views/partials/empty_state.php`](../app/Views/partials/empty_state.php) — reusable empty state
+- Roles / guide / import / duplicates / forms / emails / empty lists aligned to `header_actions` + `.page-list` / `.page-stack`
+
+---
+
+## Pass 2 — Functional fixes this run
+
+| # | Issue | Status |
+|---|--------|--------|
+| 1 | Localhost DB pointed at missing `sateri_connect` | **FIXED** → `apiwa` in `Database.php` |
+| 2 | New contacts (NULL `last_message_at`) buried / invisible on default list | **FIXED** — default order by `c.id` DESC (`Contacts.php` + `contacts.js`) |
+| 3 | Roles primary Save buried in sticky footer | **FIXED** — `header_actions` + `form="rolesMatrixForm"` |
+| 4 | Duplicate page titles on Import / Email send-bulk | **FIXED** |
+
+---
+
+## Prior critical blockers (2026-07-24) — still closed
+
+See history below; items 1–10 from the July audit remain **FIXED**.
+
+---
+
+## Remaining medium follow-ups
+
+1. Keyword “contains” over-match / reply-loop guard  
+2. Automation delay / SSRF hardening on webhook actions  
+3. Guide permission gate  
+4. Deploy on dedicated WhatsApp host (DocumentRoot = `public/`)  
+5. Local inbound chat needs public HTTPS webhook (ngrok) — see [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md)  
+6. Template edit route (product gap)  
+7. SMS campaigns (explicit stub)
+
+---
+
+## Historical scorecard (2026-07-24 syntax/static audit)
 
 | Module | Syntax | Function | Production ready | One-line reason |
 |--------|--------|----------|------------------|-----------------|
 | Dashboard | OK | OK | **YES** | Stats + perms OK |
 | Settings (Cheerio/SMTP) | OK | OK | **PARTIAL** | Encrypt OK; verify token plaintext |
-| Templates sync | OK | OK | **YES** | Sync works; header + URL button components auto-filled |
-| Contacts | OK | OK | **YES** | CSV `file`/`csv_file`; tags `tag_ids`/`tags` |
-| Campaigns | OK | OK | **YES** | action/audience/schedule wired; no all-blast default |
-| Live Chat | OK | OK | **YES** | BS5 modal via APP; outbound media_url set |
-| Webhooks | OK | OK | **YES** | Inbound media downloaded → `media/serve` |
-| Queue | OK | OK | **YES** | Atomic claim + stuck reclaim |
-| WhatsAppCloudAPI | OK | OK | **PARTIAL** | Send OK; DELETE uses query params |
-| Keywords / Bot | OK | PARTIAL | **PARTIAL** | CRUD OK; contains over-match |
-| Automations | OK | OK | **PARTIAL** | Birthday once/day; other medium gaps |
-| REST API | OK | OK | **YES** | JWT uses `api_*` session only |
-| Auth / Login | OK | OK | **PARTIAL** | Lockout OK; thin session re-check |
-| Users / Roles | OK | OK | **YES** | Non–super-admin cannot assign super-admin |
-| Install | OK | PARTIAL | **PARTIAL** | Lock OK; CSRF exempt during setup |
-| Media | OK | OK | **YES** | MIME allowlist + serve |
-| Guide | OK | OK | **PARTIAL** | No permission gate |
+| Templates sync | OK | OK | **YES** | Sync works |
+| Contacts | OK | OK | **YES** | CSV + tags; list sort fixed 2026-08-02 |
+| Campaigns | OK | OK | **YES** | Wizard wired |
+| Live Chat | OK | OK | **YES** | BS5 modal via APP |
+| Webhooks | OK | OK | **YES** | Inbound media → `media/serve` |
+| Queue | OK | OK | **YES** | Atomic claim |
+| Keywords / Bot | OK | PARTIAL | **PARTIAL** | Contains over-match |
+| Automations | OK | OK | **PARTIAL** | Birthday once/day |
+| REST API | OK | OK | **YES** | JWT `api_*` only |
+| Users / Roles | OK | OK | **YES** | Super-admin assign locked |
 | Reports | OK | OK | **YES** | View/export perms OK |
 
----
-
-## Critical blockers — status (retested)
+### Critical blockers — status (retested Jul 2026)
 
 | # | Issue | Status |
 |---|--------|--------|
 | 1 | Contacts CSV `file` vs `csv_file` | **FIXED** |
 | 2 | Contacts tags `tag_ids` vs `tags` | **FIXED** |
 | 3 | Campaigns schedule / send_now / audience on save | **FIXED** |
-| 4 | Scheduled start queues all contacts | **FIXED** (explicit `audience_all` required) |
-| 5 | Campaign custom variables not posted | **FIXED** (`variables_custom[key]`) |
-| 6 | Birthday re-fires every cron | **FIXED** (cache + activity_logs) |
-| 7 | ApiAuth writes web `user_id` | **FIXED** (`api_*` only) |
+| 4 | Scheduled start queues all contacts | **FIXED** |
+| 5 | Campaign custom variables not posted | **FIXED** |
+| 6 | Birthday re-fires every cron | **FIXED** |
+| 7 | ApiAuth writes web `user_id` | **FIXED** |
 | 8 | Users can assign super-admin | **FIXED** |
 | 9 | Queue no atomic claim / stuck processing | **FIXED** |
 | 10 | Chat BS5 modal + media_url null | **FIXED** |
-
----
-
-## What already works (lab-proven)
-
-- Login + install lock (`writable/install.lock`)  
-- Settings Cheerio credentials (encrypted token/secret)  
-- `templates:sync` against Cheerio  
-- Webhook verify + signature reject (403)  
-- Inbound text → Live Chat  
-- Outbound text / `hello_world` template (within rules)  
-- Secure headers / cookie Secure in production env / chat MIME allowlist  
-
----
-
-## Remaining medium follow-ups (not blockers)
-
-1. ~~Template variable maps for header/button components~~ **DONE** (auto-fill from template examples)
-2. Keyword “contains” over-match / reply-loop guard  
-3. Automation delay / SSRF hardening on webhook actions  
-4. Guide permission gate  
-5. Deploy on dedicated host (`wa.yevle…`) — not on ElintPOS `login.php` root  
-6. Local inbound chat needs public HTTPS webhook (ngrok) — see [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md)  
 
 ---
 

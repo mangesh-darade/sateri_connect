@@ -12,8 +12,9 @@ $action = $isEdit ? site_url('keywords/' . (int) $keyword['id']) : site_url('key
 $provider = function_exists('whatsapp_provider') ? whatsapp_provider() : (string) ($whatsappProvider ?? 'cheerio');
 $providerShort = function_exists('whatsapp_provider_short') ? whatsapp_provider_short() : ($provider === 'meta' ? 'Meta' : 'Cheerio');
 ?>
+<div class="page-stack">
 <div class="form-shell">
-<div class="alert alert-light border mb-3 py-2 px-3 d-flex flex-wrap align-items-center gap-2" role="status">
+<div class="alert alert-light border mb-0 py-2 px-3 d-flex flex-wrap align-items-center gap-2" role="status">
     <span class="badge <?= $provider === 'meta' ? 'text-bg-primary' : 'text-bg-success' ?>">
         Settings: <?= esc($providerShort) ?>
     </span>
@@ -146,6 +147,7 @@ $providerShort = function_exists('whatsapp_provider_short') ? whatsapp_provider_
             <a href="<?= site_url('keywords') ?>" class="btn btn-outline-secondary btn-sm">Cancel</a>
         </div>
     </form>
+</div>
 </div>
 </div>
 <?= $this->endSection() ?>

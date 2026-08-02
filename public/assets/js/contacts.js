@@ -120,7 +120,7 @@
                     }
                 }
             ],
-            order: [[6, 'desc']],
+            order: [[0, 'desc']],
             createdRow: function (row) {
                 $(row).addClass('contact-row-clickable').css('cursor', 'pointer');
             }
