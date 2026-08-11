@@ -1223,7 +1223,13 @@ $(function () {
         setBadge('credentials', !!(byId.access_token && byId.access_token.ok && byId.phone_number_id && byId.phone_number_id.ok), (data && data.message) || '');
         setBadge('api', !!(byId.graph_api && byId.graph_api.ok), (byId.graph_api && byId.graph_api.detail) || (data && data.message) || '');
         setBadge('production', ok && !!(byId.webhook_fields && byId.webhook_fields.ok), 'Confirm live number + messages webhook field');
-        setBadge('template', !!(byId.waba_id && byId.waba_id.ok), (byId.waba_id && byId.waba_id.detail) || 'WABA ID needed for template sync');
+        setBadge(
+            'template',
+            !!(byId.approved_templates && byId.approved_templates.ok),
+            (byId.approved_templates && byId.approved_templates.detail)
+                || (byId.templates_api && byId.templates_api.detail)
+                || 'Sync approved templates from this WABA (do not rely on hello_world sample)'
+        );
         if ($('[data-check="webhook_fields"]').length) {
             setBadge(
                 'webhook_fields',
@@ -1231,7 +1237,18 @@ $(function () {
                 (byId.webhook_fields && byId.webhook_fields.detail) || 'Subscribe messages in Meta App Dashboard'
             );
         }
-        $('#goLiveDetails').text(JSON.stringify(data || {}, null, 2));
+        var conn = (data && data.connection) ? data.connection : {};
+        var summary = [
+            'WhatsApp: ' + (conn.whatsapp || (ok ? 'Connected' : 'Not connected')),
+            'WABA: ' + (conn.waba || ((byId.waba_id && byId.waba_id.ok) ? 'Connected' : 'Not connected')),
+            'Phone Number: ' + (conn.phone_number || ((byId.phone_number_id && byId.phone_number_id.ok && byId.graph_api && byId.graph_api.ok) ? 'Connected' : 'Not connected')),
+            'Templates: ' + (data && data.template_count != null ? data.template_count : '-'),
+            'Approved: ' + (data && data.approved_templates != null ? data.approved_templates : '-'),
+            'Pending: ' + (data && data.pending_templates != null ? data.pending_templates : '-'),
+            'Rejected: ' + (data && data.rejected_templates != null ? data.rejected_templates : '-'),
+            'hello_world on WABA: ' + ((data && data.hello_world_exists) ? 'yes' : 'no')
+        ].join('\n');
+        $('#goLiveDetails').text(summary + '\n\n' + JSON.stringify(data || {}, null, 2));
     }
 
     function runCheerioTest($btn, toast) {

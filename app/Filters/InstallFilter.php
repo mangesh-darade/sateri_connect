@@ -2,14 +2,15 @@
 
 namespace App\Filters;
 
-use App\Libraries\SettingsService;
+use App\Libraries\InstallStatus;
 use CodeIgniter\Filters\FilterInterface;
 use CodeIgniter\HTTP\RequestInterface;
 use CodeIgniter\HTTP\ResponseInterface;
-use Throwable;
 
 /**
  * Redirects to the installer when the application is not installed.
+ * Uses InstallStatus (lock file first) — never re-check DB on every
+ * setting() call path, and never bounce installed apps into /install.
  */
 class InstallFilter implements FilterInterface
 {
@@ -22,6 +23,9 @@ class InstallFilter implements FilterInterface
             'install',
             'login',
             'logout',
+            'signup',
+            'verify-email',
+            'resend-verification',
             'forgot-password',
             'reset-password',
             'webhooks',
@@ -40,20 +44,11 @@ class InstallFilter implements FilterInterface
             }
         }
 
-        try {
-            if (is_file(WRITEPATH . 'install.lock')) {
-                return null;
-            }
-            $settings = new SettingsService();
-            if ($settings->isInstalled()) {
-                return null;
-            }
-        } catch (Throwable $e) {
-            // Settings table may not exist yet during first boot
-            log_message('debug', 'InstallFilter settings check failed: {msg}', ['msg' => $e->getMessage()]);
+        if (InstallStatus::isInstalled()) {
+            return null;
         }
 
-        return redirect()->to('/install');
+        return redirect()->to(site_url('install'));
     }
 
     public function after(RequestInterface $request, ResponseInterface $response, $arguments = null)

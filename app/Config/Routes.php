@@ -149,6 +149,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('templates/sync', 'Templates::sync', ['filter' => 'csrf']);
     $routes->get('templates/(:num)', 'Templates::show/$1');
     $routes->get('templates/(:num)/preview', 'Templates::preview/$1');
+    $routes->post('templates/(:num)/send-test', 'Templates::sendTest/$1', ['filter' => 'csrf']);
     $routes->post('templates/(:num)/delete', 'Templates::delete/$1', ['filter' => 'csrf']);
 
     // Chat
@@ -271,6 +272,12 @@ $routes->group('api', ['namespace' => 'App\Controllers\Api'], static function ($
 
         $routes->get('templates', 'Templates::index', ['filter' => 'permission:templates.view']);
         $routes->post('templates/sync', 'Templates::sync', ['filter' => 'permission:templates.sync']);
+
+        $routes->get('whatsapp/templates', 'WhatsAppTemplates::index', ['filter' => 'permission:templates.view']);
+        $routes->get('whatsapp/templates/(:segment)', 'WhatsAppTemplates::index/$1', ['filter' => 'permission:templates.view']);
+        $routes->post('whatsapp/templates/sync', 'WhatsAppTemplates::sync', ['filter' => 'permission:templates.sync']);
+        $routes->post('whatsapp/templates/(:segment)/sync', 'WhatsAppTemplates::sync/$1', ['filter' => 'permission:templates.sync']);
+        $routes->post('whatsapp/templates/(:num)/send-test', 'WhatsAppTemplates::sendTest/$1', ['filter' => 'permission:chat.send']);
 
         $routes->get('reports/stats', 'Reports::stats', ['filter' => 'permission:reports.view']);
     });

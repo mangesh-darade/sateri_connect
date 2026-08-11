@@ -81,7 +81,7 @@ class SettingSeeder extends Seeder
             ],
             [
                 'key'          => 'meta_api_version',
-                'value'        => 'v21.0',
+                'value'        => 'v25.0',
                 'group'        => 'meta',
                 'is_encrypted' => 0,
             ],

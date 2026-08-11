@@ -51,7 +51,7 @@ class MetaEmbeddedSignup
         return [
             'app_id'      => (string) ($meta['app_id'] ?? ''),
             'config_id'   => (string) ($meta['embedded_config_id'] ?? ''),
-            'api_version' => (string) ($meta['api_version'] ?? 'v21.0') ?: 'v21.0',
+            'api_version' => (string) ($meta['api_version'] ?? $this->config->graphApiVersion ?? 'v25.0') ?: 'v25.0',
             'ready'       => $this->isLaunchReady(),
         ];
     }
@@ -143,18 +143,51 @@ class MetaEmbeddedSignup
             $warnings[] = 'Phone info: ' . $e->getMessage();
         }
 
-        return [
-            'ok'              => true,
-            'provider'        => 'meta',
+        $templateSummary  = null;
+        $standardTemplate = null;
+        try {
+            $templateSummary = (new TemplateSyncService(new WhatsAppCloudAPI($this->settings), $this->settings))->sync($wabaId);
+        } catch (\Throwable $e) {
+            $warnings[] = 'Template sync: ' . $e->getMessage();
+            MetaGraphLogger::log('onboarding.templates.sync_failed', [
+                'waba_id'         => $wabaId,
+                'phone_number_id' => $phoneNumberId,
+                'detail'          => $e->getMessage(),
+            ], 'warning');
+        }
+
+        try {
+            $standardTemplate = (new StandardTemplateOnboarding(
+                new WhatsAppCloudAPI($this->settings),
+                $this->settings
+            ))->ensureOrderConfirmation();
+            if (($standardTemplate['action'] ?? '') === 'failed') {
+                $warnings[] = 'Standard template: ' . ($standardTemplate['message'] ?? 'failed');
+            }
+        } catch (\Throwable $e) {
+            $warnings[] = 'Standard template: ' . $e->getMessage();
+        }
+
+        MetaGraphLogger::log('onboarding.complete', [
             'waba_id'         => $wabaId,
             'phone_number_id' => $phoneNumberId,
-            'business_id'     => $businessId,
-            'display_phone'   => $displayPhone,
-            'verified_name'   => $verifiedName,
-            'token_type'      => (string) ($tokenResult['token_type'] ?? 'bearer'),
-            'registered'      => is_array($register) && ! empty($register['success']),
-            'webhook'         => $subscribe,
-            'warnings'        => $warnings,
+            'detail'          => 'app_connected=1',
+        ]);
+
+        return [
+            'ok'                => true,
+            'provider'          => 'meta',
+            'waba_id'           => $wabaId,
+            'phone_number_id'   => $phoneNumberId,
+            'business_id'       => $businessId,
+            'display_phone'     => $displayPhone,
+            'verified_name'     => $verifiedName,
+            'token_type'        => (string) ($tokenResult['token_type'] ?? 'bearer'),
+            'registered'        => is_array($register) && ! empty($register['success']),
+            'webhook'           => $subscribe,
+            'warnings'          => $warnings,
+            'templates'         => $templateSummary,
+            'standard_template' => $standardTemplate,
         ];
     }
 
@@ -168,7 +201,7 @@ class MetaEmbeddedSignup
         $meta       = $this->settings->getMetaConfig();
         $appId      = trim((string) ($meta['app_id'] ?? ''));
         $appSecret  = trim((string) ($meta['app_secret'] ?? ''));
-        $apiVersion = (string) ($meta['api_version'] ?? 'v21.0') ?: 'v21.0';
+        $apiVersion = (string) ($meta['api_version'] ?? $this->config->graphApiVersion ?? 'v25.0') ?: 'v25.0';
 
         if ($appId === '' || $appSecret === '') {
             throw new RuntimeException(
@@ -227,7 +260,7 @@ class MetaEmbeddedSignup
         }
 
         $meta       = $this->settings->getMetaConfig();
-        $apiVersion = (string) ($meta['api_version'] ?? 'v21.0') ?: 'v21.0';
+        $apiVersion = (string) ($meta['api_version'] ?? $this->config->graphApiVersion ?? 'v25.0') ?: 'v25.0';
         $base       = rtrim((string) ($meta['graph_base_url'] ?? $this->config->graphBaseUrl), '/');
         $url        = $base . '/' . $apiVersion . '/' . $phoneNumberId . '/register';
 

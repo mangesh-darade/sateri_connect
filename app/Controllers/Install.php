@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Libraries\InstallStatus;
 use App\Models\RoleModel;
 use App\Models\UserModel;
 use CodeIgniter\Controller;
@@ -492,23 +493,15 @@ class Install extends Controller
 
     protected function alreadyInstalled(): bool
     {
-        // Filesystem lock — fail closed even if DB is down (prevents re-install attacks)
-        if (is_file(WRITEPATH . 'install.lock')) {
-            return true;
-        }
-
-        try {
-            return service('settingsService')->isInstalled();
-        } catch (Throwable $e) {
-            return false;
-        }
+        return InstallStatus::isInstalled();
     }
 
     protected function writeInstallLock(): void
     {
-        $path = WRITEPATH . 'install.lock';
+        $path = InstallStatus::lockPath();
         $body = "installed_at=" . date('c') . "\n" . 'host=' . ($_SERVER['HTTP_HOST'] ?? 'cli') . "\n";
         @file_put_contents($path, $body);
+        InstallStatus::markInstalledFromLock();
     }
 
     protected function envQuote(string $value): string

@@ -120,6 +120,46 @@ final class WhatsAppTemplateVariables
     }
 
     /**
+     * Human label for a template variable input (never hardcodes count).
+     *
+     * @param array{key?:string,index?:int,example?:string,suggested_source?:string} $definition
+     */
+    public static function labelFor(array $definition): string
+    {
+        $key      = trim((string) ($definition['key'] ?? ''));
+        $example  = trim((string) ($definition['example'] ?? ''));
+        $source   = (string) ($definition['suggested_source'] ?? '');
+        $index    = (int) ($definition['index'] ?? 0);
+
+        if ($source === 'name') {
+            return 'Customer Name';
+        }
+        if ($source === 'mobile') {
+            return 'Phone Number';
+        }
+        if ($source === 'email') {
+            return 'Email';
+        }
+
+        $haystack = strtolower($key . ' ' . $example);
+        if (preg_match('/\border\b/', $haystack)) {
+            return 'Order Number';
+        }
+        if (preg_match('/\b(otp|code|pin)\b/', $haystack)) {
+            return 'Code';
+        }
+        if (! ctype_digit($key) && $key !== '') {
+            return ucwords(str_replace('_', ' ', $key));
+        }
+
+        if ($example !== '' && ! preg_match('/^sample\d+$/i', $example)) {
+            return 'Variable ' . ($index > 0 ? $index : $key) . ' (' . $example . ')';
+        }
+
+        return 'Variable {{' . ($key !== '' ? $key : (string) $index) . '}}';
+    }
+
+    /**
      * Build the safe backend mapping used when the UI does not submit one.
      *
      * Semantic variables map to contact fields; non-semantic provider examples

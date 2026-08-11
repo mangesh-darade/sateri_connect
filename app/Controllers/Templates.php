@@ -25,18 +25,113 @@ class Templates extends BaseController
 
         $status = (string) ($this->request->getGet('status') ?? '');
         $model  = model(TemplateModel::class);
+        $wabaId = trim((string) (service('settingsService')->getMetaConfig()['waba_id'] ?? ''));
 
         if ($status !== '') {
             $model->where('status', $status);
         }
+        // Strict: only templates for the active WABA (hide leftover rows from old accounts).
+        if ($wabaId !== '' && $model->db->fieldExists('waba_id', 'templates')) {
+            $model->where('waba_id', $wabaId);
+        }
 
         $templates = $model->orderBy('name', 'ASC')->findAll();
+        $counts    = model(TemplateModel::class)->countByStatus($wabaId !== '' ? $wabaId : null);
 
         return $this->render('templates/index', [
-            'pageTitle' => 'Templates',
-            'templates' => $templates,
-            'filterStatus' => $status,
+            'pageTitle'     => 'Templates',
+            'templates'     => $templates,
+            'filterStatus'  => $status,
+            'statusCounts'  => $counts,
+            'wabaId'        => $wabaId,
+            'phoneNumberId' => (string) (service('settingsService')->getMetaConfig()['phone_number_id'] ?? ''),
+            'lastSyncedAt'  => $this->latestSyncedAt($templates),
         ]);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $templates
+     */
+    protected function latestSyncedAt(array $templates): ?string
+    {
+        $latest = null;
+        foreach ($templates as $tpl) {
+            $synced = (string) ($tpl['synced_at'] ?? '');
+            if ($synced !== '' && ($latest === null || $synced > $latest)) {
+                $latest = $synced;
+            }
+        }
+
+        return $latest;
+    }
+
+    /**
+     * Send a test template message using tenant WABA credentials only.
+     */
+    public function sendTest(int $id): ResponseInterface
+    {
+        if ($denied = $this->requireAnyPermission(['templates.sync', 'chat.send', 'templates.create'])) {
+            return $denied;
+        }
+
+        $input = $this->request->getJSON(true);
+        if (! is_array($input)) {
+            $input = $this->request->getPost() ?: [];
+        }
+
+        $to = normalize_phone((string) ($input['to'] ?? $input['mobile'] ?? ''));
+        if ($to === '') {
+            return $this->jsonResponse(false, null, 'Recipient phone number is required.', [], 422);
+        }
+
+        $variables = [];
+        if (is_array($input['variables'] ?? null)) {
+            $variables = $input['variables'];
+        } elseif (is_array($input['vars'] ?? null)) {
+            $variables = $input['vars'];
+        }
+
+        try {
+            $guard = new \App\Libraries\WhatsAppTemplateSendGuard();
+            $guard->assertPhoneNumberId(isset($input['phone_number_id']) ? (string) $input['phone_number_id'] : null);
+            $guard->assertWabaId(isset($input['waba_id']) ? (string) $input['waba_id'] : null);
+
+            $tpl = $guard->resolveApprovedTemplate($id, null, null);
+            $components = $guard->buildBodyComponents($tpl, $variables);
+
+            // Optional header media from request
+            if (is_array($input['components'] ?? null) && $input['components'] !== []) {
+                $components = array_merge($input['components'], $components);
+            }
+
+            $api = service('whatsApp');
+            $result = $api->sendTemplate(
+                $to,
+                (string) $tpl['name'],
+                (string) ($tpl['language'] ?? 'en_US'),
+                $components
+            );
+
+            (new ActivityLogger())->log('send_test', 'templates', 'Sent test template ' . $tpl['name'], [
+                'template_id' => $tpl['meta_id'] ?? null,
+                'to'          => $to,
+            ]);
+
+            return $this->jsonResponse(true, [
+                'wa_message_id' => $result['messages'][0]['id'] ?? null,
+                'template'      => [
+                    'id'       => (int) $tpl['id'],
+                    'name'     => $tpl['name'],
+                    'language' => $tpl['language'] ?? '',
+                    'status'   => $tpl['status'] ?? '',
+                ],
+            ], 'Test template sent.');
+        } catch (Throwable $e) {
+            $code = (int) $e->getCode();
+            $status = $code >= 400 && $code < 600 ? $code : 500;
+
+            return $this->jsonResponse(false, null, $e->getMessage(), [], $status);
+        }
     }
 
     public function sync(): ResponseInterface
@@ -46,84 +141,39 @@ class Templates extends BaseController
         }
 
         try {
-            $api      = service('whatsApp');
-            $response = $api->getTemplates();
-            $data     = $response['data'] ?? [];
-
-            if (! is_array($data)) {
-                return $this->jsonResponse(false, null, 'Unexpected response from Cheerio.', [], 502);
-            }
-
-            $model  = model(TemplateModel::class);
-            $synced = 0;
-            $now    = date('Y-m-d H:i:s');
-            $seen   = [];
-
-            foreach ($data as $tpl) {
-                if (! is_array($tpl) || empty($tpl['name'])) {
-                    continue;
-                }
-
-                $componentsList = is_array($tpl['components'] ?? null) ? $tpl['components'] : [];
-                $parsed   = $this->parseComponents($componentsList);
-                $metaId   = (string) ($tpl['id'] ?? '');
-                $name     = (string) $tpl['name'];
-                $language = (string) ($tpl['language'] ?? 'en');
-                $templateType = $this->detectTemplateTypeFromComponents($tpl, $componentsList);
-                $seen[] = strtolower(trim($name)) . '|' . strtolower(trim($language));
-
-                $row = [
-                    'meta_id'        => $metaId !== '' ? $metaId : null,
-                    'name'           => $name,
-                    'language'       => $language,
-                    'category'       => $tpl['category'] ?? null,
-                    'template_type'  => $templateType,
-                    'status'         => $tpl['status'] ?? null,
-                    'header_type'    => $parsed['header_type'],
-                    'header_content' => $parsed['header_content'],
-                    'body'           => $parsed['body'],
-                    'footer'         => $parsed['footer'],
-                    'buttons'        => $parsed['buttons'],
-                    'variables'      => $parsed['variables'],
-                    'raw_payload'    => $tpl,
-                    'synced_at'      => $now,
-                ];
-
-                $existing = null;
-                if ($metaId !== '') {
-                    $existing = $model->findByMetaId($metaId);
-                }
-                if ($existing === null) {
-                    $existing = $model->where('name', $name)->where('language', $language)->first();
-                }
-
-                if ($existing !== null) {
-                    $model->update((int) $existing['id'], $row);
-                } else {
-                    $model->insert($row);
-                }
-                $synced++;
-            }
-
-            $disabled = $model->disableMissingFromSync($seen);
-            $provider = service('settingsService')->getWhatsAppProvider();
+            $result = (new \App\Libraries\TemplateSyncService())->sync();
+            $provider = $result['provider'] ?? service('settingsService')->getWhatsAppProvider();
+            $synced = (int) ($result['synced'] ?? 0);
+            $disabled = (int) ($result['disabled'] ?? 0);
             $msg = "Synced {$synced} template(s) from {$provider}.";
             if ($disabled > 0) {
                 $msg .= " Disabled {$disabled} not returned by provider.";
             }
+            if (! empty($result['hello_world']['exists'])) {
+                $hw = $result['hello_world']['template'] ?? [];
+                $msg .= ' hello_world is present on this WABA (' . ($hw['status'] ?? '') . ').';
+            } else {
+                $msg .= ' hello_world is NOT available on this WABA (Meta API Setup sample is not a production template).';
+            }
 
-            (new ActivityLogger())->log('sync', 'templates', $msg);
+            (new ActivityLogger())->log('sync', 'templates', $msg, [
+                'waba_id'        => $result['waba_id'] ?? null,
+                'status_counts'  => $result['status_counts'] ?? null,
+                'last_synced_at' => $result['last_synced_at'] ?? null,
+            ]);
 
             if ($this->request->isAJAX()) {
-                return $this->jsonResponse(true, ['synced' => $synced, 'disabled' => $disabled], $msg);
+                return $this->jsonResponse(true, $result, $msg);
             }
 
             return redirect()->to('/templates')->with('success', $msg);
         } catch (Throwable $e) {
             log_message('error', 'Template sync failed: {msg}', ['msg' => $e->getMessage()]);
+            $code = (int) $e->getCode();
+            $status = $code >= 400 && $code < 600 ? $code : 500;
 
             if ($this->request->isAJAX()) {
-                return $this->jsonResponse(false, null, $e->getMessage(), [], 500);
+                return $this->jsonResponse(false, null, $e->getMessage(), [], $status);
             }
 
             return redirect()->to('/templates')->with('error', $e->getMessage());
@@ -189,8 +239,10 @@ class Templates extends BaseController
             $storedPayload['language'] = $input['language'];
             $storedPayload['category'] = $input['category'];
             $storedPayload['components'] = $components;
+            $wabaId = trim((string) (service('settingsService')->getMetaConfig()['waba_id'] ?? ''));
 
             model(TemplateModel::class)->insert([
+                'waba_id'        => $wabaId !== '' ? $wabaId : null,
                 'meta_id'        => $metaId !== '' ? $metaId : null,
                 'name'           => $input['name'],
                 'language'       => $input['language'],
@@ -207,12 +259,13 @@ class Templates extends BaseController
                 'synced_at'      => date('Y-m-d H:i:s'),
             ]);
 
-            (new ActivityLogger())->log('create', 'templates', "Submitted template {$input['name']} to Cheerio", [
+            (new ActivityLogger())->log('create', 'templates', "Submitted template {$input['name']}", [
                 'meta_id' => $metaId,
                 'status'  => $status,
+                'waba_id' => $wabaId,
             ]);
 
-            $message = "Template \"{$input['name']}\" submitted to Cheerio ({$status}). Sync again after Cheerio approves it.";
+            $message = "Template \"{$input['name']}\" submitted ({$status}). Sync again after Meta approves it.";
             if ($this->request->isAJAX()) {
                 return $this->jsonResponse(true, [
                     'redirect' => site_url('templates'),
@@ -287,6 +340,10 @@ class Templates extends BaseController
             (string) ($template['body'] ?? ''),
             $template['raw_payload'] ?? null
         );
+        foreach ($variableDefinitions as &$definition) {
+            $definition['label'] = \App\Libraries\WhatsAppTemplateVariables::labelFor($definition);
+        }
+        unset($definition);
         $variables = array_column($variableDefinitions, 'key');
 
         return $this->jsonResponse(true, [
@@ -301,6 +358,7 @@ class Templates extends BaseController
             'footer'       => $template['footer'],
             'buttons'      => $template['buttons'],
             'status'       => $template['status'],
+            'sendable'     => strtoupper((string) ($template['status'] ?? '')) === 'APPROVED',
             'variables'    => $variables,
             'variable_definitions' => $variableDefinitions,
         ]);

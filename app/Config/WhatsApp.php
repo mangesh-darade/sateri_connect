@@ -25,7 +25,7 @@ class WhatsApp extends BaseConfig
     /**
      * Default Meta Graph API version when not set in settings.
      */
-    public string $graphApiVersion = 'v21.0';
+    public string $graphApiVersion = 'v25.0';
 
     /**
      * Default HTTP timeout in seconds.

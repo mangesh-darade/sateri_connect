@@ -9,6 +9,10 @@ namespace Config;
  *       So you cannot replace the property values with Environment Variables.
  *
  * WARNING: Do not use these options when running the app in the Worker Mode.
+ *
+ * Config + locator cache cut bootstrap work on every request. After changing
+ * files under app/Config or composer packages, clear: writable/cache/* or run
+ * `php spark optimize:clear` (then `php spark optimize` again if desired).
  */
 class Optimize
 {
@@ -23,7 +27,7 @@ class Optimize
 
     /**
      * --------------------------------------------------------------------------
-     * Config Caching
+     * File Locator Caching
      * --------------------------------------------------------------------------
      *
      * @see https://codeigniter.com/user_guide/concepts/autoloader.html#file-locator-caching

@@ -40,7 +40,9 @@ class EnsureWhatsAppSchema extends BaseCommand
                 'external_message_id' => 'VARCHAR(191) NULL DEFAULT NULL',
             ],
             'templates' => [
-                'template_type' => "VARCHAR(30) NOT NULL DEFAULT 'default'",
+                'template_type'   => "VARCHAR(30) NOT NULL DEFAULT 'default'",
+                'waba_id'         => 'VARCHAR(64) NULL DEFAULT NULL',
+                'rejected_reason' => 'TEXT NULL DEFAULT NULL',
             ],
         ];
 
@@ -52,6 +54,8 @@ class EnsureWhatsAppSchema extends BaseCommand
             'messages.channel'              => 'conversation_id',
             'messages.external_message_id'  => 'wamid',
             'templates.template_type'       => 'category',
+            'templates.waba_id'             => 'id',
+            'templates.rejected_reason'     => 'status',
         ];
 
         foreach ($columns as $table => $defs) {
@@ -95,6 +99,24 @@ class EnsureWhatsAppSchema extends BaseCommand
             $db->query("UPDATE `messages` SET `channel` = 'whatsapp' WHERE `channel` IS NULL OR `channel` = ''");
             if ($db->fieldExists('template_type', 'templates')) {
                 $db->query("UPDATE `templates` SET `template_type` = 'default' WHERE `template_type` IS NULL OR `template_type` = ''");
+            }
+            if ($db->fieldExists('waba_id', 'templates')) {
+                // Do NOT blanket-assign current WABA to every NULL row — that
+                // incorrectly attaches templates from a previous Meta account.
+                try {
+                    $exists = $db->query(
+                        "SELECT 1 FROM information_schema.statistics
+                         WHERE table_schema = DATABASE() AND table_name = 'templates'
+                           AND index_name = 'templates_waba_meta_unique' LIMIT 1"
+                    )->getRowArray();
+                    if ($exists === null) {
+                        $db->query('ALTER TABLE `templates` ADD UNIQUE KEY `templates_waba_meta_unique` (`waba_id`, `meta_id`)');
+                        CLI::write('ADD templates_waba_meta_unique', 'yellow');
+                        $added++;
+                    }
+                } catch (Throwable $e) {
+                    CLI::write('Index templates_waba_meta_unique skipped: ' . $e->getMessage(), 'yellow');
+                }
             }
             if ($db->fieldExists('external_message_id', 'messages')) {
                 $db->query(

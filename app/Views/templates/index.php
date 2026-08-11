@@ -19,6 +19,16 @@
 $templateStatuses = [];
 $templateCategories = [];
 $templateLanguages = [];
+$statusCounts = $statusCounts ?? ['APPROVED' => 0, 'PENDING' => 0, 'REJECTED' => 0, 'DISABLED' => 0, 'OTHER' => 0];
+$variableCount = static function (array $tpl): int {
+    $defs = \App\Libraries\WhatsAppTemplateVariables::definitionsForTemplate(
+        $tpl['variables'] ?? null,
+        (string) ($tpl['body'] ?? ''),
+        $tpl['raw_payload'] ?? null
+    );
+
+    return count($defs);
+};
 $normalizeStatus = static function (?string $value): string {
     $normalized = strtolower(trim((string) $value));
     $normalized = str_replace([' ', '-'], '_', $normalized);
@@ -57,7 +67,38 @@ sort($templateStatuses);
 sort($templateCategories);
 sort($templateLanguages);
 ?>
-<div class="page-list">
+<div class="page-list" id="templatesPageRoot"
+     data-auto-sync="<?= (function_exists('can') && can('templates.sync')) ? '1' : '0' ?>"
+     data-last-synced="<?= esc((string) ($lastSyncedAt ?? ''), 'attr') ?>">
+
+<div class="card mb-2">
+    <div class="card-body py-3">
+        <div class="d-flex flex-wrap gap-3 align-items-center justify-content-between">
+            <div>
+                <div class="fw-semibold">WhatsApp Template Management</div>
+                <div class="small text-muted">
+                    WABA <?= esc($wabaId ?: 'not configured') ?>
+                    <?php if (! empty($phoneNumberId)): ?>
+                        · Phone ID <?= esc($phoneNumberId) ?>
+                    <?php endif; ?>
+                    <?php if (! empty($lastSyncedAt)): ?>
+                        · Last synced <?= esc(format_app_datetime($lastSyncedAt)) ?>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <span class="badge text-bg-success">Approved <?= (int) ($statusCounts['APPROVED'] ?? 0) ?></span>
+                <span class="badge text-bg-warning text-dark">Pending <?= (int) ($statusCounts['PENDING'] ?? 0) ?></span>
+                <span class="badge text-bg-danger">Rejected <?= (int) ($statusCounts['REJECTED'] ?? 0) ?></span>
+                <span class="badge text-bg-secondary">Disabled <?= (int) ($statusCounts['DISABLED'] ?? 0) ?></span>
+            </div>
+        </div>
+        <div class="small text-muted mt-2">
+            Only <strong>APPROVED</strong> templates can be selected for sending.
+            Meta API Setup may show <code>hello_world</code> as a sample — that does not guarantee it exists on this WABA.
+        </div>
+    </div>
+</div>
 
 <?php if (! empty($templates)): ?>
 <div class="card">
@@ -114,6 +155,8 @@ sort($templateLanguages);
             $status = $normalizeStatus((string) ($tpl['status'] ?? ''));
             $category = strtolower(trim((string) ($tpl['category'] ?? '')));
             $language = strtolower(trim((string) ($tpl['language'] ?? '')));
+            $varsCount = $variableCount($tpl);
+            $isApproved = strtoupper((string) ($tpl['status'] ?? '')) === 'APPROVED';
             $searchText = strtolower(trim(implode(' ', [
                 (string) ($tpl['name'] ?? ''),
                 (string) ($tpl['body'] ?? ''),
@@ -139,11 +182,12 @@ sort($templateLanguages);
                     </div>
                     <div class="panel-body flex-grow-1">
                         <p class="small mb-2" style="white-space:pre-wrap;color:var(--text-muted)"><?= esc(mb_strimwidth($tpl['body'] ?? '', 0, 160, '…')) ?></p>
+                        <div class="small text-muted mb-1"><?= (int) $varsCount ?> variable<?= $varsCount === 1 ? '' : 's' ?></div>
                         <?php if (! empty($tpl['synced_at'])): ?>
-                            <div class="small text-muted">Synced <?= esc(format_app_datetime($tpl['synced_at'] ?? null)) ?></div>
+                            <div class="small text-muted">Last synced <?= esc(format_app_datetime($tpl['synced_at'] ?? null)) ?></div>
                         <?php endif; ?>
                     </div>
-                    <div class="panel-body border-top pt-2 d-flex gap-2" style="border-color:var(--border)!important">
+                    <div class="panel-body border-top pt-2 d-flex flex-wrap gap-2" style="border-color:var(--border)!important">
                         <button type="button" class="btn btn-sm btn-outline-secondary btn-preview-tpl"
                             data-id="<?= (int) $tpl['id'] ?>"
                             data-name="<?= esc($tpl['name'], 'attr') ?>"
@@ -151,9 +195,19 @@ sort($templateLanguages);
                             data-footer="<?= esc($tpl['footer'] ?? '', 'attr') ?>"
                             data-header="<?= esc($tpl['header_content'] ?? '', 'attr') ?>"
                             data-header-type="<?= esc($tpl['header_type'] ?? '', 'attr') ?>">
-                            <i class="fas fa-eye"></i> Preview
+                            <i class="fas fa-eye"></i> View
                         </button>
-                        <a href="<?= site_url('templates/' . (int) $tpl['id']) ?>" class="btn btn-sm btn-wa">Details</a>
+                        <a href="<?= site_url('templates/' . (int) $tpl['id']) ?>" class="btn btn-sm btn-outline-secondary">Details</a>
+                        <?php if ($isApproved && function_exists('can') && (can('chat.send') || can('templates.sync') || can('templates.create'))): ?>
+                            <button type="button"
+                                class="btn btn-sm btn-wa btn-send-test-tpl"
+                                data-id="<?= (int) $tpl['id'] ?>"
+                                data-name="<?= esc($tpl['name'], 'attr') ?>"
+                                data-language="<?= esc($tpl['language'] ?? '', 'attr') ?>"
+                                data-status="<?= esc($tpl['status'] ?? '', 'attr') ?>">
+                                <i class="fas fa-paper-plane"></i> Send Test
+                            </button>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -170,7 +224,7 @@ sort($templateLanguages);
             <div class="table-responsive">
                 <table class="table table-sm table-hover align-middle w-100" id="templatesTable">
                     <thead>
-                        <tr><th>Name</th><th>Language</th><th>Category</th><th>Status</th><th>Synced</th></tr>
+                        <tr><th>Name</th><th>Language</th><th>Category</th><th>Status</th><th>Variables</th><th>Last Synced</th><th></th></tr>
                     </thead>
                     <tbody>
                         <?php foreach ($templates as $tpl): ?>
@@ -178,6 +232,8 @@ sort($templateLanguages);
                             $status = $normalizeStatus((string) ($tpl['status'] ?? ''));
                             $category = strtolower(trim((string) ($tpl['category'] ?? '')));
                             $language = strtolower(trim((string) ($tpl['language'] ?? '')));
+                            $varsCount = $variableCount($tpl);
+                            $isApproved = strtoupper((string) ($tpl['status'] ?? '')) === 'APPROVED';
                             $searchText = strtolower(trim(implode(' ', [
                                 (string) ($tpl['name'] ?? ''),
                                 (string) ($tpl['body'] ?? ''),
@@ -197,7 +253,18 @@ sort($templateLanguages);
                                 <td><?= esc($tpl['language'] ?? '') ?></td>
                                 <td><?= esc($tpl['category'] ?? '') ?></td>
                                 <td><?= view('partials/status_badge', ['status' => strtolower($tpl['status'] ?? '')]) ?></td>
+                                <td><?= (int) $varsCount ?></td>
                                 <td class="text-muted small text-nowrap"><?= esc(format_app_datetime($tpl['synced_at'] ?? null, 'd-M-Y, g:i A', '')) ?></td>
+                                <td class="text-nowrap">
+                                    <a href="<?= site_url('templates/' . (int) $tpl['id']) ?>" class="btn btn-sm btn-outline-secondary">View</a>
+                                    <?php if ($isApproved && function_exists('can') && (can('chat.send') || can('templates.sync') || can('templates.create'))): ?>
+                                        <button type="button" class="btn btn-sm btn-wa btn-send-test-tpl"
+                                            data-id="<?= (int) $tpl['id'] ?>"
+                                            data-name="<?= esc($tpl['name'], 'attr') ?>"
+                                            data-language="<?= esc($tpl['language'] ?? '', 'attr') ?>"
+                                            data-status="<?= esc($tpl['status'] ?? '', 'attr') ?>">Send Test</button>
+                                    <?php endif; ?>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -251,6 +318,31 @@ sort($templateLanguages);
                     <div id="tplPreviewBody" style="white-space:pre-wrap"></div>
                     <div class="small text-muted" id="tplPreviewFooter"></div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="tplSendTestModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Send Test — <span id="tplSendTestName"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="tplSendTestId" value="">
+                <div class="mb-3">
+                    <label class="form-label">Recipient phone (E.164 / digits)</label>
+                    <input type="text" class="form-control" id="tplSendTestTo" placeholder="9198XXXXXXXX">
+                </div>
+                <div id="tplSendTestVars" class="mb-2"></div>
+                <div class="small text-muted">Only APPROVED templates for this WABA can be sent. Credentials are taken from Settings — never enter another customer's WABA or token.</div>
+                <div id="tplSendTestError" class="alert alert-danger d-none mt-3 mb-0"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-wa" id="tplSendTestSubmit"><i class="fas fa-paper-plane me-1"></i> Send Test</button>
             </div>
         </div>
     </div>
@@ -447,6 +539,73 @@ $(function () {
     setView(activeView);
     applyFilters();
 
+    // Auto-sync from Meta/Cheerio every time this screen opens.
+    (function autoSyncOnOpen() {
+        var $root = $('#templatesPageRoot');
+        if ($root.data('auto-sync') != 1 && $root.data('auto-sync') !== '1') {
+            return;
+        }
+
+        // After a reload triggered by sync, skip one pass to avoid a loop.
+        var skipKey = 'templates_skip_auto_sync_once';
+        if (sessionStorage.getItem(skipKey) === '1') {
+            sessionStorage.removeItem(skipKey);
+            return;
+        }
+
+        var $btn = $('#btnSyncTemplates');
+        var originalHtml = $btn.length ? $btn.html() : '';
+        if ($btn.length) {
+            $btn.prop('disabled', true)
+                .html('<i class="fas fa-sync fa-spin me-1"></i> Syncing…');
+        }
+
+        var csrf = $('meta[name="csrf-token"]').attr('content') || '';
+        $.ajax({
+            url: APP.baseUrl + '/templates/sync',
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': csrf, 'X-Requested-With': 'XMLHttpRequest' },
+            dataType: 'json',
+            timeout: 60000
+        }).done(function (res) {
+            if (!(res && res.success)) {
+                if (window.APP && APP.toast) {
+                    APP.toast((res && res.message) || 'Template sync failed', 'error');
+                }
+                return;
+            }
+
+            var d = res.data || {};
+            var changed = (parseInt(d.inserted || 0, 10) > 0)
+                || (parseInt(d.updated || 0, 10) > 0)
+                || (parseInt(d.disabled || 0, 10) > 0)
+                || (parseInt(d.synced || 0, 10) > 0);
+
+            if (changed) {
+                sessionStorage.setItem(skipKey, '1');
+                if (window.APP && APP.toast) {
+                    APP.toast(res.message || 'Templates synced', 'success');
+                }
+                location.reload();
+                return;
+            }
+
+            if (window.APP && APP.toast) {
+                APP.toast(res.message || 'Templates already up to date', 'success');
+            }
+        }).fail(function (xhr) {
+            var msg = (xhr.responseJSON && xhr.responseJSON.message)
+                || 'Could not auto-sync templates';
+            if (window.APP && APP.toast) {
+                APP.toast(msg, 'error');
+            }
+        }).always(function () {
+            if ($btn.length && !sessionStorage.getItem(skipKey)) {
+                $btn.prop('disabled', false).html(originalHtml);
+            }
+        });
+    })();
+
     $('.btn-preview-tpl').on('click', function () {
         var $b = $(this);
         $('#tplPreviewTitle').text($b.data('name'));
@@ -460,6 +619,105 @@ $(function () {
         } else if (window.bootstrap) {
             bootstrap.Modal.getOrCreateInstance(document.getElementById('tplPreviewModal')).show();
         }
+    });
+
+    function showSendTestModal(defs, meta) {
+        $('#tplSendTestId').val(meta.id);
+        $('#tplSendTestName').text(meta.name + ' (' + (meta.language || '') + ')');
+        $('#tplSendTestError').addClass('d-none').text('');
+        var $vars = $('#tplSendTestVars').empty();
+        (defs || []).forEach(function (def) {
+            var key = def.key || '';
+            var label = def.label || ('Variable {{' + key + '}}');
+            var example = def.example || '';
+            $vars.append(
+                '<div class="mb-2">' +
+                '<label class="form-label">' + $('<div>').text(label).html() + '</label>' +
+                '<input type="text" class="form-control tpl-send-var" data-key="' + $('<div>').text(key).html() + '" placeholder="' + $('<div>').text(example || ('{{' + key + '}}')).html() + '">' +
+                '</div>'
+            );
+        });
+        if (window.APP && typeof APP.showModal === 'function') {
+            APP.showModal('#tplSendTestModal');
+        } else if (window.bootstrap) {
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('tplSendTestModal')).show();
+        }
+    }
+
+    $(document).on('click', '.btn-send-test-tpl', function () {
+        var $b = $(this);
+        var status = ($b.data('status') || '').toString().toUpperCase();
+        if (status && status !== 'APPROVED') {
+            if (window.APP && APP.toast) {
+                APP.toast('Only APPROVED templates can be sent. Current status: ' + status, 'error');
+            } else {
+                alert('Only APPROVED templates can be sent.');
+            }
+            return;
+        }
+        var id = $b.data('id');
+        $.getJSON(APP.baseUrl + '/templates/' + id + '/preview')
+            .done(function (res) {
+                var defs = (res && res.data && res.data.variable_definitions) ? res.data.variable_definitions : [];
+                defs = defs.map(function (d) {
+                    if (!d.label) {
+                        d.label = 'Variable {{' + (d.key || '') + '}}';
+                    }
+                    return d;
+                });
+                showSendTestModal(defs, {
+                    id: id,
+                    name: $b.data('name'),
+                    language: $b.data('language')
+                });
+            })
+            .fail(function () {
+                showSendTestModal([], {
+                    id: id,
+                    name: $b.data('name'),
+                    language: $b.data('language')
+                });
+            });
+    });
+
+    $('#tplSendTestSubmit').on('click', function () {
+        var id = $('#tplSendTestId').val();
+        var to = ($('#tplSendTestTo').val() || '').toString().trim();
+        var vars = {};
+        $('.tpl-send-var').each(function () {
+            vars[$(this).data('key')] = ($(this).val() || '').toString().trim();
+        });
+        var $err = $('#tplSendTestError').addClass('d-none');
+        if (!to) {
+            $err.removeClass('d-none').text('Recipient phone number is required.');
+            return;
+        }
+        var csrf = $('meta[name="csrf-token"]').attr('content') || '';
+        var $btn = $(this).prop('disabled', true);
+        $.ajax({
+            url: APP.baseUrl + '/templates/' + id + '/send-test',
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': csrf, 'X-Requested-With': 'XMLHttpRequest' },
+            contentType: 'application/json',
+            dataType: 'json',
+            data: JSON.stringify({ to: to, variables: vars })
+        }).done(function (res) {
+            if (res && res.success) {
+                if (window.APP && APP.toast) {
+                    APP.toast(res.message || 'Test sent', 'success');
+                }
+                if (window.bootstrap) {
+                    bootstrap.Modal.getOrCreateInstance(document.getElementById('tplSendTestModal')).hide();
+                }
+            } else {
+                $err.removeClass('d-none').text((res && res.message) || 'Send failed');
+            }
+        }).fail(function (xhr) {
+            var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Send failed';
+            $err.removeClass('d-none').text(msg);
+        }).always(function () {
+            $btn.prop('disabled', false);
+        });
     });
 });
 </script>

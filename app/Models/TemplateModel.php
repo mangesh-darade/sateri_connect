@@ -15,12 +15,14 @@ class TemplateModel extends Model
     protected $useSoftDeletes   = false;
     protected $protectFields    = true;
     protected $allowedFields    = [
+        'waba_id',
         'meta_id',
         'name',
         'language',
         'category',
         'template_type',
         'status',
+        'rejected_reason',
         'header_type',
         'header_content',
         'body',
@@ -113,24 +115,114 @@ class TemplateModel extends Model
     }
 
     /**
-     * @return list<array<string, mixed>>
+     * Unique mapping for sync: waba_id + template_id (meta_id).
+     *
+     * @return array<string, mixed>|null
      */
-    public function getApproved(): array
+    public function findByWabaAndMetaId(string $wabaId, string $metaId): ?array
     {
-        return $this->whereIn('status', ['APPROVED', 'approved'])
-            ->orderBy('name', 'ASC')
-            ->findAll();
+        if ($metaId === '') {
+            return null;
+        }
+
+        $builder = $this->where('meta_id', $metaId);
+        if ($wabaId !== '' && $this->db->fieldExists('waba_id', $this->table)) {
+            $builder->groupStart()
+                ->where('waba_id', $wabaId)
+                ->orWhere('waba_id', null)
+                ->orWhere('waba_id', '')
+                ->groupEnd();
+        }
+
+        $row = $builder->first();
+
+        return is_array($row) ? $row : null;
     }
 
     /**
-     * After a full provider sync, disable local APPROVED templates that the
-     * active provider did not return (e.g. Meta hello_world after switching to Cheerio).
+     * @return array<string, mixed>|null
+     */
+    public function findByWabaNameLanguage(string $wabaId, string $name, string $language): ?array
+    {
+        $builder = $this->where('name', $name)->where('language', $language);
+        if ($wabaId !== '' && $this->db->fieldExists('waba_id', $this->table)) {
+            $builder->groupStart()
+                ->where('waba_id', $wabaId)
+                ->orWhere('waba_id', null)
+                ->orWhere('waba_id', '')
+                ->groupEnd();
+        }
+
+        $row = $builder->first();
+
+        return is_array($row) ? $row : null;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function getApproved(?string $wabaId = null): array
+    {
+        $builder = $this->whereIn('status', ['APPROVED', 'approved']);
+        if ($wabaId !== null && $wabaId !== '' && $this->db->fieldExists('waba_id', $this->table)) {
+            $builder->groupStart()
+                ->where('waba_id', $wabaId)
+                ->orWhere('waba_id', null)
+                ->orWhere('waba_id', '')
+                ->groupEnd();
+        }
+
+        return $builder->orderBy('name', 'ASC')->findAll();
+    }
+
+    /**
+     * @return array{APPROVED: int, PENDING: int, REJECTED: int, DISABLED: int, OTHER: int}
+     */
+    public function countByStatus(?string $wabaId = null): array
+    {
+        $counts = [
+            'APPROVED' => 0,
+            'PENDING'  => 0,
+            'REJECTED' => 0,
+            'DISABLED' => 0,
+            'OTHER'    => 0,
+        ];
+
+        $builder = $this->builder();
+        if ($wabaId !== null && $wabaId !== '' && $this->db->fieldExists('waba_id', $this->table)) {
+            // Strict: only this WABA (do not mix in legacy rows from a previous account).
+            $builder->where('waba_id', $wabaId);
+        }
+
+        $rows = $builder->select('status')->get()->getResultArray();
+        foreach ($rows as $row) {
+            $status = strtoupper(trim((string) ($row['status'] ?? '')));
+            if ($status === 'APPROVED') {
+                $counts['APPROVED']++;
+            } elseif (in_array($status, ['PENDING', 'IN_REVIEW', 'INREVIEW', 'IN_PROGRESS', 'INPROGRESS'], true)) {
+                $counts['PENDING']++;
+            } elseif ($status === 'REJECTED') {
+                $counts['REJECTED']++;
+            } elseif (in_array($status, ['DISABLED', 'DELETED', 'PAUSED'], true)) {
+                $counts['DISABLED']++;
+            } else {
+                $counts['OTHER']++;
+            }
+        }
+
+        return $counts;
+    }
+
+    /**
+     * After a full provider sync, disable local templates for this WABA that the
+     * provider did not return. Prevents stale rows (and bad waba_id backfills)
+     * from appearing as active for the current account.
      *
      * @param list<string> $seenKeys Keys of "name|language" returned by the provider
      *
      * @return int Number of templates marked DISABLED
      */
-    public function disableMissingFromSync(array $seenKeys): int
+    public function disableMissingFromSync(array $seenKeys, ?string $wabaId = null): int
     {
         $seen = [];
         foreach ($seenKeys as $key) {
@@ -141,12 +233,24 @@ class TemplateModel extends Model
             return 0;
         }
 
-        $approved = $this->whereIn('status', ['APPROVED', 'approved'])->findAll();
+        $builder = $this->builder();
+        if ($wabaId !== null && $wabaId !== '' && $this->db->fieldExists('waba_id', $this->table)) {
+            $builder->where('waba_id', $wabaId);
+        }
+
+        // Only touch rows that are still "active-ish" — leave already DISABLED alone
+        // unless they belong to this WABA and were wrongly associated.
+        $rows = $builder->get()->getResultArray();
         $disabled = 0;
 
-        foreach ($approved as $row) {
+        foreach ($rows as $row) {
+            $status = strtoupper(trim((string) ($row['status'] ?? '')));
             $key = strtolower(trim((string) ($row['name'] ?? ''))) . '|' . strtolower(trim((string) ($row['language'] ?? '')));
             if ($key === '|' || isset($seen[$key])) {
+                continue;
+            }
+
+            if ($status === 'DISABLED') {
                 continue;
             }
 

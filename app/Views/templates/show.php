@@ -5,6 +5,14 @@
 <a href="<?= site_url('templates') ?>" class="btn btn-outline-secondary btn-sm">
     <i class="fas fa-arrow-left me-1"></i> Back
 </a>
+<?php if (strtoupper((string) ($t['status'] ?? '')) === 'APPROVED' && function_exists('can') && (can('chat.send') || can('templates.sync') || can('templates.create'))): ?>
+    <button type="button" class="btn btn-wa btn-sm" id="btnShowSendTest"
+        data-id="<?= (int) ($t['id'] ?? 0) ?>"
+        data-name="<?= esc($t['name'] ?? '', 'attr') ?>"
+        data-language="<?= esc($t['language'] ?? '', 'attr') ?>">
+        <i class="fas fa-paper-plane me-1"></i> Send Test
+    </button>
+<?php endif; ?>
 <?php if (function_exists('can') && can('templates.delete')): ?>
     <form action="<?= site_url('templates/' . (int) ($t['id'] ?? 0) . '/delete') ?>" method="post"
           onsubmit="return confirm('Delete this template from <?= esc(function_exists('whatsapp_provider_short') ? whatsapp_provider_short() : 'provider') ?> and locally?');">
@@ -34,9 +42,35 @@
                     <dd class="col-sm-8"><?= esc(ucfirst((string) ($t['header_type'] ?? 'none'))) ?></dd>
                     <dt class="col-sm-4 text-muted">Status</dt>
                     <dd class="col-sm-8"><?= view('partials/status_badge', ['status' => $t['status'] ?? '']) ?></dd>
+                    <dt class="col-sm-4 text-muted">WABA</dt>
+                    <dd class="col-sm-8"><code><?= esc($t['waba_id'] ?? '') ?></code></dd>
                     <dt class="col-sm-4 text-muted">Provider ID</dt>
                     <dd class="col-sm-8"><code><?= esc($t['meta_id'] ?? '') ?></code></dd>
-                    <dt class="col-sm-4 text-muted">Synced</dt>
+                    <dt class="col-sm-4 text-muted">Variables</dt>
+                    <dd class="col-sm-8">
+                        <?php
+                        $defs = \App\Libraries\WhatsAppTemplateVariables::definitionsForTemplate(
+                            $t['variables'] ?? null,
+                            (string) ($t['body'] ?? ''),
+                            $t['raw_payload'] ?? null
+                        );
+                        if ($defs === []):
+                            echo 'None';
+                        else:
+                            echo count($defs) . ' — ';
+                            $labels = [];
+                            foreach ($defs as $def) {
+                                $labels[] = \App\Libraries\WhatsAppTemplateVariables::labelFor($def);
+                            }
+                            echo esc(implode(', ', $labels));
+                        endif;
+                        ?>
+                    </dd>
+                    <?php if (! empty($t['rejected_reason'])): ?>
+                        <dt class="col-sm-4 text-muted">Rejected reason</dt>
+                        <dd class="col-sm-8 text-danger"><?= esc($t['rejected_reason']) ?></dd>
+                    <?php endif; ?>
+                    <dt class="col-sm-4 text-muted">Last Synced</dt>
                     <dd class="col-sm-8"><?= esc(format_app_datetime($t['synced_at'] ?? null)) ?></dd>
                 </dl>
             </div>
@@ -78,4 +112,79 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="tplSendTestModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Send Test — <span id="tplSendTestName"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="tplSendTestId" value="">
+                <div class="mb-3">
+                    <label class="form-label">Recipient phone</label>
+                    <input type="text" class="form-control" id="tplSendTestTo" placeholder="9198XXXXXXXX">
+                </div>
+                <div id="tplSendTestVars"></div>
+                <div id="tplSendTestError" class="alert alert-danger d-none mt-3 mb-0"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-wa" id="tplSendTestSubmit">Send Test</button>
+            </div>
+        </div>
+    </div>
+</div>
+<?= $this->endSection() ?>
+
+<?= $this->section('scripts') ?>
+<script>
+$(function () {
+    $('#btnShowSendTest').on('click', function () {
+        var $b = $(this);
+        var id = $b.data('id');
+        $.getJSON(APP.baseUrl + '/templates/' + id + '/preview').done(function (res) {
+            var defs = (res && res.data && res.data.variable_definitions) ? res.data.variable_definitions : [];
+            $('#tplSendTestId').val(id);
+            $('#tplSendTestName').text($b.data('name') + ' (' + ($b.data('language') || '') + ')');
+            $('#tplSendTestError').addClass('d-none');
+            var $vars = $('#tplSendTestVars').empty();
+            defs.forEach(function (def) {
+                $vars.append(
+                    '<div class="mb-2"><label class="form-label">' + $('<div>').text(def.label || ('Variable {{' + def.key + '}}')).html() +
+                    '</label><input type="text" class="form-control tpl-send-var" data-key="' + $('<div>').text(def.key || '').html() + '"></div>'
+                );
+            });
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('tplSendTestModal')).show();
+        });
+    });
+    $('#tplSendTestSubmit').on('click', function () {
+        var id = $('#tplSendTestId').val();
+        var to = ($('#tplSendTestTo').val() || '').trim();
+        var vars = {};
+        $('.tpl-send-var').each(function () { vars[$(this).data('key')] = ($(this).val() || '').trim(); });
+        var $err = $('#tplSendTestError').addClass('d-none');
+        if (!to) { $err.removeClass('d-none').text('Recipient phone number is required.'); return; }
+        var csrf = $('meta[name="csrf-token"]').attr('content') || '';
+        $.ajax({
+            url: APP.baseUrl + '/templates/' + id + '/send-test',
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': csrf, 'X-Requested-With': 'XMLHttpRequest' },
+            contentType: 'application/json',
+            dataType: 'json',
+            data: JSON.stringify({ to: to, variables: vars })
+        }).done(function (res) {
+            if (res && res.success) {
+                if (APP.toast) APP.toast(res.message || 'Sent', 'success');
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('tplSendTestModal')).hide();
+            } else {
+                $err.removeClass('d-none').text((res && res.message) || 'Send failed');
+            }
+        }).fail(function (xhr) {
+            $err.removeClass('d-none').text((xhr.responseJSON && xhr.responseJSON.message) || 'Send failed');
+        });
+    });
+});
+</script>
 <?= $this->endSection() ?>

@@ -21,6 +21,14 @@ class SettingsService
     protected SettingModel $settings;
     protected EncryptionService $encryption;
 
+    /**
+     * Per-request memo of decoded setting values (shared service = one page load).
+     * Avoids N identical SELECTs from layout setting() / provider helpers.
+     *
+     * @var array<string, mixed>
+     */
+    protected array $valueCache = [];
+
     /** @var list<string> */
     protected array $encryptedKeys = [
         'cheerio_api_key',
@@ -41,20 +49,30 @@ class SettingsService
 
     /**
      * Get a setting value. Decrypts automatically when the setting is flagged encrypted.
+     * Results are memoized for the current request (shared SettingsService instance).
      */
     public function get(string $key, mixed $default = null): mixed
     {
+        if (array_key_exists($key, $this->valueCache)) {
+            $cached = $this->valueCache[$key];
+
+            return $cached === $this->cacheMissSentinel() ? $default : $cached;
+        }
+
         $row = $this->settings->where('key', $key)->first();
 
         if ($row === null) {
             if (method_exists($this->settings, 'getValue')) {
                 $value = $this->settings->getValue($key, $default);
                 if ($value !== $default && in_array($key, $this->encryptedKeys, true) && is_string($value)) {
-                    return $this->encryption->decryptIfNeeded($value);
+                    $value = $this->encryption->decryptIfNeeded($value);
                 }
+                $this->valueCache[$key] = $value === $default ? $this->cacheMissSentinel() : $value;
 
                 return $value;
             }
+
+            $this->valueCache[$key] = $this->cacheMissSentinel();
 
             return $default;
         }
@@ -65,18 +83,31 @@ class SettingsService
 
         if ($isEncrypted && is_string($value) && $value !== '') {
             try {
-                return $this->encryption->decryptIfNeeded($value);
+                $value = $this->encryption->decryptIfNeeded($value);
             } catch (RuntimeException $e) {
                 log_message('error', 'SettingsService::get decrypt failed for {key}: {msg}', [
                     'key' => $key,
                     'msg' => $e->getMessage(),
                 ]);
+                $this->valueCache[$key] = $this->cacheMissSentinel();
 
                 return $default;
             }
         }
 
+        $this->valueCache[$key] = $value;
+
         return $value;
+    }
+
+    /**
+     * Sentinel for "key missing" so we still short-circuit repeated misses.
+     */
+    protected function cacheMissSentinel(): object
+    {
+        static $sentinel;
+
+        return $sentinel ??= new \stdClass();
     }
 
     /**
@@ -93,8 +124,16 @@ class SettingsService
             $storeValue = $this->encryption->encryptIfNeeded($storeValue);
         }
 
+        // Drop cache for this key; next get() reloads (or we seed plaintext $value).
+        unset($this->valueCache[$key]);
+
         if (method_exists($this->settings, 'setValue')) {
-            return (bool) $this->settings->setValue($key, $storeValue, $group, $shouldEncrypt);
+            $ok = (bool) $this->settings->setValue($key, $storeValue, $group, $shouldEncrypt);
+            if ($ok) {
+                $this->valueCache[$key] = $value;
+            }
+
+            return $ok;
         }
 
         $existing = $this->settings->where('key', $key)->first();
@@ -106,10 +145,16 @@ class SettingsService
         ];
 
         if ($existing !== null) {
-            return (bool) $this->settings->update($existing['id'], $data);
+            $ok = (bool) $this->settings->update($existing['id'], $data);
+        } else {
+            $ok = (bool) $this->settings->insert($data);
         }
 
-        return (bool) $this->settings->insert($data);
+        if ($ok) {
+            $this->valueCache[$key] = $value;
+        }
+
+        return $ok;
     }
 
     public function getWhatsAppProvider(): string

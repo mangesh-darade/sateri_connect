@@ -78,15 +78,31 @@ class Messages extends BaseApiController
         try {
             $api    = service('whatsApp');
             $phone  = $api->normalizePhone((string) $contact['mobile']);
-            $result = match ($type) {
-                'template' => $api->sendTemplate(
-                    $phone,
+            if ($type === 'template') {
+                $guard = new \App\Libraries\WhatsAppTemplateSendGuard();
+                $guard->assertPhoneNumberId(isset($input['phone_number_id']) ? (string) $input['phone_number_id'] : null);
+                $guard->assertWabaId(isset($input['waba_id']) ? (string) $input['waba_id'] : null);
+                $tpl = $guard->resolveApprovedTemplate(
+                    isset($input['template_id']) ? (int) $input['template_id'] : null,
                     (string) ($input['template_name'] ?? $input['name'] ?? ''),
-                    (string) ($input['language'] ?? 'en'),
-                    is_array($input['components'] ?? null) ? $input['components'] : []
-                ),
-                default => $api->sendText($phone, (string) ($input['text'] ?? $input['content'] ?? '')),
-            };
+                    isset($input['language']) ? (string) $input['language'] : null
+                );
+                $components = is_array($input['components'] ?? null) ? $input['components'] : [];
+                if ($components === [] && is_array($input['variables'] ?? null)) {
+                    $components = $guard->buildBodyComponents($tpl, $input['variables']);
+                } elseif ($components === []) {
+                    // Validate variables even when components omitted (no vars required)
+                    $components = $guard->buildBodyComponents($tpl, []);
+                }
+                $result = $api->sendTemplate(
+                    $phone,
+                    (string) $tpl['name'],
+                    (string) ($tpl['language'] ?? 'en_US'),
+                    $components
+                );
+            } else {
+                $result = $api->sendText($phone, (string) ($input['text'] ?? $input['content'] ?? ''));
+            }
 
             $waId = $result['messages'][0]['id'] ?? null;
             $conversation = model(ConversationModel::class)->findOrCreateForContact($contactId);
@@ -171,14 +187,30 @@ class Messages extends BaseApiController
         try {
             $api   = service('whatsApp');
             $phone = $api->normalizePhone((string) $contact['mobile']);
-            $result = $type === 'template'
-                ? $api->sendTemplate(
-                    $phone,
+            if ($type === 'template') {
+                $guard = new \App\Libraries\WhatsAppTemplateSendGuard();
+                $guard->assertPhoneNumberId(isset($input['phone_number_id']) ? (string) $input['phone_number_id'] : null);
+                $guard->assertWabaId(isset($input['waba_id']) ? (string) $input['waba_id'] : null);
+                $tpl = $guard->resolveApprovedTemplate(
+                    isset($input['template_id']) ? (int) $input['template_id'] : null,
                     (string) ($input['template_name'] ?? $input['name'] ?? ''),
-                    (string) ($input['language'] ?? 'en'),
-                    is_array($input['components'] ?? null) ? $input['components'] : []
-                )
-                : $api->sendText($phone, (string) ($input['text'] ?? $input['content'] ?? ''));
+                    isset($input['language']) ? (string) $input['language'] : null
+                );
+                $components = is_array($input['components'] ?? null) ? $input['components'] : [];
+                if ($components === [] && is_array($input['variables'] ?? null)) {
+                    $components = $guard->buildBodyComponents($tpl, $input['variables']);
+                } elseif ($components === []) {
+                    $components = $guard->buildBodyComponents($tpl, []);
+                }
+                $result = $api->sendTemplate(
+                    $phone,
+                    (string) $tpl['name'],
+                    (string) ($tpl['language'] ?? 'en_US'),
+                    $components
+                );
+            } else {
+                $result = $api->sendText($phone, (string) ($input['text'] ?? $input['content'] ?? ''));
+            }
 
             $waId         = $result['messages'][0]['id'] ?? null;
             $conversation = model(ConversationModel::class)->findOrCreateForContact($contactId);

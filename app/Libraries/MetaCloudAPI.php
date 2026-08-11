@@ -22,7 +22,7 @@ class MetaCloudAPI
     protected string $accessToken = '';
     protected string $phoneNumberId = '';
     protected string $wabaId = '';
-    protected string $apiVersion = 'v21.0';
+    protected string $apiVersion = 'v25.0';
 
     public function __construct(?SettingsService $settings = null, ?WhatsAppConfig $config = null)
     {
@@ -38,7 +38,7 @@ class MetaCloudAPI
         $this->accessToken   = (string) ($meta['access_token'] ?? '');
         $this->phoneNumberId = (string) ($meta['phone_number_id'] ?? '');
         $this->wabaId        = (string) ($meta['waba_id'] ?? '');
-        $this->apiVersion    = (string) ($meta['api_version'] ?? 'v21.0') ?: 'v21.0';
+        $this->apiVersion    = (string) ($meta['api_version'] ?? $this->config->graphApiVersion ?? 'v25.0') ?: 'v25.0';
     }
 
     /**
@@ -144,12 +144,17 @@ class MetaCloudAPI
                     return $decoded;
                 }
 
+                $parsed     = MetaApiErrorMapper::parseDecoded($decoded);
                 $apiMessage = $this->extractApiError($decoded);
                 $lastError  = sprintf('HTTP %d: %s', $status, $apiMessage);
 
-                log_message('error', 'MetaCloudAPI error body: {body}', [
-                    'body' => mb_substr($body, 0, 4000),
-                ]);
+                MetaGraphLogger::log('graph.request.error', [
+                    'waba_id'          => $this->wabaId,
+                    'phone_number_id'  => $this->phoneNumberId,
+                    'meta_status'      => $status,
+                    'meta_error_code'  => $parsed['code'] ?? '',
+                    'detail'           => $method . ' ' . $endpoint . ' :: ' . mb_substr($apiMessage, 0, 400),
+                ], 'error');
 
                 if (in_array($status, [429, 500, 502, 503, 504], true) && $attempts <= $this->config->maxRetries) {
                     $delay = $this->config->retryDelaySeconds * (2 ** ($attempts - 1));
@@ -157,7 +162,8 @@ class MetaCloudAPI
                     continue;
                 }
 
-                throw new RuntimeException('Meta WhatsApp API error: ' . $lastError, $status);
+                $human = MetaApiErrorMapper::humanize($apiMessage, $status, $parsed['code'] ?? null);
+                throw new RuntimeException($human, $status);
             } catch (RuntimeException $e) {
                 throw $e;
             } catch (Throwable $e) {
@@ -216,7 +222,34 @@ class MetaCloudAPI
             $payload['template']['components'] = $components;
         }
 
-        return $this->sendMessage($to, $payload);
+        MetaGraphLogger::log('messages.template.send', [
+            'waba_id'         => $this->wabaId,
+            'phone_number_id' => $this->phoneNumberId,
+            'template_name'   => $templateName,
+            'detail'          => 'language=' . $lang,
+        ]);
+
+        try {
+            $result = $this->sendMessage($to, $payload);
+            MetaGraphLogger::log('messages.template.sent', [
+                'waba_id'         => $this->wabaId,
+                'phone_number_id' => $this->phoneNumberId,
+                'template_name'   => $templateName,
+                'meta_status'     => 200,
+            ]);
+
+            return $result;
+        } catch (Throwable $e) {
+            MetaGraphLogger::log('messages.template.error', [
+                'waba_id'         => $this->wabaId,
+                'phone_number_id' => $this->phoneNumberId,
+                'template_name'   => $templateName,
+                'meta_status'     => (string) $e->getCode(),
+                'detail'          => $e->getMessage(),
+            ], 'error');
+
+            throw $e;
+        }
     }
 
     /**
@@ -1553,6 +1586,14 @@ class MetaCloudAPI
                 : 'Needed for template sync (WhatsApp Business Account ID)',
         ];
 
+        $appId = trim((string) ($this->settings->getMetaConfig()['app_id'] ?? ''));
+        $checklist[] = [
+            'id'     => 'app_id',
+            'label'  => 'Meta App ID configured',
+            'ok'     => $appId !== '',
+            'detail' => $appId !== '' ? $appId : 'Save Meta App ID in Settings',
+        ];
+
         $info      = null;
         $apiOk     = false;
         $apiDetail = 'Skipped until token + Phone Number ID are set.';
@@ -1572,6 +1613,64 @@ class MetaCloudAPI
             'label'  => 'Graph API phone lookup',
             'ok'     => $apiOk,
             'detail' => $apiDetail,
+        ];
+
+        $templateCount    = 0;
+        $approvedCount    = 0;
+        $pendingCount     = 0;
+        $rejectedCount    = 0;
+        $templatesOk      = false;
+        $templatesDetail  = 'Skipped until WABA ID + token are set.';
+        $helloWorldExists = false;
+
+        if ($this->accessToken !== '' && $this->wabaId !== '') {
+            try {
+                $tplResult = $this->getTemplates($this->wabaId);
+                $rows      = is_array($tplResult['data'] ?? null) ? $tplResult['data'] : [];
+                $templatesOk   = true;
+                $templateCount = count($rows);
+                foreach ($rows as $row) {
+                    if (! is_array($row)) {
+                        continue;
+                    }
+                    $status = strtoupper((string) ($row['status'] ?? ''));
+                    if ($status === 'APPROVED') {
+                        $approvedCount++;
+                    } elseif (in_array($status, ['PENDING', 'IN_REVIEW', 'IN_PROGRESS'], true)) {
+                        $pendingCount++;
+                    } elseif ($status === 'REJECTED') {
+                        $rejectedCount++;
+                    }
+                    if (strtolower((string) ($row['name'] ?? '')) === 'hello_world') {
+                        $helloWorldExists = true;
+                    }
+                }
+                $templatesDetail = sprintf(
+                    'Templates: %d · Approved: %d · Pending: %d · Rejected: %d%s',
+                    $templateCount,
+                    $approvedCount,
+                    $pendingCount,
+                    $rejectedCount,
+                    $helloWorldExists ? ' · hello_world present on WABA' : ' · hello_world NOT on this WABA'
+                );
+            } catch (Throwable $e) {
+                $templatesDetail = MetaApiErrorMapper::humanize($e->getMessage(), (int) $e->getCode());
+            }
+        }
+
+        $checklist[] = [
+            'id'     => 'templates_api',
+            'label'  => 'WABA templates reachable',
+            'ok'     => $templatesOk,
+            'detail' => $templatesDetail,
+        ];
+        $checklist[] = [
+            'id'     => 'approved_templates',
+            'label'  => 'At least one APPROVED template',
+            'ok'     => $approvedCount > 0,
+            'detail' => $approvedCount > 0
+                ? sprintf('%d approved', $approvedCount)
+                : 'Sync Templates after Meta approves at least one template. Do not rely on Meta API Setup hello_world sample.',
         ];
 
         $webhookOk = false;
@@ -1631,18 +1730,33 @@ class MetaCloudAPI
 
         $message = $ok
             ? ('Meta Cloud API OK — ' . $apiDetail . ($webhookOk ? ' · webhook pinned' : '')
-                . ($fieldsOk ? ' · messages subscribed' : ''))
+                . ($fieldsOk ? ' · messages subscribed' : '')
+                . ($templatesOk ? ' · ' . $templatesDetail : ''))
             : (! $fieldsOk && is_array($fieldsDiag) && ! empty($fieldsDiag['error'])
                 ? (string) $fieldsDiag['error']
                 : $apiDetail);
 
         return [
-            'ok'             => $ok,
-            'provider'       => 'meta',
-            'message'        => $message,
-            'info'           => $info,
-            'checklist'      => $checklist,
-            'webhook_fields' => $fieldsDiag,
+            'ok'                  => $ok,
+            'provider'            => 'meta',
+            'message'             => $message,
+            'info'                => $info,
+            'checklist'           => $checklist,
+            'webhook_fields'      => $fieldsDiag,
+            'connection'          => [
+                'whatsapp'      => $apiOk ? 'Connected' : 'Not connected',
+                'waba'          => $this->wabaId !== '' ? 'Connected' : 'Not connected',
+                'phone_number'  => $this->phoneNumberId !== '' && $apiOk ? 'Connected' : 'Not connected',
+                'app_id'        => $appId,
+                'waba_id'       => $this->wabaId,
+                'phone_number_id' => $this->phoneNumberId,
+            ],
+            'templates_reachable' => $templatesOk,
+            'template_count'      => $templateCount,
+            'approved_templates'  => $approvedCount,
+            'pending_templates'   => $pendingCount,
+            'rejected_templates'  => $rejectedCount,
+            'hello_world_exists'  => $helloWorldExists,
         ];
     }
 
