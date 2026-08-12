@@ -361,8 +361,14 @@
                     + '</tr>'
                 );
             });
-            $('#importMapMeta').text((preview.filename || 'CSV') + ' · ' + (preview.row_count || 0) + ' row(s)');
+            $('#importMapMeta').text((preview.filename || 'file') + ' · ' + (preview.row_count || 0) + ' row(s)');
             $('#importSampleNote').text('Showing up to 5 sample rows for mapping hints.');
+            var $warn = $('#importMapWarning');
+            if (preview.warning) {
+                $warn.text(preview.warning).removeClass('d-none');
+            } else {
+                $warn.addClass('d-none').text('');
+            }
         }
 
         function collectMapping() {
@@ -375,9 +381,27 @@
             return mapping;
         }
 
+        function allowedImportFile(file) {
+            if (!file || !file.name) return false;
+            var name = String(file.name).toLowerCase();
+            return /\.csv$/i.test(name) || /\.xlsx$/i.test(name);
+        }
+
         $('#importFile').on('change', function () {
             var file = this.files && this.files[0];
             if (file) {
+                if (!allowedImportFile(file)) {
+                    APP.toast('Please choose a CSV or XLSX file.', 'error');
+                    this.value = '';
+                    $('#importFileName').text('Max size: 5 MB · up to 5,000 rows · .csv or .xlsx');
+                    return;
+                }
+                if (file.size > 5 * 1024 * 1024) {
+                    APP.toast('File exceeds 5MB limit.', 'error');
+                    this.value = '';
+                    $('#importFileName').text('Max size: 5 MB · up to 5,000 rows · .csv or .xlsx');
+                    return;
+                }
                 $('#importFileName').text(file.name + ' (' + Math.round(file.size / 1024) + ' KB)');
             }
         });
@@ -387,7 +411,15 @@
             var fileInput = document.getElementById('importFile');
             var file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
             if (!file) {
-                APP.toast('Please choose a CSV file.', 'error');
+                APP.toast('Please choose a CSV or XLSX file.', 'error');
+                return;
+            }
+            if (!allowedImportFile(file)) {
+                APP.toast('Please choose a CSV or XLSX file.', 'error');
+                return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                APP.toast('File exceeds 5MB limit.', 'error');
                 return;
             }
 
@@ -406,15 +438,18 @@
                 headers: csrfHeaders()
             }).done(function (res) {
                 if (!res || res.success === false) {
-                    APP.toast((res && res.message) || 'Could not read CSV.', 'error');
+                    APP.toast((res && res.message) || 'Could not read file.', 'error');
                     return;
                 }
                 preview = res.data || res;
                 renderMapping();
+                if (preview.warning) {
+                    APP.toast(preview.warning, 'warning');
+                }
                 $('#importStepUpload').addClass('d-none');
                 $('#importStepMap').removeClass('d-none');
             }).fail(function (xhr) {
-                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Could not read CSV.';
+                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Could not read file.';
                 APP.toast(msg, 'error');
             }).always(function () {
                 $btn.prop('disabled', false).html($btn.data('html') || 'Continue to mapping');
@@ -428,7 +463,7 @@
 
         $('#btnImportCommit').on('click', function () {
             if (!preview || !preview.token) {
-                APP.toast('Upload the CSV again.', 'error');
+                APP.toast('Upload the file again.', 'error');
                 return;
             }
             var mapping = collectMapping();
@@ -456,9 +491,11 @@
                     APP.toast((res && res.message) || 'Import failed.', 'error');
                     return;
                 }
-                APP.toast(res.message || 'Import complete.', 'success');
-                var redirect = (res.data && res.data.redirect) || (base() + '/contacts');
-                setTimeout(function () { window.location.href = redirect; }, 600);
+                var data = res.data || {};
+                var toastType = (data.errors && data.errors.length) ? 'warning' : 'success';
+                APP.toast(res.message || 'Import complete.', toastType);
+                var redirect = data.redirect || (base() + '/contacts');
+                setTimeout(function () { window.location.href = redirect; }, 900);
             }).fail(function (xhr) {
                 var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Import failed.';
                 APP.toast(msg, 'error');

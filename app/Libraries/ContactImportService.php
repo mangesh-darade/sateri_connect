@@ -6,15 +6,19 @@ namespace App\Libraries;
 
 use App\Models\ContactModel;
 use App\Models\TagModel;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Reader\Exception as ReaderException;
 use RuntimeException;
 
 /**
- * Multi-step contact CSV import: parse → map → commit.
+ * Multi-step contact CSV/XLSX import: parse → map → commit.
  */
 class ContactImportService
 {
     public const MAX_BYTES = 5 * 1024 * 1024;
     public const MAX_ROWS  = 5000;
+
+    private const ALLOWED_EXTENSIONS = ['csv', 'xlsx'];
 
     /**
      * Core / special destinations that are not custom_fields keys.
@@ -52,7 +56,7 @@ class ContactImportService
     }
 
     /**
-     * Suggest a destination for a CSV header.
+     * Suggest a destination for a spreadsheet header.
      */
     public function suggestDestination(string $header): string
     {
@@ -108,15 +112,34 @@ class ContactImportService
     }
 
     /**
+     * Detect allowed spreadsheet format from original filename.
+     *
+     * @throws RuntimeException
+     */
+    public function detectFormat(string $originalName): string
+    {
+        $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+        if (! in_array($ext, self::ALLOWED_EXTENSIONS, true)) {
+            throw new RuntimeException('Please upload a CSV or XLSX file.');
+        }
+
+        return $ext;
+    }
+
+    /**
      * Store upload and return preview payload for the mapping UI.
      *
      * @return array{
      *     token: string,
+     *     filename: string,
+     *     format: string,
      *     headers: list<string>,
      *     sample_rows: list<list<string>>,
      *     suggested_mapping: array<string,string>,
      *     destinations: list<array{value:string,label:string}>,
-     *     row_count: int
+     *     row_count: int,
+     *     truncated: bool,
+     *     warning: ?string
      * }
      */
     public function parseUpload(string $tempPath, string $originalName = 'import.csv'): array
@@ -125,44 +148,27 @@ class ContactImportService
             throw new RuntimeException('Unable to read uploaded file.');
         }
         if (filesize($tempPath) > self::MAX_BYTES) {
-            throw new RuntimeException('CSV exceeds 5MB limit.');
+            throw new RuntimeException('File exceeds 5MB limit.');
         }
 
-        $handle = fopen($tempPath, 'rb');
-        if ($handle === false) {
-            throw new RuntimeException('Unable to open uploaded file.');
+        $format = $this->detectFormat($originalName);
+        $parsed = $format === 'xlsx'
+            ? $this->readXlsx($tempPath)
+            : $this->readCsv($tempPath);
+
+        $headers    = $parsed['headers'];
+        $dataRows   = $parsed['rows'];
+        $totalRows  = count($dataRows);
+        $truncated = $totalRows > self::MAX_ROWS;
+        if ($truncated) {
+            $dataRows = array_slice($dataRows, 0, self::MAX_ROWS);
         }
 
-        $header = fgetcsv($handle, 0, ",", "\"", "\\");
-        if ($header === false || $header === [null] || $header === []) {
-            fclose($handle);
-            throw new RuntimeException('CSV is empty.');
+        if ($headers === []) {
+            throw new RuntimeException('File has no header row.');
         }
-
-        $headers = [];
-        foreach ($header as $i => $h) {
-            $label = trim((string) $h);
-            $headers[] = $label !== '' ? $label : ('Column_' . ($i + 1));
-        }
-
-        $sampleRows = [];
-        $rowCount   = 0;
-        while (($row = fgetcsv($handle, 0, ",", "\"", "\\")) !== false) {
-            if ($this->rowIsEmpty($row)) {
-                continue;
-            }
-            $rowCount++;
-            if (count($sampleRows) < 5) {
-                $sampleRows[] = array_map(static fn ($v) => (string) $v, $row);
-            }
-            if ($rowCount > self::MAX_ROWS) {
-                break;
-            }
-        }
-        fclose($handle);
-
-        if ($rowCount === 0) {
-            throw new RuntimeException('CSV has headers but no data rows.');
+        if ($dataRows === []) {
+            throw new RuntimeException('File has headers but no data rows.');
         }
 
         $dir = WRITEPATH . 'uploads/imports';
@@ -172,8 +178,8 @@ class ContactImportService
 
         $token    = bin2hex(random_bytes(16));
         $destPath = $dir . DIRECTORY_SEPARATOR . $token . '.csv';
-        if (! copy($tempPath, $destPath)) {
-            throw new RuntimeException('Unable to stage uploaded CSV.');
+        if (! $this->writeStagedCsv($destPath, $headers, $dataRows)) {
+            throw new RuntimeException('Unable to stage uploaded file.');
         }
 
         $suggested = [];
@@ -181,43 +187,51 @@ class ContactImportService
             $suggested[$h] = $this->suggestDestination($h);
         }
 
+        $sampleRows = array_slice($dataRows, 0, 5);
+        $warning    = $truncated
+            ? 'Only the first ' . self::MAX_ROWS . ' of ' . $totalRows . ' rows will be imported.'
+            : null;
+
         return [
             'token'             => $token,
             'filename'          => $originalName,
+            'format'            => $format,
             'headers'           => $headers,
             'sample_rows'       => $sampleRows,
             'suggested_mapping' => $suggested,
             'destinations'      => $this->destinations(),
-            'row_count'         => min($rowCount, self::MAX_ROWS),
+            'row_count'         => count($dataRows),
+            'truncated'         => $truncated,
+            'warning'           => $warning,
         ];
     }
 
     /**
      * @param array<string, string> $mapping header => destination
      *
-     * @return array{imported:int,skipped:int,updated:int,errors:list<string>,custom_fields_created:list<string>}
+     * @return array{imported:int,skipped:int,updated:int,errors:list<string>,custom_fields_created:list<string>,truncated:bool}
      */
     public function commit(string $token, array $mapping, ?int $tagId, bool $skipDuplicates): array
     {
         $token = preg_replace('/[^a-f0-9]/', '', strtolower($token)) ?? '';
         if (strlen($token) !== 32) {
-            throw new RuntimeException('Invalid import session. Upload the CSV again.');
+            throw new RuntimeException('Invalid import session. Upload the file again.');
         }
 
         $path = WRITEPATH . 'uploads/imports' . DIRECTORY_SEPARATOR . $token . '.csv';
         if (! is_file($path)) {
-            throw new RuntimeException('Import file expired. Upload the CSV again.');
+            throw new RuntimeException('Import file expired. Upload the file again.');
         }
 
         $handle = fopen($path, 'rb');
         if ($handle === false) {
-            throw new RuntimeException('Unable to read staged CSV.');
+            throw new RuntimeException('Unable to read staged import file.');
         }
 
-        $header = fgetcsv($handle, 0, ",", "\"", "\\");
+        $header = fgetcsv($handle, 0, ',', '"', '\\');
         if ($header === false) {
             fclose($handle);
-            throw new RuntimeException('Staged CSV is empty.');
+            throw new RuntimeException('Staged import file is empty.');
         }
 
         $headers = [];
@@ -239,14 +253,16 @@ class ContactImportService
         $updated  = 0;
         $errors   = [];
         $rowNum   = 0;
+        $truncated = false;
         $createdCustom = $resolved['new_custom_keys'];
 
-        while (($row = fgetcsv($handle, 0, ",", "\"", "\\")) !== false) {
+        while (($row = fgetcsv($handle, 0, ',', '"', '\\')) !== false) {
             if ($this->rowIsEmpty($row)) {
                 continue;
             }
             $rowNum++;
             if ($rowNum > self::MAX_ROWS) {
+                $truncated = true;
                 $skipped++;
                 break;
             }
@@ -255,6 +271,9 @@ class ContactImportService
             $mobile = normalize_phone((string) ($values['mobile'] ?? ''));
             if ($mobile === '') {
                 $skipped++;
+                if (count($errors) < 10) {
+                    $errors[] = 'Row ' . $rowNum . ': missing or invalid mobile.';
+                }
                 continue;
             }
 
@@ -340,7 +359,165 @@ class ContactImportService
             'skipped'               => $skipped,
             'errors'                => array_slice($errors, 0, 10),
             'custom_fields_created' => array_values(array_unique($createdCustom)),
+            'truncated'             => $truncated,
         ];
+    }
+
+    /**
+     * @return array{headers:list<string>,rows:list<list<string>>}
+     */
+    protected function readCsv(string $path): array
+    {
+        $handle = fopen($path, 'rb');
+        if ($handle === false) {
+            throw new RuntimeException('Unable to open uploaded CSV.');
+        }
+
+        // Strip UTF-8 BOM if present.
+        $bom = fread($handle, 3);
+        if ($bom !== "\xEF\xBB\xBF") {
+            rewind($handle);
+        }
+
+        $header = fgetcsv($handle, 0, ',', '"', '\\');
+        if ($header === false || $header === [null] || $header === []) {
+            fclose($handle);
+            throw new RuntimeException('CSV is empty.');
+        }
+
+        $headers = $this->normalizeHeaders($header);
+        $rows    = [];
+        while (($row = fgetcsv($handle, 0, ',', '"', '\\')) !== false) {
+            if ($this->rowIsEmpty($row)) {
+                continue;
+            }
+            $rows[] = $this->normalizeRow($row, count($headers));
+            if (count($rows) > self::MAX_ROWS) {
+                // Keep counting past the limit so preview can warn; stop reading huge files.
+                // Continue until one extra row, then break after loop check below.
+            }
+            if (count($rows) > self::MAX_ROWS + 50) {
+                break;
+            }
+        }
+        fclose($handle);
+
+        return ['headers' => $headers, 'rows' => $rows];
+    }
+
+    /**
+     * @return array{headers:list<string>,rows:list<list<string>>}
+     */
+    protected function readXlsx(string $path): array
+    {
+        try {
+            $reader = IOFactory::createReader('Xlsx');
+            $reader->setReadDataOnly(true);
+            $spreadsheet = $reader->load($path);
+        } catch (ReaderException $e) {
+            throw new RuntimeException('Unable to read XLSX file. ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            throw new RuntimeException('Unable to read XLSX file. Make sure it is a valid Excel workbook.');
+        }
+
+        $sheet = $spreadsheet->getActiveSheet();
+        $matrix = $sheet->toArray(null, true, true, false);
+        $spreadsheet->disconnectWorksheets();
+        unset($spreadsheet);
+
+        if ($matrix === []) {
+            throw new RuntimeException('XLSX is empty.');
+        }
+
+        $headerRow = array_shift($matrix);
+        if (! is_array($headerRow) || $this->rowIsEmpty($headerRow)) {
+            throw new RuntimeException('XLSX has no header row.');
+        }
+
+        $headers = $this->normalizeHeaders($headerRow);
+        $rows    = [];
+        foreach ($matrix as $row) {
+            if (! is_array($row) || $this->rowIsEmpty($row)) {
+                continue;
+            }
+            $rows[] = $this->normalizeRow($row, count($headers));
+            if (count($rows) > self::MAX_ROWS + 50) {
+                break;
+            }
+        }
+
+        return ['headers' => $headers, 'rows' => $rows];
+    }
+
+    /**
+     * @param list<mixed> $header
+     *
+     * @return list<string>
+     */
+    protected function normalizeHeaders(array $header): array
+    {
+        $headers = [];
+        foreach ($header as $i => $h) {
+            $label = trim((string) $h);
+            $headers[] = $label !== '' ? $label : ('Column_' . ($i + 1));
+        }
+
+        return $headers;
+    }
+
+    /**
+     * @param list<mixed> $row
+     *
+     * @return list<string>
+     */
+    protected function normalizeRow(array $row, int $columnCount): array
+    {
+        $out = [];
+        for ($i = 0; $i < $columnCount; $i++) {
+            $cell = $row[$i] ?? '';
+            if (is_float($cell) || is_int($cell)) {
+                // Avoid scientific notation for phone-like numbers.
+                if (is_float($cell) && floor($cell) === $cell) {
+                    $out[] = sprintf('%.0f', $cell);
+                } else {
+                    $out[] = (string) $cell;
+                }
+            } else {
+                $out[] = trim((string) $cell);
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param list<string>       $headers
+     * @param list<list<string>> $rows
+     */
+    protected function writeStagedCsv(string $path, array $headers, array $rows): bool
+    {
+        $handle = fopen($path, 'wb');
+        if ($handle === false) {
+            return false;
+        }
+
+        if (fputcsv($handle, $headers, ',', '"', '\\') === false) {
+            fclose($handle);
+
+            return false;
+        }
+
+        foreach ($rows as $row) {
+            if (fputcsv($handle, $row, ',', '"', '\\') === false) {
+                fclose($handle);
+
+                return false;
+            }
+        }
+
+        fclose($handle);
+
+        return true;
     }
 
     /**

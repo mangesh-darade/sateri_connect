@@ -13,7 +13,7 @@ use App\Models\TagModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
 /**
- * Contact management with DataTables, CSV import/export, tags, duplicates.
+ * Contact management with DataTables, CSV/XLSX import/export, tags, duplicates.
  */
 class Contacts extends BaseController
 {
@@ -480,19 +480,32 @@ class Contacts extends BaseController
 
         $file = $this->request->getFile('file') ?? $this->request->getFile('csv_file');
         if ($file === null || ! $file->isValid()) {
-            return $this->jsonResponse(false, null, 'Please upload a valid CSV file.', [], 422);
+            $error = $file !== null ? $file->getErrorString() : 'No file received.';
+
+            return $this->jsonResponse(false, null, 'Please upload a valid CSV or XLSX file. ' . $error, [], 422);
+        }
+
+        $clientName = (string) $file->getClientName();
+        $ext = strtolower(pathinfo($clientName, PATHINFO_EXTENSION));
+        if (! in_array($ext, ['csv', 'xlsx'], true)) {
+            return $this->jsonResponse(false, null, 'Please upload a CSV or XLSX file.', [], 422);
         }
 
         try {
             $preview = (new \App\Libraries\ContactImportService())->parseUpload(
                 $file->getTempName(),
-                $file->getClientName()
+                $clientName
             );
         } catch (\Throwable $e) {
             return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
         }
 
-        return $this->jsonResponse(true, $preview, 'Map CSV columns to CRM fields, then import.');
+        $msg = 'Map columns to CRM fields, then import.';
+        if (! empty($preview['warning'])) {
+            $msg = (string) $preview['warning'] . ' ' . $msg;
+        }
+
+        return $this->jsonResponse(true, $preview, $msg);
     }
 
     public function importCommit(): ResponseInterface
@@ -538,6 +551,9 @@ class Contacts extends BaseController
             $msg .= ", updated {$result['updated']}";
         }
         $msg .= ", skipped {$result['skipped']}.";
+        if (! empty($result['truncated'])) {
+            $msg .= ' Row limit reached (max ' . \App\Libraries\ContactImportService::MAX_ROWS . ').';
+        }
         if (($result['custom_fields_created'] ?? []) !== []) {
             $msg .= ' New CRM fields: ' . implode(', ', $result['custom_fields_created']) . '.';
         }
@@ -557,6 +573,11 @@ class Contacts extends BaseController
         }
 
         if ($this->request->getGet('sample') === '1') {
+            $format = strtolower((string) ($this->request->getGet('format') ?? 'csv'));
+            if ($format === 'xlsx') {
+                return $this->downloadSampleXlsx();
+            }
+
             $csv = "name,mobile,email,country,notes,tags\n"
                 . "Sample Contact,919999999999,sample@example.com,IN,Notes here,\"vip,lead\"\n";
 
@@ -679,6 +700,28 @@ class Contacts extends BaseController
             return redirect()->to('/contacts')->with('error', $e->getMessage());
         }
     }
+
+    protected function downloadSampleXlsx(): ResponseInterface
+    {
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->fromArray([
+            ['name', 'mobile', 'email', 'country', 'notes', 'tags'],
+            ['Sample Contact', '919999999999', 'sample@example.com', 'IN', 'Notes here', 'vip,lead'],
+        ], null, 'A1');
+
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        ob_start();
+        $writer->save('php://output');
+        $body = (string) ob_get_clean();
+        $spreadsheet->disconnectWorksheets();
+
+        return $this->response
+            ->setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            ->setHeader('Content-Disposition', 'attachment; filename="contacts_sample.xlsx"')
+            ->setBody($body);
+    }
+
     protected function parseCustomFields(): ?array
     {
         $keys   = $this->request->getPost('attr_key');

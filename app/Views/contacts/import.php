@@ -11,13 +11,13 @@
         <?= csrf_field() ?>
         <div class="card-body">
             <div class="alert border mb-3" style="background:var(--wa-mist);border-color:var(--border)!important;color:var(--wa-ink)">
-                Upload a CSV, choose an optional customer group, then map columns to CRM fields.
+                Upload a CSV or Excel (XLSX) file, choose an optional customer group, then map columns to CRM fields.
                 Unknown columns can be saved as new custom fields. Mobile is required.
             </div>
             <div class="mb-3">
-                <label class="form-label" for="importFile">CSV file</label>
-                <input type="file" name="file" id="importFile" class="form-control" accept=".csv,text/csv" required>
-                <div class="form-text" id="importFileName">Max size: 5 MB · up to 5,000 rows</div>
+                <label class="form-label" for="importFile">CSV or XLSX file</label>
+                <input type="file" name="file" id="importFile" class="form-control" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+                <div class="form-text" id="importFileName">Max size: 5 MB · up to 5,000 rows · .csv or .xlsx</div>
             </div>
             <div class="mb-3">
                 <label class="form-label" for="importGroupId">Customer group (optional)</label>
@@ -33,7 +33,10 @@
                 <input class="form-check-input" type="checkbox" name="skip_duplicates" value="1" id="skipDup" checked>
                 <label class="form-check-label" for="skipDup">Skip duplicate mobiles</label>
             </div>
-            <a href="<?= site_url('contacts/export?sample=1') ?>" class="btn btn-link btn-sm px-0"><i class="fas fa-download me-1"></i> Download sample CSV</a>
+            <div class="d-flex flex-wrap gap-3">
+                <a href="<?= site_url('contacts/export?sample=1') ?>" class="btn btn-link btn-sm px-0"><i class="fas fa-download me-1"></i> Sample CSV</a>
+                <a href="<?= site_url('contacts/export?sample=1&format=xlsx') ?>" class="btn btn-link btn-sm px-0"><i class="fas fa-file-excel me-1"></i> Sample XLSX</a>
+            </div>
         </div>
         <div class="card-footer d-flex gap-2">
             <button type="submit" class="btn btn-wa" id="btnImportContinue"><i class="fas fa-arrow-right me-1"></i> Continue to mapping</button>
@@ -44,18 +47,19 @@
 
 <div class="card d-none" id="importStepMap">
     <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-        <h3 class="card-title mb-0">Map CSV fields to CRM</h3>
+        <h3 class="card-title mb-0">Map columns to CRM</h3>
         <span class="small text-muted" id="importMapMeta"></span>
     </div>
     <div class="card-body">
+        <div class="alert alert-warning border d-none mb-3" id="importMapWarning"></div>
         <div class="alert alert-light border mb-3" id="importMapHint">
-            Match each CSV column to a CRM field. Choose <strong>Create new custom field</strong> for unknown columns — values are saved in contact custom fields.
+            Match each column to a CRM field. Choose <strong>Create new custom field</strong> for unknown columns — values are saved in contact custom fields.
         </div>
         <div class="table-responsive mb-3">
             <table class="table table-sm align-middle" id="importMappingTable">
                 <thead>
                     <tr>
-                        <th>CSV column</th>
+                        <th>File column</th>
                         <th>Sample</th>
                         <th>CRM field</th>
                     </tr>
