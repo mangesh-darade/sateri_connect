@@ -1,12 +1,33 @@
 <?= $this->extend('layouts/auth') ?>
 
 <?= $this->section('content') ?>
+<?php
+$selectedKey    = strtolower(trim((string) ($selectedTenantKey ?? '')));
+$selectedTenant = $selectedTenant ?? null;
+$isPlatform     = $selectedKey === '_platform';
+?>
+
 <div class="auth-card-head">
     <h2>Welcome back</h2>
-    <p class="auth-desc">Sign in to your automation console.</p>
+    <?php if ($isPlatform): ?>
+        <p class="auth-desc">
+            Platform super admin login
+            · <a href="<?= site_url('login') ?>">Back to login</a>
+        </p>
+    <?php elseif (is_array($selectedTenant)): ?>
+        <p class="auth-desc">
+            Signing in to
+            <strong><?= esc((string) ($selectedTenant['name'] ?? $selectedKey)) ?></strong>
+        </p>
+    <?php else: ?>
+        <p class="auth-desc">Sign in to your automation console.</p>
+    <?php endif; ?>
 </div>
 <form action="<?= site_url('login') ?>" method="post" autocomplete="on" class="auth-form">
     <?= csrf_field() ?>
+    <?php if ($selectedKey !== '' && $selectedKey !== '_email'): ?>
+        <input type="hidden" name="tenant_key" value="<?= esc($selectedKey) ?>">
+    <?php endif; ?>
     <div class="mb-3">
         <label class="form-label" for="email">Email</label>
         <div class="auth-field">
@@ -34,6 +55,15 @@
     <button type="submit" class="btn btn-wa auth-submit"><i class="fas fa-arrow-right-to-bracket me-1"></i> Sign in</button>
 </form>
 <div class="auth-links">
-    <a href="<?= site_url('signup') ?>">Create a new account</a>
+    <?php if ($isPlatform): ?>
+        <a href="<?= site_url('login') ?>">Back to login</a>
+    <?php else: ?>
+        <a href="<?= site_url('signup') ?>">Create a new account</a>
+        <div class="mt-2">
+            <a href="<?= site_url('login?tenant=_platform') ?>" class="text-muted small">
+                <i class="fas fa-shield-halved me-1"></i>Platform super admin
+            </a>
+        </div>
+    <?php endif; ?>
 </div>
 <?= $this->endSection() ?>

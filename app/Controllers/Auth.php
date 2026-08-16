@@ -23,15 +23,32 @@ class Auth extends BaseController
         if ($this->session->get('user_id')) {
             return redirect()->to('/dashboard');
         }
+        if ($this->session->get('platform_admin_id')) {
+            return redirect()->to('/platform/clients');
+        }
 
         if (strtolower($this->request->getMethod()) === 'post') {
             return $this->attemptLogin();
         }
 
+        // Normal email/password login. Optional: ?tenant=_platform or ?tenant={clientKey}.
+        $selectedKey    = strtolower(trim((string) ($this->request->getGet('tenant') ?? '')));
+        $selectedTenant = null;
+
+        if ($selectedKey !== '' && $selectedKey !== '_email' && $selectedKey !== '_platform'
+            && \App\Libraries\MasterTenantRepository::masterConfigured()) {
+            $selectedTenant = (new \App\Libraries\MasterTenantRepository())->findActiveTenant($selectedKey);
+            if ($selectedTenant === null) {
+                return redirect()->to('/login')->with('error', 'Client not found or inactive.');
+            }
+        }
+
         return view('auth/login', [
-            'pageTitle' => 'Login',
-            'csrfName'  => csrf_token(),
-            'csrfToken' => csrf_hash(),
+            'pageTitle'         => 'Login',
+            'csrfName'          => csrf_token(),
+            'csrfToken'         => csrf_hash(),
+            'selectedTenantKey' => $selectedKey,
+            'selectedTenant'    => $selectedTenant,
         ]);
     }
 
@@ -77,6 +94,57 @@ class Auth extends BaseController
 
         $email    = (string) $this->request->getPost('email');
         $password = (string) $this->request->getPost('password');
+        $postedTenant = strtolower(trim((string) $this->request->getPost('tenant_key')));
+
+        // Platform super admin (master.platform_admins) — manages all clients.
+        if (\App\Libraries\MasterTenantRepository::masterConfigured()) {
+            $platformAdmin = (new \App\Libraries\MasterTenantRepository())->findPlatformAdminByEmail($email);
+            if (
+                is_array($platformAdmin)
+                && strtolower((string) ($platformAdmin['status'] ?? '')) === 'active'
+                && password_verify($password, (string) ($platformAdmin['password'] ?? ''))
+            ) {
+                $this->clearAttempts($key);
+                $this->session->regenerate(true);
+                $this->session->set([
+                    'platform_admin_id'    => (int) ($platformAdmin['id'] ?? 0),
+                    'platform_admin_email' => (string) ($platformAdmin['email'] ?? $email),
+                    'platform_admin_name'  => (string) ($platformAdmin['name'] ?? 'Platform Super Admin'),
+                    'logged_in'            => true,
+                ]);
+                (new ActivityLogger())->log('login', 'platform', 'Platform super admin logged in', [
+                    'email' => $email,
+                ]);
+
+                return redirect()->to('/platform/clients')->with(
+                    'success',
+                    'Welcome, ' . ($platformAdmin['name'] ?? 'Platform Super Admin') . '!'
+                );
+            }
+        }
+
+        // Portal multi-client: prefer explicit client from list, else email → tenant index.
+        $tenantKey = null;
+        if (\App\Libraries\MasterTenantRepository::masterConfigured()) {
+            $repo = new \App\Libraries\MasterTenantRepository();
+            if ($postedTenant !== '') {
+                if ($repo->findActiveTenant($postedTenant) === null) {
+                    return redirect()->to('/login')->with('error', 'Client not found or inactive.');
+                }
+                $tenantKey = $postedTenant;
+            } else {
+                $tenantKey = $repo->findTenantKeyByEmail($email);
+            }
+
+            if ($tenantKey !== null) {
+                if (! (new \App\Libraries\TenantConnection())->apply($tenantKey, 'login')) {
+                    return redirect()->back()->withInput()->with(
+                        'error',
+                        'Unable to connect to your workspace. Contact support.'
+                    );
+                }
+            }
+        }
 
         $users = model(UserModel::class);
         $user  = $users->findByEmail($email);
@@ -101,7 +169,7 @@ class Auth extends BaseController
         }
 
         $this->clearAttempts($key);
-        $this->establishSession($user);
+        $this->establishSession($user, $tenantKey ?? \App\Libraries\TenantContext::get());
 
         $users->update((int) $user['id'], ['last_login' => date('Y-m-d H:i:s')]);
 
@@ -115,7 +183,7 @@ class Auth extends BaseController
     /**
      * @param array<string, mixed> $user
      */
-    protected function establishSession(array $user): void
+    protected function establishSession(array $user, ?string $tenantKey = null): void
     {
         $roleModel   = model(RoleModel::class);
         $role        = $roleModel->find((int) ($user['role_id'] ?? 0));
@@ -133,8 +201,10 @@ class Auth extends BaseController
             }
         }
 
+        $tenantKey = $tenantKey ?? \App\Libraries\TenantContext::get();
+
         $this->session->regenerate(true);
-        $this->session->set([
+        $sessionData = [
             'user_id'     => (int) $user['id'],
             'user_name'   => (string) ($user['name'] ?? ''),
             'user_email'  => (string) ($user['email'] ?? ''),
@@ -144,7 +214,11 @@ class Auth extends BaseController
             'role_slug'   => $role['slug'] ?? null,
             'permissions' => $permissions,
             'logged_in'   => true,
-        ]);
+        ];
+        if ($tenantKey !== null && $tenantKey !== '') {
+            $sessionData['tenant_key'] = strtolower($tenantKey);
+        }
+        $this->session->set($sessionData);
     }
 
     protected function attemptSignup(): ResponseInterface
@@ -237,7 +311,7 @@ class Auth extends BaseController
 
     public function logout(): ResponseInterface
     {
-        if ($this->session->get('user_id')) {
+        if ($this->session->get('user_id') || $this->session->get('platform_admin_id')) {
             (new ActivityLogger())->log('logout', 'auth', 'User logged out');
         }
 

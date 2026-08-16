@@ -25,6 +25,8 @@ class AuthFilter implements FilterInterface
             return redirect()->to('/login')->with('error', 'Please log in to continue.');
         }
 
+        \App\Libraries\TenantResolver::ensureFromSession();
+
         return null;
     }
 
