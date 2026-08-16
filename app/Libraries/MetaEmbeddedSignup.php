@@ -28,31 +28,89 @@ class MetaEmbeddedSignup
     }
 
     /**
+     * Resolve Tech Provider launch credentials:
+     * tenant settings → platform_settings → env.
+     *
+     * @return array{app_id: string, config_id: string, app_secret: string, api_version: string, ready: bool, managed: bool, source: string}
+     */
+    public function resolveLaunchCredentials(): array
+    {
+        $meta = $this->settings->getMetaConfig();
+        $appId = trim((string) ($meta['app_id'] ?? ''));
+        $configId = trim((string) ($meta['embedded_config_id'] ?? ''));
+        $appSecret = trim((string) ($meta['app_secret'] ?? ''));
+        $apiVersion = trim((string) ($meta['api_version'] ?? $this->config->graphApiVersion ?? 'v25.0')) ?: 'v25.0';
+        $source = 'tenant';
+        $managed = false;
+
+        $tenantReady = $appId !== '' && $configId !== '' && $appSecret !== '';
+        if (! $tenantReady) {
+            try {
+                $platform = (new MasterTenantRepository())->getPlatformMetaTechProvider();
+            } catch (\Throwable $e) {
+                $platform = [
+                    'app_id' => '', 'config_id' => '', 'app_secret' => '',
+                    'api_version' => $apiVersion, 'ready' => false, 'source' => 'none',
+                ];
+            }
+
+            $fromPlatform = false;
+            if ($appId === '' && trim((string) ($platform['app_id'] ?? '')) !== '') {
+                $appId = trim((string) $platform['app_id']);
+                $fromPlatform = true;
+            }
+            if ($configId === '' && trim((string) ($platform['config_id'] ?? '')) !== '') {
+                $configId = trim((string) $platform['config_id']);
+                $fromPlatform = true;
+            }
+            if ($appSecret === '' && trim((string) ($platform['app_secret'] ?? '')) !== '') {
+                $appSecret = trim((string) $platform['app_secret']);
+                $fromPlatform = true;
+            }
+            if (! empty($platform['api_version'])) {
+                $apiVersion = trim((string) $platform['api_version']) ?: $apiVersion;
+            }
+            if ($fromPlatform) {
+                $managed = true;
+                $source = (string) ($platform['source'] ?? 'platform');
+            }
+        }
+
+        return [
+            'app_id'      => $appId,
+            'config_id'   => $configId,
+            'app_secret'  => $appSecret,
+            'api_version' => $apiVersion,
+            'ready'       => $appId !== '' && $configId !== '' && $appSecret !== '',
+            'managed'     => $managed,
+            'source'      => $source,
+        ];
+    }
+
+    /**
      * Whether Settings has enough Meta app credentials to launch Embedded Signup.
      */
     public function isLaunchReady(): bool
     {
-        $meta = $this->settings->getMetaConfig();
-
-        return trim((string) ($meta['app_id'] ?? '')) !== ''
-            && trim((string) ($meta['embedded_config_id'] ?? '')) !== ''
-            && trim((string) ($meta['app_secret'] ?? '')) !== '';
+        return $this->resolveLaunchCredentials()['ready'];
     }
 
     /**
      * Public values safe to expose to the Settings page for FB.init / FB.login.
      *
-     * @return array{app_id: string, config_id: string, api_version: string, ready: bool}
+     * @return array{app_id: string, config_id: string, api_version: string, ready: bool, managed: bool, source: string}
      */
     public function clientConfig(): array
     {
-        $meta = $this->settings->getMetaConfig();
+        $creds = $this->resolveLaunchCredentials();
 
         return [
-            'app_id'      => (string) ($meta['app_id'] ?? ''),
-            'config_id'   => (string) ($meta['embedded_config_id'] ?? ''),
-            'api_version' => (string) ($meta['api_version'] ?? $this->config->graphApiVersion ?? 'v25.0') ?: 'v25.0',
-            'ready'       => $this->isLaunchReady(),
+            'app_id'      => $creds['app_id'],
+            'config_id'   => $creds['config_id'],
+            'api_version' => $creds['api_version'],
+            'ready'       => $creds['ready'],
+            'managed'     => $creds['managed'],
+            'source'      => $creds['source'],
         ];
     }
 
@@ -135,12 +193,22 @@ class MetaEmbeddedSignup
 
         $displayPhone = '';
         $verifiedName = '';
+        $profilePic   = '';
         try {
-            $info = (new MetaCloudAPI($this->settings))->getPhoneNumberInfo();
-            $displayPhone = (string) ($info['display_phone_number'] ?? '');
-            $verifiedName = (string) ($info['verified_name'] ?? '');
+            $identity = (new WhatsAppIdentityService($this->settings))->refreshFromMeta(true);
+            $displayPhone = (string) ($identity['phone'] ?? '');
+            $verifiedName = (string) ($identity['display_name'] ?? '');
+            $profilePic   = (string) ($identity['profile_picture_url'] ?? '');
         } catch (\Throwable $e) {
-            $warnings[] = 'Phone info: ' . $e->getMessage();
+            $warnings[] = 'Identity refresh: ' . $e->getMessage();
+            try {
+                $api  = new MetaCloudAPI($this->settings);
+                $info = $api->getPhoneNumberInfo();
+                $displayPhone = (string) ($info['display_phone'] ?? '');
+                $verifiedName = (string) ($info['verified_name'] ?? '');
+            } catch (\Throwable $e2) {
+                $warnings[] = 'Phone info: ' . $e2->getMessage();
+            }
         }
 
         $templateSummary  = null;
@@ -182,6 +250,7 @@ class MetaEmbeddedSignup
             'business_id'       => $businessId,
             'display_phone'     => $displayPhone,
             'verified_name'     => $verifiedName,
+            'profile_picture_url' => $profilePic,
             'token_type'        => (string) ($tokenResult['token_type'] ?? 'bearer'),
             'registered'        => is_array($register) && ! empty($register['success']),
             'webhook'           => $subscribe,
@@ -198,14 +267,15 @@ class MetaEmbeddedSignup
      */
     public function exchangeCodeForToken(string $code): array
     {
+        $creds      = $this->resolveLaunchCredentials();
+        $appId      = $creds['app_id'];
+        $appSecret  = $creds['app_secret'];
+        $apiVersion = $creds['api_version'];
         $meta       = $this->settings->getMetaConfig();
-        $appId      = trim((string) ($meta['app_id'] ?? ''));
-        $appSecret  = trim((string) ($meta['app_secret'] ?? ''));
-        $apiVersion = (string) ($meta['api_version'] ?? $this->config->graphApiVersion ?? 'v25.0') ?: 'v25.0';
 
         if ($appId === '' || $appSecret === '') {
             throw new RuntimeException(
-                'Save Meta App ID and App Secret in Settings before Connect WhatsApp.'
+                'Meta Tech Provider App ID / App Secret missing. Ask platform admin to save Embedded Signup credentials.'
             );
         }
 

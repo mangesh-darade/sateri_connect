@@ -65,10 +65,32 @@ abstract class BaseController extends Controller
         $data['csrfToken']    = csrf_hash();
         $data['csrfName']     = csrf_token();
 
+        if (! isset($data['waAccount'])) {
+            try {
+                $identitySvc = new \App\Libraries\WhatsAppIdentityService();
+                $identity    = $identitySvc->getIdentity();
+                $data['waAccount'] = $identity;
+                $data['waIdentityNeedsRefresh'] = ! empty($identity['needs_refresh']);
+            } catch (\Throwable $e) {
+                $data['waAccount'] = [
+                    'provider'            => 'cheerio',
+                    'display_name'        => '',
+                    'phone'               => '',
+                    'profile_picture_url' => '',
+                    'connected'           => false,
+                    'needs_refresh'       => false,
+                ];
+                $data['waIdentityNeedsRefresh'] = false;
+            }
+        } else {
+            $data['waIdentityNeedsRefresh'] = $data['waIdentityNeedsRefresh'] ?? false;
+        }
+
         if (! isset($data['notifications'])) {
             $uid = (int) ($this->currentUser['id'] ?? 0);
+            $notifModel = model(\App\Models\NotificationModel::class);
             $data['notifications'] = $uid > 0
-                ? model(\App\Models\NotificationModel::class)->getUnreadForUser($uid, 12)
+                ? $notifModel->enrichForUi($notifModel->getUnreadForUser($uid, 12))
                 : [];
         }
         if (! isset($data['unread_notifications'])) {

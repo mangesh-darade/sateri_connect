@@ -55,7 +55,6 @@ body.layout-fixed .main-sidebar.elint-sidebar > .sidebar {
     overflow: hidden !important;
     padding-bottom: 0 !important;
 }
-.elint-sidebar .elint-user-strip,
 .elint-sidebar .elint-menu-search,
 .elint-sidebar .sidebar-footer-links {
     flex: 0 0 auto !important;
@@ -83,88 +82,81 @@ body.layout-fixed .main-sidebar.elint-sidebar > .sidebar {
     }
 }
 
-/* Brand */
+/* Brand — shop identity only (user lives in topbar) */
 .elint-brand.brand-link {
-    height: 58px !important;
-    min-height: 58px !important;
+    height: var(--header-h, 58px) !important;
+    min-height: var(--header-h, 58px) !important;
     display: flex !important;
     align-items: center !important;
     justify-content: flex-start !important;
-    gap: 10px;
-    padding: 0 16px !important;
+    gap: 11px;
+    padding: 0 14px !important;
     border-bottom: 1px solid var(--elint-border) !important;
-    background: linear-gradient(180deg, #faf7ff 0%, #fff 70%) !important;
+    background:
+        linear-gradient(180deg, #faf8ff 0%, #ffffff 72%) !important;
+}
+.elint-brand.elint-workspace {
+    text-decoration: none !important;
+    color: inherit !important;
 }
 .elint-brand-mark {
-    width: 30px;
-    height: 30px;
-    border-radius: 8px;
-    background: linear-gradient(135deg, #8e53f7, #4b3786);
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    background: linear-gradient(145deg, #8e53f7 0%, #5b2fd6 100%);
     color: #fff;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     font-weight: 700;
-    font-size: 13px;
+    font-size: 14px;
+    flex: 0 0 auto;
+    box-shadow: 0 4px 10px rgba(91, 47, 214, 0.22);
+    letter-spacing: -0.02em;
 }
-.elint-brand-copy { min-width: 0; line-height: 1.15; }
+.elint-brand-copy {
+    min-width: 0;
+    flex: 1 1 auto;
+    line-height: 1.15;
+}
 .elint-brand .brand-text {
     font-family: var(--elint-sidebar-font) !important;
     font-weight: 700 !important;
-    font-size: 16px !important;
+    font-size: 14.5px !important;
     color: var(--elint-text) !important;
     margin: 0 !important;
     opacity: 1 !important;
+    display: block !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: -0.02em;
+    text-transform: none !important;
 }
 .elint-brand .brand-sub {
-    font-size: 11px !important;
-    font-weight: 500 !important;
+    font-size: 10.5px !important;
+    font-weight: 600 !important;
     color: var(--elint-muted) !important;
-    margin: 1px 0 0 !important;
+    margin: 2px 0 0 !important;
     display: block !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-transform: uppercase !important;
+    letter-spacing: 0.06em !important;
 }
 .elint-brand.has-logo-only {
-    justify-content: center !important;
+    justify-content: flex-start !important;
 }
 .elint-brand.has-logo-only .brand-logo-img {
-    max-height: 34px !important;
-    height: 34px !important;
+    max-height: 30px !important;
+    height: 30px !important;
     width: auto !important;
+    flex: 0 0 auto;
 }
 
-/* User strip (not a card) */
-.elint-user-strip {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 0;
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--elint-border);
-    background: #FAFAFA;
-}
-.elint-user-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    object-fit: cover;
-    border: 1px solid var(--elint-border);
-}
-.elint-user-meta { min-width: 0; flex: 1; }
-.elint-user-name {
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--elint-text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.elint-user-mail {
-    font-size: 11px;
-    color: var(--elint-muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
+/* Legacy user strip removed */
+.elint-user-strip { display: none !important; }
 .elint-user-chip {
     flex: 0 0 auto;
     font-size: 10px;
@@ -442,8 +434,6 @@ body.layout-fixed .main-sidebar.elint-sidebar > .sidebar {
 
 /* Collapse */
 body.sidebar-mini.sidebar-collapse .elint-sidebar .elint-brand-copy,
-body.sidebar-mini.sidebar-collapse .elint-sidebar .elint-user-meta,
-body.sidebar-mini.sidebar-collapse .elint-sidebar .elint-user-chip,
 body.sidebar-mini.sidebar-collapse .elint-sidebar .elint-menu-search,
 body.sidebar-mini.sidebar-collapse .elint-sidebar .app-sidebar-group-title,
 body.sidebar-mini.sidebar-collapse .elint-sidebar .nav-link p,
@@ -452,9 +442,9 @@ body.sidebar-mini.sidebar-collapse .elint-sidebar .app-sidebar-tree,
 body.sidebar-mini.sidebar-collapse .elint-sidebar .elint-menu-badge {
     display: none !important;
 }
-body.sidebar-mini.sidebar-collapse .elint-sidebar .elint-user-strip {
-    justify-content: center;
-    padding: 10px 0;
+body.sidebar-mini.sidebar-collapse .elint-sidebar .elint-brand.elint-workspace {
+    justify-content: center !important;
+    padding: 0 !important;
 }
 body.sidebar-mini.sidebar-collapse .elint-sidebar .nav-sidebar > .nav-item > .nav-link,
 body.sidebar-mini.sidebar-collapse .elint-sidebar .sidebar-footer-links .nav-link {

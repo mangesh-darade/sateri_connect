@@ -506,8 +506,8 @@
         timer: null,
         lastId: 0,
         knownIds: {},
-        pollMsVisible: 4000,
-        pollMsHidden: 12000,
+        pollMsVisible: 2500,
+        pollMsHidden: 8000,
         titleBase: document.title,
         flashTimer: null,
         soundReady: false
@@ -517,11 +517,30 @@
         return $('<div>').text(str == null ? '' : String(str)).html();
     }
 
-    function notifIconClass(type) {
-        type = (type || 'info').toLowerCase();
-        if (type === 'error') return 'exclamation-circle text-danger';
-        if (type === 'chat') return 'comment text-success';
-        return 'info-circle text-primary';
+    function notifDisplay(n) {
+        n = n || {};
+        return {
+            id: parseInt(n.id, 10) || 0,
+            title: n.display_title || n.contact_name || n.title || 'Notification',
+            phone: n.display_subtitle || n.contact_phone || '',
+            body: n.display_body || n.message || '',
+            link: n.link || '#',
+            initials: n.avatar_initials || 'N',
+            color: n.avatar_color || '#7c3aed',
+            created: n.created_at || '',
+            type: (n.type || 'info').toLowerCase()
+        };
+    }
+
+    function notifRelativeTime(raw) {
+        if (!raw) return '';
+        var t = Date.parse(String(raw).replace(' ', 'T'));
+        if (!t) return APP.formatDateTime ? APP.formatDateTime(raw) : '';
+        var sec = Math.max(0, Math.floor((Date.now() - t) / 1000));
+        if (sec < 45) return 'Just now';
+        if (sec < 3600) return Math.floor(sec / 60) + 'm';
+        if (sec < 86400) return Math.floor(sec / 3600) + 'h';
+        return APP.formatDateTime ? APP.formatDateTime(raw) : '';
     }
 
     function storageKey(suffix) {
@@ -558,20 +577,30 @@
         var $list = $('#navNotifList');
         if (!$list.length) return;
         if (!Array.isArray(items) || !items.length) {
-            $list.html('<span class="dropdown-item text-muted nav-notif-empty">No new notifications</span><div class="dropdown-divider"></div>');
+            $list.html(
+                '<div class="notif-empty nav-notif-empty">' +
+                '<i class="far fa-bell-slash"></i>' +
+                '<div class="notif-empty-title">No new notifications</div>' +
+                '<div class="notif-empty-sub">New WhatsApp replies will appear here live.</div>' +
+                '</div>'
+            );
             return;
         }
         var html = '';
-        items.slice(0, 8).forEach(function (n) {
-            var id = parseInt(n.id, 10) || 0;
+        items.slice(0, 10).forEach(function (raw) {
+            var n = notifDisplay(raw);
             html +=
-                '<a href="' + notifEsc(n.link || '#') + '" class="dropdown-item nav-notif-item" data-id="' + id + '">' +
-                '<i class="fas fa-' + notifIconClass(n.type) + ' me-2"></i>' +
-                notifEsc(n.title || 'Notification') +
-                (n.message ? ('<div class="small text-muted text-truncate" style="max-width:16rem">' + notifEsc(n.message) + '</div>') : '') +
-                '<span class="float-end text-muted text-sm">' + notifEsc(APP.formatDateTime(n.created_at || '')) + '</span>' +
-                '</a><div class="dropdown-divider"></div>';
-            if (id > 0) LiveNotif.knownIds[id] = true;
+                '<a href="' + notifEsc(n.link) + '" class="notif-item nav-notif-item" data-id="' + n.id + '">' +
+                '<span class="notif-avatar" style="background:' + notifEsc(n.color) + '">' + notifEsc(n.initials) + '</span>' +
+                '<span class="notif-item-body">' +
+                '<span class="notif-item-top">' +
+                '<span class="notif-item-name">' + notifEsc(n.title) + '</span>' +
+                '<span class="notif-item-time">' + notifEsc(notifRelativeTime(n.created)) + '</span>' +
+                '</span>' +
+                (n.phone ? ('<span class="notif-item-phone">' + notifEsc(n.phone) + '</span>') : '') +
+                (n.body ? ('<span class="notif-item-msg">' + notifEsc(n.body) + '</span>') : '') +
+                '</span></a>';
+            if (n.id > 0) LiveNotif.knownIds[n.id] = true;
         });
         $list.html(html);
     };
@@ -580,15 +609,19 @@
         count = parseInt(count, 10) || 0;
         var $badge = $('#navNotifBadge');
         var $header = $('#navNotifHeader');
+        var $mark = $('#navNotifMarkAll');
         if ($badge.length) {
             if (count > 0) {
-                $badge.text(String(count)).removeClass('d-none');
+                $badge.text(count > 99 ? '99+' : String(count)).removeClass('d-none');
             } else {
-                $badge.text('0').addClass('d-none');
+                $badge.text('0').addClass('d-none').removeClass('is-live');
             }
         }
         if ($header.length) {
-            $header.text(count + ' Notification' + (count === 1 ? '' : 's'));
+            $header.text(count > 0 ? (count + ' unread') : "You're all caught up");
+        }
+        if ($mark.length) {
+            $mark.prop('disabled', count <= 0);
         }
         if (count > 0) {
             document.title = '(' + count + ') ' + LiveNotif.titleBase;
@@ -597,6 +630,15 @@
             LiveNotif.stopTitleFlash();
         }
         LiveNotif.setInboxBadges(count);
+    };
+
+    LiveNotif.pulseBadge = function () {
+        var $badge = $('#navNotifBadge');
+        if (!$badge.length) return;
+        $badge.removeClass('is-live');
+        // force reflow so animation can replay
+        void $badge[0].offsetWidth;
+        $badge.addClass('is-live');
     };
 
     /** Sidebar Team Inbox + mobile Inbox badge (no page refresh). */
@@ -685,7 +727,7 @@
         if (Notification.permission === 'granted') {
             $btn.text('Browser alerts on').prop('disabled', true);
         } else if (Notification.permission === 'denied') {
-            $btn.text('Browser alerts blocked — allow in browser settings').prop('disabled', true);
+            $btn.text('Alerts blocked in browser').prop('disabled', true);
         } else {
             $btn.text('Enable browser alerts').prop('disabled', false);
         }
@@ -711,30 +753,57 @@
 
     LiveNotif.showBrowser = function (note) {
         if (!LiveNotif.browserAllowed()) return;
-        // Prefer when tab is in background; still allow soft toast when focused
-        var title = note.title || (APP.appName || 'Notification');
-        var body = note.message || '';
-        var n;
+        var n = notifDisplay(note);
+        var body = [n.phone, n.body].filter(Boolean).join(' · ');
+        var desktop;
         try {
-            n = new Notification(title, {
-                body: body,
+            desktop = new Notification(n.title, {
+                body: body || 'New message',
                 icon: APP.favicon || undefined,
-                tag: 'whstapp-n-' + (note.id || Date.now()),
+                tag: 'whstapp-n-' + (n.id || Date.now()),
                 renotify: true
             });
         } catch (e) {
             return;
         }
-        n.onclick = function () {
+        desktop.onclick = function () {
             window.focus();
-            if (note.link) {
-                window.location.href = note.link;
+            if (n.link && n.link !== '#') {
+                window.location.href = n.link;
             }
-            try { n.close(); } catch (e2) { /* ignore */ }
+            try { desktop.close(); } catch (e2) { /* ignore */ }
         };
         setTimeout(function () {
-            try { n.close(); } catch (e3) { /* ignore */ }
+            try { desktop.close(); } catch (e3) { /* ignore */ }
         }, 8000);
+    };
+
+    LiveNotif.showLiveBanner = function (note) {
+        var $stack = $('#notifLiveStack');
+        if (!$stack.length) return;
+        var n = notifDisplay(note);
+        var $card = $(
+            '<div class="notif-live-card" role="status">' +
+            '<span class="notif-avatar" style="background:' + notifEsc(n.color) + '">' + notifEsc(n.initials) + '</span>' +
+            '<div class="notif-live-copy">' +
+            '<div class="notif-live-name">' + notifEsc(n.title) + '</div>' +
+            (n.phone ? ('<div class="notif-live-phone">' + notifEsc(n.phone) + '</div>') : '') +
+            (n.body ? ('<div class="notif-live-msg">' + notifEsc(n.body) + '</div>') : '') +
+            '<div class="notif-live-meta"><i class="fab fa-whatsapp"></i> New message</div>' +
+            '</div></div>'
+        );
+        $card.on('click', function () {
+            if (n.link && n.link !== '#') {
+                window.location.href = n.link;
+            }
+        });
+        $stack.prepend($card);
+        setTimeout(function () {
+            $card.addClass('is-out');
+            setTimeout(function () { $card.remove(); }, 220);
+        }, 5200);
+        // Keep stack short
+        $stack.children('.notif-live-card').slice(3).remove();
     };
 
     LiveNotif.flashTitle = function (preview) {
@@ -769,14 +838,14 @@
 
         reallyNew.forEach(function (n) {
             LiveNotif.showBrowser(n);
+            LiveNotif.showLiveBanner(n);
         });
 
-        var last = reallyNew[reallyNew.length - 1];
+        var last = notifDisplay(reallyNew[reallyNew.length - 1]);
         LiveNotif.playBeep();
+        LiveNotif.pulseBadge();
         if (document.hidden) {
             LiveNotif.flashTitle(last.title || 'New notification');
-        } else if (window.Swal) {
-            APP.toast(last.title || 'New notification', 'info');
         }
     };
 
@@ -788,6 +857,13 @@
         }).done(function (res) {
             var data = (res && res.data) ? res.data : res;
             if (!data) return;
+            if (data.poll_hint_ms) {
+                var hint = parseInt(data.poll_hint_ms, 10) || 0;
+                if (hint >= 1500 && hint <= 10000 && hint !== LiveNotif.pollMsVisible) {
+                    LiveNotif.pollMsVisible = hint;
+                    if (!document.hidden) LiveNotif.schedule();
+                }
+            }
             LiveNotif.setBadge(data.unread_count || 0);
             if (Array.isArray(data.items)) {
                 LiveNotif.renderList(data.items);
@@ -849,11 +925,10 @@
             var $item = $(this);
             if (id > 0) {
                 // Optimistic: drop count immediately (no refresh)
-                var cur = parseInt($('#navNotifBadge').text(), 10) || 0;
+                var cur = parseInt(String($('#navNotifBadge').text()).replace('+', ''), 10) || 0;
                 if (!$('#navNotifBadge').hasClass('d-none') && cur > 0) {
                     LiveNotif.setBadge(cur - 1);
                 }
-                $item.next('.dropdown-divider').remove();
                 $item.remove();
                 if (!$('#navNotifList .nav-notif-item').length) {
                     LiveNotif.renderList([]);
@@ -920,9 +995,57 @@
         $wrap.data('clock-timer', setInterval(tick, 1000));
     }
 
+    function applyWaIdentity(identity) {
+        if (!identity || typeof identity !== 'object') return;
+        var name = String(identity.display_name || identity.verified_name || '').trim();
+        var phone = String(identity.phone || identity.display_phone || '').trim();
+        var pic = String(identity.profile_picture_url || '').trim();
+
+        if (name) {
+            $('.js-wa-name').text(name);
+            $('.js-wa-avatar').attr('alt', name);
+        }
+        if (phone) {
+            $('.js-wa-phone').text(phone);
+            $('.js-wa-phone-row').removeClass('d-none');
+        }
+        if (pic) {
+            $('.js-wa-avatar').attr('src', pic);
+        }
+        APP.waAccount = Object.assign({}, APP.waAccount || {}, identity, {
+            display_name: name || (APP.waAccount && APP.waAccount.display_name) || '',
+            phone: phone || (APP.waAccount && APP.waAccount.phone) || '',
+            profile_picture_url: pic || (APP.waAccount && APP.waAccount.profile_picture_url) || ''
+        });
+    }
+
+    function refreshWaIdentity(force) {
+        if (String(APP.whatsappProvider || '') !== 'meta' && !force) return;
+        APP.get((APP.baseUrl || '') + '/wa-identity/refresh', { force: force ? 1 : 0 })
+            .done(function (res) {
+                var data = (res && res.data) ? res.data : res;
+                if (!data) return;
+                applyWaIdentity(data);
+                APP.waIdentityNeedsRefresh = false;
+            })
+            .fail(function () {
+                // Keep cached chrome; Settings → Test Meta can repair.
+            });
+    }
+
+    function refreshWaIdentityIfNeeded() {
+        if (String(APP.whatsappProvider || '') !== 'meta') return;
+        if (!APP.waIdentityNeedsRefresh && APP.waAccount && APP.waAccount.profile_picture_url) return;
+        refreshWaIdentity(false);
+    }
+
+    APP.applyWaIdentity = applyWaIdentity;
+    APP.refreshWaIdentity = refreshWaIdentity;
+
     $(function () {
         initNavTimezoneClock();
         LiveNotif.start();
+        refreshWaIdentityIfNeeded();
 
         function refreshLucideIcons() {
             if (window.lucide && typeof window.lucide.createIcons === 'function') {

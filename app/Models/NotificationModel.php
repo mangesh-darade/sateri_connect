@@ -193,4 +193,103 @@ class NotificationModel extends Model
 
         return $n;
     }
+
+    /**
+     * Attach contact display fields for mobile-style notification UI.
+     *
+     * @param list<array<string, mixed>> $rows
+     * @return list<array<string, mixed>>
+     */
+    public function enrichForUi(array $rows): array
+    {
+        if ($rows === []) {
+            return [];
+        }
+
+        $contactIds = [];
+        foreach ($rows as $row) {
+            $cid = $this->contactIdFromLink((string) ($row['link'] ?? ''));
+            if ($cid > 0) {
+                $contactIds[$cid] = $cid;
+            }
+        }
+
+        $contacts = [];
+        if ($contactIds !== []) {
+            try {
+                $found = model(ContactModel::class)
+                    ->select('id, name, mobile, external_id, channel')
+                    ->whereIn('id', array_values($contactIds))
+                    ->findAll();
+                foreach ($found as $c) {
+                    $contacts[(int) ($c['id'] ?? 0)] = $c;
+                }
+            } catch (\Throwable $e) {
+                $contacts = [];
+            }
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            $cid   = $this->contactIdFromLink((string) ($row['link'] ?? ''));
+            $c     = $cid > 0 ? ($contacts[$cid] ?? null) : null;
+            $name  = is_array($c) ? trim((string) ($c['name'] ?? '')) : '';
+            $phone = is_array($c) ? trim((string) (($c['mobile'] ?? '') !== '' ? $c['mobile'] : ($c['external_id'] ?? ''))) : '';
+
+            if ($name === '') {
+                $title = (string) ($row['title'] ?? '');
+                if (preg_match('/(?:message from|from)\s+(.+)$/i', $title, $m) === 1) {
+                    $name = trim($m[1]);
+                } elseif ($title !== '' && ! str_starts_with(strtolower($title), 'new ')) {
+                    $name = $title;
+                }
+            }
+
+            $label = $name !== '' ? $name : ($phone !== '' ? $phone : (string) ($row['title'] ?? 'Notification'));
+            $row['contact_id']       = $cid > 0 ? $cid : null;
+            $row['contact_name']     = $name;
+            $row['contact_phone']    = $phone;
+            $row['display_title']    = $label;
+            $row['display_subtitle'] = $phone !== '' && $phone !== $label ? $phone : '';
+            $row['display_body']     = trim((string) ($row['message'] ?? ''));
+            $row['avatar_initials']  = $this->avatarInitials($label);
+            $row['avatar_color']     = $this->avatarColor($label . '|' . $phone);
+            $out[] = $row;
+        }
+
+        return $out;
+    }
+
+    protected function contactIdFromLink(string $link): int
+    {
+        if ($link === '' || preg_match('/(?:[?&])contact_id=(\d+)/', $link, $m) !== 1) {
+            return 0;
+        }
+
+        return (int) $m[1];
+    }
+
+    protected function avatarInitials(string $label): string
+    {
+        $label = trim($label);
+        if ($label === '') {
+            return 'N';
+        }
+        if (preg_match('/^\+?\d+$/', $label) === 1) {
+            return mb_strtoupper(mb_substr($label, -2));
+        }
+        $parts = preg_split('/\s+/', $label) ?: [];
+        $a = mb_strtoupper(mb_substr((string) ($parts[0] ?? 'N'), 0, 1));
+        $b = count($parts) > 1 ? mb_strtoupper(mb_substr((string) $parts[1], 0, 1)) : '';
+
+        return $a . $b;
+    }
+
+    protected function avatarColor(string $seed): string
+    {
+        $palette = ['#7c3aed', '#2563eb', '#059669', '#d97706', '#db2777', '#0891b2', '#4f46e5', '#0f766e'];
+        $hash    = abs(crc32($seed));
+
+        return $palette[$hash % count($palette)];
+    }
 }

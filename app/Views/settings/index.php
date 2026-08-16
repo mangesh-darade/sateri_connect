@@ -241,7 +241,7 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                     </div>
 
                                     <?php
-                                    $embedded = $embeddedSignup ?? ['app_id' => '', 'config_id' => '', 'api_version' => 'v21.0', 'ready' => false];
+                                    $embedded = $embeddedSignup ?? ['app_id' => '', 'config_id' => '', 'api_version' => 'v21.0', 'ready' => false, 'managed' => false];
                                     $connected = trim((string) ($meta['phone_number_id'] ?? '')) !== ''
                                         && trim((string) ($meta['waba_id'] ?? '')) !== ''
                                         && trim((string) ($meta['access_token'] ?? '')) !== '';
@@ -250,7 +250,19 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                          data-app-id="<?= esc($embedded['app_id'] ?? '') ?>"
                                          data-config-id="<?= esc($embedded['config_id'] ?? '') ?>"
                                          data-api-version="<?= esc($embedded['api_version'] ?? 'v21.0') ?>"
-                                         data-ready="<?= ! empty($embedded['ready']) ? '1' : '0' ?>">
+                                         data-ready="<?= ! empty($embedded['ready']) ? '1' : '0' ?>"
+                                         data-managed="<?= ! empty($embedded['managed']) ? '1' : '0' ?>">
+                                        <?php if (! empty($embedded['managed']) && ! empty($embedded['ready'])): ?>
+                                            <div class="alert alert-success border py-2 px-3 small mb-2">
+                                                <strong>Auto Embedded Signup ready.</strong>
+                                                Platform Tech Provider credentials are loaded — client only clicks Connect WhatsApp (no Meta app create/publish).
+                                            </div>
+                                        <?php elseif (empty($embedded['ready'])): ?>
+                                            <div class="alert alert-warning border py-2 px-3 small mb-2">
+                                                Platform admin must save <strong>Embedded Signup</strong> App ID + Config ID + App Secret
+                                                (Platform → Embedded Signup), <em>or</em> fill Meta app fields below.
+                                            </div>
+                                        <?php endif; ?>
                                         <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                                             <span class="badge <?= $connected ? 'text-bg-success' : 'text-bg-secondary' ?>" id="metaConnectStatus">
                                                 <?= $connected ? 'Connected' : 'Not connected' ?>
@@ -261,7 +273,11 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                                     WABA <?= esc((string) ($meta['waba_id'] ?? '')) ?> · Phone ID <?= esc((string) ($meta['phone_number_id'] ?? '')) ?>
                                                 </span>
                                             <?php else: ?>
-                                                <span class="small text-muted" id="metaConnectSummary">Save App ID + Config ID + App Secret, then connect.</span>
+                                                <span class="small text-muted" id="metaConnectSummary">
+                                                    <?= ! empty($embedded['ready'])
+                                                        ? 'Click Connect WhatsApp to authorize this business number.'
+                                                        : 'Save Tech Provider credentials (platform) or App ID + Config ID + App Secret, then connect.' ?>
+                                                </span>
                                             <?php endif; ?>
                                         </div>
                                         <div class="d-flex flex-wrap gap-2">
@@ -289,14 +305,14 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                         </div>
                                     </div>
 
-                                    <div class="wp-creds-head">
+                                    <div class="wp-creds-head <?= ! empty($embedded['managed']) ? 'd-none' : '' ?>" id="metaAppCredsHead">
                                         <div>
                                             <h3>Meta app (for Embedded Signup)</h3>
-                                            <p>From Meta Developer App. Leave masked secrets blank to keep current values.</p>
+                                            <p>Only needed if platform Tech Provider is not configured. Leave masked secrets blank to keep current values.</p>
                                         </div>
                                         <a class="wp-link" href="https://developers.facebook.com/apps/" target="_blank" rel="noopener">Open Meta Apps <i class="fas fa-arrow-up-right-from-square"></i></a>
                                     </div>
-                                    <div class="wp-field-grid">
+                                    <div class="wp-field-grid <?= ! empty($embedded['managed']) ? 'd-none' : '' ?>" id="metaAppCredsFields">
                                         <div class="wp-field">
                                             <label class="form-label">Meta App ID</label>
                                             <input type="text" name="meta_app_id" id="meta_app_id" class="form-control" value="<?= $val($meta, 'app_id') ?>" placeholder="App Dashboard → App ID" inputmode="numeric">
@@ -307,7 +323,7 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                         </div>
                                     </div>
                                     <div class="wp-field-grid">
-                                        <div class="wp-field">
+                                        <div class="wp-field <?= ! empty($embedded['managed']) ? 'd-none' : '' ?>" id="metaAppSecretField">
                                             <label class="form-label">App Secret</label>
                                             <div class="input-group input-secret">
                                                 <input type="password" name="meta_webhook_secret" class="form-control" value="<?= $val($meta, 'app_secret') ?>" autocomplete="off" placeholder="App settings → App secret">
@@ -403,14 +419,23 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                 </div>
                                 <aside class="wp-creds-aside">
                                     <p class="wp-aside-kicker">Setup path</p>
+                                    <?php if (! empty($embedded['managed']) && ! empty($embedded['ready'])): ?>
                                     <ol class="wp-steps">
+                                        <li>Platform Tech Provider is already configured</li>
+                                        <li>Have a Meta Business Portfolio + WhatsApp number ready</li>
+                                        <li>Click <strong>Connect WhatsApp</strong> and authorize</li>
+                                        <li>Public HTTPS webhook under Webhooks tab</li>
+                                    </ol>
+                                    <?php else: ?>
+                                    <ol class="wp-steps">
+                                        <li>Platform admin: <strong>Embedded Signup</strong> (preferred), or</li>
                                         <li><a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener">Create / open Meta App</a></li>
-                                        <li>Become Tech Provider (or use own WABA Path A)</li>
-                                        <li>Facebook Login for Business → create Embedded Signup config</li>
+                                        <li>Facebook Login for Business → Embedded Signup config</li>
                                         <li>Save App ID + Config ID + App Secret here</li>
                                         <li>Click <strong>Connect WhatsApp</strong></li>
                                         <li>Public HTTPS webhook under Webhooks tab</li>
                                     </ol>
+                                    <?php endif; ?>
                                     <?php if (function_exists('can') && can('settings.view')): ?>
                                         <button type="button" class="btn btn-wa w-100" id="btnTestMeta">
                                             <i class="fas fa-plug me-1"></i> Test connection
@@ -604,7 +629,7 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                         </div>
                     </div>
 
-                    <div class="tab-pane fade" id="tabEmail" role="tabpanel">
+sadD                    <div class="tab-pane fade" id="tabEmail" role="tabpanel">
                         <section class="wp-stage" data-email-provider="<?= esc($emailProvider) ?>" id="emailStage">
                             <header class="wp-stage-head">
                                 <div class="wp-stage-copy">
@@ -1404,6 +1429,10 @@ $(function () {
             });
         })();
 
+        function isManaged() {
+            return $box.attr('data-managed') === '1';
+        }
+
         function embedCfg() {
             return {
                 appId: ($('#meta_app_id').val() || $box.attr('data-app-id') || '').toString().trim(),
@@ -1423,10 +1452,33 @@ $(function () {
         function setReady() {
             var c = embedCfg();
             var ready = !!(c.appId && c.configId);
-            $box.attr('data-ready', ready ? '1' : '0');
+            // Keep server "ready" (includes App Secret) when platform-managed.
+            if (isManaged() && $box.attr('data-ready') === '1') {
+                ready = true;
+            }
+            if (!isManaged()) {
+                $box.attr('data-ready', ready ? '1' : '0');
+            }
             $('#btnConnectWhatsApp').prop('disabled', !ready || !APP.MetaEmbeddedSignup.isSdkReady());
-            if (!ready) {
+            if (!ready && !isManaged()) {
                 $('#metaConnectSummary').text('Save App ID + Config ID + App Secret, then connect.');
+            } else if (!ready && isManaged()) {
+                $('#metaConnectSummary').text('Platform Tech Provider credentials are incomplete.');
+            }
+        }
+
+        function applyConnectedIdentity(data) {
+            if (!data) return;
+            APP.whatsappProvider = 'meta';
+            if (typeof APP.applyWaIdentity === 'function') {
+                APP.applyWaIdentity({
+                    display_name: data.verified_name || data.display_name || '',
+                    phone: data.display_phone || data.phone || '',
+                    profile_picture_url: data.profile_picture_url || ''
+                });
+            }
+            if (typeof APP.refreshWaIdentity === 'function') {
+                APP.refreshWaIdentity(true);
             }
         }
 
@@ -1481,6 +1533,7 @@ $(function () {
                     + (data.display_phone ? (' · ' + data.display_phone) : '')
                 );
                 $('input[name="whatsapp_provider"][value="meta"]').prop('checked', true).trigger('change');
+                applyConnectedIdentity(data);
                 if (typeof runMetaTest === 'function') {
                     runMetaTest(null, false);
                 }
@@ -1531,15 +1584,63 @@ $(function () {
                 });
         }
 
+        function launchEmbeddedSignup(c) {
+            setResult('Opening Meta Embedded Signup (Facebook SDK)…', true);
+            APP.MetaEmbeddedSignup.launch({
+                appId: c.appId,
+                configId: c.configId,
+                apiVersion: c.apiVersion,
+                onSession: onEmbeddedSession,
+                onCode: function (code) {
+                    pendingCode = code;
+                    tryComplete();
+                },
+                onCancel: function () {
+                    if (!pendingSession) {
+                        setResult('Meta login did not return an auth code. Check App Review / Advanced Access on Meta.', false);
+                        setReady();
+                    }
+                }
+            }).catch(function (err) {
+                setResult($('<div>').text((err && err.message) || 'Could not launch Embedded Signup').html(), false);
+                APP.toast((err && err.message) || 'Embedded Signup failed', 'error');
+                setReady();
+            });
+        }
+
         $('#btnConnectWhatsApp').on('click', function () {
             var c = embedCfg();
             if (!c.appId || !c.configId) {
-                APP.toast('Enter Meta App ID and Embedded Signup Config ID first.', 'warning');
+                APP.toast(
+                    isManaged()
+                        ? 'Platform Tech Provider App ID / Config ID missing. Ask platform admin.'
+                        : 'Enter Meta App ID and Embedded Signup Config ID first.',
+                    'warning'
+                );
                 return;
             }
             if (!APP.MetaEmbeddedSignup.isSdkReady()) {
                 APP.toast('Facebook SDK is still loading. Wait a second and try again.', 'warning');
                 preloadSdk();
+                return;
+            }
+
+            // Platform-managed: token exchange uses platform App Secret — launch directly.
+            if (isManaged()) {
+                var pinOnly = ($('#meta_two_step_pin').val() || '').toString().trim();
+                if (/^\d{6}$/.test(pinOnly)) {
+                    APP.post(APP.baseUrl + '/settings/save', {
+                        section: 'meta',
+                        meta_two_step_pin: pinOnly,
+                        meta_phone_number_id: ($('#meta_phone_number_id').val() || '').toString(),
+                        meta_waba_id: ($('#meta_waba_id').val() || '').toString(),
+                        meta_api_version: c.apiVersion
+                    }).always(function () {
+                        launchEmbeddedSignup(c);
+                    });
+                    return;
+                }
+                launchEmbeddedSignup(c);
                 return;
             }
 
@@ -1565,11 +1666,9 @@ $(function () {
                 meta_page_id: ($('input[name="meta_page_id"]').val() || '').toString(),
                 meta_instagram_account_id: ($('input[name="meta_instagram_account_id"]').val() || '').toString(),
                 inbox_instagram_enabled: $('#inboxInstagramEnabled').is(':checked') ? '1' : '',
-                inbox_messenger_enabled: $('#inboxMessengerEnabled').is(':checked') ? '1' : ''
+                inbox_messenger_enabled: $('#inboxMessengerEnabled').is(':checked') ? '1' : '',
+                meta_webhook_secret: secretVal
             };
-            if (hasSecretTyped) {
-                savePayload.meta_webhook_secret = secretVal;
-            }
             var pin = ($('#meta_two_step_pin').val() || '').toString().trim();
             if (/^\d{6}$/.test(pin)) {
                 savePayload.meta_two_step_pin = pin;
@@ -1581,28 +1680,7 @@ $(function () {
                     $box.attr('data-config-id', c.configId);
                     $box.attr('data-api-version', c.apiVersion);
                     $box.attr('data-ready', '1');
-                    setResult('Opening Meta Embedded Signup (Facebook SDK)…', true);
-
-                    APP.MetaEmbeddedSignup.launch({
-                        appId: c.appId,
-                        configId: c.configId,
-                        apiVersion: c.apiVersion,
-                        onSession: onEmbeddedSession,
-                        onCode: function (code) {
-                            pendingCode = code;
-                            tryComplete();
-                        },
-                        onCancel: function () {
-                            if (!pendingSession) {
-                                setResult('Meta login did not return an auth code. Check App Review / Advanced Access on Meta.', false);
-                                setReady();
-                            }
-                        }
-                    }).catch(function (err) {
-                        setResult($('<div>').text((err && err.message) || 'Could not launch Embedded Signup').html(), false);
-                        APP.toast((err && err.message) || 'Embedded Signup failed', 'error');
-                        setReady();
-                    });
+                    launchEmbeddedSignup(c);
                 })
                 .fail(function (xhr) {
                     var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Could not save Meta settings';

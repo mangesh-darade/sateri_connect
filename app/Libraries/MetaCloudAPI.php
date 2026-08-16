@@ -1232,6 +1232,49 @@ class MetaCloudAPI
     }
 
     /**
+     * WhatsApp Business profile for the connected phone number (includes profile picture).
+     *
+     * @return array{profile_picture_url: string, about: string, description: string, raw: array<string, mixed>}
+     */
+    public function getBusinessProfile(): array
+    {
+        $this->ensureConfigured(true);
+        $raw = $this->request('GET', $this->phoneNumberId . '/whatsapp_business_profile', [
+            'fields' => 'profile_picture_url,about,address,description,email,vertical,websites',
+        ]);
+
+        $row = [];
+        if (isset($raw['data'][0]) && is_array($raw['data'][0])) {
+            $row = $raw['data'][0];
+        } elseif (is_array($raw)) {
+            $row = $raw;
+        }
+
+        return [
+            'profile_picture_url' => (string) ($row['profile_picture_url'] ?? ''),
+            'about'               => (string) ($row['about'] ?? ''),
+            'description'         => (string) ($row['description'] ?? ''),
+            'raw'                 => $raw,
+        ];
+    }
+
+    /**
+     * Fetch + cache verified name, display phone, and profile picture for UI chrome.
+     *
+     * @return array{display_name: string, phone: string, profile_picture_url: string}
+     */
+    public function refreshCachedIdentity(): array
+    {
+        $identity = (new WhatsAppIdentityService($this->settings))->refreshFromMeta(true);
+
+        return [
+            'display_name'        => (string) ($identity['display_name'] ?? ''),
+            'phone'               => (string) ($identity['phone'] ?? ''),
+            'profile_picture_url' => (string) ($identity['profile_picture_url'] ?? ''),
+        ];
+    }
+
+    /**
      * Register a business phone number for Cloud API (two-step PIN).
      *
      * @return array<string, mixed>
@@ -1600,9 +1643,15 @@ class MetaCloudAPI
 
         if ($this->accessToken !== '' && $this->phoneNumberId !== '') {
             try {
-                $info      = $this->getPhoneNumberInfo();
+                $identity  = $this->refreshCachedIdentity();
+                $info      = [
+                    'verified_name'   => $identity['display_name'],
+                    'display_phone'   => $identity['phone'],
+                    'phone_number_id' => $this->phoneNumberId,
+                    'profile_picture_url' => $identity['profile_picture_url'],
+                ];
                 $apiOk     = true;
-                $apiDetail = trim(($info['verified_name'] ?? '') . ' · ' . ($info['display_phone'] ?: $this->phoneNumberId));
+                $apiDetail = trim(($identity['display_name'] ?? '') . ' · ' . ($identity['phone'] ?: $this->phoneNumberId));
             } catch (Throwable $e) {
                 $apiDetail = $this->humanizeConnectionError($e->getMessage());
             }

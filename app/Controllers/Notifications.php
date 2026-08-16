@@ -23,16 +23,18 @@ class Notifications extends BaseController
         $limit   = max(1, min(30, (int) ($this->request->getGet('limit') ?? 12)));
 
         $model  = model(NotificationModel::class);
-        $unread = $model->getUnreadForUser($uid, $limit);
+        $unread = $model->enrichForUi($model->getUnreadForUser($uid, $limit));
         $count  = $model->countUnreadForUser($uid);
 
         $fresh = [];
         if ($sinceId > 0) {
-            $fresh = model(NotificationModel::class)
-                ->where('user_id', $uid)
-                ->where('id >', $sinceId)
-                ->orderBy('id', 'ASC')
-                ->findAll(20);
+            $fresh = $model->enrichForUi(
+                model(NotificationModel::class)
+                    ->where('user_id', $uid)
+                    ->where('id >', $sinceId)
+                    ->orderBy('id', 'ASC')
+                    ->findAll(20)
+            );
         }
 
         $maxId = 0;
@@ -49,6 +51,7 @@ class Notifications extends BaseController
             'fresh'        => $fresh,
             'max_id'       => $maxId,
             'server_time'  => date('Y-m-d H:i:s'),
+            'poll_hint_ms' => 2500,
         ]);
     }
 

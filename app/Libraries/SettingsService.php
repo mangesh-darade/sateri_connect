@@ -251,6 +251,16 @@ class SettingsService
 
             $this->set($settingKey, $value, $group, $encrypt);
         }
+
+        if (array_key_exists('display_phone', $config)) {
+            $phone = preg_replace('/\D+/', '', (string) $config['display_phone']) ?? '';
+            if ($phone !== '') {
+                $this->cacheWhatsAppIdentity([
+                    'display_name' => trim((string) $this->get('app_name', 'WhatsApp')),
+                    'phone'        => $phone,
+                ]);
+            }
+        }
     }
 
     /**
@@ -396,6 +406,82 @@ class SettingsService
         }
 
         $this->syncTenantPhoneRoute();
+    }
+
+    /**
+     * Cached WhatsApp business identity for UI (dropdown / header).
+     *
+     * @return array{
+     *     provider: string,
+     *     display_name: string,
+     *     phone: string,
+     *     profile_picture_url: string,
+     *     connected: bool
+     * }
+     */
+    public function getWhatsAppIdentity(): array
+    {
+        $provider = $this->getWhatsAppProvider();
+        $name     = trim((string) $this->get('wa_display_name', ''));
+        $phone    = trim((string) $this->get('wa_display_phone', ''));
+        $picture  = trim((string) $this->get('wa_profile_picture_url', ''));
+
+        if ($provider === 'meta') {
+            if ($phone === '') {
+                $phone = trim((string) $this->get('meta_display_phone', ''));
+            }
+            if ($name === '') {
+                $name = trim((string) $this->get('meta_verified_name', ''));
+            }
+            $connected = trim((string) $this->get('meta_phone_number_id', '')) !== ''
+                && trim((string) $this->get('meta_access_token', '')) !== '';
+        } else {
+            if ($phone === '') {
+                $phone = trim((string) $this->get('cheerio_display_phone', ''));
+            }
+            if ($name === '') {
+                $name = trim((string) $this->get('app_name', 'WhatsApp'));
+            }
+            $connected = $phone !== '' || trim((string) $this->get('cheerio_api_key', '')) !== '';
+        }
+
+        return [
+            'provider'             => $provider,
+            'display_name'         => $name,
+            'phone'                => $phone,
+            'profile_picture_url'  => $picture,
+            'connected'            => $connected && ($name !== '' || $phone !== ''),
+        ];
+    }
+
+    /**
+     * Persist Meta/Cheerio display identity for chrome UI.
+     *
+     * @param array{display_name?: string, verified_name?: string, phone?: string, display_phone?: string, profile_picture_url?: string} $identity
+     */
+    public function cacheWhatsAppIdentity(array $identity): void
+    {
+        $name = trim((string) ($identity['display_name'] ?? $identity['verified_name'] ?? ''));
+        $phone = trim((string) ($identity['phone'] ?? $identity['display_phone'] ?? ''));
+        $picture = trim((string) ($identity['profile_picture_url'] ?? ''));
+
+        if ($name !== '') {
+            $this->set('wa_display_name', $name, 'whatsapp', false);
+            if ($this->isMetaProvider()) {
+                $this->set('meta_verified_name', $name, 'meta', false);
+            }
+        }
+        if ($phone !== '') {
+            $this->set('wa_display_phone', $phone, 'whatsapp', false);
+            if ($this->isMetaProvider()) {
+                $this->set('meta_display_phone', $phone, 'meta', false);
+            } else {
+                $this->set('cheerio_display_phone', $phone, 'cheerio', false);
+            }
+        }
+        if ($picture !== '') {
+            $this->set('wa_profile_picture_url', $picture, 'whatsapp', false);
+        }
     }
 
     /**

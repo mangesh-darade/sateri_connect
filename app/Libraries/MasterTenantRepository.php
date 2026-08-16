@@ -457,6 +457,150 @@ class MasterTenantRepository
         }
     }
 
+    protected function encryptSecret(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+
+        try {
+            return (new EncryptionService())->encrypt($value);
+        } catch (Throwable) {
+            return $value;
+        }
+    }
+
+    public function getPlatformSetting(string $key, string $default = ''): string
+    {
+        $key = trim($key);
+        if ($key === '' || ! self::masterConfigured()) {
+            return $default;
+        }
+
+        try {
+            $row = $this->db()->table('platform_settings')
+                ->where('key', $key)
+                ->get()
+                ->getRowArray();
+            if (! is_array($row)) {
+                return $default;
+            }
+
+            return (string) ($row['value'] ?? $default);
+        } catch (Throwable $e) {
+            log_message('debug', 'getPlatformSetting failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return $default;
+        }
+    }
+
+    public function setPlatformSetting(string $key, string $value, bool $encrypt = false): void
+    {
+        $key = trim($key);
+        if ($key === '' || ! self::masterConfigured()) {
+            return;
+        }
+
+        $store = $encrypt ? $this->encryptSecret($value) : $value;
+        $now   = date('Y-m-d H:i:s');
+        $db    = $this->db();
+        $existing = $db->table('platform_settings')->where('key', $key)->get()->getRowArray();
+        if (is_array($existing)) {
+            $db->table('platform_settings')->where('key', $key)->update([
+                'value'      => $store,
+                'updated_at' => $now,
+            ]);
+        } else {
+            $db->table('platform_settings')->insert([
+                'key'        => $key,
+                'value'      => $store,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+    }
+
+    /**
+     * Shared Meta Tech Provider app used for Embedded Signup across all tenants.
+     *
+     * @return array{app_id: string, config_id: string, app_secret: string, api_version: string, ready: bool, source: string}
+     */
+    public function getPlatformMetaTechProvider(): array
+    {
+        $appId      = '';
+        $configId   = '';
+        $appSecret  = '';
+        $apiVersion = 'v25.0';
+        $source     = 'none';
+
+        if (self::masterConfigured()) {
+            $appId      = trim($this->getPlatformSetting('meta_tech_app_id'));
+            $configId   = trim($this->getPlatformSetting('meta_tech_config_id'));
+            $appSecret  = trim($this->decryptSecret($this->getPlatformSetting('meta_tech_app_secret')));
+            $apiVersion = trim($this->getPlatformSetting('meta_tech_api_version', 'v25.0')) ?: 'v25.0';
+            if ($appId !== '' || $configId !== '') {
+                $source = 'platform';
+            }
+        }
+
+        if ($appId === '') {
+            $appId = trim((string) env('meta.techAppId', env('META_TECH_APP_ID', '')));
+            if ($appId !== '') {
+                $source = 'env';
+            }
+        }
+        if ($configId === '') {
+            $configId = trim((string) env('meta.techConfigId', env('META_TECH_CONFIG_ID', '')));
+            if ($configId !== '') {
+                $source = $source === 'none' ? 'env' : $source;
+            }
+        }
+        if ($appSecret === '') {
+            $appSecret = trim((string) env('meta.techAppSecret', env('META_TECH_APP_SECRET', '')));
+        }
+        $envVer = trim((string) env('meta.techApiVersion', env('META_TECH_API_VERSION', '')));
+        if ($envVer !== '') {
+            $apiVersion = $envVer;
+        }
+
+        return [
+            'app_id'      => $appId,
+            'config_id'   => $configId,
+            'app_secret'  => $appSecret,
+            'api_version' => $apiVersion,
+            'ready'       => $appId !== '' && $configId !== '' && $appSecret !== '',
+            'source'      => $source,
+        ];
+    }
+
+    /**
+     * @param array{app_id?: string, config_id?: string, app_secret?: string, api_version?: string} $data
+     */
+    public function setPlatformMetaTechProvider(array $data): void
+    {
+        if (! self::masterConfigured()) {
+            throw new \RuntimeException('Master database is not configured.');
+        }
+
+        if (array_key_exists('app_id', $data)) {
+            $this->setPlatformSetting('meta_tech_app_id', trim((string) $data['app_id']));
+        }
+        if (array_key_exists('config_id', $data)) {
+            $this->setPlatformSetting('meta_tech_config_id', trim((string) $data['config_id']));
+        }
+        if (array_key_exists('api_version', $data)) {
+            $ver = trim((string) $data['api_version']);
+            $this->setPlatformSetting('meta_tech_api_version', $ver !== '' ? $ver : 'v25.0');
+        }
+        if (array_key_exists('app_secret', $data)) {
+            $secret = trim((string) $data['app_secret']);
+            if ($secret !== '' && ! str_contains($secret, '•')) {
+                $this->setPlatformSetting('meta_tech_app_secret', $secret, true);
+            }
+        }
+    }
+
     /**
      * @return \CodeIgniter\Database\BaseConnection
      */

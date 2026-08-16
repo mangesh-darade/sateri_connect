@@ -414,8 +414,8 @@ class Webhooks extends Controller
             $name    = (string) ($contact['name'] ?? $senderId);
             $assign  = ! empty($contact['assigned_to']) ? (int) $contact['assigned_to'] : null;
             model(NotificationModel::class)->notifyChatUsers(
-                'New ' . $channel . ' message from ' . ($name !== '' ? $name : $senderId),
-                $preview !== '' ? $preview : ('(' . $type . ')'),
+                $name !== '' ? $name : $senderId,
+                trim(($senderId !== '' && $senderId !== $name ? $senderId . ' · ' : '') . ($preview !== '' ? $preview : '(' . $type . ')')),
                 site_url('chat?contact_id=' . $contactId . '&channel=' . $channel),
                 $assign
             );
@@ -578,8 +578,8 @@ class Webhooks extends Controller
             $name    = (string) ($contact['name'] ?? $from);
             $assign  = ! empty($contact['assigned_to']) ? (int) $contact['assigned_to'] : null;
             model(NotificationModel::class)->notifyChatUsers(
-                'New message from ' . ($name !== '' ? $name : $from),
-                $preview !== '' ? $preview : ('(' . ($parsed['type'] ?? 'message') . ')'),
+                $name !== '' ? $name : $from,
+                trim(($from !== '' && $from !== $name ? $from . ' · ' : '') . ($preview !== '' ? $preview : '(' . ($parsed['type'] ?? 'message') . ')')),
                 site_url('chat?contact_id=' . $contactId),
                 $assign
             );

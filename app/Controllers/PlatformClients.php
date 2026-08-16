@@ -42,6 +42,38 @@ class PlatformClients extends BaseController
         ]);
     }
 
+    public function metaTech(): string|ResponseInterface
+    {
+        $repo  = new MasterTenantRepository();
+        $tech  = $repo->getPlatformMetaTechProvider();
+        $tech['app_secret'] = $this->maskSecret((string) ($tech['app_secret'] ?? ''));
+
+        return view('platform/meta_tech', [
+            'pageTitle'    => 'Embedded Signup (Tech Provider)',
+            'navActive'    => 'meta-tech',
+            'tech'         => $tech,
+            'platformName' => (string) session('platform_admin_name'),
+            'sdkOrigin'    => rtrim(site_url(), '/'),
+        ]);
+    }
+
+    public function saveMetaTech(): ResponseInterface
+    {
+        $repo = new MasterTenantRepository();
+        try {
+            $repo->setPlatformMetaTechProvider([
+                'app_id'      => (string) $this->request->getPost('app_id'),
+                'config_id'   => (string) $this->request->getPost('config_id'),
+                'app_secret'  => (string) $this->request->getPost('app_secret'),
+                'api_version' => (string) ($this->request->getPost('api_version') ?: 'v25.0'),
+            ]);
+        } catch (\Throwable $e) {
+            return redirect()->back()->withInput()->with('error', $e->getMessage());
+        }
+
+        return redirect()->to('/platform/meta-tech')->with('success', 'Tech Provider Embedded Signup credentials saved. Clients can Connect WhatsApp without creating their own Meta app.');
+    }
+
     public function store(): ResponseInterface
     {
         $result = (new TenantProvisionService())->provision([

@@ -45,13 +45,13 @@
 </head>
 <body class="hold-transition sidebar-mini layout-fixed<?= ! empty($fullBleed) ? ' flow-builder-page' : '' ?><?= ! empty($chatPage) ? ' chat-page-active' : '' ?>">
 <div class="wrapper">
-    <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <nav class="main-header navbar navbar-expand navbar-white navbar-light app-topbar">
         <ul class="navbar-nav">
             <li class="nav-item">
-                <a class="nav-link" data-widget="pushmenu" href="#" role="button" aria-label="Toggle menu"><i class="fas fa-bars"></i></a>
+                <a class="nav-link app-topbar-toggle" data-widget="pushmenu" href="#" role="button" aria-label="Toggle menu"><i class="fas fa-bars"></i></a>
             </li>
         </ul>
-        <ul class="navbar-nav ms-auto align-items-center">
+        <ul class="navbar-nav ms-auto align-items-center app-topbar-actions">
             <li class="nav-item">
                 <div class="nav-clock" id="navAppClock" data-timezone="<?= esc($appTimezone, 'attr') ?>" title="<?= esc($appTimezone) ?>" aria-live="polite">
                     <span class="nav-clock-time" id="navAppClockTime">--:--:--</span>
@@ -59,52 +59,105 @@
                 </div>
             </li>
             <li class="nav-item dropdown" id="navNotifWrap">
-                <a class="nav-link" id="navNotifToggle" data-bs-toggle="dropdown" href="#" aria-expanded="false" aria-label="Notifications">
+                <a class="nav-link app-topbar-icon" id="navNotifToggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" href="#" aria-expanded="false" aria-label="Notifications">
                     <i class="far fa-bell"></i>
                     <?php $notifCount = (int) ($unread_notifications ?? (is_array($notifications ?? null) ? count($notifications) : 0)); ?>
                     <span class="badge navbar-badge<?= $notifCount > 0 ? '' : ' d-none' ?>" id="navNotifBadge"><?= esc((string) $notifCount) ?></span>
                 </a>
-                <div class="dropdown-menu dropdown-menu-lg dropdown-menu-end" id="navNotifMenu">
-                    <span class="dropdown-item dropdown-header" id="navNotifHeader"><?= esc((string) $notifCount) ?> Notifications</span>
-                    <div class="dropdown-divider"></div>
-                    <div id="navNotifList">
+                <div class="dropdown-menu dropdown-menu-end notif-panel" id="navNotifMenu">
+                    <div class="notif-panel-head">
+                        <div>
+                            <div class="notif-panel-title">Notifications</div>
+                            <div class="notif-panel-sub" id="navNotifHeader"><?= $notifCount > 0 ? esc((string) $notifCount) . ' unread' : 'You\'re all caught up' ?></div>
+                        </div>
+                        <button type="button" class="notif-panel-action" id="navNotifMarkAll"<?= $notifCount > 0 ? '' : ' disabled' ?>>Mark all read</button>
+                    </div>
+                    <div class="notif-panel-list" id="navNotifList">
                     <?php if (! empty($notifications) && is_array($notifications)): ?>
                         <?php foreach (array_slice($notifications, 0, 8) as $note): ?>
-                            <a href="<?= esc($note['link'] ?? '#') ?>" class="dropdown-item nav-notif-item" data-id="<?= (int) ($note['id'] ?? 0) ?>">
-                                <i class="fas fa-<?= esc($note['type'] ?? 'info') === 'error' ? 'exclamation-circle text-danger' : ((string) ($note['type'] ?? '') === 'chat' ? 'comment text-success' : 'info-circle text-primary') ?> me-2"></i>
-                                <?= esc($note['title'] ?? 'Notification') ?>
-                                <?php if (! empty($note['message'])): ?>
-                                    <div class="small text-muted text-truncate" style="max-width:16rem"><?= esc($note['message']) ?></div>
-                                <?php endif; ?>
-                                <span class="float-end text-muted text-sm"><?= esc(format_app_datetime($note['created_at'] ?? null, 'd-M-Y, g:i A', '')) ?></span>
+                            <?php
+                            $nTitle = (string) ($note['display_title'] ?? $note['title'] ?? 'Notification');
+                            $nPhone = (string) ($note['display_subtitle'] ?? $note['contact_phone'] ?? '');
+                            $nBody  = (string) ($note['display_body'] ?? $note['message'] ?? '');
+                            $nInit  = (string) ($note['avatar_initials'] ?? 'N');
+                            $nColor = (string) ($note['avatar_color'] ?? '#7c3aed');
+                            ?>
+                            <a href="<?= esc($note['link'] ?? '#') ?>" class="notif-item nav-notif-item" data-id="<?= (int) ($note['id'] ?? 0) ?>">
+                                <span class="notif-avatar" style="background:<?= esc($nColor) ?>"><?= esc($nInit) ?></span>
+                                <span class="notif-item-body">
+                                    <span class="notif-item-top">
+                                        <span class="notif-item-name"><?= esc($nTitle) ?></span>
+                                        <span class="notif-item-time"><?= esc(format_app_datetime($note['created_at'] ?? null, 'g:i A', '')) ?></span>
+                                    </span>
+                                    <?php if ($nPhone !== ''): ?>
+                                        <span class="notif-item-phone"><?= esc($nPhone) ?></span>
+                                    <?php endif; ?>
+                                    <?php if ($nBody !== ''): ?>
+                                        <span class="notif-item-msg"><?= esc($nBody) ?></span>
+                                    <?php endif; ?>
+                                </span>
                             </a>
-                            <div class="dropdown-divider"></div>
                         <?php endforeach; ?>
                     <?php else: ?>
-                        <span class="dropdown-item text-muted nav-notif-empty">No new notifications</span>
-                        <div class="dropdown-divider"></div>
+                        <div class="notif-empty nav-notif-empty">
+                            <i class="far fa-bell-slash"></i>
+                            <div class="notif-empty-title">No new notifications</div>
+                            <div class="notif-empty-sub">New WhatsApp replies will appear here live.</div>
+                        </div>
                     <?php endif; ?>
                     </div>
-                    <button type="button" class="dropdown-item dropdown-footer text-start" id="navNotifMarkAll">Mark all as read</button>
-                    <button type="button" class="dropdown-item dropdown-footer text-start border-top" id="navNotifBrowserBtn">Enable browser alerts</button>
+                    <div class="notif-panel-foot">
+                        <button type="button" class="notif-panel-action" id="navNotifBrowserBtn">Enable browser alerts</button>
+                    </div>
                 </div>
             </li>
             <li class="nav-item dropdown user-menu">
-                <a href="#" class="nav-link dropdown-toggle user-menu-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                    <img src="<?= esc($user['avatar'] ?? base_url('assets/img/avatar.png')) ?>" class="user-image img-circle" alt="User">
-                    <span class="d-none d-md-inline"><?= esc($user['name'] ?? session('user_name') ?? 'User') ?></span>
+                <?php
+                $waAccount = $waAccount ?? [];
+                $waName = trim((string) ($waAccount['display_name'] ?? ''));
+                $waPhone = trim((string) ($waAccount['phone'] ?? ''));
+                $waPic = trim((string) ($waAccount['profile_picture_url'] ?? ''));
+                $waConnected = ! empty($waAccount['connected']);
+                $menuAvatar = $waPic !== ''
+                    ? $waPic
+                    : (string) ($user['avatar'] ?? base_url('assets/img/avatar.png'));
+                $menuTitle = $waName !== '' ? $waName : (string) ($user['name'] ?? session('user_name') ?? 'User');
+                $menuPhone = $waPhone !== '' ? $waPhone : (string) ($user['email'] ?? session('user_email') ?? '');
+                ?>
+                <a href="#" class="nav-link dropdown-toggle user-menu-toggle app-topbar-user" data-bs-toggle="dropdown" aria-expanded="false">
+                    <img src="<?= esc($menuAvatar) ?>" class="user-image img-circle js-wa-avatar" alt="<?= esc($menuTitle) ?>" referrerpolicy="no-referrer">
+                    <span class="app-topbar-user-meta d-none d-md-flex">
+                        <span class="app-topbar-user-name js-wa-name"><?= esc($menuTitle) ?></span>
+                        <span class="app-topbar-user-role js-wa-phone"><?= esc($menuPhone !== '' ? $menuPhone : (string) ($user['role_name'] ?? session('role_name') ?? 'Member')) ?></span>
+                    </span>
+                    <i class="fas fa-chevron-down app-topbar-user-caret d-none d-md-inline" aria-hidden="true"></i>
                 </a>
                 <ul class="dropdown-menu dropdown-menu-lg dropdown-menu-end user-menu-dropdown">
-                    <li class="user-header bg-wa">
-                        <img src="<?= esc($user['avatar'] ?? base_url('assets/img/avatar.png')) ?>" class="img-circle" alt="User">
-                        <p>
-                            <?= esc($user['name'] ?? session('user_name') ?? 'User') ?>
-                            <small><?= esc($user['role_name'] ?? session('role_name') ?? '') ?></small>
-                        </p>
+                    <li class="user-header bg-wa wa-account-header">
+                        <img src="<?= esc($menuAvatar) ?>" class="img-circle wa-account-avatar js-wa-avatar" alt="<?= esc($menuTitle) ?>" referrerpolicy="no-referrer">
+                        <div class="wa-account-copy">
+                            <div class="wa-account-name js-wa-name"><?= esc($menuTitle) ?></div>
+                            <?php if ($menuPhone !== ''): ?>
+                                <div class="wa-account-phone js-wa-phone-row"><i class="fab fa-whatsapp" aria-hidden="true"></i> <span class="js-wa-phone"><?= esc($menuPhone) ?></span></div>
+                            <?php else: ?>
+                                <div class="wa-account-phone js-wa-phone-row d-none"><i class="fab fa-whatsapp" aria-hidden="true"></i> <span class="js-wa-phone"></span></div>
+                            <?php endif; ?>
+                            <div class="wa-account-provider">
+                                <span class="provider-chip <?= function_exists('is_meta_provider') && is_meta_provider() ? 'is-meta' : 'is-cheerio' ?>">
+                                    <i class="<?= function_exists('is_meta_provider') && is_meta_provider() ? 'fab fa-meta' : 'fas fa-bolt' ?>"></i>
+                                    <?= esc(function_exists('whatsapp_provider_short') ? whatsapp_provider_short() : 'WA') ?>
+                                </span>
+                                <?php if ($waConnected): ?>
+                                    <span class="wa-account-status">Connected</span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
                     </li>
                     <li class="user-body">
-                        <div class="user-meta-chip">
-                            <i class="fas fa-shield-halved"></i>
+                        <div class="user-meta-chip" title="Signed-in user">
+                            <i class="fas fa-user-shield"></i>
+                            <?= esc($user['name'] ?? session('user_name') ?? 'User') ?>
+                            <span class="text-muted">·</span>
                             <?= esc($user['role_name'] ?? session('role_name') ?? 'Member') ?>
                         </div>
                     </li>
@@ -120,35 +173,28 @@
     </nav>
 
     <aside class="main-sidebar sidebar-light-primary elint-sidebar elint-sidebar--stack" aria-label="Main navigation">
-        <a href="<?= site_url('dashboard') ?>" class="brand-link elint-brand<?= $siteLogo !== '' ? ' has-logo-only' : '' ?>">
+        <?php
+        $userName  = (string) ($user['name'] ?? session('user_name') ?? 'User');
+        $userRole  = (string) ($user['role_name'] ?? session('role_name') ?? 'Member');
+        $userEmail = (string) ($user['email'] ?? session('user_email') ?? '');
+        $userAvatar = (string) ($user['avatar'] ?? base_url('assets/img/avatar.png'));
+        $inboxBadge = (int) ($notifCount ?? 0);
+        $mobileNavTabs = [];
+        $workspaceLabel = $appTagline !== '' ? $appTagline : 'Workspace';
+        $brandInitial = mb_strtoupper(mb_substr($appName !== '' ? $appName : 'S', 0, 1));
+        ?>
+        <a href="<?= site_url('dashboard') ?>" class="brand-link elint-brand elint-workspace<?= $siteLogo !== '' ? ' has-logo-only' : '' ?>" title="<?= esc($appName) ?>">
             <?php if ($siteLogo !== ''): ?>
                 <img src="<?= esc($siteLogo) ?>" alt="<?= esc($appName) ?>" class="brand-image brand-logo-img">
             <?php else: ?>
-                <span class="elint-brand-mark" aria-hidden="true">E</span>
-                <span class="elint-brand-copy">
-                    <span class="brand-text"><?= esc($appName !== '' ? $appName : 'ElintOm') ?></span>
-                    <span class="brand-sub"><?= esc($appTagline !== '' ? $appTagline : 'CRM • Marketing Platform') ?></span>
-                </span>
+                <span class="elint-brand-mark" aria-hidden="true"><?= esc($brandInitial) ?></span>
             <?php endif; ?>
+            <span class="elint-brand-copy">
+                <span class="brand-text"><?= esc($appName !== '' ? $appName : 'Sateri Connect') ?></span>
+                <span class="brand-sub"><?= esc($workspaceLabel) ?></span>
+            </span>
         </a>
         <div class="sidebar">
-            <?php
-            $userName  = (string) ($user['name'] ?? session('user_name') ?? 'User');
-            $userRole  = (string) ($user['role_name'] ?? session('role_name') ?? 'Member');
-            $userEmail = (string) ($user['email'] ?? session('user_email') ?? '');
-            $userAvatar = (string) ($user['avatar'] ?? base_url('assets/img/avatar.png'));
-            $inboxBadge = (int) ($notifCount ?? 0);
-            $mobileNavTabs = [];
-            ?>
-            <div class="elint-user-strip">
-                <img src="<?= esc($userAvatar) ?>" class="elint-user-avatar" alt="<?= esc($userName) ?>">
-                <div class="elint-user-meta">
-                    <div class="elint-user-name"><?= esc($userName) ?></div>
-                    <div class="elint-user-mail"><?= esc($userEmail !== '' ? $userEmail : $userRole) ?></div>
-                </div>
-                <span class="elint-user-chip" title="Workspace">WS</span>
-            </div>
-
             <?php
             $currentUri = trim(uri_string(), '/');
             $req = service('request');
@@ -558,41 +604,42 @@
                 <?php
                 $headerActionsHtml = trim((string) $this->renderSection('header_actions'));
                 ?>
-                <?php /* Standard page header: breadcrumb left → title + provider chip left → actions right */ ?>
-                <ol class="breadcrumb mb-1 d-none d-md-flex">
-                    <li class="breadcrumb-item"><a href="<?= site_url('dashboard') ?>">Home</a></li>
-                    <?php if (! empty($breadcrumb) && is_array($breadcrumb)): ?>
-                        <?php foreach ($breadcrumb as $crumb): ?>
-                            <?php if (! empty($crumb['url'])): ?>
-                                <li class="breadcrumb-item"><a href="<?= esc($crumb['url']) ?>"><?= esc($crumb['label'] ?? '') ?></a></li>
-                            <?php else: ?>
-                                <li class="breadcrumb-item active"><?= esc($crumb['label'] ?? '') ?></li>
+                <div class="page-intro">
+                    <ol class="breadcrumb page-intro-crumb mb-0 d-none d-md-flex">
+                        <li class="breadcrumb-item"><a href="<?= site_url('dashboard') ?>">Home</a></li>
+                        <?php if (! empty($breadcrumb) && is_array($breadcrumb)): ?>
+                            <?php foreach ($breadcrumb as $crumb): ?>
+                                <?php if (! empty($crumb['url'])): ?>
+                                    <li class="breadcrumb-item"><a href="<?= esc($crumb['url']) ?>"><?= esc($crumb['label'] ?? '') ?></a></li>
+                                <?php else: ?>
+                                    <li class="breadcrumb-item active"><?= esc($crumb['label'] ?? '') ?></li>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <li class="breadcrumb-item active"><?= esc($title ?? '') ?></li>
+                        <?php endif; ?>
+                    </ol>
+                    <div class="d-flex flex-wrap align-items-start justify-content-between gap-2 page-header-row">
+                        <div class="min-w-0 page-header-title">
+                            <div class="page-intro-title-row">
+                                <h1 class="mb-0"><?= esc($title ?? 'Dashboard') ?></h1>
+                                <?php if (function_exists('whatsapp_provider_short')): ?>
+                                    <span class="provider-chip <?= function_exists('is_meta_provider') && is_meta_provider() ? 'is-meta' : 'is-cheerio' ?>" title="<?= esc(function_exists('whatsapp_provider_label') ? whatsapp_provider_label() : '') ?>">
+                                        <i class="<?= function_exists('is_meta_provider') && is_meta_provider() ? 'fab fa-meta' : 'fas fa-bolt' ?>"></i>
+                                        <?= esc(whatsapp_provider_short()) ?>
+                                    </span>
+                                <?php endif; ?>
+                            </div>
+                            <?php if (! empty($subtitle)): ?>
+                                <p class="page-subtitle mb-0 d-none d-md-block"><?= esc($subtitle) ?></p>
                             <?php endif; ?>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <li class="breadcrumb-item active"><?= esc($title ?? '') ?></li>
-                    <?php endif; ?>
-                </ol>
-                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-0 page-header-row">
-                    <div class="min-w-0 page-header-title">
-                        <h1 class="text-truncate d-inline-flex align-items-center flex-wrap gap-2 mb-0">
-                            <?= esc($title ?? 'Dashboard') ?>
-                            <?php if (function_exists('whatsapp_provider_short')): ?>
-                                <span class="provider-chip <?= function_exists('is_meta_provider') && is_meta_provider() ? 'is-meta' : 'is-cheerio' ?>" title="<?= esc(function_exists('whatsapp_provider_label') ? whatsapp_provider_label() : '') ?>">
-                                    <i class="<?= function_exists('is_meta_provider') && is_meta_provider() ? 'fab fa-meta' : 'fas fa-bolt' ?>"></i>
-                                    <?= esc(whatsapp_provider_short()) ?>
-                                </span>
-                            <?php endif; ?>
-                        </h1>
-                        <?php if (! empty($subtitle)): ?>
-                            <p class="page-subtitle mb-0 text-truncate d-none d-md-block"><?= esc($subtitle) ?></p>
+                        </div>
+                        <?php if ($headerActionsHtml !== ''): ?>
+                            <div class="ms-auto d-flex align-items-center justify-content-end gap-2 flex-wrap header-page-actions" role="toolbar" aria-label="Page actions">
+                                <?= $headerActionsHtml ?>
+                            </div>
                         <?php endif; ?>
                     </div>
-                    <?php if ($headerActionsHtml !== ''): ?>
-                        <div class="ms-auto d-flex align-items-center justify-content-end gap-2 flex-wrap header-page-actions" role="toolbar" aria-label="Page actions">
-                            <?= $headerActionsHtml ?>
-                        </div>
-                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -655,6 +702,8 @@
     </nav>
     <?php endif; ?>
 
+    <div id="notifLiveStack" class="notif-live-stack" aria-live="polite" aria-relevant="additions"></div>
+
     <?php if (empty($fullBleed)): ?>
     <footer class="main-footer">
         <strong>&copy; <?= date('Y') ?> <?= esc(function_exists('setting') ? (string) setting('app_name', 'WhatsApp Automation Platform') : 'WhatsApp Automation Platform') ?></strong>
@@ -684,7 +733,14 @@
         timezone: <?= json_encode($appTimezone) ?>,
         whatsappProvider: <?= json_encode(function_exists('whatsapp_provider') ? whatsapp_provider() : 'cheerio') ?>,
         whatsappProviderShort: <?= json_encode(function_exists('whatsapp_provider_short') ? whatsapp_provider_short() : 'Cheerio') ?>,
-        whatsappProviderLabel: <?= json_encode(function_exists('whatsapp_provider_label') ? whatsapp_provider_label() : 'Cheerio Direct API') ?>
+        whatsappProviderLabel: <?= json_encode(function_exists('whatsapp_provider_label') ? whatsapp_provider_label() : 'Cheerio Direct API') ?>,
+        waIdentityNeedsRefresh: <?= ! empty($waIdentityNeedsRefresh) ? 'true' : 'false' ?>,
+        waAccount: <?= json_encode([
+            'display_name'        => (string) (($waAccount['display_name'] ?? '')),
+            'phone'               => (string) (($waAccount['phone'] ?? '')),
+            'profile_picture_url' => (string) (($waAccount['profile_picture_url'] ?? '')),
+            'connected'           => ! empty($waAccount['connected']),
+        ], JSON_UNESCAPED_SLASHES) ?>
     };
 </script>
 <script src="<?= asset_url('assets/js/app.js') ?>"></script>

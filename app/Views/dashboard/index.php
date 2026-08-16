@@ -16,7 +16,7 @@ $failedCount = (int) $get($stats, 'failed');
         <h2 class="page-section-title">Overview</h2>
         <p class="page-section-sub">Jump into the main workspaces</p>
     </div>
-    <div class="row g-2 kpi-grid">
+    <div class="row g-3 kpi-grid">
     <div class="col-lg-3 col-6">
         <a href="<?= site_url('contacts') ?>" class="kpi-card kpi-hero">
             <span class="kpi-icon"><i class="fas fa-address-book"></i></span>
@@ -57,7 +57,7 @@ $failedCount = (int) $get($stats, 'failed');
         <h2 class="page-section-title">Delivery metrics</h2>
         <p class="page-section-sub">All-time performance pulse</p>
     </div>
-    <div class="row g-2 kpi-grid kpi-grid-metrics">
+    <div class="row g-3 kpi-grid kpi-grid-metrics">
     <div class="col-6 col-md-4 col-xl-2">
         <a href="<?= site_url('reports') ?>" class="kpi-card kpi-compact kpi-accent-teal">
             <span class="kpi-label">Sent</span>
@@ -103,44 +103,63 @@ $failedCount = (int) $get($stats, 'failed');
 </div>
 </div>
 
-<div class="row g-2">
-    <div class="col-lg-8">
-        <div class="dash-panel">
-            <div class="panel-head">
-                <h3>Message trends (14 days)</h3>
-            </div>
-            <div class="panel-body">
-                <div class="chart-frame">
-                    <?php $trends = $charts['trends'] ?? []; ?>
-                    <canvas id="chartTrends"
-                        data-labels='<?= json_encode($trends['labels'] ?? []) ?>'
-                        data-sent='<?= json_encode($trends['sent'] ?? []) ?>'
-                        data-delivered='<?= json_encode($trends['delivered'] ?? []) ?>'
-                        data-read='<?= json_encode($trends['read'] ?? []) ?>'
-                        data-failed='<?= json_encode($trends['failed'] ?? []) ?>'
-                        data-replies='<?= json_encode($trends['replies'] ?? []) ?>'></canvas>
+<div class="page-section">
+    <div class="page-section-head">
+        <h2 class="page-section-title">Performance</h2>
+        <p class="page-section-sub">Trends and campaign mix</p>
+    </div>
+    <div class="row g-3 dash-row">
+        <div class="col-lg-8">
+            <div class="dash-panel">
+                <div class="panel-head">
+                    <h3>Message trends (14 days)</h3>
+                </div>
+                <div class="panel-body">
+                    <div class="chart-frame">
+                        <?php $trends = $charts['trends'] ?? []; ?>
+                        <canvas id="chartTrends"
+                            data-labels='<?= json_encode($trends['labels'] ?? []) ?>'
+                            data-sent='<?= json_encode($trends['sent'] ?? []) ?>'
+                            data-delivered='<?= json_encode($trends['delivered'] ?? []) ?>'
+                            data-read='<?= json_encode($trends['read'] ?? []) ?>'
+                            data-failed='<?= json_encode($trends['failed'] ?? []) ?>'
+                            data-replies='<?= json_encode($trends['replies'] ?? []) ?>'></canvas>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
-    <div class="col-lg-4">
-        <div class="dash-panel">
-            <div class="panel-head">
-                <h3>Campaigns by status</h3>
-            </div>
-            <div class="panel-body">
-                <div class="chart-frame">
-                    <?php $camp = $charts['campaigns'] ?? []; ?>
-                    <canvas id="chartCampaigns"
-                        data-labels='<?= json_encode($camp['labels'] ?? []) ?>'
-                        data-values='<?= json_encode($camp['values'] ?? []) ?>'></canvas>
+        <div class="col-lg-4">
+            <div class="dash-panel">
+                <div class="panel-head">
+                    <h3>Campaigns by status</h3>
+                </div>
+                <div class="panel-body">
+                    <div class="chart-frame" id="chartCampaignsFrame">
+                        <?php $camp = $charts['campaigns'] ?? []; ?>
+                        <canvas id="chartCampaigns"
+                            data-labels='<?= json_encode($camp['labels'] ?? []) ?>'
+                            data-values='<?= json_encode($camp['values'] ?? []) ?>'></canvas>
+                        <div class="chart-empty d-none" id="chartCampaignsEmpty" aria-hidden="true">
+                            <i class="fas fa-chart-pie"></i>
+                            <div class="chart-empty-title">No campaigns yet</div>
+                            <div class="chart-empty-sub">Create a campaign to see status mix here.</div>
+                            <?php if (function_exists('can') && can('campaigns.create')): ?>
+                                <a href="<?= site_url('campaigns/create') ?>" class="btn btn-sm btn-wa mt-1">New campaign</a>
+                            <?php endif; ?>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<div class="row g-2">
+<div class="page-section">
+    <div class="page-section-head">
+        <h2 class="page-section-title">Activity</h2>
+        <p class="page-section-sub">Latest campaigns and team events</p>
+    </div>
+    <div class="row g-3 dash-row">
     <div class="col-lg-5">
         <div class="dash-panel">
             <div class="panel-head">
@@ -236,6 +255,7 @@ $failedCount = (int) $get($stats, 'failed');
             </div>
         </div>
     </div>
+</div>
 </div>
 </div>
 <?= $this->endSection() ?>

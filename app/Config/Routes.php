@@ -44,6 +44,8 @@ $routes->group('platform', ['filter' => 'platformAuth'], static function ($route
     $routes->get('clients', 'PlatformClients::index');
     $routes->get('clients/create', 'PlatformClients::create');
     $routes->post('clients', 'PlatformClients::store', ['filter' => 'csrf']);
+    $routes->get('meta-tech', 'PlatformClients::metaTech');
+    $routes->post('meta-tech', 'PlatformClients::saveMetaTech', ['filter' => 'csrf']);
     $routes->get('clients/(:segment)', 'PlatformClients::show/$1');
     $routes->post('clients/(:segment)/meta', 'PlatformClients::saveMeta/$1', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/login', 'PlatformClients::saveLogin/$1', ['filter' => 'csrf']);
@@ -183,6 +185,11 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->get('notifications/poll', 'Notifications::poll');
     $routes->post('notifications/(:num)/read', 'Notifications::markRead/$1', ['filter' => 'csrf']);
     $routes->post('notifications/read-all', 'Notifications::markAllRead', ['filter' => 'csrf']);
+
+    // Meta WhatsApp identity (verified name / phone / profile pic)
+    $routes->get('wa-identity/avatar', 'WaIdentity::avatar');
+    $routes->get('wa-identity/refresh', 'WaIdentity::refresh');
+    $routes->post('wa-identity/refresh', 'WaIdentity::refresh', ['filter' => 'csrf']);
 
     // Automations
     $routes->get('automations', 'Automations::index');

@@ -41,6 +41,10 @@ $platformName = (string) ($platformName ?? 'Admin');
                 <i class="fas fa-plus" aria-hidden="true"></i>
                 <span>Create client</span>
             </a>
+            <a href="<?= site_url('platform/meta-tech') ?>" class="platform-side-link<?= $navActive === 'meta-tech' ? ' is-active' : '' ?>">
+                <i class="fab fa-meta" aria-hidden="true"></i>
+                <span>Embedded Signup</span>
+            </a>
 
             <div class="platform-side-footer">
                 <div class="platform-side-user">

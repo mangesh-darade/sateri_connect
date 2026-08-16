@@ -53,10 +53,38 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom' } },
-                scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+                layout: { padding: { bottom: 4 } },
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { boxWidth: 10, boxHeight: 10, padding: 12, font: { size: 11 } }
+                    }
+                },
+                scales: {
+                    x: { ticks: { maxRotation: 0, autoSkipPadding: 8, font: { size: 10 } }, grid: { display: false } },
+                    y: { beginAtZero: true, ticks: { precision: 0, font: { size: 10 } }, grid: { color: 'rgba(75,55,134,.06)' } }
+                }
             }
         });
+    }
+
+    function sumValues(values) {
+        var total = 0;
+        for (var i = 0; i < values.length; i++) {
+            total += Number(values[i]) || 0;
+        }
+        return total;
+    }
+
+    function showCampaignEmptyState(canvas) {
+        if (canvas) {
+            canvas.classList.add('d-none');
+        }
+        var empty = document.getElementById('chartCampaignsEmpty');
+        if (empty) {
+            empty.classList.remove('d-none');
+            empty.setAttribute('aria-hidden', 'false');
+        }
     }
 
     function initCampaignChart() {
@@ -71,6 +99,11 @@
         if (window.dashboardCharts && window.dashboardCharts.campaigns) {
             labels = window.dashboardCharts.campaigns.labels || labels;
             values = window.dashboardCharts.campaigns.values || values;
+        }
+
+        if (!labels.length || !values.length || sumValues(values) <= 0) {
+            showCampaignEmptyState(canvas);
+            return;
         }
 
         new Chart(canvas.getContext('2d'), {
@@ -88,7 +121,13 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom' } }
+                cutout: '62%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { boxWidth: 10, boxHeight: 10, padding: 12, font: { size: 11 } }
+                    }
+                }
             }
         });
     }
