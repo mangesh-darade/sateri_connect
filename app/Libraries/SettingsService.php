@@ -39,6 +39,7 @@ class SettingsService
         'meta_two_step_pin',
         'smtp_password',
         'sendgrid_api_key',
+        'elintom_api_private_key',
     ];
 
     public function __construct(?SettingModel $settings = null, ?EncryptionService $encryption = null)

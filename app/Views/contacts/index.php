@@ -13,6 +13,13 @@
             <i class="fas fa-cloud-download-alt me-1"></i> <?= esc(function_exists('whatsapp_sync_label') ? whatsapp_sync_label() : 'Sync contacts') ?>
         </button>
     </form>
+    <form action="<?= site_url('contacts/sync-elintom') ?>" method="post" class="d-inline" id="formSyncElintOmContacts">
+        <?= csrf_field() ?>
+        <button type="submit" class="btn btn-outline-secondary btn-sm" id="btnSyncElintOmContacts"
+                title="Fetch customers from ElintOm POS (sma_companies) into Contacts">
+            <i class="fas fa-cash-register me-1"></i> Sync ElintOm customers
+        </button>
+    </form>
 <?php endif; ?>
 <?php if (function_exists('can') && can('contacts.export')): ?>
     <a href="<?= site_url('contacts/export') ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-file-export me-1"></i> Export</a>

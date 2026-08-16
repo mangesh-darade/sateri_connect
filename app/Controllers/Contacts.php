@@ -701,6 +701,41 @@ class Contacts extends BaseController
         }
     }
 
+    /**
+     * Pull customers from ElintOm POS (sma_companies) into local contacts.
+     */
+    public function syncFromElintOm(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('contacts.import')) {
+            return $denied;
+        }
+
+        try {
+            $stats = (new \App\Libraries\ElintOmCustomerSyncService())->sync();
+            $msg   = sprintf(
+                'ElintOm customers: %d created, %d updated%s%s.',
+                $stats['created'],
+                $stats['updated'],
+                $stats['skipped'] ? ', ' . $stats['skipped'] . ' skipped' : '',
+                $stats['failed'] ? ', ' . $stats['failed'] . ' failed' : ''
+            );
+
+            if ($this->request->isAJAX()) {
+                return $this->jsonResponse(true, $stats, $msg);
+            }
+
+            return redirect()->to('/contacts')->with('success', $msg);
+        } catch (\Throwable $e) {
+            log_message('error', 'ElintOm customer sync failed: {msg}', ['msg' => $e->getMessage()]);
+
+            if ($this->request->isAJAX()) {
+                return $this->jsonResponse(false, null, $e->getMessage(), [], 500);
+            }
+
+            return redirect()->to('/contacts')->with('error', $e->getMessage());
+        }
+    }
+
     protected function downloadSampleXlsx(): ResponseInterface
     {
         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();

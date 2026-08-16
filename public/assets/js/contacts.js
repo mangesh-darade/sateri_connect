@@ -535,6 +535,31 @@
             $btn.html('<i class="fas fa-spinner fa-spin me-1"></i> Syncing…');
         });
 
+        $('#formSyncElintOmContacts').on('submit', function (e) {
+            e.preventDefault();
+            var $form = $(this);
+            var $btn = $('#btnSyncElintOmContacts').prop('disabled', true);
+            $btn.data('html', $btn.html());
+            $btn.html('<i class="fas fa-spinner fa-spin me-1"></i> Syncing…');
+
+            APP.post(base() + '/contacts/sync-elintom', $form.serialize())
+                .done(function (res) {
+                    var msg = (res && res.message) || 'ElintOm sync complete.';
+                    APP.toast(msg, res && res.success === false ? 'error' : 'success');
+                    if (Contacts.table) {
+                        Contacts.table.ajax.reload(null, false);
+                    }
+                })
+                .fail(function (xhr) {
+                    var msg = (xhr.responseJSON && xhr.responseJSON.message)
+                        || 'ElintOm sync failed. Set elintom_base_url and elintom_api_private_key in settings.';
+                    APP.toast(msg, 'error');
+                })
+                .always(function () {
+                    $btn.prop('disabled', false).html($btn.data('html') || 'Sync ElintOm customers');
+                });
+        });
+
         Contacts.initDataTable();
         Contacts.initImport();
     });

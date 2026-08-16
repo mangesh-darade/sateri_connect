@@ -78,6 +78,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('contacts/bulk-delete', 'Contacts::bulkDelete', ['filter' => 'csrf']);
     $routes->post('contacts/bulk-tags', 'Contacts::bulkTags', ['filter' => 'csrf']);
     $routes->post('contacts/sync-cheerio', 'Contacts::syncFromCheerio', ['filter' => 'csrf']);
+    $routes->post('contacts/sync-elintom', 'Contacts::syncFromElintOm', ['filter' => 'csrf']);
     $routes->get('contacts/(:num)', 'Contacts::show/$1');
     $routes->get('contacts/(:num)/edit', 'Contacts::edit/$1');
     $routes->post('contacts/(:num)', 'Contacts::update/$1', ['filter' => 'csrf']);
@@ -247,6 +248,8 @@ $routes->group('api', ['namespace' => 'App\Controllers\Api'], static function ($
 
         $routes->get('contacts', 'Contacts::index', ['filter' => 'permission:contacts.view']);
         $routes->post('contacts', 'Contacts::create', ['filter' => 'permission:contacts.create']);
+        $routes->post('contacts/upsert', 'Contacts::upsert', ['filter' => 'permission:contacts.create']);
+        $routes->post('contacts/bulk-upsert', 'Contacts::bulkUpsert', ['filter' => 'permission:contacts.create']);
         $routes->get('contacts/(:num)', 'Contacts::show/$1', ['filter' => 'permission:contacts.view']);
         $routes->put('contacts/(:num)', 'Contacts::update/$1', ['filter' => 'permission:contacts.edit']);
         $routes->delete('contacts/(:num)', 'Contacts::delete/$1', ['filter' => 'permission:contacts.delete']);

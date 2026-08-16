@@ -1,4 +1,4 @@
-﻿# Sateri Connect — REST API Guide
+# Sateri Connect — REST API Guide
 
 Copy-paste ready reference for connecting ERP / website / other systems to Sateri Connect.
 
@@ -186,6 +186,8 @@ Failure:
 | `GET` | `/api/auth/me` | JWT | Current user |
 | `GET` | `/api/contacts` | `contacts.view` | List contacts |
 | `POST` | `/api/contacts` | `contacts.create` | Create contact |
+| `POST` | `/api/contacts/upsert` | `contacts.create` | Create or update by mobile |
+| `POST` | `/api/contacts/bulk-upsert` | `contacts.create` | Bulk upsert (max 200) |
 | `GET` | `/api/contacts/{id}` | `contacts.view` | Get contact |
 | `PUT` | `/api/contacts/{id}` | `contacts.edit` | Update contact |
 | `DELETE` | `/api/contacts/{id}` | `contacts.delete` | Delete contact |
@@ -405,6 +407,29 @@ curl -s -X POST "$BASE/contacts" \
     "status": "active",
     "notes": "From ERP"
   }'
+```
+
+### Upsert (ElintOm sync)
+
+```bash
+curl -s -X POST "$BASE/contacts/upsert" \
+  -H "Authorization: Bearer YOUR_JWT_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Bob",
+    "mobile": "919876543210",
+    "email": "bob@example.com",
+    "custom_fields": { "elintom_company_id": 42, "source": "elintom" }
+  }'
+```
+
+### Bulk upsert
+
+```bash
+curl -s -X POST "$BASE/contacts/bulk-upsert" \
+  -H "Authorization: Bearer YOUR_JWT_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{"contacts":[{"name":"A","mobile":"919111111111"},{"name":"B","mobile":"919222222222"}]}'
 ```
 
 ### Get / Update / Delete
