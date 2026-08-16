@@ -292,11 +292,15 @@ body.sidebar-collapse .main-sidebar .brand-link.has-logo-only .brand-logo-img {
 
 /* Fixed sidebar: keep Settings always visible; scroll only the menu */
 body.layout-fixed .main-sidebar {
-    height: 100vh !important;
-    height: 100dvh !important;
+    position: fixed !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    height: auto !important;
+    max-height: 100vh !important;
+    max-height: 100dvh !important;
     overflow: hidden !important;
-    display: flex;
-    flex-direction: column;
+    display: flex !important;
+    flex-direction: column !important;
 }
 body.layout-fixed .main-sidebar > .sidebar {
     flex: 1 1 auto;
@@ -314,21 +318,19 @@ body.layout-fixed .main-sidebar > .sidebar {
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
+    scrollbar-gutter: stable;
     scrollbar-width: thin;
-    scrollbar-color: transparent transparent;
-}
-.sidebar-nav-scroll:hover {
     scrollbar-color: #c5d0da transparent;
 }
 .sidebar-nav-scroll::-webkit-scrollbar {
-    width: 4px;
+    width: 6px;
 }
 .sidebar-nav-scroll::-webkit-scrollbar-thumb {
-    background: transparent;
+    background: #c5d0da;
     border-radius: 999px;
 }
 .sidebar-nav-scroll:hover::-webkit-scrollbar-thumb {
-    background: #c5d0da;
+    background: #9aa5b1;
 }
 .app-sidebar-nav {
     padding: 0 0 0.35rem;
@@ -1201,6 +1203,62 @@ body.layout-fixed .main-sidebar > .sidebar {
     font-weight: 560;
 }
 .auth-card .auth-links a:hover { color: var(--wa-teal); text-decoration: underline; }
+
+.auth-client-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    margin-top: 0.25rem;
+}
+.auth-client-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid rgba(15, 23, 42, 0.1);
+    border-radius: 12px;
+    text-decoration: none;
+    color: inherit;
+    background: #fff;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.auth-client-card:hover {
+    border-color: var(--wa-green, #25d366);
+    box-shadow: 0 4px 14px rgba(37, 211, 102, 0.12);
+    color: inherit;
+}
+.auth-client-card-icon {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(37, 211, 102, 0.12);
+    color: var(--wa-green-dark, #128c7e);
+    flex-shrink: 0;
+}
+.auth-client-card-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+.auth-client-card-name {
+    font-weight: 650;
+    font-size: 0.95rem;
+}
+.auth-client-card-key {
+    font-size: 0.78rem;
+    color: #64748b;
+}
+.auth-client-card-action {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--wa-green-dark, #128c7e);
+    white-space: nowrap;
+}
 
 /* Legacy / unused split-panel bits kept inert */
 .auth-page .login-box { z-index: 2; }
