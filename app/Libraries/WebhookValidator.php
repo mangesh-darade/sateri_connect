@@ -36,7 +36,16 @@ class WebhookValidator
             }
         }
 
-        log_message('warning', 'Webhook challenge failed: verify token mismatch (tried cheerio+meta).');
+        // Portal multi-client: accept any active tenant/platform verify token from master.
+        if (MasterTenantRepository::masterConfigured()) {
+            foreach ((new MasterTenantRepository())->allVerifyTokens() as $masterToken) {
+                if ($masterToken !== '' && hash_equals($masterToken, $token)) {
+                    return $challenge;
+                }
+            }
+        }
+
+        log_message('warning', 'Webhook challenge failed: verify token mismatch (tried cheerio+meta+master).');
 
         return false;
     }
@@ -75,7 +84,16 @@ class WebhookValidator
             }
         }
 
-        log_message('warning', 'Webhook signature mismatch (tried cheerio+meta secrets).');
+        if (MasterTenantRepository::masterConfigured()) {
+            foreach ((new MasterTenantRepository())->allAppSecrets() as $secret) {
+                $expected = 'sha256=' . hash_hmac('sha256', $rawBody, $secret);
+                if (hash_equals($expected, $signatureHeader)) {
+                    return 'master';
+                }
+            }
+        }
+
+        log_message('warning', 'Webhook signature mismatch (tried cheerio+meta+master secrets).');
 
         return null;
     }

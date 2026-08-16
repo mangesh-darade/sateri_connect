@@ -27,6 +27,7 @@ WhatsApp Automation Platform (`whstapp`) — full documentation set.
 | 6 | [CRON_SETUP.md](CRON_SETUP.md) | Queue / campaign workers |
 | 7 | [API.md](API.md) | REST API + JWT |
 | 8 | [DEPLOYMENT.md](DEPLOYMENT.md) | Production checklist |
+| — | [MULTI_CLIENT_TENANCY.md](MULTI_CLIENT_TENANCY.md) | Single domain + separate DB per client |
 | — | [schema.sql](schema.sql) | Database schema reference |
 
 Meta publish / go-live: **[META_PUBLISH_GO_LIVE.md](META_PUBLISH_GO_LIVE.md)** · API test calls: **[META_APP_REVIEW_API_TESTING.md](META_APP_REVIEW_API_TESTING.md)** · also `META_TESTING.md`, `META_CONFIGURATION.md`, `META_FLOW.md`.

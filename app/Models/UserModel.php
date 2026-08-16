@@ -52,7 +52,13 @@ class UserModel extends Model
     protected $cleanValidationRules = true;
 
     protected $beforeInsert = ['hashPassword'];
-    protected $beforeUpdate = ['hashPassword'];
+    protected $beforeUpdate = ['hashPassword', 'rememberEmailsBeforeUpdate'];
+    protected $afterInsert  = ['syncLoginDirectoryAfterInsert'];
+    protected $afterUpdate  = ['syncLoginDirectoryAfterUpdate'];
+    protected $afterDelete  = ['syncLoginDirectoryAfterDelete'];
+
+    /** @var array<int, string> */
+    protected array $emailsBeforeUpdate = [];
 
     /**
      * @param array<string, mixed> $data
@@ -68,6 +74,99 @@ class UserModel extends Model
 
         if (password_get_info($data['data']['password'])['algo'] === null) {
             $data['data']['password'] = password_hash($data['data']['password'], PASSWORD_DEFAULT);
+        }
+
+        return $data;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    protected function rememberEmailsBeforeUpdate(array $data): array
+    {
+        $this->emailsBeforeUpdate = [];
+        $ids = $data['id'] ?? null;
+        if ($ids === null) {
+            return $data;
+        }
+        if (! is_array($ids)) {
+            $ids = [$ids];
+        }
+        foreach ($ids as $id) {
+            $row = $this->find((int) $id);
+            if (is_array($row) && ! empty($row['email'])) {
+                $this->emailsBeforeUpdate[(int) $id] = (string) $row['email'];
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    protected function syncLoginDirectoryAfterInsert(array $data): array
+    {
+        $email = (string) ($data['data']['email'] ?? '');
+        if ($email !== '') {
+            (new \App\Libraries\TenantLoginDirectory())->syncEmail($email);
+        }
+
+        return $data;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    protected function syncLoginDirectoryAfterUpdate(array $data): array
+    {
+        $ids = $data['id'] ?? null;
+        if ($ids === null) {
+            return $data;
+        }
+        if (! is_array($ids)) {
+            $ids = [$ids];
+        }
+
+        $dir = new \App\Libraries\TenantLoginDirectory();
+        foreach ($ids as $id) {
+            $id  = (int) $id;
+            $row = $this->withDeleted()->find($id);
+            if (! is_array($row)) {
+                continue;
+            }
+            $newEmail = (string) ($row['email'] ?? '');
+            $oldEmail = $this->emailsBeforeUpdate[$id] ?? null;
+            $dir->syncEmail($newEmail, $oldEmail);
+        }
+        $this->emailsBeforeUpdate = [];
+
+        return $data;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    protected function syncLoginDirectoryAfterDelete(array $data): array
+    {
+        $ids = $data['id'] ?? null;
+        if ($ids === null) {
+            return $data;
+        }
+        if (! is_array($ids)) {
+            $ids = [$ids];
+        }
+
+        $dir = new \App\Libraries\TenantLoginDirectory();
+        foreach ($ids as $id) {
+            $row = $this->withDeleted()->find((int) $id);
+            if (is_array($row) && ! empty($row['email'])) {
+                $dir->removeEmail((string) $row['email']);
+            }
         }
 
         return $data;

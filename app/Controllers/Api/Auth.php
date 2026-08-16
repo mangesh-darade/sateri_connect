@@ -28,6 +28,16 @@ class Auth extends BaseApiController
             ]);
         }
 
+        $tenantKey = null;
+        if (\App\Libraries\MasterTenantRepository::masterConfigured()) {
+            $tenantKey = (new \App\Libraries\MasterTenantRepository())->findTenantKeyByEmail($email);
+            if ($tenantKey !== null) {
+                if (! (new \App\Libraries\TenantConnection())->apply($tenantKey, 'api_login')) {
+                    return $this->respondError('Unable to connect to your workspace.', [], 503);
+                }
+            }
+        }
+
         $user = model(UserModel::class)->findByEmail($email);
 
         if ($user === null || ! password_verify($password, (string) ($user['password'] ?? ''))) {
@@ -50,10 +60,16 @@ class Auth extends BaseApiController
             }
         }
 
-        $token = service('jwtService')->generate((int) $user['id'], [
+        $tenantKey = $tenantKey ?? \App\Libraries\TenantContext::get();
+        $claims    = [
             'email' => $user['email'],
             'role'  => $role['slug'] ?? null,
-        ]);
+        ];
+        if ($tenantKey !== null && $tenantKey !== '') {
+            $claims['tenant'] = strtolower($tenantKey);
+        }
+
+        $token = service('jwtService')->generate((int) $user['id'], $claims);
 
         model(UserModel::class)->update((int) $user['id'], ['last_login' => date('Y-m-d H:i:s')]);
         (new ActivityLogger())->log('api_login', 'auth', 'API login', ['user_id' => $user['id']]);
@@ -62,6 +78,7 @@ class Auth extends BaseApiController
             'token'      => $token,
             'token_type' => 'Bearer',
             'expires_in' => (int) config('Jwt')->ttl,
+            'tenant'     => $tenantKey,
             'user'       => [
                 'id'          => (int) $user['id'],
                 'name'        => $user['name'],

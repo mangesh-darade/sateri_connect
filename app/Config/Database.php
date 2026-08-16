@@ -3,12 +3,14 @@
 namespace Config;
 
 use App\Libraries\SubdomainDatabase;
+use App\Libraries\TenantResolver;
 use CodeIgniter\Database\Config;
 
 /**
- * Edit ONLY applyBySubdomain() switch for multi-tenant DBs.
- * Connection credentials are NOT read from .env (database.default.* ignored).
- * Defaults + subdomain detect: App\Libraries\SubdomainDatabase.
+ * Multi-tenant DBs:
+ * - Legacy: applyBySubdomain() switch for known Host slugs
+ * - Portal: master DB (sateri_master) + session/JWT/webhook routing
+ * Connection credentials are NOT read from .env for default (except optional master.* / tenancy.*).
  */
 class Database extends Config
 {
@@ -22,16 +24,20 @@ class Database extends Config
     /** @var array<string, mixed> */
     public array $tests;
 
+    /** Master routing DB (tenants, login index, phone routes). @var array<string, mixed> */
+    public array $master = [];
+
     public function __construct()
     {
         $this->default = SubdomainDatabase::defaultConnection();
         $this->tests   = SubdomainDatabase::testsConnection();
+        $this->master  = SubdomainDatabase::defaultConnection();
 
         parent::__construct();
-        SubdomainDatabase::boot($this);
+        TenantResolver::boot($this);
     }
 
-    /** Subdomain → DB. Add new clients here only. */
+    /** Subdomain → DB. Keep for legacy Host-based tenants. */
     public function applyBySubdomain(string $subdomain): void
     {
         switch ($subdomain) {
@@ -61,22 +67,6 @@ class Database extends Config
                 $this->default['DBDriver'] = 'MySQLi';
                 $this->default['port']     = 3306;
                 break;
-
-            // case 'herbinn':
-            //     $this->default['hostname'] = 'localhost';
-            //     $this->default['username'] = 'root';
-            //     $this->default['password'] = '';
-            //     $this->default['database'] = 'herbinn';
-            //     $this->default['port']     = 3306;
-            //     break;
-
-            // case 'client1':
-            //     $this->default['hostname'] = 'localhost';
-            //     $this->default['username'] = 'root';
-            //     $this->default['password'] = '';
-            //     $this->default['database'] = 'client1_db';
-            //     $this->default['port']     = 3306;
-            //     break;
 
             default:
                 break;

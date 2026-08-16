@@ -5,8 +5,9 @@ namespace App\Libraries;
 use Config\Database;
 
 /**
- * CI4 database defaults + subdomain detect/boot.
- * Tenant credentials: ONLY Config\Database::applyBySubdomain() — never .env database.default.*.
+ * CI4 database defaults + subdomain Host detection.
+ * Boot is handled by TenantResolver (legacy switch + portal/master).
+ * Tenant credentials: applyBySubdomain() and/or sateri_master — never .env database.default.*.
  */
 class SubdomainDatabase
 {
@@ -78,24 +79,11 @@ class SubdomainDatabase
     }
 
     /**
-     * Called from Config\Database::__construct after parent::__construct().
-     * Wipes any .env database.default.* merge, then applies subdomain switch only.
+     * @deprecated Use TenantResolver::boot()
      */
     public static function boot(Database $db): void
     {
-        if (\ENVIRONMENT === 'testing') {
-            $db->defaultGroup = 'tests';
-            $db->tests        = self::testsConnection();
-            $db->tests['DBDebug'] = true;
-
-            return;
-        }
-
-        // Ignore .env database.default.* — switch in Config\Database is the only source.
-        $db->default            = self::defaultConnection();
-        $db->default['DBDebug'] = \ENVIRONMENT !== 'production';
-
-        $db->applyBySubdomain(self::resolve());
+        TenantResolver::boot($db);
     }
 
     /**

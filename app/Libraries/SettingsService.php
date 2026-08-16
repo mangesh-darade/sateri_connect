@@ -394,6 +394,35 @@ class SettingsService
 
             $this->set($settingKey, $value, $group, $encrypt);
         }
+
+        $this->syncTenantPhoneRoute();
+    }
+
+    /**
+     * Publish Meta phone_number_id → tenant map for shared-domain webhooks.
+     */
+    protected function syncTenantPhoneRoute(): void
+    {
+        $tenantKey = TenantContext::get();
+        if ($tenantKey === null || $tenantKey === '') {
+            return;
+        }
+        if (! MasterTenantRepository::masterConfigured()) {
+            return;
+        }
+
+        $meta = $this->getMetaConfig();
+        $pnid = trim((string) ($meta['phone_number_id'] ?? ''));
+        if ($pnid === '') {
+            return;
+        }
+
+        (new MasterTenantRepository())->upsertPhoneRoute(
+            $pnid,
+            $tenantKey,
+            (string) ($meta['app_secret'] ?? ''),
+            (string) ($meta['verify_token'] ?? '')
+        );
     }
 
     public function isInstagramInboxEnabled(): bool

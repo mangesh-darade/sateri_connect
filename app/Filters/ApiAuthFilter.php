@@ -39,6 +39,15 @@ class ApiAuthFilter implements FilterInterface
                 ->setJSON(['success' => false, 'message' => 'Invalid or expired token.']);
         }
 
+        $tenantClaim = isset($payload->tenant) ? (string) $payload->tenant : '';
+        if ($tenantClaim !== '') {
+            if (! \App\Libraries\TenantResolver::ensureFromJwtClaim($tenantClaim)) {
+                return service('response')
+                    ->setStatusCode(503)
+                    ->setJSON(['success' => false, 'message' => 'Unable to connect to workspace.']);
+            }
+        }
+
         $userId = (int) ($payload->uid ?? $payload->sub ?? 0);
         if ($userId <= 0) {
             return service('response')

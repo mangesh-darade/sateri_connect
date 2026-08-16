@@ -79,6 +79,17 @@ class Webhooks extends Controller
             $rawBody = (string) $rawBody;
         }
 
+        $payload = json_decode($rawBody, true);
+        if (! is_array($payload)) {
+            $payload = [];
+        }
+
+        // Portal multi-client: switch tenant DB from phone_number_id before signature/settings.
+        $phoneNumberId = $this->extractPhoneNumberId($payload);
+        if ($phoneNumberId !== '') {
+            (new \App\Libraries\TenantConnection())->applyFromPhoneNumberId($phoneNumberId);
+        }
+
         $signature = $this->request->getHeaderLine('X-Hub-Signature-256');
         $validator = new WebhookValidator();
         $matchedProvider = $validator->matchSignatureProvider($rawBody, $signature !== '' ? $signature : null);
@@ -87,11 +98,6 @@ class Webhooks extends Controller
         // Local / non-production: still accept payload so Live Chat testing works
         // when App Secret is missing/mismatched. Production stays strict.
         $allowUnsigned = defined('ENVIRONMENT') && ENVIRONMENT !== 'production';
-
-        $payload = json_decode($rawBody, true);
-        if (! is_array($payload)) {
-            $payload = [];
-        }
 
         $logId = model(WebhookLogModel::class)->insert([
             'event_type'      => $this->detectEventType($payload),
@@ -139,6 +145,36 @@ class Webhooks extends Controller
         }
 
         return $this->response->setStatusCode(200)->setJSON(['success' => true]);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    protected function extractPhoneNumberId(array $payload): string
+    {
+        $entries = $payload['entry'] ?? [];
+        if (! is_array($entries)) {
+            return '';
+        }
+
+        foreach ($entries as $entry) {
+            $changes = is_array($entry) ? ($entry['changes'] ?? []) : [];
+            if (! is_array($changes)) {
+                continue;
+            }
+            foreach ($changes as $change) {
+                $value = is_array($change) ? ($change['value'] ?? []) : [];
+                if (! is_array($value)) {
+                    continue;
+                }
+                $meta = $value['metadata'] ?? null;
+                if (is_array($meta) && ! empty($meta['phone_number_id'])) {
+                    return trim((string) $meta['phone_number_id']);
+                }
+            }
+        }
+
+        return '';
     }
 
     /**
