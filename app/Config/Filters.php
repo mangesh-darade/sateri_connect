@@ -40,6 +40,7 @@ class Filters extends BaseFilters
         'pagecache'     => PageCache::class,
         'performance'   => PerformanceMetrics::class,
         'auth'          => AuthFilter::class,
+        'platformAuth'  => \App\Filters\PlatformAuthFilter::class,
         'permission'    => PermissionFilter::class,
         'apiAuth'       => ApiAuthFilter::class,
         'rateLimit'     => RateLimitFilter::class,

@@ -37,6 +37,21 @@ $routes->match(['get', 'post'], 'reset-password/(:segment)', 'Auth::resetPasswor
 
 /*
  * --------------------------------------------------------------------
+ * Platform super admin (all clients)
+ * --------------------------------------------------------------------
+ */
+$routes->group('platform', ['filter' => 'platformAuth'], static function ($routes) {
+    $routes->get('clients', 'PlatformClients::index');
+    $routes->get('clients/create', 'PlatformClients::create');
+    $routes->post('clients', 'PlatformClients::store', ['filter' => 'csrf']);
+    $routes->get('clients/(:segment)', 'PlatformClients::show/$1');
+    $routes->post('clients/(:segment)/meta', 'PlatformClients::saveMeta/$1', ['filter' => 'csrf']);
+    $routes->post('clients/(:segment)/login', 'PlatformClients::saveLogin/$1', ['filter' => 'csrf']);
+    $routes->post('clients/(:segment)/enter', 'PlatformClients::enter/$1', ['filter' => 'csrf']);
+});
+
+/*
+ * --------------------------------------------------------------------
  * WhatsApp Webhooks (public — no auth, no CSRF; WhatsApp-shaped payload via Cheerio)
  * --------------------------------------------------------------------
  */
