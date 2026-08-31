@@ -1,6 +1,6 @@
-﻿# Deploy to yevle.elintpos.in (WhatsApp app)
+# Deploy to yevle.elintpos.in (WhatsApp app)
 
-Your domain **already runs another site** (`login.php` → ElintPOS style app).  
+Your domain **already runs another site** (`login.php` ? ElintPOS style app).  
 This WhatsApp project is **not** online there yet (`/webhooks` = 404).
 
 Follow this order.
@@ -11,26 +11,26 @@ Follow this order.
 
 | Check | Result |
 |-------|--------|
-| `https://yevle.elintpos.in/` | Opens other app → `login.php` |
+| `https://yevle.elintpos.in/` | Opens other app ? `login.php` |
 | `https://yevle.elintpos.in/webhooks` | **404** (WhatsApp app missing) |
-| `https://yevle.elintpos.in/whstapp/public/` | **404** |
+| `https://yevle.elintpos.in/sateri_connect/public/` | **404** |
 
 So Cheerio **cannot** verify webhook until this CodeIgniter app is uploaded and reachable.
 
 ---
 
-## Option A — Subdomain (recommended)
+## Option A � Subdomain (recommended)
 
 Create DNS:
 
 ```text
-wa.yevle.elintpos.in   → same server IP
+wa.yevle.elintpos.in   ? same server IP
 ```
 
 Point that vhost DocumentRoot to:
 
 ```text
-/path/to/whstapp/public
+/path/to/sateri_connect/public
 ```
 
 Then:
@@ -44,42 +44,42 @@ Keeps existing POS on `yevle.elintpos.in` untouched.
 
 ---
 
-## Option B — Subfolder on same domain
+## Option B � Subfolder on same domain
 
 Upload project to e.g.:
 
 ```text
-/home/.../yevle.elintpos.in/whstapp/
+/home/.../yevle.elintpos.in/sateri_connect/
 ```
 
 DocumentRoot stays the POS site. App URL:
 
 ```text
-https://yevle.elintpos.in/whstapp/public/
+https://yevle.elintpos.in/sateri_connect/public/
 ```
 
 Webhook:
 
 ```text
-https://yevle.elintpos.in/whstapp/public/webhooks
+https://yevle.elintpos.in/sateri_connect/public/webhooks
 ```
 
 `.env`:
 
 ```ini
-app.baseURL = 'https://yevle.elintpos.in/whstapp/public/'
+app.baseURL = 'https://yevle.elintpos.in/sateri_connect/public/'
 ```
 
 ---
 
-## Option C — Replace main site (dangerous)
+## Option C � Replace main site (dangerous)
 
 Only if you want to remove the current POS login site.  
 Not recommended without backup.
 
 ---
 
-## After files are online — do this
+## After files are online � do this
 
 ### 1) Server `.env`
 
@@ -104,21 +104,21 @@ app.forceGlobalSecureRequests = true
 ### 2) Database
 
 ```bash
-# create DB apiwa, then:
+# create DB sateri_connect, then:
 php spark migrate
 # install wizard in browser OR seed admin
 ```
 
 ### 3) SSL
 
-HTTPS must work (Let’s Encrypt). Cheerio / WABA rejects plain HTTP.
+HTTPS must work (Let�s Encrypt). Cheerio / WABA rejects plain HTTP.
 
 ### 4) Cheerio webhook
 
 | Field | Value (Option A example) |
 |-------|---------------------------|
 | Callback URL | `https://wa.yevle.elintpos.in/webhooks` |
-| Verify token | Same as Settings → Cheerio API |
+| Verify token | Same as Settings ? Cheerio API |
 
 Subscribe: **messages**  
 Remove old Cloudflare tunnel URL.
@@ -130,9 +130,9 @@ Ensure Cheerio WABA is live for production webhooks.
 ### 6) Cron
 
 ```cron
-* * * * * cd /path/to/whstapp && php spark queue:process
-* * * * * cd /path/to/whstapp && php spark campaigns:process
-* * * * * cd /path/to/whstapp && php spark automations:process
+* * * * * cd /path/to/sateri_connect && php spark queue:process
+* * * * * cd /path/to/sateri_connect && php spark campaigns:process
+* * * * * cd /path/to/sateri_connect && php spark automations:process
 ```
 
 ### 7) Test
@@ -141,7 +141,7 @@ Ensure Cheerio WABA is live for production webhooks.
 php spark templates:sync
 ```
 
-Send template → reply on phone → check Live Chat.
+Send template ? reply on phone ? check Live Chat.
 
 ---
 
@@ -153,14 +153,14 @@ Send template → reply on phone → check Live Chat.
 
 ## What is ready in this project
 
-- [`.env.production.yevle`](../.env.production.yevle) — production env template  
-- In-app **Guide → Production**  
+- [`.env.production.yevle`](../.env.production.yevle) � production env template  
+- In-app **Guide ? Production**  
 - Local Cheerio settings already work on WAMP  
 
 ---
 
 ## Next action for you
 
-1. Hosting panel → create **`wa.yevle.elintpos.in`** (Option A) **or** upload to `/whstapp/public` (Option B).  
-2. Tell me which option + when `https://…/login` of **this** WhatsApp app opens.  
+1. Hosting panel ? create **`wa.yevle.elintpos.in`** (Option A) **or** upload to `/sateri_connect/public` (Option B).  
+2. Tell me which option + when `https://�/login` of **this** WhatsApp app opens.  
 3. Then I can give the exact Cheerio Callback string and we can re-run webhook verify steps.

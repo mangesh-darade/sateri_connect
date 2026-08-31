@@ -1,4 +1,4 @@
-ï»¿# Installation Guide
+# Installation Guide
 
 WhatsApp Automation Platform on **XAMPP** (macOS / Windows / Linux) with CodeIgniter 4.7.
 
@@ -18,13 +18,13 @@ Required PHP extensions: `intl`, `mbstring`, `json`, `curl`, `openssl`, `mysqli`
 ### XAMPP notes
 
 - Start **Apache** and **MySQL** from the XAMPP control panel.
-- Document root is typically `htdocs/`. This project lives at `htdocs/APIWA`.
-- Prefer pointing a vhost or Alias at `APIWA/public` so `app/`, `writable/`, and `.env` are not web-accessible.
+- Document root is typically `htdocs/`. This project lives at `htdocs/sateri_connect`.
+- Prefer pointing a vhost or Alias at `sateri_connect/public` so `app/`, `writable/`, and `.env` are not web-accessible.
 
 ## 2. Install dependencies
 
 ```bash
-cd /Applications/XAMPP/xamppfiles/htdocs/APIWA   # adjust path on Windows/Linux
+cd /Applications/XAMPP/xamppfiles/htdocs/sateri_connect   # adjust path on Windows/Linux
 composer install
 ```
 
@@ -39,9 +39,9 @@ Edit `.env`:
 
 ```ini
 CI_ENVIRONMENT = development
-app.baseURL = 'http://localhost/APIWA/public/'
+app.baseURL = 'http://localhost/sateri_connect/public/'
 database.default.hostname = localhost
-database.default.database = apiwa
+database.default.database = sateri_connect
 database.default.username = root
 database.default.password =
 database.default.DBDriver = MySQLi
@@ -76,7 +76,7 @@ chmod -R ug+rwX writable
 In phpMyAdmin or MySQL CLI:
 
 ```sql
-CREATE DATABASE apiwa CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE sateri_connect CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
 ## 6. Migrate and seed (CLI)
@@ -97,17 +97,17 @@ Create an admin user via the installer **Admin** step, or insert one manually wi
 Visit:
 
 ```
-http://localhost/APIWA/public/install
+http://localhost/sateri_connect/public/install
 ```
 
 Steps:
 
-1. **Welcome / requirements** â€” PHP version and extensions check  
-2. **Database** â€” writes DB credentials to `.env`  
-3. **Migrate** â€” runs migrations + seeders  
-4. **Admin** â€” creates the first administrator account  
-5. **Cheerio** â€” optional Cheerio API credentials  
-6. **Finish** â€” sets `app_installed` and redirects to login  
+1. **Welcome / requirements** — PHP version and extensions check  
+2. **Database** — writes DB credentials to `.env`  
+3. **Migrate** — runs migrations + seeders  
+4. **Admin** — creates the first administrator account  
+5. **Cheerio** — optional Cheerio API credentials  
+6. **Finish** — sets `app_installed` and redirects to login  
 
 After install, `/install` should no longer be needed. The `install` filter skips the installer routes while the app is uninstalled.
 
@@ -127,16 +127,16 @@ Optional VirtualHost:
 
 ```apache
 <VirtualHost *:80>
-    ServerName apiwa.local
-    DocumentRoot "/Applications/XAMPP/xamppfiles/htdocs/APIWA/public"
-    <Directory "/Applications/XAMPP/xamppfiles/htdocs/APIWA/public">
+    ServerName sateri_connect.local
+    DocumentRoot "/Applications/XAMPP/xamppfiles/htdocs/sateri_connect/public"
+    <Directory "/Applications/XAMPP/xamppfiles/htdocs/sateri_connect/public">
         AllowOverride All
         Require all granted
     </Directory>
 </VirtualHost>
 ```
 
-Set `app.baseURL = 'http://apiwa.local/'` to match.
+Set `app.baseURL = 'http://sateri_connect.local/'` to match.
 
 ## 9. Cron workers
 
@@ -145,9 +145,9 @@ Campaigns, the message queue, automations, template sync, and log cleanup requir
 Minimum for development (every minute):
 
 ```cron
-* * * * * cd /Applications/XAMPP/xamppfiles/htdocs/APIWA && php spark queue:process >> writable/logs/cron-queue.log 2>&1
-* * * * * cd /Applications/XAMPP/xamppfiles/htdocs/APIWA && php spark campaigns:process >> writable/logs/cron-campaigns.log 2>&1
-* * * * * cd /Applications/XAMPP/xamppfiles/htdocs/APIWA && php spark automations:process >> writable/logs/cron-automations.log 2>&1
+* * * * * cd /Applications/XAMPP/xamppfiles/htdocs/sateri_connect && php spark queue:process >> writable/logs/cron-queue.log 2>&1
+* * * * * cd /Applications/XAMPP/xamppfiles/htdocs/sateri_connect && php spark campaigns:process >> writable/logs/cron-campaigns.log 2>&1
+* * * * * cd /Applications/XAMPP/xamppfiles/htdocs/sateri_connect && php spark automations:process >> writable/logs/cron-automations.log 2>&1
 ```
 
 ## 10. First login and Cheerio setup
@@ -155,7 +155,7 @@ Minimum for development (every minute):
 1. Open `/login` with the admin account from the installer.  
 2. Configure Cheerio API key under **Settings** (or finish Cheerio during install).  
 3. Follow [CHEERIO_CONFIGURATION.md](CHEERIO_CONFIGURATION.md) and [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md).  
-4. Sync message templates from Cheerio under **Templates â†’ Sync**.
+4. Sync message templates from Cheerio under **Templates ? Sync**.
 
 ## Troubleshooting
 
@@ -169,6 +169,6 @@ Minimum for development (every minute):
 
 ## Next steps
 
-- [API.md](API.md) â€” REST API  
-- [DEPLOYMENT.md](DEPLOYMENT.md) â€” production hardening  
-- [CRON_SETUP.md](CRON_SETUP.md) â€” full crontab  
+- [API.md](API.md) — REST API  
+- [DEPLOYMENT.md](DEPLOYMENT.md) — production hardening  
+- [CRON_SETUP.md](CRON_SETUP.md) — full crontab  

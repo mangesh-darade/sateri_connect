@@ -146,7 +146,7 @@ Full API reference: [API.md](API.md)
 
 **In Sateri Connect:**
 
-1. **Settings → ElintOm POS** — set ElintOm domain URL + Api3 private key  
-2. **Contacts → Sync ElintOm customers** — pulls via `POST {url}/api3/eshop` (`action=sateri_contacts`)
+1. **Settings → ElintOm POS** — set ElintOm domain URL + Api3 private key (Test / Sync from the same tab)
+2. **Contacts → Sync ElintOm customers** — same pull via `POST {url}/api3/eshop` (`action=sateri_contacts`)
 
 Details: [ELINTOM_CUSTOMER_SYNC.md](ELINTOM_CUSTOMER_SYNC.md)

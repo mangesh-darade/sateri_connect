@@ -1,17 +1,17 @@
-﻿# Production readiness & security
+# Production readiness & security
 
 Audit date context: local WAMP lab hardened for safer production deploys.
 
 ## Structure (target)
 
 ```
-whstapp/
-  public/          ← ONLY web DocumentRoot
+sateri_connect/
+  public/          ? ONLY web DocumentRoot
   app/
-  writable/        ← not web-accessible (.htaccess deny)
+  writable/        ? not web-accessible (.htaccess deny)
   docs/
-  _unused/         ← quarantined junk (do not deploy)
-  .env             ← never commit / never web-accessible
+  _unused/         ? quarantined junk (do not deploy)
+  .env             ? never commit / never web-accessible
 ```
 
 Root `.htaccess` rewrites into `public/` if DocumentRoot is mis-set.
@@ -29,7 +29,7 @@ Root `.htaccess` rewrites into `public/` if DocumentRoot is mis-set.
 | Installer | `writable/install.lock` + DB flag; lock fails closed |
 | Webhooks | Invalid signature **403 in production**; development may allow unsigned for local tunnels |
 | Chat uploads | MIME allowlist + 16MB (WhatsApp + Messenger/Instagram) |
-| Branding | Raster/ICO only (no new SVG — XSS); uploads `.htaccess` blocks PHP |
+| Branding | Raster/ICO only (no new SVG � XSS); uploads `.htaccess` blocks PHP |
 | Secrets in Settings | Fully masked (no prefix/suffix leak); page access token masked |
 | baseURL | Production uses `.env` only (no Host-header auto-detect) |
 | CSRF | Session-based CSRF for panel forms |
@@ -45,7 +45,7 @@ Root `.htaccess` rewrites into `public/` if DocumentRoot is mis-set.
 ## Quarantined (`_unused/`)
 
 - `.env.bak-install-test`
-- `apiwa_database.sql`
+- `sateri_connect_database.sql`
 - stock `env`
 - `welcome_message.php`
 - writable lab junk (cookies HTML, tunnel notes)

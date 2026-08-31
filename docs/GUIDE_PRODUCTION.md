@@ -1,4 +1,4 @@
-Ôªø# Production Guide ‚Äî Live server setup
+# Production Guide ó Live server setup
 
 **Who this is for:** Putting the app online for real customers  
 **What you will do:** Deploy on a real server with HTTPS, Cheerio API key, live phone number, and workers  
@@ -12,13 +12,13 @@
 **Example live URL:** `https://yevle.elintpos.in/` (or a subdomain like `https://wa.yevle.elintpos.in/`)  
 (Document root must point to the `public/` folder.)
 
-> **Your domain checklist:** see [DEPLOY_YEVLE.md](DEPLOY_YEVLE.md) ‚Äî right now `yevle.elintpos.in` still shows another app (`login.php`), so WhatsApp must be deployed first (subdomain recommended).
+> **Your domain checklist:** see [DEPLOY_YEVLE.md](DEPLOY_YEVLE.md) ó right now `yevle.elintpos.in` still shows another app (`login.php`), so WhatsApp must be deployed first (subdomain recommended).
 
 ---
 
 ## Big picture
 
-| Step | Do this | You are done when‚Ä¶ |
+| Step | Do this | You are done whenÖ |
 |-----:|---------|---------------------|
 | 1 | Prepare hosting | PHP 8.2+, MySQL, HTTPS ready |
 | 2 | Upload code + `.env` | Site opens on your domain |
@@ -52,16 +52,16 @@
 |------|-----|
 | VPS or shared hosting | Runs PHP + MySQL |
 | Domain name | Public URL for users and webhooks |
-| SSL certificate | HTTPS (Let‚Äôs Encrypt is fine) |
+| SSL certificate | HTTPS (Letís Encrypt is fine) |
 | Cheerio Dashboard + live WhatsApp number | Real messaging |
 | SSH or cPanel access | Upload files, run commands |
 | Backup plan | Protect data |
 
 ---
 
-# PART A ‚Äî Server
+# PART A ó Server
 
-## Step 1 ‚Äî Server requirements
+## Step 1 ó Server requirements
 
 - PHP **8.2+** with: `intl`, `mbstring`, `json`, `curl`, `openssl`, `mysqli`  
 - MySQL 8+ (or MariaDB) with **InnoDB**  
@@ -73,11 +73,11 @@
 
 - [ ] PHP version is 8.2 or higher  
 - [ ] Required extensions are enabled  
-- [ ] MySQL database created (example name: `apiwa`)  
+- [ ] MySQL database created (example name: `sateri_connect`)  
 
 ---
 
-## Step 2 ‚Äî Upload the project
+## Step 2 ó Upload the project
 
 1. Upload the project files to the server (Git, SFTP, or zip).  
 2. Point the web root to:
@@ -106,7 +106,7 @@ chmod -R ug+rwX writable
 
 ---
 
-## Step 3 ‚Äî Configure `.env`
+## Step 3 ó Configure `.env`
 
 Set at least:
 
@@ -117,7 +117,7 @@ app.baseURL = 'https://your-domain.com/'
 app.forceGlobalSecureRequests = true
 
 database.default.hostname = localhost
-database.default.database = apiwa
+database.default.database = sateri_connect
 database.default.username = YOUR_DB_USER
 database.default.password = YOUR_DB_PASSWORD
 database.default.DBDriver = MySQLi
@@ -125,7 +125,7 @@ database.default.DBDriver = MySQLi
 
 Also set:
 
-- Strong `encryption.key` ‚Üí run `php spark key:generate`  
+- Strong `encryption.key` ? run `php spark key:generate`  
 - Strong `JWT_SECRET` (long random string)  
 
 Use a **normal MySQL user**, not `root`, in production.
@@ -138,7 +138,7 @@ Use a **normal MySQL user**, not `root`, in production.
 
 ---
 
-## Step 4 ‚Äî Install / migrate
+## Step 4 ó Install / migrate
 
 If first deploy:
 
@@ -168,7 +168,7 @@ https://your-domain.com/login
 
 ---
 
-## Step 5 ‚Äî Security checklist
+## Step 5 ó Security checklist
 
 - [ ] `CI_ENVIRONMENT = production`  
 - [ ] HTTPS works on all pages  
@@ -183,11 +183,11 @@ More detail: [DEPLOYMENT.md](DEPLOYMENT.md)
 
 ---
 
-# PART B ‚Äî Cheerio for live WhatsApp
+# PART B ó Cheerio for live WhatsApp
 
-## Step 6 ‚Äî Live WhatsApp number + permanent token
+## Step 6 ó Live WhatsApp number + permanent token
 
-1. Open https://app.cheerio.in/ ‚Üí your app.  
+1. Open https://app.cheerio.in/ ? your app.  
 2. Connect a **live** WhatsApp Business phone number (not only the test number).  
 3. Create a **System User** token with WhatsApp permissions (permanent / long-lived).  
 4. Copy:
@@ -212,14 +212,14 @@ More detail: [DEPLOYMENT.md](DEPLOYMENT.md)
 
 ---
 
-## Step 7 ‚Äî Save Cheerio settings in the app
+## Step 7 ó Save Cheerio settings in the app
 
-1. Login ‚Üí **Settings ‚Üí Cheerio API**.  
+1. Login ? **Settings ? Cheerio API**.  
 2. Paste token, \(Cheerio live number\), WABA \(in Cheerio\), Webhook Secret, Verify Token.  
 3. API base: Cheerio Direct APIs (configured in app).  
 4. **Save Settings**.
 
-Also set **Settings ‚Üí Application**:
+Also set **Settings ? Application**:
 
 - App name  
 - Timezone (example: `Asia/Kolkata`)  
@@ -228,11 +228,11 @@ Also set **Settings ‚Üí Application**:
 ### Checklist
 
 - [ ] Settings saved  
-- [ ] No temporary ‚Äútest-only‚Äù token left in production  
+- [ ] No temporary ìtest-onlyî token left in production  
 
 ---
 
-## Step 8 ‚Äî Webhook (real HTTPS ‚Äî no tunnel)
+## Step 8 ó Webhook (real HTTPS ó no tunnel)
 
 Callback URL:
 
@@ -261,7 +261,7 @@ In Cheerio / WABA webhook settings:
 
 ---
 
-## Step 9 ‚Äî Sync templates
+## Step 9 ó Sync templates
 
 On the server:
 
@@ -270,7 +270,7 @@ cd /path/to/sateri_connect
 php spark templates:sync
 ```
 
-Or use **Templates ‚Üí Sync** in the panel.
+Or use **Templates ? Sync** in the panel.
 
 Only **APPROVED** templates can be used for broadcasts outside the 24-hour window.
 
@@ -281,9 +281,9 @@ Only **APPROVED** templates can be used for broadcasts outside the 24-hour windo
 
 ---
 
-# PART C ‚Äî Workers (required)
+# PART C ó Workers (required)
 
-## Step 10 ‚Äî Cron / Supervisor
+## Step 10 ó Cron / Supervisor
 
 Messages stay pending until workers run.
 
@@ -325,9 +325,9 @@ Windows server: use Task Scheduler (see [CRON_SETUP.md](CRON_SETUP.md)).
 
 ---
 
-# PART D ‚Äî Go-live test
+# PART D ó Go-live test
 
-## Step 11 ‚Äî Smoke test
+## Step 11 ó Smoke test
 
 1. Add a real contact (or your own phone if allowed).  
 2. Send an **approved template**.  
@@ -350,12 +350,12 @@ Windows server: use Task Scheduler (see [CRON_SETUP.md](CRON_SETUP.md)).
 
 ---
 
-## Step 12 ‚Äî Team and roles
+## Step 12 ó Team and roles
 
-1. **Roles** ‚Äî only give needed permissions. New modules:
+1. **Roles** ó only give needed permissions. New modules:
    - `sequences.view|create|edit|delete`
    - `guide.view` (Setup Workspace guides)
-2. **Users** ‚Äî create agent accounts (not shared admin).  
+2. **Users** ó create agent accounts (not shared admin).  
 3. Re-seed system role matrix after upgrades (custom roles are preserved):
 
 ```bash

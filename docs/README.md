@@ -1,9 +1,9 @@
 # Documentation Index
 
-WhatsApp Automation Platform (`whstapp`) — full documentation set.
+WhatsApp Automation Platform (`sateri_connect`) — full documentation set.
 
 **Messaging:** [Cheerio Direct APIs](https://newprod.api.cheerio.in/direct-apis/)  
-**Base URL (WAMP local):** `http://localhost/whstapp/public/`
+**Base URL (WAMP local):** `http://localhost/sateri_connect/public/`
 
 ---
 
@@ -38,11 +38,11 @@ Meta publish / go-live: **[META_PUBLISH_GO_LIVE.md](META_PUBLISH_GO_LIVE.md)** �
 
 | Page | URL |
 |------|-----|
-| Login | http://localhost/whstapp/public/login |
-| Installer | http://localhost/whstapp/public/install |
-| Dashboard | http://localhost/whstapp/public/dashboard |
-| Settings | http://localhost/whstapp/public/settings |
-| Webhook | http://localhost/whstapp/public/webhooks |
+| Login | http://localhost/sateri_connect/public/login |
+| Installer | http://localhost/sateri_connect/public/install |
+| Dashboard | http://localhost/sateri_connect/public/dashboard |
+| Settings | http://localhost/sateri_connect/public/settings |
+| Webhook | http://localhost/sateri_connect/public/webhooks |
 
 ---
 
@@ -50,7 +50,7 @@ Meta publish / go-live: **[META_PUBLISH_GO_LIVE.md](META_PUBLISH_GO_LIVE.md)** �
 
 Set during **Install → Admin**. If you used the guided local setup:
 
-- Email: `admin@apiwa.local`
+- Email: `admin@sateri_connect.local`
 - Password: *(the one you chose; common local default was `Admin@12345` — change it)*
 
 ---
@@ -59,7 +59,7 @@ Set during **Install → Admin**. If you used the guided local setup:
 
 ```
 Browser / Cheerio  →  Apache (public/)  →  CodeIgniter 4
-                                        →  MySQL (apiwa)
+                                        →  MySQL (sateri_connect)
 Cheerio Direct API  ←  Queue workers (spark)
 Cheerio / WABA webhooks  →  /webhooks
 ```

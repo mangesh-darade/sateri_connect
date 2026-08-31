@@ -1,12 +1,12 @@
-﻿# Local Guide — Test on your PC (WAMP)
+# Local Guide � Test on your PC (WAMP)
 
 **Who this is for:** Beginners testing on a local computer  
 **What you will do:** Run the app on WAMP, connect Cheerio WhatsApp, send and receive test messages  
-**Time:** About 1–2 hours (first time)  
+**Time:** About 1�2 hours (first time)  
 **Computer:** Windows with WAMP64  
 
-> **Messaging provider:** This app uses **Cheerio Direct APIs only** — not Meta Graph API.  
-> Primary Cheerio docs: [CHEERIO_FLOW.md](CHEERIO_FLOW.md) · [CHEERIO_CONFIGURATION.md](CHEERIO_CONFIGURATION.md) · [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md)  
+> **Messaging provider:** This app uses **Cheerio Direct APIs only** � not Meta Graph API.  
+> Primary Cheerio docs: [CHEERIO_FLOW.md](CHEERIO_FLOW.md) � [CHEERIO_CONFIGURATION.md](CHEERIO_CONFIGURATION.md) � [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md)  
 > API key: [https://app.cheerio.in/settings/apikey](https://app.cheerio.in/settings/apikey)
 
 > **Tip:** Finish one step fully. Then go to the next step. Use the checklists.  
@@ -21,7 +21,7 @@
 
 ![8 steps from WAMP to Live Chat](images/08-roadmap.png)
 
-| Step | Do this | You are done when… |
+| Step | Do this | You are done when� |
 |-----:|---------|---------------------|
 | 1 | Start WAMP | Icon is green |
 | 2 | Install app and login | Dashboard opens |
@@ -50,9 +50,9 @@ We use a free Cloudflare tunnel for local testing.
 
 ---
 
-# PART A — Run the app on your PC
+# PART A � Run the app on your PC
 
-## Step 1 — Start WAMP
+## Step 1 � Start WAMP
 
 1. Open **WAMP** from the Start Menu.  
 2. Wait until the icon is **green**.  
@@ -67,20 +67,20 @@ We use a free Cloudflare tunnel for local testing.
 
 ### If the icon is orange or red
 
-- Left-click WAMP → **Apache → Service → Start**  
-- Left-click WAMP → **MySQL → Service → Start**  
+- Left-click WAMP ? **Apache ? Service ? Start**  
+- Left-click WAMP ? **MySQL ? Service ? Start**  
 - If port 80 is busy, stop Skype or IIS, then try again.
 
 ---
 
-## Step 2 — Check the project folder
+## Step 2 � Check the project folder
 
 Your folder should look like this:
 
 ```
 c:\wamp64\www\sateri_connect\
   app\
-  public\          ← open this from the browser
+  public\          ? open this from the browser
   writable\
   vendor\
   spark
@@ -94,12 +94,12 @@ Open this link:
 http://localhost/sateri_connect/public/
 ```
 
-- If you see **Install** → go to Step 3.  
-- If you see **Login** → go to Step 4.
+- If you see **Install** ? go to Step 3.  
+- If you see **Login** ? go to Step 4.
 
 ---
 
-## Step 3 — Install the app (first time only)
+## Step 3 � Install the app (first time only)
 
 Open:
 
@@ -112,16 +112,16 @@ Follow each screen:
 | Screen | What to enter |
 |--------|----------------|
 | Requirements | All items should be green |
-| Database | Host `localhost`, user `root`, password empty (often), database name `apiwa` |
+| Database | Host `localhost`, user `root`, password empty (often), database name `sateri_connect` |
 | App | Base URL: `http://localhost/sateri_connect/public/` |
-| Admin | Your name, email, password — **save these** |
+| Admin | Your name, email, password � **save these** |
 | Cheerio | You can skip this and fill Settings later |
 | Finish | Click Finish |
 
 ### Make the database in phpMyAdmin (if needed)
 
-1. Open WAMP → **phpMyAdmin**  
-2. New database → name `apiwa` → Create  
+1. Open WAMP ? **phpMyAdmin**  
+2. New database ? name `sateri_connect` ? Create  
 
 ### Checklist
 
@@ -130,7 +130,7 @@ Follow each screen:
 
 ---
 
-## Step 4 — Login
+## Step 4 � Login
 
 Open:
 
@@ -148,7 +148,7 @@ http://localhost/sateri_connect/public/login
 
 | Field | Example |
 |-------|---------|
-| Email | `admin@apiwa.local` |
+| Email | `admin@sateri_connect.local` |
 | Password | The password you chose |
 
 Change the password later. Do not share it.
@@ -156,11 +156,11 @@ Change the password later. Do not share it.
 ### Checklist
 
 - [ ] Dashboard opens  
-- [ ] Left menu shows **Inbox → Data → Marketing → Automation → Analytics → System**  
+- [ ] Left menu shows **Inbox ? Data ? Marketing ? Automation ? Analytics ? System**  
 
 ---
 
-## Step 5 — Fix PHP SSL on Windows (important)
+## Step 5 � Fix PHP SSL on Windows (important)
 
 Without this, Cheerio calls fail with an SSL error.
 
@@ -195,7 +195,7 @@ If it shows another folder, set the same two lines in **that** `php.ini` too.
 
 ### 5.4 Restart WAMP
 
-WAMP tray → **Restart All Services**.
+WAMP tray ? **Restart All Services**.
 
 ### Checklist
 
@@ -205,13 +205,13 @@ WAMP tray → **Restart All Services**.
 
 ---
 
-# PART B — Cheerio setup
+# PART B � Cheerio setup
 
-## Step 6 — Cheerio account + API key
+## Step 6 � Cheerio account + API key
 
 1. Open https://app.cheerio.in/  
 2. Log in.  
-3. Open **My Apps** → your app (or create a new app).  
+3. Open **My Apps** ? your app (or create a new app).  
 4. Add **WhatsApp**. Open **API Setup** / **Try it out**.
 
 ### Checklist
@@ -221,7 +221,7 @@ WAMP tray → **Restart All Services**.
 
 ---
 
-## Step 7 — Copy these values
+## Step 7 � Copy these values
 
 ![Cheerio WhatsApp API Setup](images/03-meta-api-setup.png)
 
@@ -232,7 +232,7 @@ Copy from Cheerio and keep them in Notepad:
 | 1 | Temporary access token | Access Token |
 | 2 | \(Cheerio live number\) | \(Cheerio live number\) |
 | 3 | WhatsApp Business Account ID | WhatsApp Business Account ID |
-| 4 | App settings → Basic → Webhook Secret | Webhook Secret (signature) |
+| 4 | App settings ? Basic ? Webhook Secret | Webhook Secret (signature) |
 | 5 | Make your own secret string | Webhook Verify Token |
 
 ### Make a verify token (example)
@@ -253,7 +253,7 @@ v21.0
 
 - Temporary tokens expire. Make a new one if send fails later.  
 - Never share your token or Webhook Secret.  
-- You do **not** need App ID in this app’s Settings screen.
+- You do **not** need App ID in this app�s Settings screen.
 
 ### Add your phone for testing
 
@@ -272,9 +272,9 @@ v21.0
 
 ---
 
-# PART C — Save settings in the app
+# PART C � Save settings in the app
 
-## Step 8 — Settings → Cheerio API
+## Step 8 � Settings ? Cheerio API
 
 1. In the app, open **Settings**.  
 2. Open the **Cheerio API** tab.
@@ -285,7 +285,7 @@ v21.0
 4. Set API Version to `v21.0`.  
 5. Click **Save Settings**.
 
-If a field shows dots (`••••`), leave it empty to keep the old value.  
+If a field shows dots (`����`), leave it empty to keep the old value.  
 To change it, paste a new value and Save.
 
 ### Checklist
@@ -295,7 +295,7 @@ To change it, paste a new value and Save.
 
 ---
 
-## Step 9 — Sync templates (test the connection)
+## Step 9 � Sync templates (test the connection)
 
 Open PowerShell:
 
@@ -311,8 +311,8 @@ Syncing templates from Cheerio Direct API...
 Synced 5 template(s).
 ```
 
-- SSL error → go back to Step 5.  
-- Auth error → get a new API key in Cheerio, Save again, sync again.
+- SSL error ? go back to Step 5.  
+- Auth error ? get a new API key in Cheerio, Save again, sync again.
 
 Then open:
 
@@ -331,11 +331,11 @@ You should see **`hello_world`** with status **APPROVED**.
 
 ---
 
-# PART D — Webhooks (so replies show in Live Chat)
+# PART D � Webhooks (so replies show in Live Chat)
 
 Cheerio cannot reach `localhost`. You need a public HTTPS link (tunnel).
 
-## Step 10 — Start Cloudflare tunnel
+## Step 10 � Start Cloudflare tunnel
 
 ### Install once
 
@@ -388,12 +388,12 @@ https://YOUR-ID.ngrok-free.app/sateri_connect/public/webhooks
 
 ---
 
-## Step 11 — Set webhook in Cheerio / WABA
+## Step 11 � Set webhook in Cheerio / WABA
 
 1. Cheerio Dashboard / WABA webhook settings.  
 2. Edit:
    - **Callback URL** = URL from Step 10  
-   - **Verify token** = same as Settings → Webhook Verify Token  
+   - **Verify token** = same as Settings ? Webhook Verify Token  
 3. Save. Provider should say it is verified.  
 4. Subscribe to **`messages`**.
 
@@ -413,11 +413,11 @@ You should see `12345`.
 
 ---
 
-# PART E — Send and receive messages
+# PART E � Send and receive messages
 
-## Step 12 — Add a contact
+## Step 12 � Add a contact
 
-1. Open **Contacts** → Add.  
+1. Open **Contacts** ? Add.  
 2. Enter name.  
 3. Enter mobile with country code, digits only (no `+` or spaces).
 
@@ -436,13 +436,13 @@ Example (India):
 
 ---
 
-## Step 13 — Send the first template (`hello_world`)
+## Step 13 � Send the first template (`hello_world`)
 
 The first message to a user must be a **template**.
 
 Ways to send:
 
-1. **Live Chat** → Template button → `hello_world` → Send  
+1. **Live Chat** ? Template button ? `hello_world` ? Send  
 2. Or make a small **Campaign** with `hello_world`  
 3. Then run:
 
@@ -459,7 +459,7 @@ Your phone should get the Hello World message.
 
 ---
 
-## Step 14 — Reply from phone → see Live Chat
+## Step 14 � Reply from phone ? see Live Chat
 
 1. On your phone, reply (example: `hii`).  
 2. Keep the tunnel open.  
@@ -482,7 +482,7 @@ http://localhost/sateri_connect/public/chat
 
 ---
 
-## Step 15 — Reply from Live Chat
+## Step 15 � Reply from Live Chat
 
 After the customer messages you, you have about **24 hours** to send free text.
 
@@ -495,7 +495,7 @@ After the customer messages you, you have about **24 hours** to send free text.
 | Message | What to do |
 |---------|------------|
 | Outside the 24-hour window | Send a template first, or wait for a customer reply |
-| Token / login error | New token → Settings → Save |
+| Token / login error | New token ? Settings ? Save |
 | SSL error | Step 5 again |
 | Failed to parse JSON | Press Ctrl+F5 and try again |
 
@@ -506,7 +506,7 @@ After the customer messages you, you have about **24 hours** to send free text.
 
 ---
 
-# PART F — Queue workers
+# PART F � Queue workers
 
 Some messages wait in **Queue** until a worker runs.
 
@@ -540,7 +540,7 @@ php spark db:seed PermissionSeeder
 
 ---
 
-# PART G — Team Inbox 2.0
+# PART G � Team Inbox 2.0
 
 **URL:** `/chat`  
 **Permission:** `chat.view` (status change needs `chat.close`)
@@ -582,9 +582,9 @@ Mobiles use `91999900xxxx`.
 
 ---
 
-# PART H — Workflows (visual builder)
+# PART H � Workflows (visual builder)
 
-**URL:** `/automations` → **Builder** (fullscreen canvas)  
+**URL:** `/automations` ? **Builder** (fullscreen canvas)  
 **Permission:** `automations.edit`
 
 ### Useful nodes
@@ -599,13 +599,13 @@ Mobiles use `91999900xxxx`.
 
 ### How to test Delay
 
-1. Build: Trigger → Delay (1–5 sec) → Update chat status / Add note.  
+1. Build: Trigger ? Delay (1�5 sec) ? Update chat status / Add note.  
 2. Save + set **Active**.  
 3. Trigger the flow (send a matching WhatsApp message).  
 4. Run: `php spark automations:process`  
 5. Confirm the next node ran (status / note), not a restart from the first node.
 
-Catalog of sample flows: **System → Setup Workspace → Automations guide** (`/guide/automations`).
+Catalog of sample flows: **System ? Setup Workspace ? Automations guide** (`/guide/automations`).
 
 ### Checklist
 
@@ -615,7 +615,7 @@ Catalog of sample flows: **System → Setup Workspace → Automations guide** (`
 
 ---
 
-# PART I — Sequences (multi-step drips)
+# PART I � Sequences (multi-step drips)
 
 **URL:** `/sequences`  
 **Permissions:** `sequences.view` / `create` / `edit` / `delete`
@@ -637,7 +637,7 @@ Agents typically have **view only**; managers/admins can edit.
 
 ---
 
-# PART J — Menu meaning (short)
+# PART J � Menu meaning (short)
 
 Nav groups (left sidebar):
 
@@ -663,20 +663,20 @@ More detail: [USER_GUIDE.md](USER_GUIDE.md)
 
 ---
 
-# PART K — WhatsApp / Cheerio rules (simple)
+# PART K � WhatsApp / Cheerio rules (simple)
 
-1. First message to a new user → **template only**.  
-2. After they reply → free text for about **24 hours**.  
-3. In test mode → only **verified test phones** work.  
+1. First message to a new user ? **template only**.  
+2. After they reply ? free text for about **24 hours**.  
+3. In test mode ? only **verified test phones** work.  
 4. Webhooks need a **public HTTPS** URL (tunnel).  
-5. Temporary tokens **expire** — make a new one when needed.  
-6. Full production needs business verification later — not needed for this first test.
+5. Temporary tokens **expire** � make a new one when needed.  
+6. Full production needs business verification later � not needed for this first test.
 
 More: [CHEERIO_FLOW.md](CHEERIO_FLOW.md)
 
 ---
 
-# PART L — Verify with automated tests
+# PART L � Verify with automated tests
 
 Use PHP **8.2** from WAMP if your default `php` has broken extensions:
 
@@ -706,7 +706,7 @@ php spark permissions:audit
 | Page not found | Use `/sateri_connect/public/...` in the URL |
 | Install keeps opening | Finish install; app must be marked installed |
 | Sync SSL error | Step 5 + restart WAMP |
-| Sync auth error | New token → Save → sync again |
+| Sync auth error | New token ? Save ? sync again |
 | Webhook verify fails | Same verify token in app and Cheerio |
 | No inbound chat | Tunnel closed, wrong URL, or `messages` not subscribed |
 | Chat click issues | Ctrl+F5, click the conversation again |
@@ -763,4 +763,4 @@ When all boxes are checked, your first WhatsApp setup is working.
 ---
 
 **End of guide.**  
-Follow Part A → L in order. Do not skip SSL, tunnel, migrate, or queue.
+Follow Part A ? L in order. Do not skip SSL, tunnel, migrate, or queue.

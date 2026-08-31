@@ -16,7 +16,7 @@
         </div>
         <div class="col-md-6">
             <label class="form-label">Database name</label>
-            <input type="text" name="database" class="form-control" value="<?= esc(old('database') ?? ($db['database'] ?? 'apiwa')) ?>" required>
+            <input type="text" name="database" class="form-control" value="<?= esc(old('database') ?? ($db['database'] ?? 'sateri_connect')) ?>" required>
         </div>
         <div class="col-md-6">
             <label class="form-label">Username</label>

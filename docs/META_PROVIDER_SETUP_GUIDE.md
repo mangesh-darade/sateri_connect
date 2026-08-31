@@ -239,7 +239,7 @@ Examples:
   `https://your-domain.com/webhooks`
 
 - subfolder deploy:
-  `https://your-domain.com/whstapp/public/webhooks`
+  `https://your-domain.com/sateri_connect/public/webhooks`
 
 ### Meta dashboard मध्ये कुठे टाकायचा
 

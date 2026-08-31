@@ -32,7 +32,7 @@ https://your-domain.com/webhooks
 If the app lives in a subfolder and DocumentRoot is **not** `public/`:
 
 ```
-https://your-domain.com/whstapp/public/webhooks
+https://your-domain.com/sateri_connect/public/webhooks
 ```
 
 ### Local WAMP + ngrok
@@ -50,10 +50,10 @@ ngrok http 80
 Then use:
 
 ```
-https://<your-subdomain>.ngrok-free.app/whstapp/public/webhooks
+https://<your-subdomain>.ngrok-free.app/sateri_connect/public/webhooks
 ```
 
-If a vhost DocumentRoot is already `...\whstapp\public`:
+If a vhost DocumentRoot is already `...\sateri_connect\public`:
 
 ```
 https://<your-subdomain>.ngrok-free.app/webhooks
@@ -62,7 +62,7 @@ https://<your-subdomain>.ngrok-free.app/webhooks
 ### Local URL (browser only — not for Cheerio / WABA)
 
 ```
-http://localhost/whstapp/public/webhooks
+http://localhost/sateri_connect/public/webhooks
 ```
 
 ---

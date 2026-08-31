@@ -2,7 +2,7 @@
 
 How to use this platform with **Cheerio Direct APIs**.
 
-Local base (WAMP): `http://localhost/whstapp/public/`
+Local base (WAMP): `http://localhost/sateri_connect/public/`
 
 ---
 
@@ -29,7 +29,7 @@ Auth on every outbound call: header `x-api-key` (from Settings).
 7. Start workers (every minute in production):
 
 ```powershell
-cd c:\wamp64\www\whstapp
+cd c:\wamp64\www\sateri_connect
 php spark queue:process
 php spark campaigns:process
 php spark automations:process

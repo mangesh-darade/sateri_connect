@@ -27,7 +27,7 @@ class Jwt extends BaseConfig
     /**
      * Token issuer claim (optional).
      */
-    public string $issuer = 'apiwa';
+    public string $issuer = 'sateri_connect';
 
     public function __construct()
     {

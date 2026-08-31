@@ -1,17 +1,17 @@
-﻿# Cheerio Direct API Configuration
+# Cheerio Direct API Configuration
 
 This platform sends and receives WhatsApp messages through **Cheerio Direct APIs** (`https://newprod.api.cheerio.in/direct-apis/`). Meta Graph API (`graph.facebook.com`) is **not** used as the messaging transport.
 
 Official collection: [Cheerio Direct API Documentation](https://documenter.getpostman.com/view/13841235/2s9Y5Zvh9y#intro)
 
-API key: [app.cheerio.in → Settings → API Key](https://app.cheerio.in/settings/apikey)
+API key: [app.cheerio.in ? Settings ? API Key](https://app.cheerio.in/settings/apikey)
 
 ---
 
 ## 1. Prerequisites
 
 1. Cheerio account with a **live WhatsApp Business Account** (WABA).
-2. **API key** generated in Cheerio → Manage Profile / Settings → API Key.
+2. **API key** generated in Cheerio ? Manage Profile / Settings ? API Key.
 3. Templates you will send must already exist / be approved in the **Cheerio Dashboard** (or created via API).
 4. Cheerio premium plan (as required by Cheerio for Direct APIs).
 
@@ -27,7 +27,7 @@ Contact for WABA onboarding: ritul@cheerio.in
 | **Auth header** | `x-api-key: YOUR_API_KEY` |
 | **Content-Type** | `application/json` (except media upload = `multipart/form-data`) |
 
-Every WhatsApp Direct API call from this app sends `x-api-key` from **Settings → Cheerio API**.
+Every WhatsApp Direct API call from this app sends `x-api-key` from **Settings ? Cheerio API**.
 
 ---
 
@@ -78,7 +78,7 @@ Content-Type: application/json
 }
 ```
 
-Template body shape follows WhatsApp’s template object (header / body / button components) as Cheerio documents it.  
+Template body shape follows WhatsApp�s template object (header / body / button components) as Cheerio documents it.  
 See Cheerio collection: [https://documenter.getpostman.com/view/13841235/2s9Y5Zvh9y](https://documenter.getpostman.com/view/13841235/2s9Y5Zvh9y)
 
 **Typical 200 response:**
@@ -111,13 +111,13 @@ POST /v1/whatsapp/direct/send
 ```
 
 Interactive buttons / lists use the same WhatsApp-style `interactive` object.  
-You **cannot** cold-open with a free-form direct message — use a template first.
+You **cannot** cold-open with a free-form direct message � use a template first.
 
 ---
 
 ## 6. Media
 
-1. `POST /v1/whatsapp/media-id` with multipart field `file` → receive a media ID.
+1. `POST /v1/whatsapp/media-id` with multipart field `file` ? receive a media ID.
 2. Use that ID (or a public `link`) in template header components or direct image/document/video payloads.
 3. `POST /v1/whatsapp/media` with `{ "mediaId": "..." }` to resolve inbound media for download.
 
@@ -125,12 +125,12 @@ You **cannot** cold-open with a free-form direct message — use a template firs
 
 ## 7. Templates sync & create
 
-- **Sync in this app:** Templates → Sync → calls `GET /v1/getAllTemplates`.
-- **Contacts → Sync from Cheerio** → `GET /v1/contact/getAll`
-- **Automations → Sync from Cheerio** → `GET /v1/workflows` (imported Off)
+- **Sync in this app:** Templates ? Sync ? calls `GET /v1/getAllTemplates`.
+- **Contacts ? Sync from Cheerio** ? `GET /v1/contact/getAll`
+- **Automations ? Sync from Cheerio** ? `GET /v1/workflows` (imported Off)
 - CLI: `php spark cheerio:sync`
-- **Create:** Templates → Create → `POST /v1/whatsapp/create-template` (WhatsApp component format via Cheerio).
-- In Cheerio Dashboard you can also create/sync templates under Template Library → WhatsApp.
+- **Create:** Templates ? Create ? `POST /v1/whatsapp/create-template` (WhatsApp component format via Cheerio).
+- In Cheerio Dashboard you can also create/sync templates under Template Library ? WhatsApp.
 
 Delete-by-API is not exposed in Cheerio Direct APIs; remove templates from the Cheerio dashboard when needed.
 
@@ -146,7 +146,7 @@ Configure your public callback in Cheerio / WABA webhook settings:
 
 | Setting | Where |
 |---------|--------|
-| Callback URL | `https://YOUR-DOMAIN/.../webhooks` (Settings → Webhooks) |
+| Callback URL | `https://YOUR-DOMAIN/.../webhooks` (Settings ? Webhooks) |
 | Verify token | Same value in Settings and the provider console |
 | Webhook secret | Used for `X-Hub-Signature-256` when enabled |
 
@@ -159,7 +159,7 @@ Delivery statuses also arrive via webhooks; optionally poll `GET /v1/whatsapp-st
 
 ## 9. Platform settings checklist
 
-In **Settings → Cheerio API** (or installer step):
+In **Settings ? Cheerio API** (or installer step):
 
 - [ ] Cheerio API key  
 - [ ] Webhook verify token  
@@ -171,17 +171,17 @@ In **Settings → Cheerio API** (or installer step):
 
 ## 10. Smoke test
 
-1. Settings → **Test Cheerio Connection** (lists templates with your API key).  
-2. Templates → Sync — statuses show `APPROVED`.  
+1. Settings ? **Test Cheerio Connection** (lists templates with your API key).  
+2. Templates ? Sync � statuses show `APPROVED`.  
 3. Send a template from Chat or Campaigns to a real number.  
-4. Reply from WhatsApp — inbound appears in Live Chat.  
+4. Reply from WhatsApp � inbound appears in Live Chat.  
 5. Confirm delivery / read statuses update (`webhook_logs`).
 
 ---
 
 ## Related docs
 
-- [CHEERIO_FLOW.md](CHEERIO_FLOW.md) — end-to-end product flows  
+- [CHEERIO_FLOW.md](CHEERIO_FLOW.md) � end-to-end product flows  
 - [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md)  
 - [SETTINGS.md](SETTINGS.md)  
 - [CRON_SETUP.md](CRON_SETUP.md)  

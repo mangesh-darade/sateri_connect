@@ -121,6 +121,12 @@ class Settings extends BaseController
             'timezoneOptions' => (new TimeZoneOptions())->grouped(),
         ];
 
+        $elintomCfg = (new \App\Libraries\ElintOmCustomerSyncService($settings))->getConfig();
+        $data['elintom'] = [
+            'base_url'    => (string) ($elintomCfg['base_url'] ?? ''),
+            'private_key' => $this->maskSecret((string) ($elintomCfg['private_key'] ?? '')),
+        ];
+
         return $this->render('settings/index', $data);
     }
 
@@ -335,6 +341,18 @@ class Settings extends BaseController
                 $this->applySmtpConfig();
             }
 
+            if (in_array($section, ['all', 'elintom'], true)) {
+                $elintom = new \App\Libraries\ElintOmCustomerSyncService($settings);
+                $payload = [
+                    'base_url' => trim((string) $this->request->getPost('elintom_base_url')),
+                ];
+                $privateKey = trim((string) $this->request->getPost('elintom_api_private_key'));
+                if ($privateKey !== '' && ! str_contains($privateKey, '•')) {
+                    $payload['private_key'] = $privateKey;
+                }
+                $elintom->setConfig($payload);
+            }
+
             // Saving Meta/Webhook settings also performs the Graph API equivalent of
             // Meta Dashboard's "Verify and save" for this configured App + WABA.
             if (
@@ -450,6 +468,57 @@ class Settings extends BaseController
     public function testMeta(): ResponseInterface
     {
         return $this->testProviderConnection('meta');
+    }
+
+    public function testElintOm(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('settings.view')) {
+            return $denied;
+        }
+
+        // Persist posted credentials before testing (optional — same pattern as other tests).
+        if ($this->request->getPost('elintom_base_url') !== null || $this->request->getPost('elintom_api_private_key') !== null) {
+            if ($deniedEdit = $this->requirePermission('settings.edit')) {
+                return $deniedEdit;
+            }
+            $svc = new \App\Libraries\ElintOmCustomerSyncService();
+            $payload = [
+                'base_url' => trim((string) $this->request->getPost('elintom_base_url')),
+            ];
+            $key = trim((string) $this->request->getPost('elintom_api_private_key'));
+            if ($key !== '' && ! str_contains($key, '•')) {
+                $payload['private_key'] = $key;
+            }
+            $svc->setConfig($payload);
+        }
+
+        $result = (new \App\Libraries\ElintOmCustomerSyncService())->testConnection();
+        $ok = ! empty($result['ok']);
+
+        return $this->jsonResponse($ok, $result, (string) ($result['message'] ?? ($ok ? 'OK' : 'Failed')), [], $ok ? 200 : 422);
+    }
+
+    public function syncElintOm(): ResponseInterface
+    {
+        if ($denied = $this->requireAnyPermission(['contacts.import', 'settings.edit'])) {
+            return $denied;
+        }
+
+        try {
+            $stats = (new \App\Libraries\ElintOmCustomerSyncService())->sync();
+            $msg = sprintf(
+                'ElintOm sync done: %d created, %d updated, %d skipped, %d failed (of %d).',
+                (int) ($stats['created'] ?? 0),
+                (int) ($stats['updated'] ?? 0),
+                (int) ($stats['skipped'] ?? 0),
+                (int) ($stats['failed'] ?? 0),
+                (int) ($stats['total'] ?? 0)
+            );
+
+            return $this->jsonResponse(true, $stats, $msg);
+        } catch (\Throwable $e) {
+            return $this->jsonResponse(false, null, $e->getMessage(), [], 500);
+        }
     }
 
     /**

@@ -1,17 +1,17 @@
-ï»¿# WAMP Setup (Windows) â€” Deep Guide
+# WAMP Setup (Windows) — Deep Guide
 
 Install and run this project on **WAMP64** (Apache + MySQL/MariaDB + PHP).
 
 Project path used in this guide:
 
 ```
-c:\wamp64\www\whstapp
+c:\wamp64\www\sateri_connect
 ```
 
 Public URL:
 
 ```
-http://localhost/whstapp/public/
+http://localhost/sateri_connect/public/
 ```
 
 ---
@@ -21,7 +21,7 @@ http://localhost/whstapp/public/
 | Component | Required |
 |-----------|----------|
 | WAMP64 | Apache + MySQL **or** MariaDB running (green) |
-| PHP | **8.2+** (Apache module). CLI may differ â€” prefer matching versions |
+| PHP | **8.2+** (Apache module). CLI may differ — prefer matching versions |
 | Extensions | `intl`, `mbstring`, `json`, `curl`, `openssl`, `mysqli` |
 | Composer | Optional if `vendor/` already present |
 | Browser | Chrome / Edge |
@@ -35,16 +35,16 @@ php -m | findstr /i "intl mbstring curl mysqli openssl json"
 
 ### Check Apache PHP
 
-Create `public\_phpinfo.php` temporarily with `<?php phpinfo();`, open it, confirm version â‰¥ 8.2 and extensions, then delete the file.
+Create `public\_phpinfo.php` temporarily with `<?php phpinfo();`, open it, confirm version = 8.2 and extensions, then delete the file.
 
 ---
 
 ## 2. Place the project
 
 ```
-c:\wamp64\www\whstapp\
+c:\wamp64\www\sateri_connect\
   app\
-  public\          â† web entry (index.php)
+  public\          ? web entry (index.php)
   writable\
   vendor\
   .env
@@ -55,7 +55,7 @@ c:\wamp64\www\whstapp\
 If `vendor` is missing:
 
 ```powershell
-cd c:\wamp64\www\whstapp
+cd c:\wamp64\www\sateri_connect
 composer install
 ```
 
@@ -74,14 +74,14 @@ SET GLOBAL default_storage_engine = InnoDB;
 -- default_storage_engine=InnoDB
 ```
 
-If migrations fail with `Specified key was too long; max key length is 1000 bytes`, you are almost certainly on MyISAM â€” switch to InnoDB and retry.
+If migrations fail with `Specified key was too long; max key length is 1000 bytes`, you are almost certainly on MyISAM — switch to InnoDB and retry.
 
 ---
 
 ## 4. Environment (`.env`)
 
 ```powershell
-cd c:\wamp64\www\whstapp
+cd c:\wamp64\www\sateri_connect
 copy .env.example .env
 php spark key:generate
 ```
@@ -91,10 +91,10 @@ Edit `.env`:
 ```ini
 CI_ENVIRONMENT = development
 
-app.baseURL = 'http://localhost/whstapp/public/'
+app.baseURL = 'http://localhost/sateri_connect/public/'
 
 database.default.hostname = localhost
-database.default.database = apiwa
+database.default.database = sateri_connect
 database.default.username = root
 database.default.password =
 database.default.DBDriver = MySQLi
@@ -114,13 +114,13 @@ JWT_SECRET = change-me-to-a-long-random-string
 phpMyAdmin (`http://localhost/phpmyadmin`) or CLI:
 
 ```sql
-CREATE DATABASE apiwa CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE sateri_connect CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
 Optional: import full dump:
 
 ```powershell
-c:\wamp64\bin\mysql\mysql8.4.7\bin\mysql.exe -u root apiwa -e "SOURCE c:/wamp64/www/whstapp/apiwa_database.sql"
+c:\wamp64\bin\mysql\mysql8.4.7\bin\mysql.exe -u root sateri_connect -e "SOURCE c:/wamp64/www/sateri_connect/sateri_connect_database.sql"
 ```
 
 (Adjust MySQL path/version to your WAMP install.)
@@ -130,25 +130,25 @@ c:\wamp64\bin\mysql\mysql8.4.7\bin\mysql.exe -u root apiwa -e "SOURCE c:/wamp64/
 ## 6. Installer wizard (recommended)
 
 1. Start **WAMP** (Apache + MySQL green).  
-2. Open http://localhost/whstapp/public/install  
+2. Open http://localhost/sateri_connect/public/install  
 3. Complete steps:
 
 | Step | Action |
 |-----:|--------|
 | 1 Welcome | Get Started |
-| 2 Requirements | All green â†’ Continue |
-| 3 Database | `localhost`, `root`, db `apiwa`, base URL with trailing slash |
+| 2 Requirements | All green ? Continue |
+| 3 Database | `localhost`, `root`, db `sateri_connect`, base URL with trailing slash |
 | 4 Migrate | Run Migrations & Seed |
-| 5 Admin | Create super-admin email + password (â‰¥ 8 chars) |
-| 6 Cheerio | Optional â€” can Skip (configure later in Settings) |
+| 5 Admin | Create super-admin email + password (= 8 chars) |
+| 6 Cheerio | Optional — can Skip (configure later in Settings) |
 | 7 Finish | **Complete Installation** (marks `app_installed=1`) |
 
-4. Login at http://localhost/whstapp/public/login  
+4. Login at http://localhost/sateri_connect/public/login  
 
 ### CLI alternative (instead of wizard migrate)
 
 ```powershell
-cd c:\wamp64\www\whstapp
+cd c:\wamp64\www\sateri_connect
 php spark migrate
 php spark db:seed DatabaseSeeder
 ```
@@ -167,17 +167,17 @@ Then create admin via installer Admin step only, or insert a user with `password
 Clean URLs example:
 
 ```
-http://localhost/whstapp/public/dashboard
+http://localhost/sateri_connect/public/dashboard
 ```
 
 not `.../index.php/dashboard`.
 
 ### Optional virtual host
 
-Point DocumentRoot to `c:/wamp64/www/whstapp/public` and set:
+Point DocumentRoot to `c:/wamp64/www/sateri_connect/public` and set:
 
 ```ini
-app.baseURL = 'http://whstapp.test/'
+app.baseURL = 'http://sateri_connect.test/'
 ```
 
 ---
@@ -198,17 +198,17 @@ On Windows this is usually fine; if sessions fail, check folder permissions / an
 
 ---
 
-## 9. After install â€” configure product
+## 9. After install — configure product
 
-1. [SETTINGS.md](SETTINGS.md) â€” Cheerio + timezone  
-2. [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md) â€” tunnel + Cheerio verify  
-3. [USER_GUIDE.md](USER_GUIDE.md) â€” templates, contacts, campaigns  
-4. [CRON_SETUP.md](CRON_SETUP.md) â€” Windows Task Scheduler for `spark` workers  
+1. [SETTINGS.md](SETTINGS.md) — Cheerio + timezone  
+2. [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md) — tunnel + Cheerio verify  
+3. [USER_GUIDE.md](USER_GUIDE.md) — templates, contacts, campaigns  
+4. [CRON_SETUP.md](CRON_SETUP.md) — Windows Task Scheduler for `spark` workers  
 
 ### Manual worker test
 
 ```powershell
-cd c:\wamp64\www\whstapp
+cd c:\wamp64\www\sateri_connect
 php spark queue:process
 php spark campaigns:process
 ```
@@ -220,7 +220,7 @@ php spark campaigns:process
 If you need a clean wizard again:
 
 1. Backup DB / `.env`.  
-2. Set `app_installed` to `0` in `settings`, **or** drop/recreate `apiwa`.  
+2. Set `app_installed` to `0` in `settings`, **or** drop/recreate `sateri_connect`.  
 3. Visit `/install`.  
 
 Seeders are idempotent for roles/permissions/settings/keywords so migrate+seed can be re-run safely after partial installs.
@@ -232,15 +232,15 @@ Seeders are idempotent for roles/permissions/settings/keywords so migrate+seed c
 | Issue | Fix |
 |-------|-----|
 | Port 80 busy (Skype/IIS) | Change Apache port or free 80; update `app.baseURL` |
-| CLI PHP â‰  Apache PHP | Use WAMP PHP path for `spark` / Task Scheduler |
+| CLI PHP ? Apache PHP | Use WAMP PHP path for `spark` / Task Scheduler |
 | `intl` missing | Enable `extension=intl` in the **Apache** `php.ini`, restart Apache |
-| SSL error 60 on Cheerio sync | Apache `phpForApache.ini` has empty `curl.cainfo` â€” see section 11a |
+| SSL error 60 on Cheerio sync | Apache `phpForApache.ini` has empty `curl.cainfo` — see section 11a |
 | Installer requirements all Fail | Old view bug; use current `app/Views/install/requirements.php` |
-| Finish doesnâ€™t install | Must POST **Complete Installation** (not only open Finish page) |
+| Finish doesn’t install | Must POST **Complete Installation** (not only open Finish page) |
 | MyISAM / key length errors | Force InnoDB (section 3) |
 | Composer not in PATH | Use full path to `composer.phar` or rely on committed `vendor/` |
 
-### 11a. Fix SSL â€œunable to get local issuer certificateâ€ (curl 60)
+### 11a. Fix SSL “unable to get local issuer certificate” (curl 60)
 
 Cheerio sync / Graph API calls fail on many WAMP installs because **Apache** uses `phpForApache.ini`, which leaves CA paths blank (CLI `php.ini` may already be fine).
 
@@ -258,13 +258,13 @@ openssl.cafile = "C:\wamp64\bin\php\php8.4.15\cacert.pem"
 ```
 
 3. **Restart Apache** from the WAMP tray icon.
-4. Retry **Templates â†’ Sync from Cheerio**.
+4. Retry **Templates ? Sync from Cheerio**.
 
 This app also falls back to `writable/certs/cacert.pem` when php.ini is unset.
 
 ---
 
-## 12. Security (local â†’ production)
+## 12. Security (local ? production)
 
 Local WAMP is for development. Before production:
 

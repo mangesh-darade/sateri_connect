@@ -1,6 +1,6 @@
-﻿# Settings (Deep Guide)
+# Settings (Deep Guide)
 
-**URL:** `http://localhost/whstapp/public/settings`  
+**URL:** `http://localhost/sateri_connect/public/settings`  
 **Permissions:** `settings.view` (open), `settings.edit` (save / SMTP test)
 
 Settings control how the platform talks to **Cheerio Direct APIs**, how the app identifies itself, how email is sent, and what webhook URL should receive inbound events.
@@ -10,9 +10,9 @@ Settings control how the platform talks to **Cheerio Direct APIs**, how the app 
 ## Page layout
 
 ```
-┌──────────────┬──────────┬────────┬────────┬───────────┐
-│ Cheerio API  │ Go Live  │  App   │  SMTP  │ Webhooks  │
-└──────────────┴──────────┴────────┴────────┴───────────┘
++-------------------------------------------------------+
+� Cheerio API  � Go Live  �  App   �  SMTP  � Webhooks  �
++-------------------------------------------------------+
                          [ Save Settings ]
 ```
 
@@ -26,16 +26,16 @@ Secrets (API key, webhook secret, SMTP password) are:
 
 ---
 
-## Tab 1 — Cheerio API
+## Tab 1 � Cheerio API
 
 These values are required for sending/receiving WhatsApp messages.
 
 | Field (UI) | DB key | Encrypted? | Purpose |
 |------------|--------|------------|---------|
 | Cheerio API Key | `cheerio_api_key` | Yes | `x-api-key` header for Direct APIs |
-| Webhook Verify Token | `cheerio_webhook_verify_token` | No* | Must match webhook “Verify token” |
+| Webhook Verify Token | `cheerio_webhook_verify_token` | No* | Must match webhook �Verify token� |
 | Webhook Secret | `cheerio_webhook_secret` | Yes | Validate `X-Hub-Signature-256` on POST |
-| Base URL | config only | — | `https://newprod.api.cheerio.in/direct-apis` |
+| Base URL | config only | � | `https://newprod.api.cheerio.in/direct-apis` |
 
 \*Verify token is a shared secret you invent; treat it as sensitive even if not encrypted.
 
@@ -51,14 +51,14 @@ Full walkthrough: [CHEERIO_CONFIGURATION.md](CHEERIO_CONFIGURATION.md).
 
 ---
 
-## Tab 2 — Application
+## Tab 2 � Application
 
 | Field | DB key | Example | Purpose |
 |-------|--------|---------|---------|
 | Application Name | `app_name` | `WhatsApp Automation Platform` | Branding in UI / emails |
 | Timezone | `app_timezone` (+ legacy `timezone`) | `Asia/Kolkata` | Scheduling / display |
 | Support / App Email | `app_email` | `ops@company.com` | Contact / fallback from |
-| App URL | `app_url` | `http://localhost/whstapp/public/` | Canonical link |
+| App URL | `app_url` | `http://localhost/sateri_connect/public/` | Canonical link |
 
 ### Steps
 
@@ -70,7 +70,7 @@ Use [IANA timezone names](https://en.wikipedia.org/wiki/List_of_tz_database_time
 
 ---
 
-## Tab 3 — SMTP
+## Tab 3 � SMTP
 
 Used for password-reset and system emails (not for WhatsApp).
 
@@ -90,7 +90,7 @@ Used for password-reset and system emails (not for WhatsApp).
 2. Enter username + app password.  
 3. Set From email/name.  
 4. **Save Settings** first.  
-5. Click **Test SMTP** → enter a recipient → confirm inbox.
+5. Click **Test SMTP** ? enter a recipient ? confirm inbox.
 
 ### Gmail example
 
@@ -103,13 +103,13 @@ If Test SMTP fails, read `writable/logs/` and the JSON error toast (auth, TLS, r
 
 ---
 
-## Tab 4 — Webhooks
+## Tab 4 � Webhooks
 
 Read-only helpers for Cheerio webhook configuration.
 
 | Item | Value (WAMP local) |
 |------|--------------------|
-| Callback / Webhook URL | `http://localhost/whstapp/public/webhooks` |
+| Callback / Webhook URL | `http://localhost/sateri_connect/public/webhooks` |
 | Verify Token | Same as Cheerio API tab |
 
 Also accepted by the app: `/webhook` (alias). Prefer **`/webhooks`**.
@@ -126,7 +126,7 @@ Also accepted by the app: `/webhook` (alias). Prefer **`/webhooks`**.
    Then callback becomes:
 
    ```
-   https://<subdomain>.ngrok-free.app/whstapp/public/webhooks
+   https://<subdomain>.ngrok-free.app/sateri_connect/public/webhooks
    ```
 
 3. In Cheerio / WABA webhook settings:
@@ -142,7 +142,7 @@ Deep webhook doc: [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md).
 
 ### Why localhost alone is not enough
 
-Cheerio / WABA servers must **HTTP GET/POST** your URL. `localhost` is only on your PC — use ngrok, Cloudflare Tunnel, or deploy to HTTPS hosting.
+Cheerio / WABA servers must **HTTP GET/POST** your URL. `localhost` is only on your PC � use ngrok, Cloudflare Tunnel, or deploy to HTTPS hosting.
 
 ---
 
@@ -153,11 +153,11 @@ Cheerio / WABA servers must **HTTP GET/POST** your URL. `localhost` is only on y
 - Service: `App\Libraries\SettingsService`  
 - Activity log entry: `update` / `settings`  
 
-Masked secret detection: any value containing `•` is ignored so you don’t overwrite with the mask string.
+Masked secret detection: any value containing `�` is ignored so you don�t overwrite with the mask string.
 
 ---
 
-## After Settings — checklist
+## After Settings � checklist
 
 - [ ] Cheerio API key + \(Cheerio live number\) saved  
 - [ ] Webhook verified in Cheerio (green / subscribed)  
@@ -170,7 +170,7 @@ Masked secret detection: any value containing `•` is ignored so you don’t ov
 ## Security notes
 
 1. Restrict `settings.edit` to trusted roles only.  
-2. Keep `encryption.key` in `.env` stable — changing it makes old encrypted settings unreadable.  
+2. Keep `encryption.key` in `.env` stable � changing it makes old encrypted settings unreadable.  
 3. Rotate Cheerio API keys and update Settings immediately.  
 4. Production: HTTPS only; never expose `/settings` without auth (auth filter already required).  
 
@@ -180,7 +180,7 @@ Masked secret detection: any value containing `•` is ignored so you don’t ov
 
 | Problem | Fix |
 |---------|-----|
-| Fields empty after save | Confirm flash “Settings saved”; reload page; check `writable/logs` |
+| Fields empty after save | Confirm flash �Settings saved�; reload page; check `writable/logs` |
 | Encrypted values garbage after server move | Same `encryption.key` required |
 | Webhook verify fails | Token mismatch; wrong URL path; tunnel down; CSRF not excluded (should be excluded for `webhooks`) |
 | Cheerio API errors in queue | Bad/expired token; wrong \(Cheerio live number\); template not approved |

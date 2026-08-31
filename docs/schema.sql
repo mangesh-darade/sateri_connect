@@ -1,13 +1,13 @@
 -- =============================================================================
--- apiwa_database.sql
+-- sateri_connect_database.sql
 -- WhatsApp Automation Platform (whstapp) — full schema used by the app
--- Source: live MySQL `apiwa` + app/Database/Migrations (000001–000025)
+-- Source: live MySQL `sateri_connect` + app/Database/Migrations (000001–000025)
 -- Engine: InnoDB | Charset: utf8mb4
 --
 -- Prefer on existing installs:  php spark migrate
 -- Fresh DB:
---   CREATE DATABASE apiwa CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
---   mysql -u root apiwa < apiwa_database.sql
+--   CREATE DATABASE sateri_connect CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+--   mysql -u root sateri_connect < sateri_connect_database.sql
 --   php spark db:seed
 -- =============================================================================
 

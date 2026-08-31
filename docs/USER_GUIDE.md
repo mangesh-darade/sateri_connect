@@ -1,10 +1,10 @@
-﻿# User Guide (Deep)
+# User Guide (Deep)
 
 Complete step-by-step guide for the WhatsApp Automation Platform after installation.
 
 **Local base:** `http://localhost/sateri_connect/public/`
 
-Related docs: [SETTINGS.md](SETTINGS.md) · [CHEERIO_CONFIGURATION.md](CHEERIO_CONFIGURATION.md) · [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md) · [CRON_SETUP.md](CRON_SETUP.md) · [API.md](API.md) · [GUIDE_LOCAL.md](GUIDE_LOCAL.md) · [CHANGELOG_2026-07-29.md](CHANGELOG_2026-07-29.md)
+Related docs: [SETTINGS.md](SETTINGS.md) � [CHEERIO_CONFIGURATION.md](CHEERIO_CONFIGURATION.md) � [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md) � [CRON_SETUP.md](CRON_SETUP.md) � [API.md](API.md) � [GUIDE_LOCAL.md](GUIDE_LOCAL.md) � [CHANGELOG_2026-07-29.md](CHANGELOG_2026-07-29.md)
 
 ---
 
@@ -36,7 +36,7 @@ Related docs: [SETTINGS.md](SETTINGS.md) · [CHEERIO_CONFIGURATION.md](CHEERIO_C
 2. Sign in with the admin account created in the installer.  
 3. You land on **Dashboard**.
 
-If `/install` still opens, the app is not marked installed — finish the installer **Finish** step (or set `app_installed = 1` in `settings`).
+If `/install` still opens, the app is not marked installed � finish the installer **Finish** step (or set `app_installed = 1` in `settings`).
 
 ---
 
@@ -46,11 +46,11 @@ Do this **once** before sending real messages:
 
 | Step | Where | Why |
 |-----:|-------|-----|
-| 1 | Settings → Cheerio API | Access token, \(Cheerio live number\), WABA \(in Cheerio\), Webhook Secret |
-| 2 | Settings → Webhooks | Copy callback URL; configure Cheerio + verify token |
-| 3 | Settings → Application | Timezone e.g. `Asia/Kolkata`, app name |
-| 4 | Settings → SMTP (optional) | Password-reset emails |
-| 5 | Templates → Sync | Pull approved Cheerio templates |
+| 1 | Settings ? Cheerio API | Access token, \(Cheerio live number\), WABA \(in Cheerio\), Webhook Secret |
+| 2 | Settings ? Webhooks | Copy callback URL; configure Cheerio + verify token |
+| 3 | Settings ? Application | Timezone e.g. `Asia/Kolkata`, app name |
+| 4 | Settings ? SMTP (optional) | Password-reset emails |
+| 5 | Templates ? Sync | Pull approved Cheerio templates |
 | 6 | Contacts | Add or import phone numbers (E.164) |
 | 7 | Cron / workers | Queue must run or messages stay pending |
 | 8 | Keywords / Chat / Campaigns | Use the product |
@@ -74,10 +74,10 @@ Shows high-level counts (contacts, campaigns, queue, recent activity). Use it as
 
 Four tabs:
 
-- **Cheerio API** — Cheerio API key (stored encrypted)
-- **Application** — name, timezone, email, URL
-- **SMTP** — outbound email + Test SMTP
-- **Webhooks** — callback URL to paste in Cheerio / WABA
+- **Cheerio API** � Cheerio API key (stored encrypted)
+- **Application** � name, timezone, email, URL
+- **SMTP** � outbound email + Test SMTP
+- **Webhooks** � callback URL to paste in Cheerio / WABA
 
 Click **Save Settings** after edits. Leave masked secrets unchanged to keep existing values.
 
@@ -87,14 +87,14 @@ Click **Save Settings** after edits. Leave masked secrets unchanged to keep exis
 
 **URL:** `/templates`
 
-WhatsApp / Cheerio requires **approved message templates** for outbound messages outside the customer care (24h) window — especially marketing broadcasts.
+WhatsApp / Cheerio requires **approved message templates** for outbound messages outside the customer care (24h) window � especially marketing broadcasts.
 
 ### Steps
 
-1. Create templates in **Cheerio Dashboard → WhatsApp Manager → Message templates**.  
+1. Create templates in **Cheerio Dashboard ? WhatsApp Manager ? Message templates**.  
 2. Wait until status is **APPROVED**.  
-3. In this app: **Templates → Sync** (or CLI: `php spark templates:sync`).  
-4. Open a template to preview variables (`{{1}}`, `{{2}}`, …).
+3. In this app: **Templates ? Sync** (or CLI: `php spark templates:sync`).  
+4. Open a template to preview variables (`{{1}}`, `{{2}}`, �).
 
 Campaigns pick from synced, approved templates.
 
@@ -106,17 +106,17 @@ Campaigns pick from synced, approved templates.
 
 ### Add one contact
 
-1. **Contacts → Create**  
+1. **Contacts ? Create**  
 2. Enter **phone** in international format without `+` spaces preferred as digits only, e.g. `919876543210` (India).  
 3. Optional: name, email, tags.  
 4. Save.
 
 ### Import CSV
 
-1. **Contacts → Import**  
+1. **Contacts ? Import**  
 2. Upload CSV with at least a phone column.  
 3. Map columns if prompted.  
-4. Review duplicates (**Contacts → Duplicates**).
+4. Review duplicates (**Contacts ? Duplicates**).
 
 ### Bulk actions
 
@@ -136,18 +136,18 @@ Broadcast template messages to many contacts.
 
 ### Create & send (happy path)
 
-1. **Campaigns → Create**  
+1. **Campaigns ? Create**  
 2. Name the campaign.  
 3. Select an **approved** template.  
-4. Choose audience (all contacts, tags, or selected list — depending on form options).  
+4. Choose audience (all contacts, tags, or selected list � depending on form options).  
 5. Map template variables (name, custom fields, static text).  
 6. **Preview** recipients / sample payload.  
 7. Either:
    - **Send now**, or  
    - **Schedule** a datetime (timezone from Settings).  
-8. Watch status: draft → scheduled/running → completed.  
+8. Watch status: draft ? scheduled/running ? completed.  
 9. Use **Pause / Resume / Cancel** as needed.  
-10. Open campaign → **Analytics** / queue status.
+10. Open campaign ? **Analytics** / queue status.
 
 ### Important
 
@@ -166,11 +166,11 @@ Live agent inbox for 1:1 conversations (Team Inbox 2.0).
 
 ### Statuses
 
-`open` · `pending` · `intervened` · `chatbot` · `resolved` (legacy `closed` → resolved)
+`open` � `pending` � `intervened` � `chatbot` � `resolved` (legacy `closed` ? resolved)
 
 ### Flow
 
-1. Customer messages → webhook → conversation appears.  
+1. Customer messages ? webhook ? conversation appears.  
 2. Agent opens **Team Inbox**, selects conversation, replies.  
 3. Use status dropdown or **Resolve** / **Reopen** (`chat.close`).  
 4. Filters: Active, Expired, CTWA, FRT exceeded, status chips.  
@@ -195,7 +195,7 @@ Auto-replies when an inbound message matches a keyword.
 | Keyword | Text to match (e.g. `Hi`, `1`, `price`) |
 | Match type | Exact / contains (as implemented in UI) |
 | Response type | Text, interactive list, etc. |
-| Parent | Nested menu replies (e.g. Hi → options 1 / 2) |
+| Parent | Nested menu replies (e.g. Hi ? options 1 / 2) |
 | Active | Only active keywords fire |
 | Order | Priority / menu order |
 
@@ -203,13 +203,13 @@ Auto-replies when an inbound message matches a keyword.
 
 After install seeders, a simple menu may exist:
 
-- Customer: `Hi` → interactive menu  
-- Customer: `1` → products text  
-- Customer: `2` → support text  
+- Customer: `Hi` ? interactive menu  
+- Customer: `1` ? products text  
+- Customer: `2` ? support text  
 
 ### Steps to customize
 
-1. **Keywords → Create**  
+1. **Keywords ? Create**  
 2. Set keyword + response.  
 3. For menus, create parent then child keywords with `parent_id`.  
 4. Reorder if needed.  
@@ -223,11 +223,11 @@ After install seeders, a simple menu may exist:
 **Builder:** `/automations/{id}/builder` (fullscreen)  
 **Permissions:** `automations.view|create|edit|delete`
 
-Visual rule engine: trigger → conditions → actions.
+Visual rule engine: trigger ? conditions ? actions.
 
 ### Steps
 
-1. **Automations → Create** — name + enable.  
+1. **Automations ? Create** � name + enable.  
 2. Open **Builder** (fullscreen canvas).  
 3. Drag triggers / conditions / actions; connect ports; **Save**.  
 4. Useful nodes: Delay (resumes via worker), send_email, assign_bot, update_chat_status, attribute_condition, campaign_sent.  
@@ -245,7 +245,7 @@ Catalog help: `/guide/automations`.
 
 Multi-step WhatsApp drips (text or template) with delay between steps and optional **exit on reply**.
 
-1. Create sequence → add steps → save.  
+1. Create sequence ? add steps ? save.  
 2. Enroll contact by ID on the edit form.  
 3. Worker `automations:process` sends due steps.  
 4. Inbound reply can exit active enrollments.
@@ -263,7 +263,7 @@ Every outbound Cloud API send is queued for reliability (retry, rate control).
 | pending | Waiting for worker |
 | processing | Currently sending |
 | sent | Accepted by Cheerio |
-| failed | Error — inspect reason; **Retry** or fix credentials |
+| failed | Error � inspect reason; **Retry** or fix credentials |
 | cancelled | Manually cancelled |
 
 ### Operator actions
@@ -272,7 +272,7 @@ Every outbound Cloud API send is queued for reliability (retry, rate control).
 - **Cancel** pending item  
 - Watch **Queue stats**  
 
-If the queue never drains → workers/cron are not running.
+If the queue never drains ? workers/cron are not running.
 
 ---
 
@@ -292,11 +292,11 @@ Use after campaigns have run and status webhooks have updated delivery states.
 
 ## 14. Users & roles
 
-### Users — `/users`
+### Users � `/users`
 
 Create team members: name, email, password, role, active/inactive.
 
-### Roles — `/roles`
+### Roles � `/roles`
 
 Permission matrix by module:
 
@@ -305,7 +305,7 @@ Permission matrix by module:
 - Users, Roles, Queue, **Guide** (`guide.view`)
 
 **Super Admin** is locked to full access.  
-Edit checkboxes for Admin / Manager / Agent → **Save Permissions**.
+Edit checkboxes for Admin / Manager / Agent ? **Save Permissions**.
 
 Default roles from seeder: `super-admin`, `admin`, `manager`, `agent`.  
 `php spark db:seed PermissionSeeder` re-syncs system roles only (custom roles kept).
@@ -358,11 +358,11 @@ The inbox UI is aware of this window; campaigns almost always use templates.
 | Settings save but Cheerio fields empty | Re-open Settings after save; ensure encryption key in `.env` |
 | Chat empty | Webhook URL, verify token, Cheerio webhook subscription, HTTPS/tunnel |
 | Campaign stuck pending | Run `queue:process` + `campaigns:process` |
-| Send fails 401/190 | Access token expired — update Settings → Cheerio API |
+| Send fails 401/190 | Access token expired � update Settings ? Cheerio API |
 | Template sync empty | Wrong WABA \(in Cheerio\) / token permissions / no approved templates |
 | SMTP test fails | Host/port/TLS, app password, from-address allowed by provider |
 | `/roles` error | Use latest `app/Views/roles/index.php` (grouped permissions fix) |
-| MySQL “key too long” on migrate | Set `default_storage_engine=InnoDB` (WAMP often defaults MyISAM) |
+| MySQL �key too long� on migrate | Set `default_storage_engine=InnoDB` (WAMP often defaults MyISAM) |
 
 ### Logs
 

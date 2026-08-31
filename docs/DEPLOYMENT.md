@@ -1,4 +1,4 @@
-﻿# Deployment Checklist
+# Deployment Checklist
 
 Production hardening for WhatsApp Automation Platform (CodeIgniter 4.7).
 
@@ -16,7 +16,7 @@ Production hardening for WhatsApp Automation Platform (CodeIgniter 4.7).
 
 ### HTTPS & reverse proxy
 
-- [ ] TLS certificate (Let’s Encrypt or commercial)  
+- [ ] TLS certificate (Let�s Encrypt or commercial)  
 - [ ] DocumentRoot / proxy target is **`public/` only** (preferred)  
 - [ ] If DocumentRoot **must** stay project root (Plesk/nginx): keep root `index.php`, run `php spark webroot:publish`, and/or add [nginx-plesk-additional.conf](deploy/nginx-plesk-additional.conf)  
 - [ ] If behind nginx/Cloudflare/Load Balancer, configure `App::$proxyIPs` so client IPs and HTTPS detection work  

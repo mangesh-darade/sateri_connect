@@ -27,16 +27,16 @@ Messaging transport is **Cheerio only** (not Meta Graph API). Template / webhook
 ## Quick start (WAMP — Windows)
 
 ```powershell
-cd c:\wamp64\www\whstapp
+cd c:\wamp64\www\sateri_connect
 composer install
 copy .env.example .env
 php spark key:generate
 ```
 
-1. Create MySQL database `apiwa` (utf8mb4).  
-2. Set `app.baseURL = 'http://localhost/whstapp/public/'` and DB credentials in `.env`.  
+1. Create MySQL database `sateri_connect` (utf8mb4).  
+2. Set `app.baseURL = 'http://localhost/sateri_connect/public/'` and DB credentials in `.env`.  
 3. Ensure MySQL `default_storage_engine=InnoDB`.  
-4. Open http://localhost/whstapp/public/install and finish the wizard.  
+4. Open http://localhost/sateri_connect/public/install and finish the wizard.  
 5. Configure **Settings → Cheerio API** and webhooks (see docs).  
 6. Schedule Spark workers for queue / campaigns (see docs).
 

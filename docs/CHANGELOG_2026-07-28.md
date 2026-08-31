@@ -70,7 +70,7 @@ Database errors (e.g. unknown DB name) show a clear screen with optional collaps
 | File | Change |
 |------|--------|
 | `app/Libraries/SubdomainDatabase.php` | Defaults, subdomain detect, `boot()` wipes `.env` `database.default.*` |
-| `app/Config/Database.php` | Tenant switch only (`localhost` → `apiwa`) |
+| `app/Config/Database.php` | Tenant switch only (`localhost` → `sateri_connect`) |
 | `.env` / `.env.example` | Removed `database.default.*` |
 | `app/Controllers/Install.php` | Writes DB into `Database.php` switch, not `.env` |
 
@@ -108,6 +108,6 @@ Do **not** put DB credentials in `.env`.
 ## Deploy notes
 
 1. Run pending migrations (email verification, template_type, email campaign `scheduled_at`, etc.).
-2. Confirm MySQL database from the active subdomain case exists (e.g. `apiwa` for localhost).
+2. Confirm MySQL database from the active subdomain case exists (e.g. `sateri_connect` for localhost).
 3. Hard-refresh browser so `app.css?v=sections2` loads.
 4. Smoke: login → dashboard → campaigns wizard → templates list → force a bad DB name once to confirm branded error screen.

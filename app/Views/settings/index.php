@@ -90,6 +90,15 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                         </span>
                     </button>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabElintOm" type="button" role="tab" aria-controls="tabElintOm" aria-selected="false">
+                        <i class="fas fa-cash-register" aria-hidden="true"></i>
+                        <span>
+                            <span class="settings-nav-label">ElintOm POS</span>
+                            <span class="settings-nav-hint">Customer sync</span>
+                        </span>
+                    </button>
+                </li>
             </ul>
         </nav>
 
@@ -629,7 +638,7 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                         </div>
                     </div>
 
-sadD                    <div class="tab-pane fade" id="tabEmail" role="tabpanel">
+                    <div class="tab-pane fade" id="tabEmail" role="tabpanel">
                         <section class="wp-stage" data-email-provider="<?= esc($emailProvider) ?>" id="emailStage">
                             <header class="wp-stage-head">
                                 <div class="wp-stage-copy">
@@ -991,6 +1000,69 @@ sadD                    <div class="tab-pane fade" id="tabEmail" role="tabpanel"
                                     </div>
                                     <div id="webhookSetupResult" class="small mt-2"></div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane fade" id="tabElintOm" role="tabpanel">
+                        <?php $elintom = $elintom ?? ['base_url' => '', 'private_key' => '']; ?>
+                        <div class="settings-section-head">
+                            <div>
+                                <p class="settings-section-kicker">POS integration</p>
+                                <h3 class="settings-section-title">ElintOm POS</h3>
+                            </div>
+                        </div>
+                        <div class="alert alert-light border settings-note">
+                            Pull customers from ElintOm (<code>sma_companies</code> via Api3 <code>sateri_contacts</code>) into
+                            <a href="<?= site_url('contacts') ?>">Contacts</a>.
+                            ElintOm madhe <strong>API access</strong> on asava ani <code>api_privatekey</code> match hova.
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-lg-8">
+                                <div class="mb-3">
+                                    <label class="form-label" for="elintom_base_url">ElintOm domain URL</label>
+                                    <input type="url" name="elintom_base_url" id="elintom_base_url" class="form-control"
+                                           value="<?= $val($elintom, 'base_url') ?>"
+                                           placeholder="http://localhost/ElintOm">
+                                    <div class="form-text">No trailing slash. Example: <code>https://pos.example.com</code></div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="elintom_api_private_key">Api3 private key</label>
+                                    <div class="input-group input-secret">
+                                        <input type="password" name="elintom_api_private_key" id="elintom_api_private_key"
+                                               class="form-control" value="<?= $val($elintom, 'private_key') ?>"
+                                               autocomplete="off" placeholder="Same as ElintOm sma_settings.api_privatekey">
+                                        <button class="btn btn-outline-secondary toggle-secret" type="button"><i class="fas fa-eye"></i></button>
+                                    </div>
+                                    <div class="form-text">Leave masked blank to keep the current key.</div>
+                                </div>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <?php if (function_exists('can') && can('settings.edit')): ?>
+                                        <button type="button" class="btn btn-outline-secondary" id="btnTestElintOm">
+                                            <i class="fas fa-plug me-1"></i> Test connection
+                                        </button>
+                                    <?php endif; ?>
+                                    <?php if (function_exists('can') && (can('contacts.import') || can('settings.edit'))): ?>
+                                        <button type="button" class="btn btn-wa" id="btnSyncElintOmSettings">
+                                            <i class="fas fa-cash-register me-1"></i> Sync customers now
+                                        </button>
+                                    <?php endif; ?>
+                                    <a class="btn btn-outline-secondary" href="<?= site_url('contacts') ?>">
+                                        Open Contacts
+                                    </a>
+                                </div>
+                                <div id="elintomTestResult" class="creds-test-result mt-2"></div>
+                            </div>
+                            <div class="col-lg-4">
+                                <aside class="wp-creds-aside">
+                                    <p class="wp-aside-kicker">Setup path</p>
+                                    <ol class="wp-steps">
+                                        <li>ElintOm → enable API access + copy private key</li>
+                                        <li>Paste domain URL + key here → Save Settings</li>
+                                        <li>Test connection</li>
+                                        <li>Sync customers (or use Contacts page button)</li>
+                                    </ol>
+                                </aside>
                             </div>
                         </div>
                     </div>
@@ -1723,6 +1795,65 @@ $(function () {
         var provider = $('input[name="whatsapp_provider"]:checked').val() || 'cheerio';
         if (provider === 'meta') runMetaTest($(this), true);
         else runCheerioTest($(this), true);
+    });
+
+    function elintomPayload() {
+        return {
+            elintom_base_url: ($('#elintom_base_url').val() || '').toString().trim(),
+            elintom_api_private_key: ($('#elintom_api_private_key').val() || '').toString()
+        };
+    }
+
+    $('#btnTestElintOm').on('click', function () {
+        var $btn = $(this);
+        var $out = $('#elintomTestResult');
+        $btn.prop('disabled', true);
+        $out.html('<span class="text-muted">Testing ElintOm…</span>');
+        APP.post(APP.baseUrl + '/settings/test-elintom', elintomPayload())
+            .done(function (res) {
+                var ok = !!(res && res.success);
+                var msg = (res && res.message) || (ok ? 'OK' : 'Failed');
+                $out.html('<span class="' + (ok ? 'text-success' : 'text-danger') + '">' + $('<div>').text(msg).html() + '</span>');
+                APP.toast(msg, ok ? 'success' : 'error');
+            })
+            .fail(function (xhr) {
+                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ElintOm test failed';
+                $out.html('<span class="text-danger">' + $('<div>').text(msg).html() + '</span>');
+                APP.toast(msg, 'error');
+            })
+            .always(function () { $btn.prop('disabled', false); });
+    });
+
+    $('#btnSyncElintOmSettings').on('click', function () {
+        var $btn = $(this);
+        var $out = $('#elintomTestResult');
+        var html = $btn.html();
+        $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i> Syncing…');
+        $out.html('<span class="text-muted">Saving settings, then syncing…</span>');
+
+        var saveData = $.extend({ section: 'elintom' }, elintomPayload());
+        APP.post(APP.baseUrl + '/settings/save', saveData)
+            .done(function () {
+                APP.post(APP.baseUrl + '/settings/sync-elintom', {})
+                    .done(function (res) {
+                        var ok = !!(res && res.success);
+                        var msg = (res && res.message) || 'Sync complete';
+                        $out.html('<span class="' + (ok ? 'text-success' : 'text-danger') + '">' + $('<div>').text(msg).html() + '</span>');
+                        APP.toast(msg, ok ? 'success' : 'error');
+                    })
+                    .fail(function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ElintOm sync failed';
+                        $out.html('<span class="text-danger">' + $('<div>').text(msg).html() + '</span>');
+                        APP.toast(msg, 'error');
+                    })
+                    .always(function () { $btn.prop('disabled', false).html(html); });
+            })
+            .fail(function (xhr) {
+                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Could not save ElintOm settings';
+                $out.html('<span class="text-danger">' + $('<div>').text(msg).html() + '</span>');
+                APP.toast(msg, 'error');
+                $btn.prop('disabled', false).html(html);
+            });
     });
 });
 </script>

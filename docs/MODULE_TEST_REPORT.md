@@ -1,10 +1,10 @@
-Ôªø# Module deep test report (browser smoke + UI upgrade)
+# Module deep test report (browser smoke + UI upgrade)
 
 **Date:** 2026-08-02  
-**Method:** Playwright MCP screen walk (waves A‚ÄìG) + functional CRUD + shared visual upgrade  
+**Method:** Playwright MCP screen walk (waves AñG) + functional CRUD + shared visual upgrade  
 **Base URL:** `http://localhost/sateri_connect/public/`  
-**Login:** `admin@apiwa.local` (local reset for smoke)  
-**Stack:** CodeIgniter 4 ¬∑ WAMP ¬∑ DB `apiwa` (localhost tenant)
+**Login:** `admin@sateri_connect.local` (local reset for smoke)  
+**Stack:** CodeIgniter 4 ∑ WAMP ∑ DB `sateri_connect` (localhost tenant)
 
 ---
 
@@ -18,23 +18,23 @@
 | Area | Score |
 |------|-------|
 | Auth / login | **PASS** |
-| Module page loads (A‚ÄìG) | **PASS** (34 routes) |
-| Contact create ‚Üí detail | **PASS** (`/contacts/8082`) |
+| Module page loads (AñG) | **PASS** (34 routes) |
+| Contact create ? detail | **PASS** (`/contacts/8082`) |
 | Campaign wizard open | **PASS** |
 | Roles header save + matrix | **PASS** |
 | Notifications poll | **PASS** (`success: true`) |
 | Contacts list newest-first | **FIXED** (was hiding NULL `last_message_at`) |
-| Local DB tenant | **FIXED** (`Database.php` ‚Üí `apiwa`) |
+| Local DB tenant | **FIXED** (`Database.php` ? `sateri_connect`) |
 | Contacts / Keywords / Automations / Users CRUD | **PASS** |
-| Sequences CRUD (incl. delete) | **PASS** ‚Äî delete UI aligned to `data-confirm-delete` |
+| Sequences CRUD (incl. delete) | **PASS** ó delete UI aligned to `data-confirm-delete` |
 | Customer groups create + delete | **PASS** (via Add Contacts modal) |
-| Campaigns WA wizard ‚Üí draft save | **PASS** (label with phones + template) |
+| Campaigns WA wizard ? draft save | **PASS** (label with phones + template) |
 | Settings save | **PASS** |
 | Templates create form load | **PASS** (Meta sync still required for real template create) |
 
 ---
 
-## Pass 1 ‚Äî Screen smoke scorecard
+## Pass 1 ó Screen smoke scorecard
 
 | Wave | Screen | Status | Notes |
 |------|--------|--------|-------|
@@ -61,46 +61,46 @@
 | G | `/roles` | PASS | Save moved to `header_actions` |
 | G | `/settings` | PASS | |
 
-**Stubs (documented, not bugs):** SMS campaign ‚ÄúComing soon‚Äù; no template edit route; Messenger/IG need Settings setup.
+**Stubs (documented, not bugs):** SMS campaign ìComing soonî; no template edit route; Messenger/IG need Settings setup.
 
 ---
 
 ## UI changes (visual upgrade 2C)
 
-Shared (brand tokens preserved ‚Äî Onest/DM Sans, `--brand-*`):
+Shared (brand tokens preserved ó Onest/DM Sans, `--brand-*`):
 
-- [`public/assets/css/app.css`](../public/assets/css/app.css) ‚Äî stronger page header hierarchy, card hover, filter-bar polish, empty-state pattern, page-rise motion, table header density
-- [`public/assets/css/sidebar.css`](../public/assets/css/sidebar.css) ‚Äî brand strip gradient
-- [`app/Views/partials/empty_state.php`](../app/Views/partials/empty_state.php) ‚Äî reusable empty state
+- [`public/assets/css/app.css`](../public/assets/css/app.css) ó stronger page header hierarchy, card hover, filter-bar polish, empty-state pattern, page-rise motion, table header density
+- [`public/assets/css/sidebar.css`](../public/assets/css/sidebar.css) ó brand strip gradient
+- [`app/Views/partials/empty_state.php`](../app/Views/partials/empty_state.php) ó reusable empty state
 - Roles / guide / import / duplicates / forms / emails / empty lists aligned to `header_actions` + `.page-list` / `.page-stack`
 
 ---
 
-## Pass 2 ‚Äî Functional fixes this run
+## Pass 2 ó Functional fixes this run
 
 | # | Issue | Status |
 |---|--------|--------|
-| 1 | Localhost DB pointed at missing `sateri_connect` | **FIXED** ‚Üí `apiwa` in `Database.php` |
-| 2 | New contacts (NULL `last_message_at`) buried / invisible on default list | **FIXED** ‚Äî default order by `c.id` DESC (`Contacts.php` + `contacts.js`) |
-| 3 | Roles primary Save buried in sticky footer | **FIXED** ‚Äî `header_actions` + `form="rolesMatrixForm"` |
+| 1 | Localhost DB pointed at missing `sateri_connect` | **FIXED** ? `sateri_connect` in `Database.php` |
+| 2 | New contacts (NULL `last_message_at`) buried / invisible on default list | **FIXED** ó default order by `c.id` DESC (`Contacts.php` + `contacts.js`) |
+| 3 | Roles primary Save buried in sticky footer | **FIXED** ó `header_actions` + `form="rolesMatrixForm"` |
 | 4 | Duplicate page titles on Import / Email send-bulk | **FIXED** |
-| 5 | Sequences list delete used native `confirm()` form (inconsistent UX) | **FIXED** ‚Äî SweetAlert `data-confirm-delete` like other modules |
+| 5 | Sequences list delete used native `confirm()` form (inconsistent UX) | **FIXED** ó SweetAlert `data-confirm-delete` like other modules |
 
 ---
 
-## Prior critical blockers (2026-07-24) ‚Äî still closed
+## Prior critical blockers (2026-07-24) ó still closed
 
-See history below; items 1‚Äì10 from the July audit remain **FIXED**.
+See history below; items 1ñ10 from the July audit remain **FIXED**.
 
 ---
 
 ## Remaining medium follow-ups
 
-1. Keyword ‚Äúcontains‚Äù over-match / reply-loop guard  
+1. Keyword ìcontainsî over-match / reply-loop guard  
 2. Automation delay / SSRF hardening on webhook actions  
 3. Guide permission gate  
 4. Deploy on dedicated WhatsApp host (DocumentRoot = `public/`)  
-5. Local inbound chat needs public HTTPS webhook (ngrok) ‚Äî see [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md)  
+5. Local inbound chat needs public HTTPS webhook (ngrok) ó see [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md)  
 6. Template edit route (product gap)  
 7. SMS campaigns (explicit stub)
 
@@ -116,7 +116,7 @@ See history below; items 1‚Äì10 from the July audit remain **FIXED**.
 | Contacts | OK | OK | **YES** | CSV + tags; list sort fixed 2026-08-02 |
 | Campaigns | OK | OK | **YES** | Wizard wired |
 | Live Chat | OK | OK | **YES** | BS5 modal via APP |
-| Webhooks | OK | OK | **YES** | Inbound media ‚Üí `media/serve` |
+| Webhooks | OK | OK | **YES** | Inbound media ? `media/serve` |
 | Queue | OK | OK | **YES** | Atomic claim |
 | Keywords / Bot | OK | PARTIAL | **PARTIAL** | Contains over-match |
 | Automations | OK | OK | **PARTIAL** | Birthday once/day |
@@ -124,7 +124,7 @@ See history below; items 1‚Äì10 from the July audit remain **FIXED**.
 | Users / Roles | OK | OK | **YES** | Super-admin assign locked |
 | Reports | OK | OK | **YES** | View/export perms OK |
 
-### Critical blockers ‚Äî status (retested Jul 2026)
+### Critical blockers ó status (retested Jul 2026)
 
 | # | Issue | Status |
 |---|--------|--------|
@@ -143,4 +143,4 @@ See history below; items 1‚Äì10 from the July audit remain **FIXED**.
 
 ## Deploy reminder
 
-See `docs/DEPLOY_YEVLE.md` ‚Äî DocumentRoot must be `public/`, `CI_ENVIRONMENT=production`, webhook URL on the WhatsApp app host only.
+See `docs/DEPLOY_YEVLE.md` ó DocumentRoot must be `public/`, `CI_ENVIRONMENT=production`, webhook URL on the WhatsApp app host only.
