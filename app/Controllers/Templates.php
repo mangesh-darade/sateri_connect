@@ -92,6 +92,8 @@ class Templates extends BaseController
         }
 
         try {
+            service('whatsAppConsent')->assertTestRecipientAllowed($to);
+
             $guard = new \App\Libraries\WhatsAppTemplateSendGuard();
             $guard->assertPhoneNumberId(isset($input['phone_number_id']) ? (string) $input['phone_number_id'] : null);
             $guard->assertWabaId(isset($input['waba_id']) ? (string) $input['waba_id'] : null);
@@ -782,7 +784,7 @@ class Templates extends BaseController
     {
         $name         = strtolower(trim((string) $this->request->getPost('name')));
         $language     = trim((string) ($this->request->getPost('language') ?: 'en_US'));
-        $category     = strtoupper(trim((string) ($this->request->getPost('category') ?: 'UTILITY')));
+        $category     = strtoupper(trim((string) ($this->request->getPost('category') ?? '')));
         $templateType = strtolower(trim((string) ($this->request->getPost('template_type') ?: 'default')));
         $headerType   = strtolower(trim((string) ($this->request->getPost('header_type') ?: 'text')));
         $header       = trim((string) $this->request->getPost('header'));
@@ -842,7 +844,7 @@ class Templates extends BaseController
         }
 
         if (! in_array($category, ['UTILITY', 'MARKETING', 'AUTHENTICATION'], true)) {
-            return $this->invalidTemplateInput('Invalid category.');
+            return $this->invalidTemplateInput('Choose a template category. Offers, promotions or re-engagement must be MARKETING — Meta penalises utility templates that carry marketing content.');
         }
 
         if (! in_array($templateType, ['default', 'carousel'], true)) {

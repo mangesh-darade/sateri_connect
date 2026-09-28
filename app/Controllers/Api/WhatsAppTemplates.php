@@ -96,6 +96,8 @@ class WhatsAppTemplates extends BaseApiController
                 return $this->respondValidationError(['to' => 'Recipient phone number is required.']);
             }
 
+            service('whatsAppConsent')->assertTestRecipientAllowed($to);
+
             $guard = new WhatsAppTemplateSendGuard();
             $guard->assertPhoneNumberId(isset($input['phone_number_id']) ? (string) $input['phone_number_id'] : null);
             $guard->assertWabaId(isset($input['waba_id']) ? (string) $input['waba_id'] : null);

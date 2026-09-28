@@ -230,6 +230,9 @@ $categories = [
                                 <input type="hidden" name="template_buttons" id="templateButtonsInput" value="">
                                 <div class="d-flex flex-wrap gap-2 align-items-center" id="templateCtaActions">
                                     <button type="button" class="btn btn-outline-secondary btn-sm" id="templateAddButtonBtn">Add Button</button>
+                                    <button type="button" class="btn btn-outline-danger btn-sm<?= $selectedCategory === 'MARKETING' ? '' : ' d-none' ?>" id="templateAddOptOutBtn" title="Recommended by Meta for Marketing templates. A tap unsubscribes the customer automatically.">
+                                        <i class="fas fa-ban me-1"></i>Add “Stop promotions” opt-out
+                                    </button>
                                     <span class="small text-muted" id="templateButtonsHint">Click Add Button to add another button.</span>
                                 </div>
                                 <div class="d-flex flex-column gap-3 mt-3" id="templateButtonsList"></div>
@@ -1136,6 +1139,7 @@ $(function () {
         }
         $category.val(value);
         $summaryCategory.val(value);
+        $('#templateAddOptOutBtn').toggleClass('d-none', value !== 'MARKETING');
         $('[data-category-card]').removeClass('is-selected');
         $('[data-category-card][data-value="' + value + '"]').addClass('is-selected');
         updateNextButton();
@@ -1279,6 +1283,27 @@ $(function () {
         }
         var btn = emptyTemplateButton();
         btn.type = nextType;
+        templateButtons.push(btn);
+        renderTemplateButtons();
+        updatePreview();
+    });
+
+    $('#templateAddOptOutBtn').on('click', function () {
+        readTemplateButtonsFromDom();
+        var exists = templateButtons.some(function (b) {
+            return (b.type || 'quick_reply') === 'quick_reply' && String(b.text || '').trim().toLowerCase() === 'stop promotions';
+        });
+        if (exists) {
+            APP.toast('Opt-out button is already added.', 'info');
+            return;
+        }
+        if (!canAddTemplateButton()) {
+            APP.toast('You can add up to ' + MAX_TEMPLATE_BUTTONS + ' buttons.', 'info');
+            return;
+        }
+        var btn = emptyTemplateButton();
+        btn.type = 'quick_reply';
+        btn.text = 'Stop promotions';
         templateButtons.push(btn);
         renderTemplateButtons();
         updatePreview();
