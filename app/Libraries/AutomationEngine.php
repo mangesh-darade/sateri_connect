@@ -67,6 +67,10 @@ class AutomationEngine
 
             $result['matched']++;
 
+            if ($this->isCatchAllReplyCoolingDown((int) $automation['id'], $types, $triggerConfig, $context)) {
+                continue;
+            }
+
             try {
                 $this->runAutomation((int) $automation['id'], $context);
                 $result['executed']++;
@@ -78,6 +82,47 @@ class AutomationEngine
         }
 
         return $result;
+    }
+
+    /**
+     * WhatsApp policy: an unfiltered "any incoming message → reply" automation must not
+     * answer every message (spam / bot loops). Keyword- or condition-based flows are exempt.
+     *
+     * @param list<string>          $types
+     * @param array<string, mixed>  $triggerConfig
+     * @param array<string, mixed>  $context
+     */
+    protected function isCatchAllReplyCoolingDown(int $automationId, array $types, array $triggerConfig, array $context): bool
+    {
+        $contactId = (int) ($context['contact_id'] ?? 0);
+        $minutes   = (int) config(\Config\WhatsApp::class)->catchAllAutoReplyCooldownMinutes;
+        if ($contactId <= 0 || $minutes <= 0 || ! in_array('incoming_message', $types, true)) {
+            return false;
+        }
+        if (trim((string) ($triggerConfig['keyword'] ?? '')) !== '' || trim((string) ($triggerConfig['content'] ?? '')) !== ''
+            || ! empty($triggerConfig['conditions'])) {
+            return false;
+        }
+        $hasCondition = $this->rules
+            ->where('automation_id', $automationId)
+            ->where('rule_type', 'condition')
+            ->countAllResults() > 0;
+        if ($hasCondition) {
+            return false;
+        }
+
+        try {
+            $key   = 'wa_autoreply_' . md5((string) db_connect()->getDatabase()) . '_' . $automationId . '_' . $contactId;
+            $cache = cache();
+            if ($cache->get($key)) {
+                return true;
+            }
+            $cache->save($key, 1, $minutes * 60);
+        } catch (Throwable) {
+            return false;
+        }
+
+        return false;
     }
 
     /**

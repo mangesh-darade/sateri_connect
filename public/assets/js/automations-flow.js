@@ -106,6 +106,7 @@
                     n.x = n.position.x || 40;
                     n.y = n.position.y || 40;
                 }
+                n.id = String(n.id);
                 n.x = Number(n.x);
                 n.y = Number(n.y);
                 if (!isFinite(n.x)) n.x = 40;
@@ -143,7 +144,9 @@
                         port = hs;
                     }
                 }
-                return { from: e.from || e.source, to: e.to || e.target, port: port };
+                var from = e.from || e.source;
+                var to = e.to || e.target;
+                return { from: from ? String(from) : '', to: to ? String(to) : '', port: port };
             }).filter(function (e) { return e.from && e.to; });
         } catch (e) {
             Flow.nodes = [];
@@ -672,18 +675,20 @@
         var html = '';
 
         if (a === 'system_initiated') {
-            html += inspHint('Business-initiated outreach (outside 24h window) via approved WA template.');
+            html += inspHint('Business-initiated outreach (outside 24h window) via approved WA template. Sent only to contacts with recorded WhatsApp opt-in.');
             html += templateSelectHtml(d);
             html += '<label>Fallback note (optional)</label><textarea class="form-control insp" data-k="text" rows="2">' + esc(d.text || '') + '</textarea>';
         } else if (a === 'response_message' || a === 'send_text') {
             html += '<label>Message text</label><textarea class="form-control insp" data-k="text" rows="4" placeholder="Hi {{contact.name}}!">' + esc(d.text || d.note || '') + '</textarea>';
             html += inspHint('Use {{contact.name}}, {{contact.mobile}} placeholders.');
+            html += inspHint('WhatsApp policy: free text is delivered only if the customer messaged you in the last 24h. For other triggers (new contact, Shopify, birthday…) use Send template. Contacts who sent STOP get no automated replies.');
         } else if (a === 'collect_images') {
             html += '<label>How many images?</label><input type="number" min="1" max="20" class="form-control insp" data-k="count" value="' + esc(d.count || d.max_images || 1) + '">';
             html += '<label>Prompt message</label><textarea class="form-control insp" data-k="prompt" rows="3" placeholder="Please send your photo…">' + esc(d.prompt || d.text || '') + '</textarea>';
             html += inspHint('Asks the contact for images, then stores them on the contact until the count is met.');
         } else if (a === 'send_template') {
             html += templateSelectHtml(d);
+            html += inspHint('WhatsApp policy: outside the 24h window this sends only to contacts with recorded WhatsApp opt-in; others are skipped automatically.');
         } else if (a === 'add_tag' || a === 'remove_tag') {
             html += tagSelectHtml(d);
             html += '<label>Or tag name</label><input class="form-control insp" data-k="tag_name" value="' + esc(d.tag_name || d.labelName || '') + '" placeholder="Tag / label name">';
@@ -947,6 +952,23 @@
         };
     }
 
+    /**
+     * Node id under the cursor while linking: its input dot or anywhere on the card.
+     * Triggers have no input and a node cannot link to itself.
+     */
+    function linkTargetNodeId(target) {
+        if (!Flow.linkFrom) return null;
+        var $port = $(target).closest('.flow-port.in');
+        var id = $port.length ? $port.attr('data-node') : null;
+        if (!id) {
+            var $node = $(target).closest('.flow-node');
+            if (!$node.length || !$node.find('.flow-port.in').length) return null;
+            id = $node.attr('data-id');
+        }
+        if (!id || id === String(Flow.linkFrom.node)) return null;
+        return id;
+    }
+
     function upsertEdge(from, to, port) {
         port = port || 'out';
         Flow.edges = Flow.edges.filter(function (e) { return !(e.from === from && (e.port || 'out') === port); });
@@ -1048,7 +1070,7 @@
         $('#flowCanvas').on('mousedown', '.flow-node', function (e) {
             if ($(e.target).closest('.flow-port').length) return;
             if (Flow.spaceDown || e.button === 1) return;
-            var id = $(this).data('id');
+            var id = String($(this).attr('data-id'));
             Flow.selectedEdge = null;
             selectNode(id);
             var node = findNode(id);
@@ -1099,9 +1121,13 @@
                     a: Flow.linkFrom.pt,
                     b: { x: cpt.x, y: cpt.y }
                 });
-                var $near = $(e.target).closest('.flow-port.in');
+                var targetId = linkTargetNodeId(e.target);
                 $('.flow-port.in').removeClass('link-target');
-                if ($near.length) $near.addClass('link-target');
+                $('.flow-node').removeClass('link-target-node');
+                if (targetId !== null) {
+                    $('.flow-port.in[data-node="' + targetId + '"]').addClass('link-target');
+                    $('.flow-node[data-id="' + targetId + '"]').addClass('link-target-node');
+                }
             }
         });
 
@@ -1113,12 +1139,13 @@
             $('.flow-node').removeClass('dragging-node');
             Flow.dragNode = null;
             if (Flow.linkFrom) {
-                var $t = $(e.target).closest('.flow-port.in');
-                if ($t.length) {
-                    upsertEdge(Flow.linkFrom.node, $t.data('node'), Flow.linkFrom.port);
+                var dropId = linkTargetNodeId(e.target);
+                if (dropId !== null) {
+                    upsertEdge(Flow.linkFrom.node, dropId, Flow.linkFrom.port);
                 }
                 Flow.linkFrom = null;
                 $('.flow-port').removeClass('linking link-target');
+                $('.flow-node').removeClass('link-target-node');
                 $wrap.removeClass('linking');
                 drawEdges();
             }
@@ -1127,8 +1154,8 @@
         $('#flowCanvas').on('mousedown', '.flow-port.out, .flow-port.true, .flow-port.false', function (e) {
             e.stopPropagation();
             e.preventDefault();
-            var nodeId = $(this).data('node');
-            var port = $(this).data('port');
+            var nodeId = String($(this).attr('data-node'));
+            var port = String($(this).attr('data-port'));
             var pt = portCenter(nodeId, port);
             Flow.linkFrom = { node: nodeId, port: port, pt: pt };
             Flow.selectedEdge = null;

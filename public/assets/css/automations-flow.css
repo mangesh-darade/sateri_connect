@@ -386,12 +386,33 @@ body.flow-builder-page .swal2-container {
 .flow-port.true {
     right: -7px;
     top: 32%;
+    transform: translateY(-50%);
     background: #8e53f7;
 }
 .flow-port.false {
     right: -7px;
     top: 68%;
+    transform: translateY(-50%);
     background: #e25555;
+}
+.flow-port.in::after,
+.flow-port.out::after,
+.flow-port.true::after,
+.flow-port.false::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+}
+.flow-edges .flow-edge.temp {
+    pointer-events: none;
+}
+.flow-canvas-wrap.linking .flow-node:not(.trigger) {
+    cursor: copy;
+}
+.flow-node.link-target-node {
+    border-color: #8e53f7;
+    box-shadow: 0 0 0 3px rgba(142, 83, 247, 0.25);
 }
 .flow-port-label {
     position: absolute;
