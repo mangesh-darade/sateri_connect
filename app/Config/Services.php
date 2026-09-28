@@ -141,6 +141,18 @@ class Services extends BaseService
     }
 
     /**
+     * WhatsApp policy guard: opt-in/out, suppression, frequency cap, account health.
+     */
+    public static function whatsAppConsent(bool $getShared = true)
+    {
+        if ($getShared) {
+            return static::getSharedInstance('whatsAppConsent');
+        }
+
+        return new \App\Libraries\WhatsAppConsentService();
+    }
+
+    /**
      * Multi-provider outbound email facade (SMTP, SendGrid, Cheerio).
      *
      * @return \App\Libraries\EmailProvider

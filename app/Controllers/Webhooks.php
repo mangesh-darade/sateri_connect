@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Libraries\WebhookValidator;
+use App\Libraries\WhatsAppConsentService;
 use App\Models\CampaignContactModel;
 use App\Models\CampaignModel;
 use App\Models\ContactModel;
@@ -214,6 +215,23 @@ class Webhooks extends Controller
             foreach ($changes as $change) {
                 $value = $change['value'] ?? [];
                 if (! is_array($value)) {
+                    continue;
+                }
+
+                $field = (string) ($change['field'] ?? '');
+                if (in_array($field, [
+                    'phone_number_quality_update',
+                    'business_capability_update',
+                    'account_update',
+                    'message_template_quality_update',
+                    'message_template_status_update',
+                    'template_category_update',
+                ], true)) {
+                    try {
+                        service('whatsAppConsent')->handleAccountWebhook($field, $value);
+                    } catch (Throwable $e) {
+                        log_message('error', 'WABA {field} webhook failed: {msg}', ['field' => $field, 'msg' => $e->getMessage()]);
+                    }
                     continue;
                 }
 
@@ -587,6 +605,27 @@ class Webhooks extends Controller
             log_message('warning', 'Inbound notification failed: {msg}', ['msg' => $e->getMessage()]);
         }
 
+        // WhatsApp policy: STOP / START win over every bot and automation.
+        $consent       = service('whatsAppConsent');
+        $isButtonTap   = in_array((string) ($parsed['type'] ?? ''), ['button', 'interactive'], true);
+        $buttonPayload = (string) ($parsed['reply_id'] ?? '');
+        $consentText   = trim((string) ($parsed['content'] ?? ''));
+        $consentIntent = $isButtonTap
+            ? $consent->detectButtonIntent($consentText, $buttonPayload)
+            : $consent->detectIntent($consentText);
+        if (in_array($consentIntent, [WhatsAppConsentService::INTENT_OPT_OUT, WhatsAppConsentService::INTENT_OPT_IN], true)) {
+            $consent->handleConsentKeyword(
+                $contact,
+                $consentText,
+                $activeProvider,
+                $autoReplyAllowed,
+                $isButtonTap,
+                $buttonPayload
+            );
+
+            return;
+        }
+
         // Keyword bot — only when inbound number matches Settings → active provider
         $keywordText = trim((string) ($parsed['content'] ?? ''));
         $replyId     = (string) ($parsed['reply_id'] ?? '');
@@ -603,15 +642,16 @@ class Webhooks extends Controller
             ]);
         }
 
+        $botMatched = false;
         if ($autoReplyAllowed && ($replyId !== '' || $runKeywordMatch)) {
             try {
                 $bot = service('keywordBot');
                 // Always send with Settings → active provider (not the other WABA).
                 $bot->setSendProvider($activeProvider);
                 if ($replyId !== '' && preg_match('/^kw_(\d+)$/', $replyId, $m)) {
-                    $bot->replyByKeywordId($contactId, (int) $m[1]);
+                    $botMatched = ! empty($bot->replyByKeywordId($contactId, (int) $m[1])['matched']);
                 } elseif ($runKeywordMatch) {
-                    $bot->matchAndReply($contactId, $keywordText);
+                    $botMatched = ! empty($bot->matchAndReply($contactId, $keywordText)['matched']);
                 }
             } catch (Throwable $e) {
                 log_message('error', 'Keyword bot error ({provider}): {msg}', [
@@ -623,6 +663,13 @@ class Webhooks extends Controller
 
         // Automation triggers — same gate: active provider number only
         if (! $autoReplyAllowed) {
+            return;
+        }
+
+        // Policy: automated chats must offer a direct path to a person.
+        if (! $botMatched && $consentIntent === WhatsAppConsentService::INTENT_HUMAN) {
+            $consent->escalateToHuman($contact, $activeProvider);
+
             return;
         }
 
@@ -645,7 +692,8 @@ class Webhooks extends Controller
                 log_message('error', 'Sequence exit-on-reply failed: {msg}', ['msg' => $e->getMessage()]);
             }
 
-            if ($runKeywordMatch) {
+            // Keyword bot already answered — a second keyword-flow reply is a duplicate.
+            if ($runKeywordMatch && ! $botMatched) {
                 service('automationEngine')->processTrigger('keyword', [
                     'contact_id'   => $contactId,
                     'content'      => $keywordText,
@@ -728,6 +776,21 @@ class Webhooks extends Controller
                 ]);
             }
             model(CampaignModel::class)->updateStats((int) $cc['campaign_id']);
+        }
+
+        if ($newStatus === 'failed' && is_array($errors) && isset($errors[0]['code'])) {
+            $contactId = (int) ($message['contact_id'] ?? $cc['contact_id'] ?? 0);
+            if ($contactId > 0) {
+                try {
+                    service('whatsAppConsent')->applyDeliveryFailure(
+                        $contactId,
+                        (string) $errors[0]['code'],
+                        (string) ($errors[0]['title'] ?? $errors[0]['message'] ?? '')
+                    );
+                } catch (Throwable $e) {
+                    log_message('error', 'Delivery failure policy update failed: {msg}', ['msg' => $e->getMessage()]);
+                }
+            }
         }
     }
 

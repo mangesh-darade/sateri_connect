@@ -163,6 +163,10 @@ class MetaCloudAPI
                 }
 
                 $human = MetaApiErrorMapper::humanize($apiMessage, $status, $parsed['code'] ?? null);
+                if (! empty($parsed['code'])) {
+                    // Queue retry/suppression decisions key off this marker.
+                    $human .= ' [Meta #' . $parsed['code'] . ']';
+                }
                 throw new RuntimeException($human, $status);
             } catch (RuntimeException $e) {
                 throw $e;
@@ -1220,12 +1224,21 @@ class MetaCloudAPI
             'fields' => 'display_phone_number,verified_name,quality_rating,code_verification_status',
         ]);
 
+        // Portfolio-level limit (Graph v24+); separate call so older versions don't break the rest.
+        $messagingLimit = '';
+        try {
+            $limitInfo      = $this->request('GET', $this->phoneNumberId, ['fields' => 'whatsapp_business_manager_messaging_limit']);
+            $messagingLimit = (string) ($limitInfo['whatsapp_business_manager_messaging_limit'] ?? '');
+        } catch (\Throwable) {
+        }
+
         return [
             'phone_number_id' => $this->phoneNumberId,
             'waba_id'         => $this->wabaId,
             'display_phone'   => (string) ($info['display_phone_number'] ?? ''),
             'verified_name'   => (string) ($info['verified_name'] ?? ''),
             'quality_rating'  => (string) ($info['quality_rating'] ?? ''),
+            'messaging_limit' => $messagingLimit,
             'provider'        => 'meta',
             'raw'             => $info,
         ];
@@ -1442,7 +1455,7 @@ class MetaCloudAPI
 
             // Always POST the subscription. Even when `messages` is already subscribed,
             // the saved callback URL or verify token may have changed.
-            $desired = 'messages,message_template_status_update,account_update';
+            $desired = 'messages,message_template_status_update,message_template_quality_update,template_category_update,account_update,phone_number_quality_update,business_capability_update';
             $post    = $this->appGraphRequest('POST', $appId . '/subscriptions', [
                 'object'       => 'whatsapp_business_account',
                 'callback_url' => $callback,

@@ -28,6 +28,12 @@ class ContactModel extends Model
         'assigned_to',
         'birthday',
         'custom_fields',
+        'wa_opt_in',
+        'wa_opt_in_at',
+        'wa_opt_in_source',
+        'wa_opted_out_at',
+        'wa_suppressed_until',
+        'wa_suppress_reason',
     ];
 
     protected bool $allowEmptyInserts = false;

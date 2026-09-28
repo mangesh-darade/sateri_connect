@@ -151,7 +151,7 @@ class NotificationModel extends Model
      *
      * @param list<int>|null $userIds
      */
-    public function notifyChatUsers(string $title, string $message, string $link = '', ?int $preferUserId = null): int
+    public function notifyChatUsers(string $title, string $message, string $link = '', ?int $preferUserId = null, string $type = 'chat'): int
     {
         $ids = [];
         if ($preferUserId !== null && $preferUserId > 0) {
@@ -186,7 +186,7 @@ class NotificationModel extends Model
         $ids = array_values(array_unique(array_filter($ids)));
         $n   = 0;
         foreach ($ids as $uid) {
-            if ($this->push($uid, $title, $message, 'chat', $link)) {
+            if ($this->push($uid, $title, $message, $type, $link)) {
                 $n++;
             }
         }
