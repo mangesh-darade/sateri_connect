@@ -119,7 +119,16 @@ class QueueService
                 // Count this attempt before deciding retry vs final failure.
                 $attempts = ((int) ($item['attempts'] ?? 0)) + 1;
                 $max      = (int) ($item['max_attempts'] ?? 3);
-                $status   = $attempts >= $max ? 'failed' : 'pending';
+                $retry    = WhatsAppConsentService::isRetryableError($e->getMessage());
+                $status   = ($retry && $attempts < $max) ? 'pending' : 'failed';
+
+                $code = WhatsAppConsentService::extractErrorCode($e->getMessage());
+                if ($code !== null && ! empty($item['contact_id'])) {
+                    try {
+                        service('whatsAppConsent')->applyDeliveryFailure((int) $item['contact_id'], $code, $e->getMessage());
+                    } catch (Throwable $ignored) {
+                    }
+                }
 
                 if (method_exists($this->queue, 'markFailed')) {
                     $this->queue->markFailed($id, $e->getMessage(), $status, $attempts);
@@ -173,10 +182,17 @@ class QueueService
         $failed = $this->queue
             ->where('status', 'failed')
             ->orderBy('updated_at', 'ASC')
-            ->findAll($limit);
+            ->findAll($limit * 5);
 
         $count = 0;
         foreach ($failed as $item) {
+            if ($count >= $limit) {
+                break;
+            }
+            // Policy blocks, opt-outs, 131049/131050/131026 etc. must never be resent.
+            if (! WhatsAppConsentService::isRetryableError((string) ($item['error_message'] ?? ''))) {
+                continue;
+            }
             $ok = $this->queue->update((int) $item['id'], [
                 'status'        => 'pending',
                 'attempts'      => 0,
@@ -296,11 +312,17 @@ class QueueService
         $type    = (string) ($item['message_type'] ?? ($payload['type'] ?? 'text'));
 
         // WhatsApp policy: free-form outbound only inside the 24h customer-care window.
-        if ($type !== 'template' && ! contact_within_24h_window($contact, true)) {
+        $withinWindow = contact_within_24h_window($contact, true);
+        if ($type !== 'template' && ! $withinWindow) {
             throw new RuntimeException(
                 'Outside the 24-hour messaging window. Only template messages can be sent.'
             );
         }
+
+        $kind = ! empty($item['campaign_id'])
+            ? WhatsAppConsentService::KIND_CAMPAIGN
+            : ($type === 'template' ? WhatsAppConsentService::KIND_TEMPLATE : WhatsAppConsentService::KIND_SESSION);
+        service('whatsAppConsent')->assertEligible($contact, $kind, $withinWindow);
 
         return match ($type) {
             'text' => $this->api->sendText(

@@ -32,12 +32,27 @@ $positional = [
     'raw_payload' => null,
 ];
 
-// Regression: campaign saved only one variable for a two-placeholder template.
-$components = $build->invoke($service, ['1' => 'name'], $contact, null, $positional);
-check('missing mapping still sends every placeholder', count($components[0]['parameters']) === 2);
+function throwsMissing(callable $fn): bool
+{
+    try {
+        $fn();
+    } catch (\RuntimeException $e) {
+        return str_contains($e->getMessage(), 'Missing value for template variable');
+    }
+
+    return false;
+}
+
+// Policy: an unmapped variable must never go out as "-" or example text — the recipient is skipped instead.
+check('unmapped variable blocks the send (no "-" placeholder)', throwsMissing(fn () => $build->invoke($service, ['1' => 'name'], $contact, null, $positional)));
+
+$components = $build->invoke($service, ['1' => 'name', '2' => 'Acme'], $contact, null, $positional);
+check('mapped template sends every placeholder', count($components[0]['parameters']) === 2);
 check('mapped variable resolves from contact', $components[0]['parameters'][0]['text'] === 'Ada');
-check('unmapped variable falls back to placeholder text', $components[0]['parameters'][1]['text'] === '-');
 check('positional template omits parameter_name', ! isset($components[0]['parameters'][0]['parameter_name']));
+
+$noName = $build->invoke($service, ['1' => 'name', '2' => 'Acme'], ['id' => 2, 'name' => '', 'mobile' => '919999999998'], null, $positional);
+check('missing contact name uses neutral "Customer"', $noName[0]['parameters'][0]['text'] === 'Customer');
 
 // Regression: campaign saved more variables than the template has.
 $extra = $build->invoke($service, ['1' => 'name', '2' => 'Acme', '3' => 'stale'], $contact, null, $positional);
@@ -45,8 +60,7 @@ check('extra saved variables are dropped', count($extra[0]['parameters']) === 2)
 check('second parameter keeps its custom value', $extra[0]['parameters'][1]['text'] === 'Acme');
 
 // Empty map on a template that needs parameters.
-$empty = $build->invoke($service, [], $contact, null, $positional);
-check('empty map still produces parameters', isset($empty[0]) && count($empty[0]['parameters']) === 2);
+check('empty map on a parameterised template blocks the send', throwsMissing(fn () => $build->invoke($service, [], $contact, null, $positional)));
 
 // Template without placeholders must not send a body component.
 $noVars = $build->invoke($service, ['1' => 'name'], $contact, null, [
@@ -72,7 +86,7 @@ $legacy = $build->invoke($service, ['1' => 'name', '2' => 'A-1001'], $contact, n
 check('positional map still fills named template', count($legacy[0]['parameters']) === 2);
 check('positional map keeps named order', $legacy[0]['parameters'][1]['text'] === 'A-1001');
 
-// Examples from the approved template are a better fallback than a dash.
+// Approval examples (e.g. "Mangesh") must never be sent to a real customer.
 $withExample = [
     'body'        => 'hey {{1}} this is {{2}} software for customer.',
     'variables'   => json_encode(['1', '2']),
@@ -84,9 +98,7 @@ $withExample = [
         ]],
     ]),
 ];
-$exampleOut = $build->invoke($service, [], $contact, null, $withExample);
-check('unmapped positional variable uses the approved example', $exampleOut[0]['parameters'][0]['text'] === 'Mangesh');
-check('second unmapped variable uses its own example', $exampleOut[0]['parameters'][1]['text'] === 'ElintOm');
+check('approval example text is not used as a fallback', throwsMissing(fn () => $build->invoke($service, [], $contact, null, $withExample)));
 
 // Existing Meta components are passed through untouched.
 $existing = [['type' => 'body', 'parameters' => [['type' => 'text', 'text' => 'preset']]]];

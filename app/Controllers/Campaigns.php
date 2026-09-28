@@ -48,7 +48,22 @@ class Campaigns extends BaseController
             'canCreateEmail'  => function_exists('can') && can('emails.send'),
             'openChannel'     => strtolower(trim((string) ($this->request->getGet('new') ?? ''))),
             'isCheerioEmail'  => $settings->getEmailProvider() === SettingsService::EMAIL_PROVIDER_CHEERIO,
+            'waHealth'        => service('whatsAppConsent')->getHealth(),
         ]);
+    }
+
+    /**
+     * Operator confirms the Meta quality / restriction warning was reviewed.
+     */
+    public function acknowledgeHealth(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('campaigns.start')) {
+            return $denied;
+        }
+
+        service('whatsAppConsent')->acknowledgeHealth();
+
+        return $this->okOrRedirect('/campaigns', 'Marked as reviewed. Keep sending only to opted-in customers.');
     }
 
     public function create(): string|ResponseInterface
@@ -279,7 +294,7 @@ class Campaigns extends BaseController
             return $this->okOrRedirect('/campaigns/' . $id, 'Campaign started. Sent '
                 . (int) ($result['sent'] ?? 0) . ' / queued ' . (int) ($result['queued'] ?? 0)
                 . (! empty($result['failed']) ? (', failed ' . (int) $result['failed']) : '')
-                . '.');
+                . '.' . (! empty($result['excluded_summary']) ? ' ' . $result['excluded_summary'] . '.' : ''));
         } catch (Throwable $e) {
             return $this->failOrRedirect($e->getMessage());
         }
@@ -528,12 +543,15 @@ class Campaigns extends BaseController
             $preview = service('campaignService')->previewAudience($tagIds, [], $attributes, false);
 
             return $this->jsonResponse(true, [
-                'total'        => $preview['total'],
-                'phone_count'  => $preview['phone_count'],
-                'email_count'  => $preview['email_count'],
-                'contact_ids'  => $preview['contact_ids'],
-                'sample'       => $preview['sample'],
-                'attributes'   => $attributes,
+                'total'             => $preview['total'],
+                'phone_count'       => $preview['phone_count'],
+                'email_count'       => $preview['email_count'],
+                'contact_ids'       => $preview['contact_ids'],
+                'sample'            => $preview['sample'],
+                'attributes'        => $attributes,
+                'wa_eligible_count' => $preview['wa_eligible_count'],
+                'wa_excluded'       => $preview['wa_excluded'],
+                'wa_excluded_text'  => $preview['wa_excluded_text'],
             ]);
         } catch (Throwable $e) {
             return $this->jsonResponse(false, null, $e->getMessage(), [], 400);
@@ -687,6 +705,11 @@ class Campaigns extends BaseController
         $preview = service('campaignService')->previewAudience([$tagId], [], $attributes, false);
         if ($preview['total'] === 0) {
             return $this->jsonResponse(false, null, 'No contacts matched this label/filters.', [], 422);
+        }
+        if ((int) ($preview['wa_eligible_count'] ?? 0) === 0) {
+            return $this->jsonResponse(false, null, 'No contact in this audience can receive a WhatsApp campaign. '
+                . ($preview['wa_excluded_text'] !== '' ? $preview['wa_excluded_text'] . '. ' : '')
+                . 'Record WhatsApp opt-in on the contacts first.', [], 422);
         }
 
         $label = model(TagModel::class)->find($tagId);
@@ -1013,12 +1036,13 @@ class Campaigns extends BaseController
                 'completed' => ! empty($result['completed']),
                 'contacts'  => $result['contacts'] ?? 0,
                 'redirect'  => site_url('campaigns/' . $id),
-            ], ! empty($result['completed'])
+            ], (! empty($result['completed'])
                 ? ('Campaign completed. Sent ' . (int) ($result['sent'] ?? 0) . '.')
                 : ('Campaign started. Sent ' . (int) ($result['sent'] ?? 0)
                     . ' / queued ' . (int) ($result['queued'] ?? 0)
                     . (! empty($result['failed']) ? (', failed ' . (int) $result['failed']) : '')
-                    . '.'));
+                    . '.'))
+                . (! empty($result['excluded_summary']) ? ' ' . $result['excluded_summary'] . '.' : ''));
         } catch (Throwable $e) {
             return $this->jsonResponse(false, null, $e->getMessage(), [], 400);
         }

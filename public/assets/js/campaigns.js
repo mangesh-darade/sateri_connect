@@ -262,12 +262,17 @@
                 total: data.total || 0,
                 phone_count: data.phone_count || 0,
                 email_count: data.email_count || 0,
-                contact_ids: data.contact_ids || []
+                contact_ids: data.contact_ids || [],
+                wa_eligible_count: data.wa_eligible_count || 0,
+                wa_excluded_text: data.wa_excluded_text || ''
             };
-            $('#cwAudienceCounts').text(
-                'Phone Numbers fetched: ' + state.audience.phone_count +
-                ' | Emails fetched: ' + state.audience.email_count
-            );
+            var countsText = 'Phone Numbers fetched: ' + state.audience.phone_count +
+                ' | Emails fetched: ' + state.audience.email_count;
+            if (state.channel === 'whatsapp') {
+                countsText += ' | WhatsApp eligible (opted-in): ' + state.audience.wa_eligible_count +
+                    (state.audience.wa_excluded_text ? ' — ' + state.audience.wa_excluded_text : '');
+            }
+            $('#cwAudienceCounts').text(countsText);
             $('#cwShareCounts').text(state.audience.total + ' contacts');
         }).fail(function (xhr) {
             showWizardError(apiErrorMessage(xhr, 'Audience preview failed'));
@@ -487,7 +492,7 @@
         $('#cwSelectedLabelChip, #cwShareLabelChip').text(state.labelName || selectedLabelName() || '—');
         var countLabel = state.channel === 'email'
             ? (state.audience.email_count + ' emails')
-            : (state.audience.phone_count + ' phones / ' + state.audience.total + ' contacts');
+            : ((state.audience.wa_eligible_count || 0) + ' opted-in of ' + state.audience.phone_count + ' phones / ' + state.audience.total + ' contacts');
         $('#cwShareCounts').text(countLabel);
         if (state.channel === 'email') {
             $('#cwShareTplName').text($('#cwEmailSubject').val() || 'Email campaign');
@@ -536,6 +541,11 @@
             }
             if (state.channel === 'whatsapp' && !state.audience.phone_count) {
                 return showWizardError('No phone numbers found for this audience. Add mobiles to the label contacts.');
+            }
+            if (state.channel === 'whatsapp' && !state.audience.wa_eligible_count) {
+                return showWizardError('No contact in this audience has WhatsApp opt-in'
+                    + (state.audience.wa_excluded_text ? ' (' + state.audience.wa_excluded_text + ')' : '')
+                    + '. Record consent on Contacts before sending — Meta bans numbers that message people without opt-in.');
             }
             if (state.channel === 'email' && !state.audience.email_count) {
                 return showWizardError('No emails found for this audience. Add emails to the label contacts.');
@@ -1126,6 +1136,17 @@
 
         $('#campaignRefreshBtn').on('click', function () {
             window.location.reload();
+        });
+
+        $('#btnAckWaHealth').on('click', function () {
+            var $btn = $(this).prop('disabled', true);
+            APP.post(base() + '/campaigns/health/acknowledge', {}).done(function (res) {
+                toast((res && res.message) || 'Marked as reviewed.');
+                $('#waHealthBanner').remove();
+            }).fail(function (xhr) {
+                $btn.prop('disabled', false);
+                toast(apiErrorMessage(xhr, 'Could not update status'), 'error');
+            });
         });
 
         // Legacy form page

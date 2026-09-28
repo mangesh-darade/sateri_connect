@@ -19,6 +19,14 @@ class CampaignService
     protected TemplateModel $templates;
     protected QueueService $queue;
     protected ActivityLogger $logger;
+    protected WhatsAppConsentService $consent;
+
+    /**
+     * Policy exclusions from the most recent WhatsApp recipient resolution.
+     *
+     * @var array<string, int>
+     */
+    protected array $lastExclusions = [];
 
     public function __construct(
         ?CampaignModel $campaigns = null,
@@ -26,7 +34,8 @@ class CampaignService
         ?ContactModel $contacts = null,
         ?TemplateModel $templates = null,
         ?QueueService $queue = null,
-        ?ActivityLogger $logger = null
+        ?ActivityLogger $logger = null,
+        ?WhatsAppConsentService $consent = null
     ) {
         $this->campaigns        = $campaigns ?? model(CampaignModel::class);
         $this->campaignContacts = $campaignContacts ?? model(CampaignContactModel::class);
@@ -34,6 +43,7 @@ class CampaignService
         $this->templates        = $templates ?? model(TemplateModel::class);
         $this->queue            = $queue ?? new QueueService();
         $this->logger           = $logger ?? new ActivityLogger();
+        $this->consent          = $consent ?? service('whatsAppConsent');
     }
 
     /**
@@ -131,12 +141,16 @@ class CampaignService
             throw new RuntimeException('Select an audience (all contacts, specific contacts, or tags) before starting.');
         }
 
+        $this->consent->assertCanStartCampaign();
+        $this->assertTemplateSendable($campaign);
+
         $useCheerioBulk = $this->shouldDispatchViaCheerioBulk($campaign);
 
         if ($useCheerioBulk) {
             $queued = $this->dispatchCheerioBulkCampaign($campaignId, $contactIds, $tagIds, $allActive);
         } else {
             $queued = $this->queueRecipients($campaignId, $contactIds, $tagIds, $allActive);
+            $this->assertHasEligibleRecipients($queued);
 
             $this->campaigns->update($campaignId, [
                 'status'         => 'running',
@@ -184,11 +198,80 @@ class CampaignService
         }
         $queued['sent']   = (int) ($fresh['sent_count'] ?? ($queued['sent'] ?? 0));
         $queued['failed'] = (int) ($fresh['failed_count'] ?? ($queued['failed'] ?? 0));
+        $queued['excluded_summary'] = WhatsAppConsentService::describeExclusions($queued['excluded'] ?? []);
 
-        // Fire "Campaign Sent" automations for each audience contact (capped for safety).
-        $this->fireCampaignSentTriggers($campaignId, $contactIds, $tagIds, $allActive);
+        // Fire "Campaign Sent" automations for recipients that actually got the campaign.
+        $this->fireCampaignSentTriggers($campaignId);
 
         return $queued;
+    }
+
+    /**
+     * Meta pauses / disables low-quality templates; sending them again only fails and
+     * hurts the number further.
+     *
+     * @param array<string, mixed> $campaign
+     */
+    protected function assertTemplateSendable(array $campaign): void
+    {
+        if ((string) ($campaign['message_type'] ?? 'template') !== 'template' || empty($campaign['template_id'])) {
+            return;
+        }
+
+        $template = $this->templates->find((int) $campaign['template_id']);
+        if (! is_array($template)) {
+            return;
+        }
+
+        $status = strtoupper(trim((string) ($template['status'] ?? '')));
+        if ($status === 'APPROVED') {
+            return;
+        }
+
+        throw new RuntimeException(
+            WhatsAppConsentService::POLICY_PREFIX . ' Template "' . ($template['name'] ?? '') . '" is ' . ($status !== '' ? $status : 'not approved')
+            . ' on Meta. Use an APPROVED template (sync templates if you just fixed it).',
+            422
+        );
+    }
+
+    /**
+     * Refuse to start when policy filters removed every recipient, so the operator
+     * sees why instead of a silent empty "completed" campaign.
+     *
+     * @param array<string, mixed> $queued
+     */
+    protected function assertHasEligibleRecipients(array $queued): void
+    {
+        if ((int) ($queued['contacts'] ?? 0) > 0) {
+            return;
+        }
+
+        $summary = WhatsAppConsentService::describeExclusions($queued['excluded'] ?? []);
+        throw new RuntimeException(
+            'No eligible WhatsApp recipients. ' . ($summary !== '' ? $summary . '. ' : '')
+            . 'Only contacts with a recorded WhatsApp opt-in who have not opted out can receive campaigns.'
+        );
+    }
+
+    /**
+     * Audience for a WhatsApp campaign after policy filtering (opt-in, opt-out,
+     * suppression, 24h frequency cap, duplicate mobiles).
+     *
+     * @param list<int>|null $contactIds
+     * @param list<int>|null $tagIds
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function resolveWhatsAppRecipients(?int $campaignId, ?array $contactIds, ?array $tagIds, bool $allActive): array
+    {
+        $split = $this->consent->splitCampaignAudience(
+            $this->resolveContacts($contactIds, $tagIds, $allActive),
+            $campaignId
+        );
+        $this->lastExclusions = $split['excluded'];
+
+        return $split['eligible'];
     }
 
     /**
@@ -221,7 +304,10 @@ class CampaignService
         bool $allActive
     ): array {
         $campaign = $this->requireCampaign($campaignId);
-        $contacts = $this->resolveContacts($contactIds, $tagIds, $allActive);
+        $contacts = $this->resolveWhatsAppRecipients($campaignId, $contactIds, $tagIds, $allActive);
+        $excluded = $this->lastExclusions;
+        $this->assertHasEligibleRecipients(['contacts' => count($contacts), 'excluded' => $excluded]);
+        $this->consent->assertWithinMessagingLimit(count($contacts), $campaignId);
 
         $basePayload = $this->buildSendPayload($campaign);
         $variableMap = $this->decodeVariables($campaign['variables'] ?? null);
@@ -273,12 +359,18 @@ class CampaignService
                 continue;
             }
 
-            $components = $this->buildTemplateComponents(
-                $variableMap,
-                $contact,
-                $basePayload['components'] ?? null,
-                is_array($templateRow) ? $templateRow : null
-            );
+            try {
+                $components = $this->buildTemplateComponents(
+                    $variableMap,
+                    $contact,
+                    $basePayload['components'] ?? null,
+                    is_array($templateRow) ? $templateRow : null
+                );
+            } catch (RuntimeException $e) {
+                $skippedNoPhone++;
+                $this->markCampaignContactStatus($campaignId, $contactId, 'failed', $e->getMessage());
+                continue;
+            }
             $components = WhatsAppTemplatePayload::mergeHeaderFromPayload(
                 $components,
                 $basePayload,
@@ -305,6 +397,7 @@ class CampaignService
             'failed'   => $skippedNoPhone,
             'batches'  => 0,
             'dispatch' => 'cheerio_bulk',
+            'excluded' => $excluded,
         ];
 
         $this->logger->log('start', 'campaigns', 'Campaign started via Cheerio bulk API', [
@@ -477,15 +570,28 @@ class CampaignService
     }
 
     /**
-     * Notify automation engine that a campaign was launched for contacts.
-     *
-     * @param list<int>|null $contactIds
-     * @param list<int>|null $tagIds
+     * Notify automation engine for recipients the campaign was actually sent to
+     * (never for skipped / opted-out / failed contacts).
      */
-    protected function fireCampaignSentTriggers(int $campaignId, ?array $contactIds, ?array $tagIds, bool $allActive): void
+    protected function fireCampaignSentTriggers(int $campaignId): void
     {
         try {
-            $contacts = $this->resolveContacts($contactIds, $tagIds, $allActive);
+            $sentIds = array_map(
+                'intval',
+                array_column(
+                    db_connect()->table('campaign_contacts')
+                        ->select('contact_id')
+                        ->where('campaign_id', $campaignId)
+                        ->whereIn('status', ['sent', 'delivered', 'read'])
+                        ->get()
+                        ->getResultArray(),
+                    'contact_id'
+                )
+            );
+            if ($sentIds === []) {
+                return;
+            }
+            $contacts = $this->contacts->whereIn('id', $sentIds)->findAll();
             $engine   = service('automationEngine');
             $limit    = 500;
             $n        = 0;
@@ -560,6 +666,9 @@ class CampaignService
             throw new RuntimeException('Only paused campaigns can be resumed.');
         }
 
+        $this->consent->assertCanStartCampaign();
+        $this->assertTemplateSendable($campaign);
+
         // Re-queue cancelled items that were never sent
         db_connect()->table('message_queue')
             ->where('campaign_id', $campaignId)
@@ -607,14 +716,18 @@ class CampaignService
      * @param list<int>|null $contactIds
      * @param list<int>|null $tagIds
      *
-     * @return array{contacts: int, queued: int}
+     * @return array{contacts: int, queued: int, excluded: array<string, int>}
      */
     public function queueRecipients(int $campaignId, ?array $contactIds = null, ?array $tagIds = null, bool $allActive = false): array
     {
         $campaign = $this->requireCampaign($campaignId);
-        $contacts = $this->resolveContacts($contactIds, $tagIds, $allActive);
-
+        $contacts = $this->resolveWhatsAppRecipients($campaignId, $contactIds, $tagIds, $allActive);
+        $excluded = $this->lastExclusions;
         $messageType = (string) ($campaign['message_type'] ?? 'template');
+        if ($messageType === 'template') {
+            $this->consent->assertWithinMessagingLimit(count($contacts), $campaignId);
+        }
+
         $basePayload = $this->buildSendPayload($campaign);
         $variableMap = $this->decodeVariables($campaign['variables'] ?? null);
         $templateRow = ! empty($campaign['template_id'])
@@ -656,13 +769,19 @@ class CampaignService
 
             $payload = $basePayload;
             if ($messageType === 'template') {
-                $payload['components'] = WhatsAppTemplatePayload::mergeHeaderFromPayload(
-                    $this->buildTemplateComponents(
+                try {
+                    $components = $this->buildTemplateComponents(
                         $variableMap,
                         $contact,
                         $payload['components'] ?? null,
                         is_array($templateRow) ? $templateRow : null
-                    ),
+                    );
+                } catch (RuntimeException $e) {
+                    $this->markCampaignContactStatus($campaignId, $contactId, 'failed', $e->getMessage());
+                    continue;
+                }
+                $payload['components'] = WhatsAppTemplatePayload::mergeHeaderFromPayload(
+                    $components,
                     $basePayload,
                     $headerType
                 );
@@ -680,7 +799,7 @@ class CampaignService
 
         $this->campaigns->update($campaignId, ['total_contacts' => count($contacts)]);
 
-        return ['contacts' => count($contacts), 'queued' => $queued];
+        return ['contacts' => count($contacts), 'queued' => $queued, 'excluded' => $excluded];
     }
 
     /**
@@ -728,13 +847,18 @@ class CampaignService
             'email'  => (string) ($c['email'] ?? ''),
         ], $contacts), 0, 10);
 
+        $waSplit = $this->consent->splitCampaignAudience($contacts);
+
         return [
-            'contacts'     => $contacts,
-            'contact_ids'  => $ids,
-            'phone_count'  => $phoneCount,
-            'email_count'  => $emailCount,
-            'total'        => count($contacts),
-            'sample'       => $sample,
+            'contacts'          => $contacts,
+            'contact_ids'       => $ids,
+            'phone_count'       => $phoneCount,
+            'email_count'       => $emailCount,
+            'total'             => count($contacts),
+            'sample'            => $sample,
+            'wa_eligible_count' => count($waSplit['eligible']),
+            'wa_excluded'       => $waSplit['excluded'],
+            'wa_excluded_text'  => WhatsAppConsentService::describeExclusions($waSplit['excluded']),
         ];
     }
 
@@ -835,7 +959,7 @@ class CampaignService
             $contactIds = $audience['contact_ids'] !== [] ? $audience['contact_ids'] : null;
             $tagIds     = $audience['tag_ids'] !== [] ? $audience['tag_ids'] : null;
         }
-        $contacts = $this->resolveContacts($contactIds, $tagIds, $allActive);
+        $contacts = $this->resolveWhatsAppRecipients($campaignId, $contactIds, $tagIds, $allActive);
 
         $sample = array_slice(array_map(static fn (array $c): array => [
             'id'     => $c['id'],
@@ -847,6 +971,8 @@ class CampaignService
             'recipient_count' => count($contacts),
             'sample'          => $sample,
             'payload'         => $this->buildSendPayload($campaign),
+            'excluded'        => $this->lastExclusions,
+            'excluded_text'   => WhatsAppConsentService::describeExclusions($this->lastExclusions),
         ];
     }
 
@@ -1107,20 +1233,16 @@ class CampaignService
             // Older campaigns stored the map by position even for named templates.
             $source = $variableMap[$key] ?? $variableMap[(string) $index] ?? null;
 
-            $text = $source !== null ? $this->resolveVariableValue($source, $contact) : '';
-            if ($text === '') {
-                $suggestion = (string) ($definition['suggested_source'] ?? '');
-                if (in_array($suggestion, ['name', 'mobile', 'email'], true)) {
-                    $text = $this->resolveVariableValue($suggestion, $contact);
-                }
+            $text       = $source !== null ? $this->resolveVariableValue($source, $contact) : '';
+            $suggestion = (string) ($definition['suggested_source'] ?? '');
+            if ($text === '' && in_array($suggestion, ['name', 'mobile', 'email'], true)) {
+                $text = $this->resolveVariableValue($suggestion, $contact);
             }
-            if ($text === '') {
-                $text = trim((string) ($definition['example'] ?? ''));
-            }
+            $isNameField = $suggestion === 'name' || ($source !== null && $this->variableSourceField($source) === 'name');
 
             $parameter = [
                 'type' => 'text',
-                'text' => $text !== '' ? $text : '-',
+                'text' => $this->requireVariableText($text, $key, $isNameField),
             ];
             if (($definition['style'] ?? '') === 'named') {
                 $parameter['parameter_name'] = $key;
@@ -1161,7 +1283,11 @@ class CampaignService
             $text = $this->resolveVariableValue($variableMap[$key], $contact);
             $parameter = [
                 'type' => 'text',
-                'text' => $text !== '' ? $text : '-',
+                'text' => $this->requireVariableText(
+                    $text,
+                    (string) $key,
+                    $this->variableSourceField($variableMap[$key]) === 'name'
+                ),
             ];
             if (! ctype_digit((string) $key)) {
                 $parameter['parameter_name'] = (string) $key;
@@ -1191,6 +1317,39 @@ class CampaignService
         }
 
         return false;
+    }
+
+    /**
+     * Placeholder text like "-" or the approval example ("John") reads as spam to
+     * recipients, so an empty value skips the recipient instead. Only a missing
+     * name gets a neutral salutation.
+     *
+     * @throws RuntimeException When the variable has no value for this contact.
+     */
+    protected function requireVariableText(string $text, string $key, bool $isNameField): string
+    {
+        $text = trim($text);
+        if ($text !== '') {
+            return $text;
+        }
+        if ($isNameField) {
+            return 'Customer';
+        }
+
+        throw new RuntimeException('Missing value for template variable {{' . $key . '}} for this contact.');
+    }
+
+    protected function variableSourceField(mixed $source): string
+    {
+        if (! is_string($source)) {
+            return '';
+        }
+        $raw = trim($source);
+        if (preg_match('/^\{\{\s*([a-zA-Z0-9_]+)\s*\}\}$/', $raw, $m)) {
+            $raw = $m[1];
+        }
+
+        return strtolower($raw);
     }
 
     protected function resolveVariableValue(mixed $source, array $contact): string

@@ -146,6 +146,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->get('campaigns/create', 'Campaigns::create');
     $routes->get('campaigns/wizard-data', 'Campaigns::wizardData');
     $routes->post('campaigns/audience-preview', 'Campaigns::audiencePreview', ['filter' => 'csrf']);
+    $routes->post('campaigns/health/acknowledge', 'Campaigns::acknowledgeHealth', ['filter' => 'csrf']);
     $routes->post('campaigns/labels', 'Campaigns::createLabel', ['filter' => 'csrf']);
     $routes->post('campaigns/wizard', 'Campaigns::wizardStore', ['filter' => 'csrf']);
     $routes->post('campaigns/wizard/(:segment)/(:num)/run', 'Campaigns::wizardRun/$1/$2', ['filter' => 'csrf']);

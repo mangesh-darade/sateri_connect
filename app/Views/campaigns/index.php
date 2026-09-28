@@ -58,6 +58,30 @@ $campaigns = $campaigns ?? [];
      data-can-wa="<?= $canCreateWa ? '1' : '0' ?>"
      data-can-email="<?= $canCreateEmail ? '1' : '0' ?>">
 
+    <?php $waHealth = $waHealth ?? ['status' => 'ok']; ?>
+    <?php if (($waHealth['status'] ?? 'ok') !== 'ok'): ?>
+        <div class="alert alert-<?= $waHealth['status'] === 'restricted' ? 'danger' : 'warning' ?> d-flex align-items-start gap-3" id="waHealthBanner">
+            <i class="fas fa-triangle-exclamation fa-lg mt-1"></i>
+            <div class="flex-grow-1">
+                <div class="fw-semibold">
+                    <?= $waHealth['status'] === 'restricted'
+                        ? 'Meta has restricted this WhatsApp number — WhatsApp campaigns are paused.'
+                        : 'WhatsApp number quality is at risk — WhatsApp campaigns are paused.' ?>
+                </div>
+                <div class="small">
+                    <?= esc($waHealth['detail'] ?: $waHealth['event']) ?>
+                    <?php if (! empty($waHealth['quality_rating'])): ?> · Quality: <strong><?= esc($waHealth['quality_rating']) ?></strong><?php endif; ?>
+                    <?php if (! empty($waHealth['messaging_limit'])): ?> · Limit: <?= esc($waHealth['messaging_limit']) ?><?php endif; ?>
+                    <?php if (! empty($waHealth['updated_at'])): ?> · <?= esc($waHealth['updated_at']) ?><?php endif; ?>
+                </div>
+                <div class="small mt-1">Check Meta Business Support Home, remove non-opted-in contacts and review template content before sending again.</div>
+            </div>
+            <?php if (function_exists('can') && can('campaigns.start')): ?>
+                <button type="button" class="btn btn-sm btn-outline-dark text-nowrap" id="btnAckWaHealth">I have reviewed</button>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
+
     <div class="card">
         <div class="card-body py-3">
             <form method="get" action="<?= site_url('campaigns') ?>" class="filter-bar mb-0" id="campaignFilterForm">
