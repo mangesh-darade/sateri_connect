@@ -2300,6 +2300,31 @@ body.layout-fixed .main-sidebar > .sidebar {
     margin-top: .2rem;
 }
 .msg-status { margin-left: .25rem; }
+.chat-day-sep {
+    display: flex;
+    justify-content: center;
+    margin: .75rem 0 .5rem;
+    position: sticky;
+    top: .25rem;
+    z-index: 2;
+    pointer-events: none;
+}
+.chat-day-sep span {
+    background: #ffffff;
+    color: #54656f;
+    font-size: .72rem;
+    font-weight: 500;
+    padding: .25rem .7rem;
+    border-radius: 8px;
+    box-shadow: 0 1px .5px rgba(11, 20, 26, .13);
+}
+.msg-unsupported {
+    display: inline-block;
+    color: #667781;
+    font-style: italic;
+    font-size: .85rem;
+    margin-right: .5rem;
+}
 .chat-composer {
     background: #f0f5f2;
     padding: 0.55rem 0.65rem;

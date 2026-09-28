@@ -552,6 +552,17 @@ class Chat extends BaseController
                     }
                 }
 
+                if ($messageType === 'template') {
+                    $check = service('whatsAppConsent')->eligibility(
+                        $contact,
+                        \App\Libraries\WhatsAppConsentService::KIND_TEMPLATE,
+                        $within24h
+                    );
+                    if (! $check['ok']) {
+                        return $this->jsonResponse(false, null, $check['message'], ['policy_reason' => $check['reason']], 422);
+                    }
+                }
+
                 $result = match ($messageType) {
                     'template' => $api->sendTemplate($to, $templateName, $language, $components),
                     'image' => $api->sendImage(

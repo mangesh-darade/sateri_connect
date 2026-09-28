@@ -14,6 +14,7 @@
         pollMs: 3000,
         pollMsHidden: 10000,
         lastMessageId: 0,
+        lastDayKey: '',
         sending: false,
         within24h: true,
         inboxStatus: 'open',
@@ -55,6 +56,59 @@
         return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
 
+    function fmtInTz(ts, opts) {
+        if (window.APP && typeof APP.formatDateTime === 'function') {
+            return APP.formatDateTime(ts, opts);
+        }
+        var d = ts instanceof Date ? ts : new Date(String(ts).replace(' ', 'T') + 'Z');
+        return isNaN(d.getTime()) ? '' : d.toLocaleString('en-GB', opts);
+    }
+
+    /** Calendar day of a message in the app timezone, used to group like WhatsApp. */
+    function dayKey(ts) {
+        if (!ts) return '';
+        return fmtInTz(ts, { year: 'numeric', month: '2-digit', day: '2-digit' });
+    }
+
+    /** "Today", "Yesterday", weekday within the last week, else "17 September 2026". */
+    function dayLabel(ts) {
+        var key = dayKey(ts);
+        var now = new Date();
+        if (key === dayKey(now)) return 'Today';
+        if (key === dayKey(new Date(now.getTime() - 86400000))) return 'Yesterday';
+        for (var i = 2; i < 7; i++) {
+            if (key === dayKey(new Date(now.getTime() - i * 86400000))) {
+                return fmtInTz(ts, { weekday: 'long' });
+            }
+        }
+        return fmtInTz(ts, { day: 'numeric', month: 'long', year: 'numeric' });
+    }
+
+    /** Conversation list stamp: time today, then "Yesterday", weekday, or short date. */
+    function listTime(ts) {
+        if (!ts) return '';
+        var label = dayLabel(ts);
+        if (label === 'Today') return formatTime(ts);
+        if (label === 'Yesterday' || label.indexOf(' ') < 0) return label;
+        return fmtInTz(ts, { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
+
+    function daySeparator(ts) {
+        return '<div class="chat-day-sep" data-day="' + escapeHtml(dayKey(ts)) + '"><span>' + escapeHtml(dayLabel(ts)) + '</span></div>';
+    }
+
+    /** Message HTML, prefixed with a date separator when the day changes. */
+    function renderWithDay(msg) {
+        var ts = msg.created_at || msg.timestamp;
+        var key = dayKey(ts);
+        var html = '';
+        if (key && key !== Chat.lastDayKey) {
+            html = daySeparator(ts);
+            Chat.lastDayKey = key;
+        }
+        return html + renderMessage(msg);
+    }
+
     function statusIcon(status) {
         status = (status || '').toLowerCase();
         if (status === 'read') return '<i class="fas fa-check-double msg-status msg-status-read"></i>';
@@ -78,13 +132,19 @@
             } else {
                 body = '<a href="' + escapeHtml(msg.media_url) + '" target="_blank" rel="noopener">Attachment</a><br>' + escapeHtml(body);
             }
+        } else if (String(body).trim() === '') {
+            var mtype = (msg.message_type || msg.type || '').toLowerCase();
+            var note = mtype === 'unsupported'
+                ? 'This message type isn\'t supported here. Open WhatsApp on the phone to view it.'
+                : (mtype ? mtype.charAt(0).toUpperCase() + mtype.slice(1) + ' message' : 'Message');
+            body = '<span class="msg-unsupported"><i class="fas fa-info-circle me-1"></i>' + escapeHtml(note) + '</span>';
         } else {
             body = escapeHtml(body).replace(/\n/g, '<br>');
         }
         return (
             '<div class="msg-row ' + dir + '" data-id="' + escapeHtml(msg.id) + '" data-status="' + escapeHtml(msg.status || '') + '">' +
             '<div class="msg-bubble">' + body +
-            '<span class="msg-time">' + escapeHtml(formatTime(msg.created_at || msg.timestamp)) +
+            '<span class="msg-time" title="' + escapeHtml(fmtInTz(msg.created_at || msg.timestamp, { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })) + '">' + escapeHtml(formatTime(msg.created_at || msg.timestamp)) +
             (dir === 'outbound' ? statusIcon(msg.status) : '') +
             '</span></div></div>'
         );
@@ -536,7 +596,7 @@
                         '<div class="chat-avatar">' + escapeHtml(initials(c.name || c.mobile)) + channelBadge(c.channel) + '</div>' +
                         '<div class="chat-conv-meta">' +
                         '<div class="d-flex justify-content-between"><span class="name">' + escapeHtml(c.name || c.mobile) + '</span>' +
-                        '<span class="time">' + escapeHtml(formatTime(c.last_message_at)) + '</span></div>' +
+                        '<span class="time">' + escapeHtml(listTime(c.last_message_at)) + '</span></div>' +
                         '<div class="d-flex justify-content-between align-items-center">' +
                         '<span class="preview">' + escapeHtml(c.last_message) + '</span>' +
                         statusBadge +
@@ -636,7 +696,8 @@
                 setWindowState(!!payload.within_24h);
             }
             if (!silent) {
-                var html = msgs.map(renderMessage).join('');
+                Chat.lastDayKey = '';
+                var html = msgs.map(renderWithDay).join('');
                 $('#chatMessages').html(html || '<div class="text-center text-muted py-4">No messages yet</div>');
                 Chat.lastMessageId = msgs.length ? parseInt(msgs[msgs.length - 1].id, 10) || 0 : 0;
                 renderNotes(payload && payload.notes ? payload.notes : []);
@@ -647,7 +708,7 @@
                 msgs.forEach(function (m) {
                     var mid = parseInt(m.id, 10) || 0;
                     if (mid > Chat.lastMessageId) {
-                        $('#chatMessages').append(renderMessage(m));
+                        $('#chatMessages').append(renderWithDay(m));
                         Chat.lastMessageId = mid;
                         if ((m.direction || '') === 'inbound') {
                             hadInbound = true;
@@ -747,7 +808,8 @@
             if (fileInput) fileInput.value = '';
             var msg = res.data || res.message_row || res;
             if (msg && msg.id) {
-                $('#chatMessages').append(renderMessage(msg));
+                $('#chatMessages').find('> .text-muted.py-4').remove();
+                $('#chatMessages').append(renderWithDay(msg));
                 Chat.lastMessageId = Math.max(Chat.lastMessageId, parseInt(msg.id, 10) || 0);
                 scrollBottom();
             } else {

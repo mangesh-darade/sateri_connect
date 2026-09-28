@@ -75,6 +75,10 @@ class Messages extends BaseApiController
             );
         }
 
+        if ($blocked = $this->policyCheck($contact, $input, $type, $within24h)) {
+            return $blocked;
+        }
+
         try {
             $api    = service('whatsApp');
             $phone  = $api->normalizePhone((string) $contact['mobile']);
@@ -138,6 +142,36 @@ class Messages extends BaseApiController
         }
     }
 
+    /**
+     * WhatsApp policy gate. Callers may assert consent they collected with
+     * `opt_in: true` (+ optional `opt_in_source`), which is recorded before the check.
+     *
+     * @param array<string, mixed> $contact
+     * @param array<string, mixed> $input
+     */
+    protected function policyCheck(array &$contact, array $input, string $type, bool $within24h): ?ResponseInterface
+    {
+        $consent   = service('whatsAppConsent');
+        $contactId = (int) ($contact['id'] ?? 0);
+
+        if (filter_var($input['opt_in'] ?? false, FILTER_VALIDATE_BOOLEAN) && ! $consent->isOptedOut($contact)) {
+            $consent->optIn($contactId, (string) ($input['opt_in_source'] ?? 'api'));
+            $contact = model(ContactModel::class)->find($contactId) ?? $contact;
+        }
+
+        $check = $consent->eligibility(
+            $contact,
+            $type === 'template'
+                ? \App\Libraries\WhatsAppConsentService::KIND_TEMPLATE
+                : \App\Libraries\WhatsAppConsentService::KIND_SESSION,
+            $within24h
+        );
+
+        return $check['ok']
+            ? null
+            : $this->respondError($check['message'], ['policy_reason' => $check['reason']], 422);
+    }
+
     public function sendText(): ResponseInterface
     {
         return $this->dispatchSend('text');
@@ -182,6 +216,10 @@ class Messages extends BaseApiController
 
         if (! $within24h && $type !== 'template') {
             return $this->respondError('Outside 24-hour window. Use a template message.', [], 422);
+        }
+
+        if ($blocked = $this->policyCheck($contact, $input, $type, $within24h)) {
+            return $blocked;
         }
 
         try {
