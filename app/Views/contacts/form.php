@@ -74,6 +74,45 @@ if (! is_array($selectedTags)) {
                     <label class="form-label">Notes</label>
                     <textarea name="notes" class="form-control" rows="3"><?= $val('notes') ?></textarea>
                 </div>
+                <?php
+                $optedOut     = ! empty($contact['wa_opted_out_at']);
+                $optInChecked = old('wa_opt_in') !== null ? (bool) old('wa_opt_in') : ((int) ($contact['wa_opt_in'] ?? 0) === 1);
+                $optInSource  = (string) (old('wa_opt_in_source') ?? ($contact['wa_opt_in_source'] ?? ''));
+                ?>
+                <div class="col-12">
+                    <div class="border rounded p-2">
+                        <div class="d-flex align-items-center justify-content-between mb-1">
+                            <label class="form-label mb-0">WhatsApp consent</label>
+                            <?php if ($isEdit): ?>
+                                <?= view('partials/wa_consent_badge', ['contact' => $contact]) ?>
+                            <?php endif; ?>
+                        </div>
+                        <?php if ($optedOut): ?>
+                            <p class="small text-danger mb-0">
+                                This customer opted out on <?= esc(format_app_datetime($contact['wa_opted_out_at'])) ?>.
+                                Only they can opt back in by sending <strong>START</strong> on WhatsApp.
+                            </p>
+                        <?php else: ?>
+                            <div class="row g-2 align-items-center">
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="wa_opt_in" value="1" id="waOptIn" <?= $optInChecked ? 'checked' : '' ?>>
+                                        <label class="form-check-label" for="waOptIn">Customer agreed to receive WhatsApp messages from us</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <select name="wa_opt_in_source" id="waOptInSource" class="form-select form-select-sm" <?= $optInChecked ? '' : 'disabled' ?>>
+                                        <option value="">How was consent given?</option>
+                                        <?php foreach (\App\Libraries\WhatsAppConsentService::OPT_IN_SOURCES as $key => $label): ?>
+                                            <option value="<?= esc($key) ?>" <?= $optInSource === $key ? 'selected' : '' ?>><?= esc($label) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-text">Meta allows campaigns only to people who opted in. Keep proof (form, message, signed sheet) for every opt-in.</div>
+                        <?php endif; ?>
+                    </div>
+                </div>
                 <div class="col-12">
                     <div class="d-flex align-items-center justify-content-between mb-1">
                         <label class="form-label mb-0">Contact attributes</label>
@@ -157,6 +196,9 @@ if (! is_array($selectedTags)) {
             '</div>';
     }
     $('#btnAddAttr').on('click', function () { $('#attrRows').append(rowHtml()); });
+    $('#waOptIn').on('change', function () {
+        $('#waOptInSource').prop('disabled', !this.checked).prop('required', this.checked);
+    }).trigger('change');
     $('#attrRows').on('click', '.btn-remove-attr', function () {
         var $rows = $('#attrRows .attr-row');
         if ($rows.length <= 1) {

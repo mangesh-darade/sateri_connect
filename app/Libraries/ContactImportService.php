@@ -211,8 +211,9 @@ class ContactImportService
      *
      * @return array{imported:int,skipped:int,updated:int,errors:list<string>,custom_fields_created:list<string>,truncated:bool}
      */
-    public function commit(string $token, array $mapping, ?int $tagId, bool $skipDuplicates): array
+    public function commit(string $token, array $mapping, ?int $tagId, bool $skipDuplicates, ?string $optInSource = null): array
     {
+        $consent = $optInSource !== null && $optInSource !== '' ? service('whatsAppConsent') : null;
         $token = preg_replace('/[^a-f0-9]/', '', strtolower($token)) ?? '';
         if (strlen($token) !== 32) {
             throw new RuntimeException('Invalid import session. Upload the file again.');
@@ -336,6 +337,11 @@ class ContactImportService
                     $errors[] = $mobile . ': ' . implode(', ', $model->errors());
                     continue;
                 }
+            }
+
+            // Operator confirmed the file holds recorded WhatsApp consent; a customer STOP still wins.
+            if ($consent !== null && ($existing === null || ! $consent->isOptedOut($existing))) {
+                $consent->optIn($contactId, $optInSource, null, false);
             }
 
             if ($tagId !== null && $tagId > 0) {

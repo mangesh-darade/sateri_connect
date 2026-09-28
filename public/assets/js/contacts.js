@@ -48,6 +48,7 @@
                     d.status = $('#filterStatus').val();
                     d.tag_id = $('#filterTag').val();
                     d.assigned_to = $('#filterAssigned').val();
+                    d.consent = $('#filterConsent').val();
                 }
             },
             columnDefs: [
@@ -91,9 +92,10 @@
                 },
                 {
                     data: 'status',
-                    render: function (s) {
+                    render: function (s, type, row) {
                         var map = { active: 'success', inactive: 'secondary', blocked: 'danger' };
-                        return '<span class="badge bg-' + (map[s] || 'secondary') + '">' + (s || '') + '</span>';
+                        return '<span class="badge bg-' + (map[s] || 'secondary') + '">' + escHtml(s || '') + '</span> '
+                            + consentBadge(row);
                     }
                 },
                 {
@@ -144,13 +146,32 @@
         $('#btnFilterContacts').on('click', function () {
             Contacts.table.ajax.reload();
         });
-        $('#filterStatus, #filterTag, #filterAssigned').on('change', function () {
+        $('#filterStatus, #filterTag, #filterAssigned, #filterConsent').on('change', function () {
             Contacts.table.ajax.reload();
         });
     };
 
     function escHtml(value) {
         return $('<div>').text(value == null ? '' : String(value)).html();
+    }
+
+    function consentState(row) {
+        if (!row) return 'none';
+        if (row.wa_opted_out_at) return 'opted_out';
+        if (row.wa_suppressed_until && new Date(String(row.wa_suppressed_until).replace(' ', 'T')) > new Date()) return 'paused';
+        if (String(row.wa_opt_in) === '1') return 'opted_in';
+        return 'none';
+    }
+
+    function consentBadge(row) {
+        var map = {
+            opted_in: ['success', 'Opted in', 'WhatsApp opt-in recorded'],
+            opted_out: ['danger', 'Opted out', 'Customer sent STOP'],
+            paused: ['warning', 'Paused', row && row.wa_suppress_reason ? row.wa_suppress_reason : 'Delivery failed'],
+            none: ['light text-dark border', 'No opt-in', 'Campaigns skip contacts without WhatsApp consent']
+        };
+        var m = map[consentState(row)];
+        return '<span class="badge bg-' + m[0] + '" title="' + escHtml(m[2]) + '"><i class="fab fa-whatsapp me-1"></i>' + m[1] + '</span>';
     }
 
     function detailValue(value) {
@@ -221,6 +242,8 @@
             +     detailRow('Email', detailValue(row.email))
             +     detailRow('Country', detailValue(row.country))
             +     detailRow('Status', detailValue(row.status))
+            +     detailRow('WhatsApp consent', consentBadge(row)
+                    + (row.wa_opt_in_source ? ' <span class="small text-muted">via ' + escHtml(row.wa_opt_in_source) + '</span>' : ''))
             +     detailRow('Birthday', detailValue(row.birthday_display || row.birthday))
             +     detailRow('Channel', detailValue(row.channel))
             +     detailRow('External ID', detailValue(row.external_id))
@@ -291,11 +314,41 @@
             });
     };
 
+    Contacts.bulkConsent = function () {
+        var ids = Contacts.selectedIds();
+        var action = $('#bulkConsentAction').val() || 'opt_in';
+        var source = $('#bulkConsentSource').val() || '';
+        if (!ids.length) {
+            APP.toast('Select at least one contact', 'warning');
+            return;
+        }
+        if (action === 'opt_in' && !source) {
+            APP.toast('Choose how these contacts gave WhatsApp consent', 'warning');
+            return;
+        }
+        APP.post(base() + '/contacts/bulk-consent', { ids: ids, action: action, source: source })
+            .done(function (res) {
+                APP.toast(res.message || 'Consent updated');
+                if (window.bootstrap && bootstrap.Modal) {
+                    var el = document.getElementById('bulkConsentModal');
+                    if (el) bootstrap.Modal.getOrCreateInstance(el).hide();
+                }
+                if (Contacts.table) Contacts.table.ajax.reload(null, false);
+            })
+            .fail(function (xhr) {
+                APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Consent update failed', 'error');
+            });
+    };
+
     Contacts.initImport = function () {
         var $form = $('#importContactsForm');
         if (!$form.length) return;
 
         var preview = null;
+
+        $('#importOptIn').on('change', function () {
+            $('#importOptInSource').prop('disabled', !this.checked);
+        });
 
         function esc(s) {
             return $('<div>').text(s == null ? '' : String(s)).html();
@@ -473,6 +526,12 @@
                 return;
             }
 
+            var optIn = $('#importOptIn').is(':checked');
+            if (optIn && !$('#importOptInSource').val()) {
+                APP.toast('Choose how WhatsApp consent was collected.', 'error');
+                return;
+            }
+
             var $btn = $(this).prop('disabled', true);
             $btn.data('html', $btn.html()).html('<i class="fas fa-spinner fa-spin me-1"></i> Importing…');
 
@@ -483,6 +542,8 @@
                     token: preview.token,
                     group_id: $('#importGroupId').val() || '',
                     skip_duplicates: $('#skipDup').is(':checked') ? 1 : 0,
+                    wa_opt_in: optIn ? 1 : 0,
+                    wa_opt_in_source: optIn ? $('#importOptInSource').val() : '',
                     mapping: JSON.stringify(mapping)
                 },
                 headers: csrfHeaders()
@@ -517,6 +578,17 @@
         $('#btnBulkDelete').on('click', function () { Contacts.bulkDelete(); });
         $('#btnBulkTags').on('click', function () { APP.showModal('#bulkTagsModal'); });
         $('#btnApplyBulkTags').on('click', function () { Contacts.bulkTags(); });
+        $('#btnBulkConsent').on('click', function () {
+            if (!Contacts.selectedIds().length) {
+                APP.toast('Select at least one contact', 'warning');
+                return;
+            }
+            APP.showModal('#bulkConsentModal');
+        });
+        $('#bulkConsentAction').on('change', function () {
+            $('#bulkConsentSourceWrap').toggleClass('d-none', $(this).val() !== 'opt_in');
+        });
+        $('#btnApplyBulkConsent').on('click', function () { Contacts.bulkConsent(); });
         $('#btnDetectDuplicates').on('click', function () {
             APP.get(base() + '/contacts/duplicates').done(function (res) {
                 var rows = res.data || res.duplicates || [];

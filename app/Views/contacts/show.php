@@ -23,6 +23,7 @@
                 <h4 class="mb-1" style="font-family:var(--font-display);font-size:1.15rem"><?= esc($contact['name'] ?? 'Unknown') ?></h4>
                 <p class="text-muted mb-2"><?= esc($contact['mobile'] ?? '') ?></p>
                 <?= view('partials/status_badge', ['status' => $contact['status'] ?? 'active']) ?>
+                <?= view('partials/wa_consent_badge', ['contact' => $contact]) ?>
                 <hr>
                 <p class="mb-1 small"><i class="fas fa-envelope me-1 text-muted"></i> <?= esc($contact['email'] ?? '—') ?></p>
                 <p class="mb-1 small"><i class="fas fa-globe me-1 text-muted"></i> <?= esc($contact['country'] ?? '—') ?></p>
@@ -39,6 +40,65 @@
                     <?php endforeach; ?>
                 <?php else: ?>
                     <span class="text-muted">No groups</span>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <?php
+        $consentSvc   = service('whatsAppConsent');
+        $isOptedOut   = $consentSvc->isOptedOut($contact);
+        $isSuppressed = $consentSvc->isSuppressed($contact);
+        $hasOptIn     = $consentSvc->hasOptIn($contact);
+        $canEditConsent = function_exists('can') && can('contacts.edit');
+        ?>
+        <div class="dash-panel mt-3" id="waConsentPanel" data-contact-id="<?= (int) ($contact['id'] ?? 0) ?>">
+            <div class="panel-head"><h3>WhatsApp consent</h3></div>
+            <div class="panel-body small">
+                <dl class="row mb-2">
+                    <dt class="col-5 text-muted">Status</dt>
+                    <dd class="col-7"><?= view('partials/wa_consent_badge', ['contact' => $contact]) ?></dd>
+                    <dt class="col-5 text-muted">Opt-in source</dt>
+                    <dd class="col-7"><?= esc(\App\Libraries\WhatsAppConsentService::OPT_IN_SOURCES[$contact['wa_opt_in_source'] ?? ''] ?? ($contact['wa_opt_in_source'] ?? '—')) ?></dd>
+                    <dt class="col-5 text-muted">Opt-in date</dt>
+                    <dd class="col-7"><?= esc(format_app_datetime($contact['wa_opt_in_at'] ?? null) ?: '—') ?></dd>
+                    <?php if ($isOptedOut): ?>
+                        <dt class="col-5 text-muted">Opted out</dt>
+                        <dd class="col-7 text-danger"><?= esc(format_app_datetime($contact['wa_opted_out_at'])) ?></dd>
+                    <?php endif; ?>
+                    <?php if ($isSuppressed): ?>
+                        <dt class="col-5 text-muted">Paused until</dt>
+                        <dd class="col-7 text-warning"><?= esc(format_app_datetime($contact['wa_suppressed_until'])) ?>
+                            <?php if (! empty($contact['wa_suppress_reason'])): ?><br><span class="text-muted"><?= esc($contact['wa_suppress_reason']) ?></span><?php endif; ?>
+                        </dd>
+                    <?php endif; ?>
+                </dl>
+                <?php if ($canEditConsent): ?>
+                    <?php if ($isOptedOut): ?>
+                        <p class="text-muted mb-0">Customer sent STOP. They can opt back in by sending START on WhatsApp.</p>
+                    <?php else: ?>
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                            <?php if (! $hasOptIn): ?>
+                                <select class="form-select form-select-sm" id="waConsentSource" style="max-width:220px">
+                                    <option value="">How was consent given?</option>
+                                    <?php foreach (\App\Libraries\WhatsAppConsentService::OPT_IN_SOURCES as $key => $label): ?>
+                                        <option value="<?= esc($key) ?>"><?= esc($label) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <button type="button" class="btn btn-sm btn-wa" data-wa-consent="opt_in"><i class="fas fa-check me-1"></i> Record opt-in</button>
+                            <?php endif; ?>
+                            <button type="button" class="btn btn-sm btn-outline-danger" data-wa-consent="opt_out"><i class="fas fa-ban me-1"></i> Opt out</button>
+                            <?php if ($isSuppressed): ?>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-wa-consent="clear_suppression">Clear pause</button>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                <?php endif; ?>
+                <?php if (function_exists('can') && can('contacts.delete')): ?>
+                    <div class="border-top pt-2 mt-3">
+                        <button type="button" class="btn btn-sm btn-link text-danger p-0" id="btnEraseContactData">
+                            <i class="fas fa-user-slash me-1"></i> Erase customer data (deletion request)
+                        </button>
+                    </div>
                 <?php endif; ?>
             </div>
         </div>
@@ -248,6 +308,51 @@
             .always(function () {
                 $btn.prop('disabled', false);
             });
+    });
+
+    $('#waConsentPanel').on('click', '[data-wa-consent]', function () {
+        var action = $(this).data('wa-consent');
+        var contactId = $('#waConsentPanel').data('contact-id');
+        var source = $('#waConsentSource').val() || '';
+        if (action === 'opt_in' && !source) {
+            APP.toast('Choose how the customer gave WhatsApp consent.', 'warning');
+            return;
+        }
+        var send = function () {
+            APP.post(APP.baseUrl + '/contacts/' + contactId + '/consent', { action: action, source: source })
+                .done(function (res) {
+                    APP.toast(res.message || 'Saved');
+                    setTimeout(function () { window.location.reload(); }, 600);
+                })
+                .fail(function (xhr) {
+                    APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Consent update failed', 'error');
+                });
+        };
+        if (action === 'opt_out') {
+            APP.confirm({ title: 'Opt out this contact?', text: 'Campaigns, automations and sequences will stop for this number.', confirmText: 'Opt out' })
+                .then(function (r) { if (r.isConfirmed) send(); });
+            return;
+        }
+        send();
+    });
+
+    $('#btnEraseContactData').on('click', function () {
+        var contactId = $('#waConsentPanel').data('contact-id');
+        APP.confirm({
+            title: 'Erase all data for this customer?',
+            text: 'Messages, chats, notes, tags and history are permanently deleted. Only the mobile number is kept as opted-out so they are never messaged again. This cannot be undone.',
+            confirmText: 'Erase data'
+        }).then(function (r) {
+            if (!r.isConfirmed) return;
+            APP.post(APP.baseUrl + '/contacts/' + contactId + '/erase', {})
+                .done(function (res) {
+                    APP.toast(res.message || 'Customer data erased');
+                    setTimeout(function () { window.location.href = APP.baseUrl + '/contacts'; }, 800);
+                })
+                .fail(function (xhr) {
+                    APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Erase failed', 'error');
+                });
+        });
     });
 })(jQuery);
 </script>

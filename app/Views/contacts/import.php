@@ -33,6 +33,19 @@
                 <input class="form-check-input" type="checkbox" name="skip_duplicates" value="1" id="skipDup" checked>
                 <label class="form-check-label" for="skipDup">Skip duplicate mobiles</label>
             </div>
+            <div class="border rounded p-2 mb-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="wa_opt_in" value="1" id="importOptIn">
+                    <label class="form-check-label" for="importOptIn">Everyone in this file agreed to receive WhatsApp messages from us</label>
+                </div>
+                <select name="wa_opt_in_source" id="importOptInSource" class="form-select form-select-sm mt-2" disabled>
+                    <option value="">How was consent collected?</option>
+                    <?php foreach (\App\Libraries\WhatsAppConsentService::OPT_IN_SOURCES as $key => $label): ?>
+                        <option value="<?= esc($key) ?>"><?= esc($label) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="form-text">Leave unticked for bought, scraped or old customer lists. Contacts without opt-in are skipped by WhatsApp campaigns (Meta policy).</div>
+            </div>
             <div class="d-flex flex-wrap gap-3">
                 <a href="<?= site_url('contacts/export?sample=1') ?>" class="btn btn-link btn-sm px-0"><i class="fas fa-download me-1"></i> Sample CSV</a>
                 <a href="<?= site_url('contacts/export?sample=1&format=xlsx') ?>" class="btn btn-link btn-sm px-0"><i class="fas fa-file-excel me-1"></i> Sample XLSX</a>

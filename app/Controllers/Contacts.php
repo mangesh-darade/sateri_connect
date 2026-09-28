@@ -42,6 +42,10 @@ class Contacts extends BaseController
         $status     = (string) ($this->request->getGet('status') ?? '');
         $tagId      = (int) ($this->request->getGet('tag_id') ?? 0);
         $assignedTo = (int) ($this->request->getGet('assigned_to') ?? 0);
+        $consent    = (string) ($this->request->getGet('consent') ?? '');
+        if (! service('whatsAppConsent')->hasConsentColumns()) {
+            $consent = '';
+        }
 
         $length = max(1, min(500, $length));
 
@@ -49,7 +53,21 @@ class Contacts extends BaseController
 
         $total = $db->table('contacts')->where('deleted_at', null)->countAllResults();
 
-        $applyFilters = static function ($builder) use ($search, $status, $tagId, $assignedTo) {
+        $applyFilters = static function ($builder) use ($search, $status, $tagId, $assignedTo, $consent) {
+            switch ($consent) {
+                case 'opted_in':
+                    $builder->where('c.wa_opt_in', 1)->where('c.wa_opted_out_at', null);
+                    break;
+                case 'no_opt_in':
+                    $builder->where('c.wa_opt_in', 0)->where('c.wa_opted_out_at', null);
+                    break;
+                case 'opted_out':
+                    $builder->where('c.wa_opted_out_at IS NOT NULL', null, false);
+                    break;
+                case 'suppressed':
+                    $builder->where('c.wa_suppressed_until >', date('Y-m-d H:i:s'));
+                    break;
+            }
             if ($search !== '') {
                 $builder->groupStart()
                     ->like('c.name', $search)
@@ -196,6 +214,10 @@ class Contacts extends BaseController
             return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
         }
 
+        if ($consentError = $this->consentFormError()) {
+            return redirect()->back()->withInput()->with('error', $consentError);
+        }
+
         $mobile = normalize_phone((string) $this->request->getPost('mobile'));
         $model  = model(ContactModel::class);
 
@@ -218,6 +240,12 @@ class Contacts extends BaseController
         if (! $id) {
             return redirect()->back()->withInput()->with('errors', $model->errors());
         }
+
+        service('whatsAppConsent')->applyOperatorConsent(
+            (int) $id,
+            (bool) $this->request->getPost('wa_opt_in'),
+            (string) $this->request->getPost('wa_opt_in_source')
+        );
 
         $tagIds = $this->request->getPost('tag_ids') ?? $this->request->getPost('tags') ?? [];
         $tagIds = array_map('intval', (array) $tagIds);
@@ -333,6 +361,10 @@ class Contacts extends BaseController
             return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
         }
 
+        if ($consentError = $this->consentFormError()) {
+            return redirect()->back()->withInput()->with('error', $consentError);
+        }
+
         $mobile = normalize_phone((string) $this->request->getPost('mobile'));
         if ($mobile === '') {
             return redirect()->back()->withInput()->with('error', 'Mobile number is required.');
@@ -358,6 +390,12 @@ class Contacts extends BaseController
         if (! $ok) {
             return redirect()->back()->withInput()->with('errors', $model->errors());
         }
+
+        service('whatsAppConsent')->applyOperatorConsent(
+            $id,
+            (bool) $this->request->getPost('wa_opt_in'),
+            (string) $this->request->getPost('wa_opt_in_source')
+        );
 
         $tagIds = $this->request->getPost('tag_ids') ?? $this->request->getPost('tags') ?? [];
         $tagIds = array_map('intval', (array) $tagIds);
@@ -389,6 +427,24 @@ class Contacts extends BaseController
         }
 
         return redirect()->to('/contacts')->with('success', 'Contact deleted.');
+    }
+
+    /**
+     * Customer asked to delete their data: wipe history, keep only an opt-out record.
+     */
+    public function erase(int $id): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('contacts.delete')) {
+            return $denied;
+        }
+
+        try {
+            $result = (new \App\Libraries\ContactErasureService())->erase($id);
+        } catch (\Throwable $e) {
+            return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
+        }
+
+        return $this->jsonResponse(true, $result, 'Customer data erased. The number is kept only as opted-out so it is never messaged again.');
     }
 
     public function bulkDelete(): ResponseInterface
@@ -458,6 +514,111 @@ class Contacts extends BaseController
         }
 
         return $this->jsonResponse(true, null, 'Tags updated for selected contacts.');
+    }
+
+    protected function consentFormError(): ?string
+    {
+        if ($this->request->getPost('wa_opt_in') && trim((string) $this->request->getPost('wa_opt_in_source')) === '') {
+            return 'Choose how the customer gave WhatsApp consent.';
+        }
+
+        return null;
+    }
+
+    /**
+     * Single-contact WhatsApp consent action (AJAX): opt_in | opt_out | clear_suppression.
+     */
+    public function consent(int $id): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('contacts.edit')) {
+            return $denied;
+        }
+
+        $contact = model(ContactModel::class)->find($id);
+        if ($contact === null) {
+            return $this->jsonResponse(false, null, 'Contact not found.', [], 404);
+        }
+
+        $input   = $this->request->getJSON(true) ?: $this->request->getPost();
+        $action  = (string) ($input['action'] ?? '');
+        $source  = (string) ($input['source'] ?? 'other');
+        $service = service('whatsAppConsent');
+
+        if (! $service->hasConsentColumns()) {
+            return $this->jsonResponse(false, null, 'Run database migrations to enable WhatsApp consent.', [], 409);
+        }
+
+        switch ($action) {
+            case 'opt_in':
+                if ($service->isOptedOut($contact)) {
+                    return $this->jsonResponse(
+                        false,
+                        null,
+                        'This customer opted out with STOP. Only they can opt back in by sending START on WhatsApp.',
+                        [],
+                        422
+                    );
+                }
+                $service->optIn($id, $source);
+                $msg = 'WhatsApp opt-in recorded.';
+                break;
+            case 'opt_out':
+                $service->optOut($id, 'operator');
+                $msg = 'Contact opted out of WhatsApp messages.';
+                break;
+            case 'clear_suppression':
+                $service->clearSuppression($id);
+                $msg = 'Delivery pause cleared.';
+                break;
+            default:
+                return $this->jsonResponse(false, null, 'Unknown consent action.', [], 422);
+        }
+
+        return $this->jsonResponse(true, ['contact' => model(ContactModel::class)->find($id)], $msg);
+    }
+
+    /**
+     * Bulk WhatsApp consent for selected contacts (AJAX).
+     */
+    public function bulkConsent(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('contacts.edit')) {
+            return $denied;
+        }
+
+        $input  = $this->request->getJSON(true) ?: $this->request->getPost();
+        $ids    = array_map('intval', (array) ($input['ids'] ?? []));
+        $action = (string) ($input['action'] ?? '');
+        $source = (string) ($input['source'] ?? '');
+
+        if ($ids === [] || ! in_array($action, ['opt_in', 'opt_out'], true)) {
+            return $this->jsonResponse(false, null, 'Select contacts and a consent action.', [], 422);
+        }
+        if ($action === 'opt_in' && $source === '') {
+            return $this->jsonResponse(false, null, 'Choose how these contacts gave WhatsApp consent.', [], 422);
+        }
+
+        $service = service('whatsAppConsent');
+        if (! $service->hasConsentColumns()) {
+            return $this->jsonResponse(false, null, 'Run database migrations to enable WhatsApp consent.', [], 409);
+        }
+
+        $n = $service->bulkSetConsent($ids, $action === 'opt_in', $action === 'opt_in' ? $source : 'operator');
+        (new ActivityLogger())->log('bulk_consent', 'contacts', 'WhatsApp consent ' . $action, [
+            'ids'     => $ids,
+            'source'  => $source,
+            'updated' => $n,
+        ]);
+
+        $skipped = count(array_unique($ids)) - $n;
+        $msg     = $action === 'opt_in'
+            ? "WhatsApp opt-in recorded for {$n} contact(s)."
+            : "{$n} contact(s) opted out.";
+        if ($skipped > 0 && $action === 'opt_in') {
+            $msg .= " {$skipped} skipped (customer sent STOP).";
+        }
+
+        return $this->jsonResponse(true, ['updated' => $n], $msg);
     }
 
     public function importCsv(): string|ResponseInterface
@@ -533,12 +694,18 @@ class Contacts extends BaseController
         /** @var array<string, string> $mapping */
         $mapping = array_map(static fn ($v) => (string) $v, $mapping);
 
+        $optInSource = null;
+        if ($this->request->getPost('wa_opt_in')) {
+            $optInSource = service('whatsAppConsent')->normalizeSource((string) ($this->request->getPost('wa_opt_in_source') ?: 'import'));
+        }
+
         try {
             $result = (new \App\Libraries\ContactImportService())->commit(
                 $token,
                 $mapping,
                 $tagId > 0 ? $tagId : null,
-                $skipDuplicates
+                $skipDuplicates,
+                $optInSource
             );
         } catch (\Throwable $e) {
             return $this->jsonResponse(false, null, $e->getMessage(), [], 422);

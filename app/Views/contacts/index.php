@@ -42,6 +42,13 @@
                 <option value="inactive">Inactive</option>
                 <option value="blocked">Blocked</option>
             </select>
+            <select id="filterConsent" class="form-select form-select-sm" style="max-width:170px" title="WhatsApp consent">
+                <option value="">All WhatsApp consent</option>
+                <option value="opted_in">Opted in</option>
+                <option value="no_opt_in">No opt-in</option>
+                <option value="opted_out">Opted out (STOP)</option>
+                <option value="suppressed">Paused (delivery failed)</option>
+            </select>
             <select id="filterTag" class="form-select form-select-sm" style="max-width:160px">
                 <option value="">All groups</option>
                 <?php foreach (($tags ?? []) as $tag): ?>
@@ -62,6 +69,7 @@
                 <?php endif; ?>
                 <?php if (function_exists('can') && can('contacts.edit')): ?>
                     <button type="button" id="btnBulkTags" class="btn btn-sm btn-soft-secondary"><i class="fas fa-tags me-1"></i> Bulk groups</button>
+                    <button type="button" id="btnBulkConsent" class="btn btn-sm btn-soft-secondary"><i class="fab fa-whatsapp me-1"></i> WhatsApp consent</button>
                 <?php endif; ?>
             </div>
         </div>
@@ -113,6 +121,43 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-wa" id="btnApplyBulkTags">Apply</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="bulkConsentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">WhatsApp consent</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label" for="bulkConsentAction">Action</label>
+                    <select id="bulkConsentAction" class="form-select">
+                        <option value="opt_in">Record opt-in (customers agreed)</option>
+                        <option value="opt_out">Opt out (stop all WhatsApp marketing)</option>
+                    </select>
+                </div>
+                <div class="mb-2" id="bulkConsentSourceWrap">
+                    <label class="form-label" for="bulkConsentSource">How did they give consent?</label>
+                    <select id="bulkConsentSource" class="form-select">
+                        <option value="">Choose…</option>
+                        <?php foreach (\App\Libraries\WhatsAppConsentService::OPT_IN_SOURCES as $key => $label): ?>
+                            <option value="<?= esc($key) ?>"><?= esc($label) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <p class="small text-muted mb-0">
+                    Only record opt-in when you have proof the customer agreed to WhatsApp messages from your business.
+                    Messaging people without consent is the main reason Meta bans numbers. Customers who sent STOP are skipped.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-wa" id="btnApplyBulkConsent">Apply</button>
             </div>
         </div>
     </div>

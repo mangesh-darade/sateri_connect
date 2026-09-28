@@ -96,6 +96,9 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->get('contacts/export', 'Contacts::exportCsv');
     $routes->post('contacts/bulk-delete', 'Contacts::bulkDelete', ['filter' => 'csrf']);
     $routes->post('contacts/bulk-tags', 'Contacts::bulkTags', ['filter' => 'csrf']);
+    $routes->post('contacts/(:num)/erase', 'Contacts::erase/$1', ['filter' => 'csrf']);
+    $routes->post('contacts/bulk-consent', 'Contacts::bulkConsent', ['filter' => 'csrf']);
+    $routes->post('contacts/(:num)/consent', 'Contacts::consent/$1', ['filter' => 'csrf']);
     $routes->post('contacts/sync-cheerio', 'Contacts::syncFromCheerio', ['filter' => 'csrf']);
     $routes->post('contacts/sync-elintom', 'Contacts::syncFromElintOm', ['filter' => 'csrf']);
     $routes->get('contacts/(:num)', 'Contacts::show/$1');
