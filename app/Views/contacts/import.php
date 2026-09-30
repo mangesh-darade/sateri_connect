@@ -91,7 +91,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
-<script src="<?= base_url('assets/js/contacts.js') ?>"></script>
+<script src="<?= asset_url('assets/js/contacts.js') ?>"></script>
 <script>
 $(function () {
     if (window.Contacts && typeof Contacts.initImport === 'function') {

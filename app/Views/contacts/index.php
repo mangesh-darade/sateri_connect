@@ -258,5 +258,5 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
-<script src="<?= base_url('assets/js/contacts.js') ?>"></script>
+<script src="<?= asset_url('assets/js/contacts.js') ?>"></script>
 <?= $this->endSection() ?>
