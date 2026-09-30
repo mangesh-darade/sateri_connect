@@ -16,7 +16,9 @@ if (is_string($variablesJson)) {
 }
 ?>
 <div class="form-shell form-shell-lg">
-<div class="card form-card" id="campaignForm">
+<div class="card form-card" id="campaignForm"
+     data-attr-fields="<?= esc(json_encode($attributeFields ?? [], JSON_UNESCAPED_UNICODE), 'attr') ?>"
+     data-variables="<?= esc(json_encode((object) $variablesJson, JSON_UNESCAPED_UNICODE), 'attr') ?>">
     <form action="<?= $action ?>" method="post">
         <?= csrf_field() ?>
         <input type="hidden" id="campaignId" value="<?= (int) ($campaign['id'] ?? 0) ?>">

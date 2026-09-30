@@ -230,8 +230,15 @@
             { value: 'equals', label: 'Equals' },
             { value: 'contains', label: 'Contains' }
         ];
-        var fieldOpts = fields.map(function (f) {
-            return '<option value="' + esc(f.value) + '"' + (prefill.name === f.value ? ' selected' : '') + '>' + esc(f.label) + '</option>';
+        var groups = {};
+        var groupOrder = [];
+        fields.forEach(function (f) {
+            var g = f.group || 'Contact';
+            if (!groups[g]) { groups[g] = []; groupOrder.push(g); }
+            groups[g].push('<option value="' + esc(f.value) + '"' + (prefill.name === f.value ? ' selected' : '') + '>' + esc(f.label) + '</option>');
+        });
+        var fieldOpts = groupOrder.map(function (g) {
+            return groupOrder.length > 1 ? '<optgroup label="' + esc(g) + '">' + groups[g].join('') + '</optgroup>' : groups[g].join('');
         }).join('');
         var condOpts = conditions.map(function (c) {
             return '<option value="' + esc(c.value) + '"' + (prefill.condition === c.value ? ' selected' : '') + '>' + esc(c.label) + '</option>';
@@ -243,7 +250,25 @@
             '<input type="text" class="form-control form-control-sm cw-attr-value" placeholder="Attribute Value" value="' + esc(prefill.value || '') + '">' +
             '<button type="button" class="btn btn-link text-danger p-0 cw-attr-remove" title="Remove"><i class="fas fa-trash"></i></button>' +
             '</div>';
-        $('#cwAttrRows').append(html);
+        var $row = $(html);
+        $('#cwAttrRows').append($row);
+        refreshAttrValueOptions($row);
+    }
+
+    /** Suggest allowed values (dropdown / Yes-No attributes) for the value box of an audience filter row. */
+    function refreshAttrValueOptions($row) {
+        var name = String($row.find('.cw-attr-name').val() || '');
+        var field = ((state.data && state.data.attribute_fields) || []).find(function (f) { return f.value === name; }) || null;
+        var options = (field && field.options) || [];
+        var listId = 'cwAttrOpts' + ($row.index() + 1) + '_' + Date.now();
+        $row.find('datalist').remove();
+        var $input = $row.find('.cw-attr-value');
+        if (!options.length) {
+            $input.removeAttr('list').attr('placeholder', field && field.type === 'date' ? 'YYYY-MM-DD' : (field && field.type === 'number' ? 'Number' : 'Attribute Value'));
+            return;
+        }
+        $input.attr({ list: listId, placeholder: options.slice(0, 3).join(' / ') });
+        $row.append('<datalist id="' + listId + '">' + options.map(function (o) { return '<option value="' + esc(o) + '">'; }).join('') + '</datalist>');
     }
 
     function previewAudience() {
@@ -342,9 +367,17 @@
             var selected = Object.prototype.hasOwnProperty.call(state.variables, key)
                 ? String(state.variables[key] || '')
                 : suggested;
+            var isAttr = selected.indexOf('attr:') === 0;
+            var isCustom = selected === 'custom' || (selected !== '' && !isAttr && ['name', 'mobile', 'email'].indexOf(selected) === -1);
             var customValue = selected === 'custom'
                 ? example
-                : ((selected && ['name','mobile','email','custom'].indexOf(selected) === -1) ? selected : '');
+                : (isCustom ? selected : '');
+            var attrOpts = ((state.data && state.data.attribute_fields) || []).filter(function (f) {
+                return ['name', 'mobile', 'email'].indexOf(f.value) === -1;
+            }).map(function (f) {
+                var v = 'attr:' + f.value;
+                return '<option value="' + esc(v) + '"' + (selected === v ? ' selected' : '') + '>' + esc(f.label) + '</option>';
+            }).join('');
             var row =
                 '<div class="row g-2 mb-2 align-items-center">' +
                 '<div class="col-4"><code>{{' + esc(key) + '}}</code>' +
@@ -356,10 +389,11 @@
                 '<option value="name"' + (selected === 'name' ? ' selected' : '') + '>Contact Name</option>' +
                 '<option value="mobile"' + (selected === 'mobile' ? ' selected' : '') + '>Mobile</option>' +
                 '<option value="email"' + (selected === 'email' ? ' selected' : '') + '>Email</option>' +
-                '<option value="custom"' + (selected === 'custom' || (selected && selected.indexOf('{{') === -1 && ['name','mobile','email'].indexOf(selected) === -1) ? ' selected' : '') + '>Custom value…</option>' +
+                (attrOpts ? '<optgroup label="Attributes">' + attrOpts + '</optgroup>' : '') +
+                '<option value="custom"' + (isCustom && selected.indexOf('{{') === -1 ? ' selected' : '') + '>Custom value…</option>' +
                 '</select>' +
                 '<input type="text" class="form-control form-control-sm mt-1 cw-var-custom' +
-                (selected === 'custom' || (selected && ['name','mobile','email','custom'].indexOf(selected) === -1) ? '' : ' d-none') +
+                (isCustom ? '' : ' d-none') +
                 '" data-var="' + esc(key) + '" placeholder="Custom value" value="' +
                 esc(customValue) + '">' +
                 '</div></div>';
@@ -852,11 +886,25 @@
             $wrap.html('<p class="text-muted mb-0">This template has no variables.</p>');
             return;
         }
+        var $form = $('#campaignForm');
+        var saved = $form.data('variables') || {};
+        var attrFields = $form.data('attr-fields') || [];
         variables.forEach(function (v, idx) {
             var key = typeof v === 'string' ? v : (v.name || v.key || ('var' + (idx + 1)));
             var label = typeof v === 'string' ? v : (v.label || key);
             var example = typeof v === 'object' ? String(v.example || '') : '';
-            var selected = typeof v === 'object' ? String(v.suggested_source || '') : '';
+            var selected = Object.prototype.hasOwnProperty.call(saved, key)
+                ? String(saved[key] || '')
+                : (typeof v === 'object' ? String(v.suggested_source || '') : '');
+            var isAttr = selected.indexOf('attr:') === 0;
+            var isCustom = selected === 'custom' || (selected !== '' && !isAttr && ['name', 'mobile', 'email'].indexOf(selected) === -1);
+            var customValue = selected === 'custom' ? example : (isCustom ? selected : '');
+            var attrOpts = attrFields.filter(function (f) {
+                return ['name', 'mobile', 'email'].indexOf(f.value) === -1;
+            }).map(function (f) {
+                var val = 'attr:' + f.value;
+                return '<option value="' + esc(val) + '"' + (selected === val ? ' selected' : '') + '>' + esc(f.label) + '</option>';
+            }).join('');
             var row =
                 '<div class="row var-map-row">' +
                 '<div class="col-md-4"><label class="mb-0 fw-semibold">{{' + esc(label) + '}}</label>' +
@@ -868,12 +916,13 @@
                 '<option value="name"' + (selected === 'name' ? ' selected' : '') + '>Contact Name</option>' +
                 '<option value="mobile"' + (selected === 'mobile' ? ' selected' : '') + '>Mobile</option>' +
                 '<option value="email"' + (selected === 'email' ? ' selected' : '') + '>Email</option>' +
-                '<option value="custom"' + (selected === 'custom' ? ' selected' : '') + '>Custom value…</option>' +
+                (attrOpts ? '<optgroup label="Attributes">' + attrOpts + '</optgroup>' : '') +
+                '<option value="custom"' + (isCustom ? ' selected' : '') + '>Custom value…</option>' +
                 '</select>' +
                 '<input type="text" class="form-control form-control-sm mt-1 var-custom' +
-                (selected === 'custom' ? '' : ' d-none') +
+                (isCustom ? '' : ' d-none') +
                 '" name="variables_custom[' + esc(key) + ']" placeholder="Custom value" data-var="' +
-                esc(key) + '" value="' + esc(selected === 'custom' ? example : '') + '">' +
+                esc(key) + '" value="' + esc(customValue) + '">' +
                 '</div></div>';
             $wrap.append(row);
         });
@@ -965,6 +1014,9 @@
         });
         $(document).on('click', '.cw-attr-remove', function () {
             $(this).closest('.cw-attr-row').remove();
+        });
+        $(document).on('change', '.cw-attr-name', function () {
+            refreshAttrValueOptions($(this).closest('.cw-attr-row'));
         });
         $('#cwVerifyAttrBtn').on('click', function () {
             clearWizardErrors();

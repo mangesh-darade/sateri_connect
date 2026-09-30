@@ -28,6 +28,12 @@ class CampaignService
      */
     protected array $lastExclusions = [];
 
+    /** Consent requests sent to "no opt-in" recipients during the last dispatch. */
+    protected int $lastConsentRequested = 0;
+
+    /** Why no consent request went out during the last dispatch ('' when sent or none needed). */
+    protected string $lastConsentNote = '';
+
     public function __construct(
         ?CampaignModel $campaigns = null,
         ?CampaignContactModel $campaignContacts = null,
@@ -199,6 +205,14 @@ class CampaignService
         $queued['sent']   = (int) ($fresh['sent_count'] ?? ($queued['sent'] ?? 0));
         $queued['failed'] = (int) ($fresh['failed_count'] ?? ($queued['failed'] ?? 0));
         $queued['excluded_summary'] = WhatsAppConsentService::describeExclusions($queued['excluded'] ?? []);
+        $queued['consent_requested'] = $this->lastConsentRequested;
+        if ($this->lastConsentRequested > 0) {
+            $queued['excluded_summary'] .= ($queued['excluded_summary'] !== '' ? '; ' : '')
+                . 'consent request sent to ' . $this->lastConsentRequested;
+        } elseif ($this->lastConsentNote !== '') {
+            $queued['excluded_summary'] .= ($queued['excluded_summary'] !== '' ? '. ' : '')
+                . 'Consent request not sent: ' . rtrim($this->lastConsentNote, '.');
+        }
 
         // Fire "Campaign Sent" automations for recipients that actually got the campaign.
         $this->fireCampaignSentTriggers($campaignId);
@@ -250,6 +264,9 @@ class CampaignService
         $summary = WhatsAppConsentService::describeExclusions($queued['excluded'] ?? []);
         throw new RuntimeException(
             'No eligible WhatsApp recipients. ' . ($summary !== '' ? $summary . '. ' : '')
+            . ($this->lastConsentRequested > 0
+                ? 'WhatsApp consent request (Agree / Stop) sent to ' . $this->lastConsentRequested . ' contact(s); they will receive campaigns after tapping Agree. '
+                : ($this->lastConsentNote !== '' ? 'Consent request not sent: ' . $this->lastConsentNote . ' ' : ''))
             . 'Only contacts with a recorded WhatsApp opt-in who have not opted out can receive campaigns.'
         );
     }
@@ -263,13 +280,19 @@ class CampaignService
      *
      * @return list<array<string, mixed>>
      */
-    protected function resolveWhatsAppRecipients(?int $campaignId, ?array $contactIds, ?array $tagIds, bool $allActive): array
+    protected function resolveWhatsAppRecipients(?int $campaignId, ?array $contactIds, ?array $tagIds, bool $allActive, bool $requestConsent = false): array
     {
         $split = $this->consent->splitCampaignAudience(
             $this->resolveContacts($contactIds, $tagIds, $allActive),
             $campaignId
         );
-        $this->lastExclusions = $split['excluded'];
+        $this->lastExclusions       = $split['excluded'];
+        $this->lastConsentRequested = $requestConsent
+            ? $this->consent->requestConsentForContacts($split['pending_consent'] ?? [])
+            : 0;
+        $this->lastConsentNote = $requestConsent && $this->lastConsentRequested === 0
+            ? $this->consent->lastConsentError()
+            : '';
 
         return $split['eligible'];
     }
@@ -304,7 +327,7 @@ class CampaignService
         bool $allActive
     ): array {
         $campaign = $this->requireCampaign($campaignId);
-        $contacts = $this->resolveWhatsAppRecipients($campaignId, $contactIds, $tagIds, $allActive);
+        $contacts = $this->resolveWhatsAppRecipients($campaignId, $contactIds, $tagIds, $allActive, true);
         $excluded = $this->lastExclusions;
         $this->assertHasEligibleRecipients(['contacts' => count($contacts), 'excluded' => $excluded]);
         $this->consent->assertWithinMessagingLimit(count($contacts), $campaignId);
@@ -721,7 +744,7 @@ class CampaignService
     public function queueRecipients(int $campaignId, ?array $contactIds = null, ?array $tagIds = null, bool $allActive = false): array
     {
         $campaign = $this->requireCampaign($campaignId);
-        $contacts = $this->resolveWhatsAppRecipients($campaignId, $contactIds, $tagIds, $allActive);
+        $contacts = $this->resolveWhatsAppRecipients($campaignId, $contactIds, $tagIds, $allActive, true);
         $excluded = $this->lastExclusions;
         $messageType = (string) ($campaign['message_type'] ?? 'template');
         if ($messageType === 'template') {
@@ -875,7 +898,7 @@ class CampaignService
             if (! is_array($row)) {
                 continue;
             }
-            $name = strtolower(trim((string) ($row['name'] ?? $row['attribute'] ?? '')));
+            $name = trim((string) ($row['name'] ?? $row['attribute'] ?? ''));
             $value = trim((string) ($row['value'] ?? ''));
             $condition = strtolower(trim((string) ($row['condition'] ?? 'equals')));
             if ($name === '' || $value === '') {
@@ -916,14 +939,16 @@ class CampaignService
             $custom = [];
         }
 
+        $customLower = array_change_key_case($custom, CASE_LOWER);
         foreach ($rules as $rule) {
             $field = $rule['name'];
-            $haystack = match ($field) {
+            $lower = strtolower($field);
+            $haystack = match ($lower) {
                 'name'   => (string) ($contact['name'] ?? ''),
                 'mobile', 'phone' => (string) ($contact['mobile'] ?? ''),
                 'email'  => (string) ($contact['email'] ?? ''),
                 'status' => (string) ($contact['status'] ?? ''),
-                default  => (string) ($custom[$field] ?? $contact[$field] ?? ''),
+                default  => (string) ($custom[$field] ?? $customLower[$lower] ?? (in_array($lower, ContactAttributes::coreKeys(), true) ? ($contact[$lower] ?? '') : '')),
             };
 
             $needle = $rule['value'];
@@ -1128,6 +1153,28 @@ class CampaignService
         }
 
         return is_array($raw) ? $raw : [];
+    }
+
+    /**
+     * Template components for one contact from already-resolved variable values
+     * (used by workflows). Throws RuntimeException when a required value is empty.
+     *
+     * @param array<string, string>     $values   placeholder key => final text
+     * @param array<string, mixed>      $contact
+     * @param list<array<string,mixed>> $existing extra components (e.g. media header)
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function templateComponentsForContact(string $templateName, string $language, array $values, array $contact, array $existing = []): array
+    {
+        $template = $this->templates->where('name', $templateName)->where('language', $language)->first()
+            ?? $this->templates->where('name', $templateName)->first();
+        $map = [];
+        foreach ($values as $key => $text) {
+            $map[(string) $key] = ['text' => (string) $text];
+        }
+
+        return $this->buildTemplateComponents($map, $contact, $existing !== [] ? $existing : null, is_array($template) ? $template : null);
     }
 
     /**
@@ -1360,9 +1407,16 @@ class CampaignService
 
         $raw = trim((string) $source);
 
+        // "attr:city" → value of that attribute (Contacts → Attributes) for this contact
+        if (str_starts_with($raw, 'attr:')) {
+            return service('contactAttributes')->valueFor($contact, substr($raw, 5));
+        }
+
         // "{{name}}" or "name" / "mobile" / "email"
+        $isPlaceholder = false;
         if (preg_match('/^\{\{\s*([a-zA-Z0-9_]+)\s*\}\}$/', $raw, $m)) {
-            $raw = $m[1];
+            $raw           = $m[1];
+            $isPlaceholder = true;
         }
 
         $field = strtolower($raw);
@@ -1379,6 +1433,11 @@ class CampaignService
 
         if (isset($map[$field])) {
             return $map[$field];
+        }
+
+        // "{{city}}" is a contact placeholder, never literal text
+        if ($isPlaceholder) {
+            return service('contactAttributes')->valueFor($contact, $raw);
         }
 
         // Custom static value

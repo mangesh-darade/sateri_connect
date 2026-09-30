@@ -175,6 +175,7 @@ class Campaigns extends BaseController
             'templates' => model(TemplateModel::class)->getApproved(),
             'tags'      => model(TagModel::class)->orderBy('name', 'ASC')->findAll(),
             'contacts'  => model(ContactModel::class)->where('status', 'active')->orderBy('name', 'ASC')->findAll(2000),
+            'attributeFields' => service('contactAttributes')->pickerFields(),
         ]);
     }
 
@@ -503,12 +504,7 @@ class Campaigns extends BaseController
             'labels'           => $labels,
             'templates'        => $templateCards,
             'email_builders'   => $builders,
-            'attribute_fields' => [
-                ['value' => 'name', 'label' => 'Name'],
-                ['value' => 'mobile', 'label' => 'Phone'],
-                ['value' => 'email', 'label' => 'Email'],
-                ['value' => 'status', 'label' => 'Status'],
-            ],
+            'attribute_fields' => service('contactAttributes')->pickerFields(),
             'conditions' => [
                 ['value' => 'equals', 'label' => 'Equals'],
                 ['value' => 'contains', 'label' => 'Contains'],
@@ -1197,7 +1193,7 @@ class Campaigns extends BaseController
             if (! is_array($row)) {
                 continue;
             }
-            $name = strtolower(trim((string) ($row['name'] ?? $row['attribute'] ?? '')));
+            $name = trim((string) ($row['name'] ?? $row['attribute'] ?? ''));
             $value = trim((string) ($row['value'] ?? ''));
             $condition = strtolower(trim((string) ($row['condition'] ?? 'equals')));
             if ($name === '' || $value === '') {
