@@ -75,7 +75,7 @@ class ElintOmCustomerSyncService
     }
 
     /**
-     * @return array{created: int, updated: int, skipped: int, failed: int, total: int, errors: list<string>}
+     * @return array{created: int, updated: int, skipped: int, failed: int, unchanged: int, total: int, errors: list<string>}
      */
     public function sync(): array
     {
@@ -85,6 +85,7 @@ class ElintOmCustomerSyncService
         $updated = 0;
         $skipped = 0;
         $failed  = 0;
+        $unchanged = 0;
         $errors  = [];
 
         foreach ($rows as $row) {
@@ -96,9 +97,12 @@ class ElintOmCustomerSyncService
 
             try {
                 $wasCreated = false;
-                $this->upsertContact($row, $mobile, $wasCreated);
+                $wasSame    = false;
+                $this->upsertContact($row, $mobile, $wasCreated, $wasSame);
                 if ($wasCreated) {
                     $created++;
+                } elseif ($wasSame) {
+                    $unchanged++;
                 } else {
                     $updated++;
                 }
@@ -115,6 +119,7 @@ class ElintOmCustomerSyncService
             'updated' => $updated,
             'skipped' => $skipped,
             'failed'  => $failed,
+            'unchanged' => $unchanged,
             'total'   => count($rows),
             'errors'  => $errors,
         ];
@@ -238,9 +243,10 @@ class ElintOmCustomerSyncService
     /**
      * @param array<string, mixed> $row
      */
-    protected function upsertContact(array $row, string $mobile, bool &$wasCreated): void
+    protected function upsertContact(array $row, string $mobile, bool &$wasCreated, bool &$unchanged = false): void
     {
         $wasCreated = false;
+        $unchanged  = false;
         $existing   = $this->contacts->findByMobile($mobile, true);
 
         $custom = [
@@ -281,6 +287,11 @@ class ElintOmCustomerSyncService
         }
 
         $id = (int) $existing['id'];
+        if (empty($existing['deleted_at']) && ! $this->hasChanges($existing, $data)) {
+            $unchanged = true;
+
+            return;
+        }
         if (! empty($existing['deleted_at'])) {
             $this->contacts->restoreContact($id);
             $data['status'] = 'active';
@@ -289,5 +300,44 @@ class ElintOmCustomerSyncService
         if (! $this->contacts->update($id, $data)) {
             throw new RuntimeException(implode(' ', $this->contacts->errors() ?: ['Update failed']));
         }
+    }
+
+    /**
+     * @param array<string, mixed> $existing
+     * @param array<string, mixed> $data
+     */
+    protected function hasChanges(array $existing, array $data): bool
+    {
+        foreach ($data as $field => $value) {
+            $current = $existing[$field] ?? null;
+            if ($field === 'custom_fields') {
+                $current = is_array($current) ? $current : (json_decode((string) $current, true) ?: []);
+                if ($this->normalizeFields($current) !== $this->normalizeFields((array) $value)) {
+                    return true;
+                }
+                continue;
+            }
+            if ((string) ($current ?? '') !== (string) ($value ?? '')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<string, mixed> $fields
+     *
+     * @return array<string, mixed>
+     */
+    protected function normalizeFields(array $fields): array
+    {
+        $out = [];
+        foreach ($fields as $key => $value) {
+            $out[(string) $key] = is_array($value) ? json_encode($value) : (string) ($value ?? '');
+        }
+        ksort($out);
+
+        return $out;
     }
 }
