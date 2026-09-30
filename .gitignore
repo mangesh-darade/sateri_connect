@@ -63,6 +63,13 @@ writable/tmp_*.php
 writable/certs/
 docs/deploy/env.production.yevle.example
 
+# Loose reports / exports / backups at project root
+/*.xlsx
+/*.xls
+/*.csv
+/*.zip
+/*.log
+
 # Local tunnel binaries (download separately)
 tools/*.exe
 tools/cloudflared/
