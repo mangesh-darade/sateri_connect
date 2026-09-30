@@ -343,6 +343,33 @@ try {
     check('V4 attribute dropdown: defined attr selected, legacy key listed, mobile hidden',
         str_contains($sel, 'value="' . $P . '_city" selected') && str_contains($sel, 'value="legacy_key"') && ! str_contains($sel, 'value="mobile"'));
 
+    $contacts->update($c3, ['custom_fields' => array_merge($cf($c3), ["{$P}_undef" => 'x'])]);
+    $undef = $attrs->undefinedKeys();
+    check('V5 Attributes page lists keys found on contacts but not defined', isset($undef["{$P}_undef"]) && ! isset($undef["{$P}_city"]), json_encode($undef));
+
+    $M = static fn (string $msg, string $kw, string $type) => \App\Libraries\KeywordMatcher::matches($msg, $kw, $type);
+    check('KM1 exact: "Hi!" matches hi, "hi mangesh" does not', $M('Hi!', 'hi', 'exact') && ! $M('hi mangesh', 'hi', 'exact'));
+    check('KM2 contains: "hi mangesh" / "ok hi" match, "this" does not', $M('hi mangesh', 'hi', 'contains') && $M('ok hi there', 'hi', 'contains') && ! $M('this is', 'hi', 'contains'));
+    check('KM3 starts with: "hi mangesh" yes, "hindi" / "ok hi" no', $M('hi mangesh', 'hi', 'starts_with') && ! $M('hindi', 'hi', 'starts_with') && ! $M('ok hi', 'hi', 'starts_with'));
+    check('KM4 comma list: "hi, hello" matches "Hello"', $M('Hello', 'hi, hello', 'exact') && $M('price list please', 'rate, price list', 'contains'));
+    $mt = new ReflectionMethod(\App\Libraries\AutomationEngine::class, 'matchesTriggerConfig');
+    $mt->setAccessible(true);
+    $engK = new \App\Libraries\AutomationEngine();
+    check('KM5 workflow trigger exact vs contains', $mt->invoke($engK, ['keyword' => 'hi', 'content' => 'hi', 'match_type' => 'exact'], ['content' => 'Hi'])
+        && ! $mt->invoke($engK, ['keyword' => 'hi', 'content' => 'hi', 'match_type' => 'exact'], ['content' => 'hi mangesh'])
+        && $mt->invoke($engK, ['keyword' => 'hi', 'match_type' => 'contains'], ['content' => 'hi mangesh']));
+    check('KM6 workflow trigger without match type = contains (old flows)', $mt->invoke($engK, ['keyword' => 'hi'], ['content' => 'hi mangesh']) && ! $mt->invoke($engK, ['keyword' => 'hi'], ['content' => 'this']));
+    $kwM   = model(\App\Models\KeywordModel::class);
+    $kwIds = [
+        (int) $kwM->insert(['keyword' => 'zqahi', 'match_type' => 'exact', 'response_type' => 'text', 'response_content' => 'E', 'is_active' => 1]),
+        (int) $kwM->insert(['keyword' => 'zqahey, zqayo', 'match_type' => 'contains', 'response_type' => 'text', 'response_content' => 'C', 'is_active' => 1]),
+    ];
+    $bot = new \App\Libraries\KeywordBot();
+    $hit = static fn (string $t) => (int) ($bot->findMatch($t)['id'] ?? 0);
+    check('KM7 Keywords: exact "zqahi" only whole message; contains list matches "yo zqayo mangesh"',
+        (int) $hit('ZQAHI') === $kwIds[0] && (int) $hit('zqahi mangesh') !== $kwIds[0] && (int) $hit('yo zqayo mangesh') === $kwIds[1]);
+    $db->table('keywords')->whereIn('id', $kwIds)->delete();
+
     // ---------------- 8. Delete definition keeps values ----------------
     check('D1 delete definition', $attrs->deleteDefinition((int) $city['id']) && $attrs->definition("{$P}_city") === null);
     check('D2 contact values kept after delete', ($cf($c2)["{$P}_city"] ?? '') === 'Mumbai');

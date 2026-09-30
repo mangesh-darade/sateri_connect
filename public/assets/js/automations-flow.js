@@ -83,7 +83,13 @@
     var TRIGGER_CONFIG_KEYS = [
         'keyword', 'content', 'event_topic', 'event_type', 'shopify_topic',
         'form_id', 'ad_id', 'page_id', 'token', 'secret', 'campaign_id',
-        'source', 'object', 'filter', 'tag_id', 'attribute', 'attribute_value'
+        'source', 'object', 'filter', 'tag_id', 'attribute', 'attribute_value', 'match_type'
+    ];
+
+    var KEYWORD_MATCH_TYPES = [
+        ['contains', 'Contains (word anywhere, e.g. “hi mangesh”)'],
+        ['exact', 'Exact (whole message only, e.g. “hi”)'],
+        ['starts_with', 'Starts with (e.g. “hi mangesh”, not “hindi”)']
     ];
 
     function esc(s) {
@@ -198,7 +204,11 @@
     function nodeSubtitle(node) {
         var d = node.data || {};
         if (node.type === 'trigger') {
-            if (d.trigger_type === 'keyword_matched' || d.keyword) return d.keyword ? ('“' + d.keyword + '”') : 'Any keyword…';
+            if (d.trigger_type === 'keyword_matched' || d.keyword) {
+                if (!d.keyword) return 'Any keyword…';
+                var mt = { exact: 'exact', starts_with: 'starts with' }[d.match_type] || 'contains';
+                return mt + ' “' + d.keyword + '”';
+            }
             if (d.trigger_type === 'shopify_event') return d.shopify_topic || d.event_topic || 'Any topic…';
             if (d.trigger_type === 'commerce_event') return d.event_type || 'Any event…';
             if (d.trigger_type === 'kylas_event_create' || d.trigger_type === 'kylas_event_update') return d.object || d.event_type || 'Any object…';
@@ -708,8 +718,13 @@
         var html = '';
 
         if (t === 'incoming_message' || t === 'keyword_matched' || t === 'messenger' || t === 'instagram') {
-            html += '<label>Optional keyword / filter</label><input class="form-control insp" data-k="keyword" value="' + esc(d.keyword || '') + '" placeholder="e.g. hello">';
-            html += inspHint('Leave blank to match any inbound message on this channel.');
+            html += '<label>Optional keyword / filter</label><input class="form-control insp" data-k="keyword" value="' + esc(d.keyword || '') + '" placeholder="e.g. hi, hello, namaste">';
+            html += '<label>Match type</label><select class="form-select insp" data-k="match_type">';
+            KEYWORD_MATCH_TYPES.forEach(function (p) {
+                html += '<option value="' + p[0] + '"' + ((d.match_type || 'contains') === p[0] ? ' selected' : '') + '>' + p[1] + '</option>';
+            });
+            html += '</select>';
+            html += inspHint('Leave keyword blank to match any inbound message on this channel. Separate several keywords with commas. Case and punctuation are ignored.');
         }
         if (t === 'campaign_sent' || t === 'campaign_replied') {
             html += '<label>Campaign ID (optional)</label><input class="form-control insp" data-k="campaign_id" value="' + esc(d.campaign_id || '') + '" placeholder="Leave blank = any">';

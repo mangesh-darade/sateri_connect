@@ -1314,7 +1314,7 @@ class AutomationEngine
             if (in_array($key, [
                 'logic', 'conditions', '_flow', 'flow_graph',
                 'label', 'prompt', 'description', 'message', 'help', 'help_text',
-                'adName', 'labelName',
+                'adName', 'labelName', 'match_type',
             ], true)) {
                 continue;
             }
@@ -1323,7 +1323,7 @@ class AutomationEngine
             }
             if ($key === 'keyword' || $key === 'content') {
                 $hay = (string) ($context['content'] ?? $context['text'] ?? $context['keyword'] ?? '');
-                if (! str_contains(mb_strtolower($hay), mb_strtolower((string) $value))) {
+                if (! KeywordMatcher::matches($hay, (string) $value, (string) ($triggerConfig['match_type'] ?? 'contains'))) {
                     return false;
                 }
                 continue;
