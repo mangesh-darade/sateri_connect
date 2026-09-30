@@ -22,13 +22,14 @@
         var $form = $modal.find('form');
         var $save = $form.find('[type="submit"]');
 
-        function openForm(row) {
+        function openForm(row, prefill) {
+            var values = row || prefill;
             $form[0].reset();
             $form.data('id', row ? row.id : null);
             $form.find('[data-edit-lock]').prop('readonly', !!row);
-            if (row) {
+            if (values) {
                 $form.find('[name]').each(function () {
-                    var value = row[this.name];
+                    var value = values[this.name];
                     if (value !== undefined && value !== null) {
                         $(this).val(Array.isArray(value) ? value.join('\n') : value);
                     }
@@ -39,7 +40,7 @@
             APP.showModal($modal[0]);
         }
 
-        $(document).on('click', '[data-crud-new]', function () { openForm(null); });
+        $(document).on('click', '[data-crud-new]', function () { openForm(null, $(this).data('prefill') || null); });
         $root.on('click', '[data-crud-edit]', function () { openForm($(this).data('row')); });
 
         $form.on('submit', function (e) {

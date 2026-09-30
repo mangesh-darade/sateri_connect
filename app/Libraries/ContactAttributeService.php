@@ -93,6 +93,36 @@ class ContactAttributeService
     }
 
     /**
+     * Keys saved on contacts (imports, workflows, webhooks) that are not defined on the Attributes page yet,
+     * with how many contacts have a value. Only defined attributes show as contact columns/fields.
+     *
+     * @return array<string, int>
+     */
+    public function undefinedKeys(): array
+    {
+        $defined = array_change_key_case(array_fill_keys(array_keys($this->definitions()), true), CASE_LOWER);
+        $core    = array_fill_keys(ContactAttributes::coreKeys(), true);
+        $counts  = [];
+        $rows    = db_connect()->table('contacts')->select('custom_fields')
+            ->where('deleted_at', null)
+            ->where('custom_fields IS NOT NULL', null, false)
+            ->limit(20000)->get()->getResultArray();
+        foreach ($rows as $row) {
+            foreach ($this->customFields($row) as $key => $value) {
+                $key = (string) $key;
+                if (isset($defined[strtolower($key)]) || isset($core[strtolower($key)])
+                    || preg_match(self::KEY_PATTERN, $key) !== 1 || $this->scalar($value) === '') {
+                    continue;
+                }
+                $counts[$key] = ($counts[$key] ?? 0) + 1;
+            }
+        }
+        arsort($counts);
+
+        return $counts;
+    }
+
+    /**
      * Where an attribute key is referenced: workflows (trigger / update / condition / ask-question /
      * template variables / {{contact.key}} text), keywords (set-attribute actions) and campaigns (attr:key variables).
      *

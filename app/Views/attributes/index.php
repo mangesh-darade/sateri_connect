@@ -106,6 +106,29 @@
         </table>
     </div>
 </div>
+
+<?php if (! empty($undefinedKeys)): ?>
+<div class="card mt-3">
+    <div class="card-header">
+        <h2 class="card-title mb-0">Found on contacts — not added yet</h2>
+        <div class="small text-muted">These fields came from imports, workflows or webhooks. Add them here to show them as columns in the contact list and as fields on the contact form.</div>
+    </div>
+    <div class="card-body py-3 d-flex flex-wrap gap-2">
+        <?php foreach ($undefinedKeys as $key => $count): ?>
+            <span class="badge bg-light text-dark border d-inline-flex align-items-center gap-2 py-2 px-2 fw-normal">
+                <code><?= esc($key) ?></code>
+                <a href="<?= site_url('contacts?attr_key=' . rawurlencode($key) . '&attr_op=not_empty') ?>" class="text-muted text-decoration-none" title="Show these contacts"><?= (int) $count ?> contact<?= $count === 1 ? '' : 's' ?></a>
+                <?php if ($canEdit): ?>
+                    <button type="button" class="btn btn-sm btn-outline-success py-0 px-2" data-crud-new
+                            data-prefill="<?= esc(json_encode(['attr_key' => $key, 'label' => ucwords(str_replace('_', ' ', $key)), 'type' => 'text']), 'attr') ?>">
+                        <i class="fas fa-plus me-1"></i>Add
+                    </button>
+                <?php endif; ?>
+            </span>
+        <?php endforeach; ?>
+    </div>
+</div>
+<?php endif; ?>
 </div>
 
 <?php if ($canEdit): ?>

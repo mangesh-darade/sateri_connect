@@ -31,6 +31,7 @@ class Attributes extends BaseController
             'attributes' => $rows,
             'types'      => ContactAttributeService::TYPES,
             'tableReady' => $service->tableReady(),
+            'undefinedKeys' => $service->tableReady() ? $service->undefinedKeys() : [],
         ]);
     }
 
