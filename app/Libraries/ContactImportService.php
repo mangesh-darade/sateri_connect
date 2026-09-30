@@ -400,9 +400,23 @@ class ContactImportService
     }
 
     /**
+     * Read a CSV / XLSX upload into headers + rows (shared by contact and chat imports).
+     *
+     * @return array{headers:list<string>,rows:list<list<string>>}
+     *
+     * @throws RuntimeException
+     */
+    public function readSpreadsheet(string $path, string $originalName, int $maxRows = self::MAX_ROWS): array
+    {
+        return $this->detectFormat($originalName) === 'xlsx'
+            ? $this->readXlsx($path, $maxRows)
+            : $this->readCsv($path, $maxRows);
+    }
+
+    /**
      * @return array{headers:list<string>,rows:list<list<string>>}
      */
-    protected function readCsv(string $path): array
+    protected function readCsv(string $path, int $maxRows = self::MAX_ROWS): array
     {
         $handle = fopen($path, 'rb');
         if ($handle === false) {
@@ -428,11 +442,8 @@ class ContactImportService
                 continue;
             }
             $rows[] = $this->normalizeRow($row, count($headers));
-            if (count($rows) > self::MAX_ROWS) {
-                // Keep counting past the limit so preview can warn; stop reading huge files.
-                // Continue until one extra row, then break after loop check below.
-            }
-            if (count($rows) > self::MAX_ROWS + 50) {
+            // Read a few rows past the limit so the preview can warn, then stop on huge files.
+            if (count($rows) > $maxRows + 50) {
                 break;
             }
         }
@@ -444,7 +455,7 @@ class ContactImportService
     /**
      * @return array{headers:list<string>,rows:list<list<string>>}
      */
-    protected function readXlsx(string $path): array
+    protected function readXlsx(string $path, int $maxRows = self::MAX_ROWS): array
     {
         try {
             $reader = IOFactory::createReader('Xlsx');
@@ -477,7 +488,7 @@ class ContactImportService
                 continue;
             }
             $rows[] = $this->normalizeRow($row, count($headers));
-            if (count($rows) > self::MAX_ROWS + 50) {
+            if (count($rows) > $maxRows + 50) {
                 break;
             }
         }

@@ -201,6 +201,13 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('chat/contact-attribute', 'Chat::saveContactAttribute', ['filter' => 'csrf']);
     $routes->post('chat/contact-tag', 'Chat::contactTag', ['filter' => 'csrf']);
     $routes->get('chat/quick-replies', 'Chat::quickReplies');
+    $routes->get('chat/transfer/export', 'InboxTransfer::export');
+    $routes->get('chat/transfer/sample', 'InboxTransfer::sample');
+    $routes->post('chat/transfer/preview', 'InboxTransfer::preview', ['filter' => 'csrf']);
+    $routes->post('chat/transfer/import', 'InboxTransfer::commit', ['filter' => 'csrf']);
+    $routes->get('chat/transfer/backup', 'InboxTransfer::backup');
+    $routes->post('chat/transfer/restore/upload', 'InboxTransfer::restoreUpload', ['filter' => 'csrf']);
+    $routes->post('chat/transfer/restore', 'InboxTransfer::restore', ['filter' => 'csrf']);
 
     // Live notifications (header bell + browser alerts)
     $routes->get('notifications/poll', 'Notifications::poll');

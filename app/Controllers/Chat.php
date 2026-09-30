@@ -385,15 +385,20 @@ class Chat extends BaseController
             $beforeId     = (int) ($this->request->getGet('before_id') ?? 0);
             $afterId      = (int) ($this->request->getGet('after_id') ?? 0);
 
+            // Thread order is by message time so imported history sits before live messages.
+            $pivot = $beforeId > 0 ? model(MessageModel::class)->select('id, created_at')->find($beforeId) : null;
             $model = model(MessageModel::class)->where('contact_id', $contactId);
             if ($afterId > 0) {
                 $model->where('id >', $afterId);
                 $messages = $model->orderBy('id', 'ASC')->findAll($limit);
             } else {
-                if ($beforeId > 0) {
-                    $model->where('id <', $beforeId);
+                if (is_array($pivot)) {
+                    $model->groupStart()
+                        ->where('created_at <', $pivot['created_at'])
+                        ->orGroupStart()->where('created_at', $pivot['created_at'])->where('id <', $beforeId)->groupEnd()
+                        ->groupEnd();
                 }
-                $messages = $model->orderBy('id', 'DESC')->findAll($limit);
+                $messages = $model->orderBy('created_at', 'DESC')->orderBy('id', 'DESC')->findAll($limit);
                 $messages = array_reverse($messages);
             }
 

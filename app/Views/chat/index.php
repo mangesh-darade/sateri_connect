@@ -52,6 +52,13 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
                             <div class="dropdown-menu dropdown-menu-end chat-menu-dropdown">
                                 <button type="button" class="dropdown-item" id="btnExportReport">Export Report</button>
                                 <button type="button" class="dropdown-item" id="btnExportFormMessages">Export Form Messages</button>
+                                <?php if (can('contacts.export') || can('contacts.import')): ?><div class="dropdown-divider"></div><?php endif; ?>
+                                <?php if (can('contacts.export')): ?>
+                                    <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#chatExportModal"><i class="fas fa-file-export me-2 text-muted"></i>Export / backup chats…</button>
+                                <?php endif; ?>
+                                <?php if (can('contacts.import')): ?>
+                                    <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#chatImportModal"><i class="fas fa-file-import me-2 text-muted"></i>Import / restore chats…</button>
+                                <?php endif; ?>
                                 <a class="dropdown-item" href="<?= site_url('guide/local') ?>">Read help article</a>
                             </div>
                         </div>
@@ -344,9 +351,11 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
         <div class="text-muted small">Loading…</div>
     </div>
 </div>
+<?= view('chat/transfer_modals', ['tags' => $tags ?? []]) ?>
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
 <script src="<?= asset_url('assets/js/chat.js') ?>"></script>
 <script src="<?= asset_url('assets/js/chat-extras.js') ?>"></script>
+<script src="<?= asset_url('assets/js/chat-transfer.js') ?>"></script>
 <?= $this->endSection() ?>

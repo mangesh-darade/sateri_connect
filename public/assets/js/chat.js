@@ -708,7 +708,7 @@
                 Chat.lastDayKey = '';
                 var html = msgs.map(renderWithDay).join('');
                 $('#chatMessages').html(html || '<div class="text-center text-muted py-4">No messages yet</div>');
-                Chat.lastMessageId = msgs.length ? parseInt(msgs[msgs.length - 1].id, 10) || 0 : 0;
+                Chat.lastMessageId = msgs.reduce(function (max, m) { return Math.max(max, parseInt(m.id, 10) || 0); }, 0);
                 renderNotes(payload && payload.notes ? payload.notes : []);
                 scrollBottom();
                 Chat.markConversationRead(contactId);

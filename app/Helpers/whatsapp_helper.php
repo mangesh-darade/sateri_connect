@@ -79,12 +79,21 @@ if (! function_exists('contact_within_24h_window')) {
         }
 
         try {
-            $row = model(\App\Models\MessageModel::class)
+            static $hasExternalId = null;
+            $hasExternalId ??= db_connect()->fieldExists('external_message_id', 'messages');
+
+            $query = model(\App\Models\MessageModel::class)
                 ->select('created_at')
                 ->where('contact_id', $contactId)
-                ->where('direction', 'inbound')
-                ->orderBy('id', 'DESC')
-                ->first();
+                ->where('direction', 'inbound');
+            if ($hasExternalId) {
+                // Imported chat history must never re-open the Meta customer-service window.
+                $query->groupStart()
+                    ->where('external_message_id', null)
+                    ->orNotLike('external_message_id', 'import:', 'after')
+                    ->groupEnd();
+            }
+            $row = $query->orderBy('created_at', 'DESC')->orderBy('id', 'DESC')->first();
         } catch (Throwable $e) {
             return false;
         }
