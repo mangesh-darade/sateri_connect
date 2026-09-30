@@ -120,6 +120,9 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
                     <div class="small text-muted text-truncate" id="chatHeaderMobile"></div>
                 </div>
                 <div class="d-flex align-items-center gap-1 flex-shrink-0">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btnChatContact" title="Contact details, groups and attributes">
+                        <i class="fas fa-id-card"></i>
+                    </button>
                     <button type="button" class="btn btn-sm btn-outline-secondary" id="btnChatNotes" title="Internal notes">
                         <i class="fas fa-sticky-note"></i>
                     </button>
@@ -175,11 +178,13 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
                         <button type="button"><?= $e ?></button>
                     <?php endforeach; ?>
                 </div>
+                <div class="quick-reply-menu d-none" id="quickReplyMenu" role="listbox" aria-label="Quick replies"></div>
                 <?php if ($canSend): ?>
                 <div class="chat-composer" id="chatComposer">
                     <div class="chat-composer-free" id="chatComposerFree">
                         <button type="button" class="btn btn-light rounded-circle" id="btnEmoji" title="Emoji"><i class="far fa-smile"></i></button>
                         <button type="button" class="btn btn-light rounded-circle" id="btnAttach" title="Attach"><i class="fas fa-paperclip"></i></button>
+                        <button type="button" class="btn btn-light rounded-circle" id="btnQuickReply" title="Quick replies (type /)"><i class="fas fa-bolt"></i></button>
                         <input type="file" id="chatFile" class="d-none" accept="image/*,application/pdf,video/*,audio/*">
                         <textarea id="chatInput" class="form-control" rows="1" placeholder="Type a message"></textarea>
                         <button type="button" class="btn btn-wa rounded-circle" id="btnChatSend" title="Send"><i class="fas fa-paper-plane"></i></button>
@@ -238,6 +243,32 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
                 <option value="mine">My chats</option>
                 <option value="unassigned">Unassigned</option>
             </select>
+        </div>
+        <div class="chat-filter-group">
+            <label class="form-label small fw-semibold">Filter by group</label>
+            <select class="form-select form-select-sm" id="chatFilterTagSelect">
+                <option value="">All groups</option>
+                <?php foreach (($tags ?? []) as $tag): ?>
+                    <option value="<?= (int) $tag['id'] ?>"><?= esc($tag['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="chat-filter-group">
+            <label class="form-label small fw-semibold">Filter by attribute</label>
+            <select class="form-select form-select-sm mb-1" id="chatFilterAttrKey">
+                <option value="">Any attribute</option>
+                <?php foreach (($attributeKeys ?? []) as $key): ?>
+                    <option value="<?= esc($key) ?>"><?= esc(isset($attributeDefs[$key]) ? $attributeDefs[$key]['label'] : $key) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <div class="d-flex gap-1">
+                <select class="form-select form-select-sm" id="chatFilterAttrOp" style="max-width:48%">
+                    <?php foreach (($attributeOps ?? []) as $op => $label): ?>
+                        <option value="<?= esc($op) ?>"><?= esc($label) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <input type="text" class="form-control form-control-sm" id="chatFilterAttrValue" placeholder="Value">
+            </div>
         </div>
         <div class="form-check mt-3">
             <input class="form-check-input" type="checkbox" value="1" id="chatOldChatsFirst">
@@ -299,8 +330,23 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
         </div>
     </div>
 </div>
+
+<div class="offcanvas offcanvas-end chat-contact-canvas" tabindex="-1" id="chatContactCanvas" aria-labelledby="chatContactCanvasTitle"
+     data-can-edit="<?= $canSend ? '1' : '0' ?>">
+    <div class="offcanvas-header border-bottom">
+        <div class="min-w-0">
+            <h5 class="offcanvas-title text-truncate" id="chatContactCanvasTitle">Contact</h5>
+            <div class="small text-muted" id="chatContactMobile"></div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body" id="chatContactBody">
+        <div class="text-muted small">Loading…</div>
+    </div>
+</div>
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
 <script src="<?= asset_url('assets/js/chat.js') ?>"></script>
+<script src="<?= asset_url('assets/js/chat-extras.js') ?>"></script>
 <?= $this->endSection() ?>

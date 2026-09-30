@@ -6,12 +6,15 @@ namespace App\Controllers;
 
 use App\Libraries\ActivityLogger;
 use App\Libraries\CheerioDirectAPI;
+use App\Libraries\ContactAttributes;
+use App\Libraries\ContactListFilter;
 use App\Libraries\WhatsAppTemplatePayload;
 use App\Models\ContactModel;
 use App\Models\ConversationModel;
 use App\Models\InternalNoteModel;
 use App\Models\MediaModel;
 use App\Models\MessageModel;
+use App\Models\TagModel;
 use App\Models\TemplateModel;
 use App\Models\UserModel;
 use CodeIgniter\HTTP\ResponseInterface;
@@ -66,7 +69,132 @@ class Chat extends BaseController
                 && str_starts_with($publicBase, 'https://')
                 && trim((string) ($activeWh['verify_token'] ?? '')) !== '',
             'whatsappProvider'=> $settings->getWhatsAppProvider(),
+            'tags'            => model(TagModel::class)->orderBy('name', 'ASC')->findAll(),
+            'attributeKeys'   => ContactAttributes::knownKeys(),
+            'attributeDefs'   => service('contactAttributes')->definitions(),
+            'attributeOps'    => ContactListFilter::ATTRIBUTE_OPS,
         ]);
+    }
+
+    /**
+     * Inbox contact panel: consent, groups (tags) and attributes for the open chat.
+     */
+    public function contactPanel(int $contactId): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('chat.view')) {
+            return $denied;
+        }
+        $payload = $this->contactPanelPayload($contactId);
+
+        return $payload === null
+            ? $this->jsonResponse(false, null, 'Contact not found.', [], 404)
+            : $this->jsonResponse(true, $payload);
+    }
+
+    public function saveContactAttribute(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('chat.send')) {
+            return $denied;
+        }
+        $input     = $this->requestInput();
+        $contactId = (int) ($input['contact_id'] ?? 0);
+        $key       = trim((string) ($input['key'] ?? ''));
+        try {
+            $value = service('contactAttributes')->setContactValue($contactId, $key, (string) ($input['value'] ?? ''));
+        } catch (\InvalidArgumentException $e) {
+            return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
+        }
+        $label = service('contactAttributes')->label($key);
+
+        return $this->jsonResponse(true, ['key' => $key, 'value' => $value], $value === '' ? "{$label} cleared." : "{$label} saved.");
+    }
+
+    public function contactTag(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('chat.send')) {
+            return $denied;
+        }
+        $input     = $this->requestInput();
+        $contactId = (int) ($input['contact_id'] ?? 0);
+        $action    = (string) ($input['action'] ?? 'add');
+        $tags      = model(TagModel::class);
+        if ($contactId <= 0 || model(ContactModel::class)->find($contactId) === null) {
+            return $this->jsonResponse(false, null, 'Contact not found.', [], 404);
+        }
+
+        $tagId = (int) ($input['tag_id'] ?? 0);
+        $name  = trim((string) ($input['tag_name'] ?? ''));
+        if ($tagId <= 0 && $name !== '' && $action === 'add') {
+            if (mb_strlen($name) > 100) {
+                return $this->jsonResponse(false, null, 'Group name is too long (max 100 characters).', [], 422);
+            }
+            $tagId = (int) ($tags->findOrCreateByName($name)['id'] ?? 0);
+        }
+        if ($tagId <= 0 || $tags->find($tagId) === null) {
+            return $this->jsonResponse(false, null, 'Choose a group.', [], 422);
+        }
+
+        if ($action === 'remove') {
+            $tags->detachContact($tagId, $contactId);
+        } else {
+            $tags->attachContact($tagId, $contactId);
+        }
+
+        return $this->jsonResponse(true, $this->contactPanelPayload($contactId), $action === 'remove' ? 'Removed from group.' : 'Added to group.');
+    }
+
+    /**
+     * Quick replies with {{placeholders}} filled for the open chat.
+     */
+    public function quickReplies(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('chat.view')) {
+            return $denied;
+        }
+        $service = service('quickReplies');
+        $contact = model(ContactModel::class)->find((int) ($this->request->getGet('contact_id') ?? 0)) ?? [];
+        $rows    = array_map(static fn (array $r): array => [
+            'shortcut' => $r['shortcut'],
+            'title'    => $r['title'],
+            'message'  => $service->render((string) $r['message'], $contact),
+        ], $service->all());
+
+        return $this->jsonResponse(true, ['quick_replies' => $rows]);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    protected function contactPanelPayload(int $contactId): ?array
+    {
+        $contact = model(ContactModel::class)->find($contactId);
+        if (! is_array($contact)) {
+            return null;
+        }
+        $consent = service('whatsAppConsent');
+        $state   = 'none';
+        if ($consent->hasConsentColumns()) {
+            $state = ! empty($contact['wa_opted_out_at']) ? 'opted_out' : ((int) ($contact['wa_opt_in'] ?? 0) === 1 ? 'opted_in' : 'no_opt_in');
+        }
+        $core = [];
+        foreach (['email', 'country', 'birthday', 'status'] as $key) {
+            $core[] = ['key' => $key, 'label' => ucfirst($key), 'type' => $key === 'birthday' ? 'date' : ($key === 'status' ? 'dropdown' : 'text'),
+                'options' => $key === 'status' ? ['active', 'inactive', 'blocked'] : [], 'value' => (string) ($contact[$key] ?? ''), 'defined' => true];
+        }
+
+        return [
+            'contact'    => [
+                'id'      => (int) $contact['id'],
+                'name'    => (string) ($contact['name'] ?? ''),
+                'mobile'  => (string) ($contact['mobile'] ?? ''),
+                'consent' => $state,
+                'url'     => site_url('contacts/' . (int) $contact['id']),
+            ],
+            'tags'       => model(TagModel::class)->getForContact($contactId),
+            'all_tags'   => model(TagModel::class)->select('id, name, color')->orderBy('name', 'ASC')->findAll(),
+            'core'       => $core,
+            'attributes' => service('contactAttributes')->contactRows($contact),
+        ];
     }
 
     public function conversations(): ResponseInterface
@@ -156,6 +284,18 @@ class Chat extends BaseController
                 $builder->where('cv.assigned_to', null);
             } elseif (is_int($assignedTo) && $assignedTo > 0) {
                 $builder->where('cv.assigned_to', $assignedTo);
+            }
+            $contactFilter = ContactListFilter::fromInput([
+                'tag_id'     => $this->request->getGet('tag_id'),
+                'attr_key'   => $this->request->getGet('attr_key'),
+                'attr_op'    => $this->request->getGet('attr_op'),
+                'attr_value' => $this->request->getGet('attr_value'),
+            ]);
+            if ($contactFilter['tag_id'] > 0) {
+                ContactListFilter::applyTag($builder, $contactFilter['tag_id'], 'c.id');
+            }
+            if ($contactFilter['attr_key'] !== '') {
+                ContactListFilter::applyAttribute($builder, $contactFilter['attr_key'], $contactFilter['attr_op'], $contactFilter['attr_value']);
             }
 
             if ($search !== '') {
@@ -559,7 +699,9 @@ class Chat extends BaseController
                         $within24h
                     );
                     if (! $check['ok']) {
-                        return $this->jsonResponse(false, null, $check['message'], ['policy_reason' => $check['reason']], 422);
+                        $message = service('whatsAppConsent')->denialWithConsentRequest($contact, $check);
+
+                        return $this->jsonResponse(false, null, $message, ['policy_reason' => $check['reason']], 422);
                     }
                 }
 

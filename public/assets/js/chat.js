@@ -163,7 +163,7 @@
         $('#chatComposerFree').toggleClass('d-none', !!locked);
         $('#chatComposerTemplateCta').toggleClass('d-none', !locked);
         // Never leave free-text controls half-disabled; hide them when locked.
-        $('#chatInput, #btnChatSend, #btnAttach, #chatFile, #btnEmoji').prop('disabled', !!locked);
+        $('#chatInput, #btnChatSend, #btnAttach, #chatFile, #btnEmoji, #btnQuickReply').prop('disabled', !!locked);
         var isWa = (Chat.contactChannel || 'whatsapp') === 'whatsapp';
         $('#btnComposerTemplate').toggleClass('d-none', !isWa);
         $('#btnTemplateReply').toggleClass('d-none', !isWa);
@@ -401,7 +401,12 @@
             Chat.loadMessages(Chat.contactId, false);
             APP.toast('Template sent');
         }).fail(function (xhr) {
-            APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Template send failed', 'error');
+            var res = xhr.responseJSON || {};
+            var noOptIn = res.errors && res.errors.policy_reason === 'no_opt_in';
+            APP.toast(res.message || 'Template send failed', noOptIn ? 'warning' : 'error');
+            if (noOptIn) {
+                Chat.loadMessages(Chat.contactId, false);
+            }
         }).always(function () {
             $('#btnSendTemplate').prop('disabled', false);
         });
@@ -530,7 +535,11 @@
             filter: filter,
             channel: Chat.channel || 'all',
             unread_only: Chat.unreadOnly ? 1 : 0,
-            assigned_to: assignedTo
+            assigned_to: assignedTo,
+            tag_id: (Chat.extraFilters || {}).tag_id || '',
+            attr_key: (Chat.extraFilters || {}).attr_key || '',
+            attr_op: (Chat.extraFilters || {}).attr_op || '',
+            attr_value: (Chat.extraFilters || {}).attr_value || ''
         }).done(function (res) {
             var list = extractList(res).map(normalizeConversation);
             if (Chat.scopeFilter === 'assigned') {
@@ -1074,6 +1083,12 @@
             Chat.unreadOnly = $('#chatFilterUnreadSelect').val() === 'unread';
             Chat.assigneeFilter = $('#chatFilterAssigneeSelect').val() || 'all';
             Chat.oldChatsFirst = $('#chatOldChatsFirst').is(':checked');
+            Chat.extraFilters = {
+                tag_id: $('#chatFilterTagSelect').val() || '',
+                attr_key: $('#chatFilterAttrKey').val() || '',
+                attr_op: $('#chatFilterAttrOp').val() || '',
+                attr_value: $('#chatFilterAttrValue').val() || ''
+            };
             Chat.scopeFilter = Chat.unreadOnly ? 'unread' : (Chat.assigneeFilter === 'unassigned' ? 'unassigned' : (Chat.inboxStatus === 'all' ? 'all' : Chat.inboxStatus));
 
             $('.chat-status-filter').removeClass('active btn-wa').addClass('btn-outline-secondary');
@@ -1122,6 +1137,9 @@
 
         $('#btnChatSend').on('click', function () { Chat.send(); });
         $('#chatInput').on('keydown', function (e) {
+            if (window.ChatQuickReplies && ChatQuickReplies.handleKey(e)) {
+                return;
+            }
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 Chat.send();
