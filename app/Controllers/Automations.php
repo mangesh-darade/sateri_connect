@@ -278,6 +278,7 @@ class Automations extends BaseController
             'templates'  => model(TemplateModel::class)->getApproved(),
             'agents'     => model(UserModel::class)->where('status', 'active')->orderBy('name', 'ASC')->findAll(200),
             'attributes' => ContactAttributes::knownKeys(),
+            'attributeDefs' => service('contactAttributes')->definitions(),
             'fullBleed'  => true,
         ]);
     }
@@ -307,6 +308,10 @@ class Automations extends BaseController
         $wf = new WorkflowGraph();
 
         if (is_array($graph) && ! empty($graph['nodes'])) {
+            $problems = $wf->validate($graph);
+            if ($problems !== []) {
+                return $this->jsonResponse(false, null, implode(' ', $problems), ['graph' => $problems], 422);
+            }
             $rules = $wf->toRules($graph);
             $triggerType = $wf->triggerFromGraph($graph);
             $existing    = model(AutomationModel::class)->find($id);

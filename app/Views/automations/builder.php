@@ -84,6 +84,9 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
             <div class="palette-item" draggable="true" data-palette="trigger" data-trigger="tag_added">
                 <i class="fas fa-tags"></i> Tag added
             </div>
+            <div class="palette-item" draggable="true" data-palette="trigger" data-trigger="attribute_updated">
+                <i class="fas fa-edit"></i> Attribute updated
+            </div>
             <div class="palette-item" draggable="true" data-palette="trigger" data-trigger="birthday">
                 <i class="fas fa-birthday-cake"></i> Birthday
             </div>
@@ -123,6 +126,12 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
             </div>
             <div class="palette-item" draggable="true" data-palette="action" data-action="response_message">
                 <i class="fab fa-whatsapp"></i> Response message
+            </div>
+            <div class="palette-item" draggable="true" data-palette="action" data-action="ask_question">
+                <i class="fas fa-circle-question"></i> Ask question
+            </div>
+            <div class="palette-item" draggable="true" data-palette="action" data-action="send_media">
+                <i class="fas fa-photo-film"></i> Send media
             </div>
             <div class="palette-item" draggable="true" data-palette="action" data-action="collect_images">
                 <i class="fas fa-images"></i> Collect Images
@@ -208,9 +217,14 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
         'id' => (int) $t['id'],
         'name' => $t['name'],
         'language' => $t['language'] ?? 'en_US',
+        'variables' => array_map(static fn ($v) => ['key' => (string) $v['key'], 'example' => (string) ($v['example'] ?? '')],
+            \App\Libraries\WhatsAppTemplateVariables::definitionsForTemplate($t['variables'] ?? null, (string) ($t['body'] ?? ''), $t['raw_payload'] ?? null)),
     ], $templates ?? []),
     'agents' => array_map(static fn ($u) => ['id' => (int) $u['id'], 'name' => $u['name']], $agents ?? []),
     'attributes' => array_values($attributes ?? []),
+    'attribute_defs' => array_map(static fn ($d) => [
+        'label' => $d['label'], 'type' => $d['type'], 'options' => $d['options'],
+    ], $attributeDefs ?? []),
     'webhook_base' => rtrim(site_url('webhooks/automation'), '/'),
 ], JSON_UNESCAPED_UNICODE) ?></script>
 <?= $this->endSection() ?>

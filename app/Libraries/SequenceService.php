@@ -231,11 +231,8 @@ class SequenceService
             $text = (string) ($step['body_text'] ?? '');
             $contact = $this->contacts->find($contactId);
             if (is_array($contact)) {
-                $text = str_replace(
-                    ['{{contact.name}}', '{{contact.mobile}}', '{{name}}'],
-                    [(string) ($contact['name'] ?? ''), (string) ($contact['mobile'] ?? ''), (string) ($contact['name'] ?? '')],
-                    $text
-                );
+                // {{name}}, {{contact.city}}, any attribute from Contacts → Attributes
+                $text = service('quickReplies')->render($text, $contact);
             }
             $this->queue->enqueue($contactId, 'text', ['text' => $text], null, 4);
         }

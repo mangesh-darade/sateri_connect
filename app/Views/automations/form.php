@@ -62,6 +62,7 @@ $triggerValue  = $hasFormErrors && old('trigger_type') !== null
                             'keyword_matched'    => 'Keyword matched',
                             'campaign_replied'   => 'Campaign reply received',
                             'tag_added'          => 'Tag added',
+                            'attribute_updated'  => 'Attribute updated',
                             'birthday'           => 'Birthday',
                             'schedule'           => 'Scheduled / cron',
                             'cheerio_workflow'   => 'Imported Cheerio workflow',

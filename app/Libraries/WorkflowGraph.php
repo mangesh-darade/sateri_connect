@@ -120,7 +120,7 @@ class WorkflowGraph
                     'step_order'    => $order,
                     'rule_type'     => 'condition',
                     'action_type'   => (string) ($data['condition_type'] ?? $data['action_type'] ?? 'message_contains'),
-                    'config'        => $this->conditionConfig($data),
+                    'config'        => $this->conditionConfig($data) + ['_graph_end' => true],
                     'next_on_true'  => $trueTo !== null && isset($stepOf[$trueTo]) ? $stepOf[$trueTo] : null,
                     'next_on_false' => $falseTo !== null && isset($stepOf[$falseTo]) ? $stepOf[$falseTo] : null,
                     'node_id'       => $id,
@@ -131,11 +131,24 @@ class WorkflowGraph
             // action (may branch like Cheerio webhookTrigger / responseMessage)
             $trueTo  = $edges[$id]['true'] ?? $edges[$id]['out'] ?? null;
             $falseTo = $edges[$id]['false'] ?? null;
+            $config  = $this->actionConfig($data);
+            // Per-option branches (Ask question buttons / list): opt_N port → step_order.
+            $routes = [];
+            foreach ($edges[$id] ?? [] as $port => $target) {
+                if (is_string($port) && str_starts_with($port, 'opt_') && isset($stepOf[$target])) {
+                    $routes[$port] = $stepOf[$target];
+                }
+            }
+            if ($routes !== []) {
+                $config['routes'] = $routes;
+            }
+            // Unconnected port = end of that branch (never fall through into a sibling branch).
+            $config['_graph_end'] = true;
             $rules[] = [
                 'step_order'    => $order,
                 'rule_type'     => 'action',
                 'action_type'   => (string) ($data['action_type'] ?? 'send_text'),
-                'config'        => $this->actionConfig($data),
+                'config'        => $config,
                 'next_on_true'  => $trueTo !== null && isset($stepOf[$trueTo]) ? $stepOf[$trueTo] : null,
                 'next_on_false' => $falseTo !== null && isset($stepOf[$falseTo]) ? $stepOf[$falseTo] : null,
                 'node_id'       => $id,
@@ -143,6 +156,114 @@ class WorkflowGraph
         }
 
         return $rules;
+    }
+
+    /**
+     * Save-time checks for nodes that cannot run half-configured.
+     *
+     * @param array{nodes?: list<array<string,mixed>>} $graph
+     *
+     * @return list<string> Human-readable problems (empty = OK).
+     */
+    public function validate(array $graph): array
+    {
+        $errors = [];
+        foreach ($graph['nodes'] ?? [] as $node) {
+            $data   = is_array($node['data'] ?? null) ? $node['data'] : [];
+            $action = (string) ($data['action_type'] ?? '');
+
+            if ($action === 'ask_question') {
+                $replyType = (string) ($data['reply_type'] ?? 'text');
+                $options   = AutomationEngine::questionOptions($data);
+                if (trim((string) ($data['text'] ?? '')) === '') {
+                    $errors[] = 'Ask question: enter the question to send.';
+                }
+                if ($replyType !== 'text' && count($options) < 2) {
+                    $errors[] = 'Ask question: add at least 2 options (one per line).';
+                }
+                if ($replyType === 'buttons' && count($options) > 3) {
+                    $errors[] = 'Ask question: WhatsApp allows max 3 buttons — use "List" for up to 10 options.';
+                }
+                foreach ($options as $label) {
+                    if (mb_strlen($label) > ($replyType === 'buttons' ? 20 : 24)) {
+                        $errors[] = 'Ask question: option "' . $label . '" is too long (buttons 20, list 24 characters).';
+                    }
+                }
+                $saveAs = trim((string) ($data['save_as'] ?? ''));
+                if ($saveAs !== '' && preg_match('/^[A-Za-z][A-Za-z0-9_]{0,49}$/', $saveAs) !== 1) {
+                    $errors[] = 'Ask question: attribute name "' . $saveAs . '" may use letters, numbers and _ only.';
+                } elseif ($saveAs !== '') {
+                    // Every option must be a value the typed attribute accepts, or that answer could never be saved.
+                    foreach ($options as $label) {
+                        $check = service('contactAttributes')->normalizeValue($saveAs, $label);
+                        if (! $check['ok']) {
+                            $errors[] = 'Ask question: option "' . $label . '" cannot be saved to ' . service('contactAttributes')->label($saveAs) . ' — ' . $check['error'];
+                        }
+                    }
+                }
+            }
+
+            if ($action === 'set_attribute') {
+                $attr  = trim((string) ($data['attribute'] ?? ''));
+                $value = (string) ($data['text'] ?? $data['value'] ?? $data['attributeNewValue'] ?? '');
+                if ($attr === '') {
+                    $errors[] = 'Update attribute: choose which attribute to update.';
+                } elseif (! str_contains($value, '{{') && preg_match(ContactAttributeService::KEY_PATTERN, $attr) === 1) {
+                    $check = service('contactAttributes')->normalizeValue($attr, $value);
+                    if (! $check['ok']) {
+                        $errors[] = 'Update attribute: ' . service('contactAttributes')->label($attr) . ' — ' . $check['error'];
+                    }
+                }
+            }
+
+            if ($action === 'send_template' || $action === 'system_initiated') {
+                $name = trim((string) ($data['template_name'] ?? ''));
+                if ($name === '') {
+                    $errors[] = 'Send WA template: choose a template.';
+                } else {
+                    $missing = $this->unmappedTemplateVariables($name, is_array($data['variables'] ?? null) ? $data['variables'] : []);
+                    if ($missing !== []) {
+                        $errors[] = 'Send WA template "' . $name . '": fill every variable — {{' . implode('}}, {{', $missing) . '}}.';
+                    }
+                }
+            }
+
+            if ($action === 'send_media') {
+                $url = trim((string) ($data['media_url'] ?? ''));
+                if (! in_array((string) ($data['media_type'] ?? ''), ['image', 'video', 'document'], true)) {
+                    $errors[] = 'Send media: choose image, video or document.';
+                }
+                if (! str_contains($url, '{{') && filter_var($url, FILTER_VALIDATE_URL) === false) {
+                    $errors[] = 'Send media: enter a public https:// media URL.';
+                }
+            }
+        }
+
+        return array_values(array_unique($errors));
+    }
+
+    /**
+     * Template variable keys that have no value in the node (Meta rejects templates with missing parameters).
+     *
+     * @param array<string, mixed> $values
+     *
+     * @return list<string>
+     */
+    protected function unmappedTemplateVariables(string $templateName, array $values): array
+    {
+        $template = model(\App\Models\TemplateModel::class)->where('name', $templateName)->first();
+        if ($template === null) {
+            return [];
+        }
+        $missing = [];
+        foreach (WhatsAppTemplateVariables::definitionsForTemplate($template['variables'] ?? null, (string) ($template['body'] ?? ''), $template['raw_payload'] ?? null) as $def) {
+            $key = (string) ($def['key'] ?? '');
+            if ($key !== '' && trim((string) ($values[$key] ?? '')) === '') {
+                $missing[] = $key;
+            }
+        }
+
+        return $missing;
     }
 
     /**
@@ -280,8 +401,9 @@ class WorkflowGraph
 
         return [
             'preset'   => $preset,
-            'operator' => $data['operator'] ?? null,
-            'field'    => $data['field'] ?? null,
+            'operator'  => $data['operator'] ?? null,
+            'field'     => $data['field'] ?? null,
+            'attribute' => $data['attribute'] ?? null,
             'value'    => $data['value'] ?? $data['text'] ?? '',
             'tag_id'   => isset($data['tag_id']) ? (int) $data['tag_id'] : null,
         ];
@@ -330,6 +452,7 @@ class WorkflowGraph
             'keyword_matched', 'keyword' => 'Keyword matched',
             'campaign_replied' => 'Campaign reply',
             'tag_added' => 'Tag added',
+            'attribute_updated' => 'Attribute updated',
             'birthday', 'schedule' => 'Birthday / schedule',
             'cheerio_workflow' => 'Cheerio workflow',
             default => $type,
@@ -641,6 +764,7 @@ class WorkflowGraph
             'shopifyevent', 'shopify_event', 'shopify', 'kylaseventcreate', 'kylas_event_create',
             'kylaseventupdate', 'kylas_event_update', 'pabblyevent', 'pabbly_event', 'pabbly',
             'messenger', 'instagram', 'commerceevent', 'commerce_event',
+            'attribute_updated', 'attributeupdated', 'attribute_changed', 'attributechanged',
         ];
         $conditionTypes = [
             'ifelse', 'condition', 'branch', 'decision',
@@ -906,6 +1030,8 @@ class WorkflowGraph
             str_contains($type, 'messenger') => 'messenger',
             str_contains($type, 'instagram') => 'instagram',
             str_contains($type, 'commerce') => 'commerce_event',
+            in_array($type, ['tag_added', 'keyword_matched', 'campaign_replied', 'birthday', 'schedule', 'attribute_updated'], true) => $type,
+            in_array($type, ['attributeupdated', 'attribute_changed', 'attributechanged'], true) => 'attribute_updated',
             default => 'cheerio_workflow',
         };
     }

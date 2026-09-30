@@ -141,6 +141,8 @@ class AutomationEngine
             'schedule'           => ['birthday', 'schedule'],
             'contact_created'    => ['contact_created'],
             'tag_added'          => ['tag_added'],
+            'attribute_updated'  => ['attribute_updated', 'attribute_changed'],
+            'attribute_changed'  => ['attribute_updated', 'attribute_changed'],
             'campaign_replied'   => ['campaign_replied'],
             'campaign_sent'      => ['campaign_sent'],
             'shopify_event'      => ['shopify_event', 'shopify'],
@@ -204,12 +206,14 @@ class AutomationEngine
             }
 
             $actionType = $this->normalizeActionType((string) ($current['action_type'] ?? ''));
-            unset($context['_action_failed'], $context['_http_status'], $context['_stop_automation']);
+            unset($context['_action_failed'], $context['_http_status'], $context['_stop_automation'], $context['_await_reply']);
             $this->executeAction($actionType, $config, $context);
 
             // Delay (and similar) pause the graph; resume via automation_delayed_jobs.
             if (! empty($context['_stop_automation'])) {
-                if (empty($context['_delay_scheduled']) && ! empty($context['_delayed_until'])) {
+                if (! empty($context['_await_reply'])) {
+                    $this->scheduleAwaitReply($automationId, $current, $context);
+                } elseif (empty($context['_delay_scheduled']) && ! empty($context['_delayed_until'])) {
                     $this->scheduleDelayedResume(
                         $automationId,
                         $current,
@@ -291,11 +295,13 @@ class AutomationEngine
             }
 
             $actionType = $this->normalizeActionType((string) ($current['action_type'] ?? ''));
-            unset($context['_action_failed'], $context['_http_status'], $context['_stop_automation'], $context['_delay_scheduled']);
+            unset($context['_action_failed'], $context['_http_status'], $context['_stop_automation'], $context['_delay_scheduled'], $context['_await_reply']);
             $this->executeAction($actionType, $config, $context);
 
             if (! empty($context['_stop_automation'])) {
-                if (empty($context['_delay_scheduled']) && ! empty($context['_delayed_until'])) {
+                if (! empty($context['_await_reply'])) {
+                    $this->scheduleAwaitReply($automationId, $current, $context);
+                } elseif (empty($context['_delay_scheduled']) && ! empty($context['_delayed_until'])) {
                     $this->scheduleDelayedResume($automationId, $current, $context, (string) $context['_delayed_until']);
                 }
                 break;
@@ -321,6 +327,10 @@ class AutomationEngine
     protected function resolveNext(array $rules, array $byId, array $byStep, array $current, mixed $nextRef): ?array
     {
         if ($nextRef === null || $nextRef === '') {
+            if (! empty($this->decodeJson($current['config'] ?? null)['_graph_end'])) {
+                return null;
+            }
+
             return $this->nextSequential($rules, $current);
         }
 
@@ -345,6 +355,8 @@ class AutomationEngine
             'cheerio_action', 'action', 'sendtext' => 'send_text',
             'system_initiated', 'systemInitiated', 'systeminitiated' => 'system_initiated',
             'collect_images', 'collectImages', 'collectimages' => 'collect_images',
+            'ask_question', 'askQuestion', 'askquestion', 'user_input', 'userInput' => 'ask_question',
+            'send_media', 'sendMedia', 'sendmedia' => 'send_media',
             'send_wa_template', 'sendTemplate' => 'send_template',
             'cheerio_addtolabel', 'addtolabel', 'add_to_label' => 'add_tag',
             'cheerio_removefromlabel', 'removefromlabel', 'remove_from_label' => 'remove_tag',
@@ -489,10 +501,28 @@ class AutomationEngine
                 if ($contactId <= 0) {
                     throw new RuntimeException($actionType . ' requires contact_id in context.');
                 }
+                $templateName = (string) ($config['template_name'] ?? $config['name'] ?? '');
+                $language     = (string) ($config['language'] ?? 'en');
+                $components   = is_array($config['components'] ?? null) ? $config['components'] : [];
+                $variables    = is_array($config['variables'] ?? null) ? array_filter($config['variables'], static fn ($v) => trim((string) $v) !== '') : [];
+                if ($variables !== []) {
+                    $values = [];
+                    foreach ($variables as $key => $source) {
+                        $values[(string) $key] = trim($this->interpolate((string) $source, $context));
+                    }
+                    $contactRow = is_array($context['contact'] ?? null) ? $context['contact'] : ($this->contacts->find($contactId) ?? []);
+                    try {
+                        $components = service('campaignService')->templateComponentsForContact($templateName, $language, $values, $contactRow, $components);
+                    } catch (RuntimeException $e) {
+                        $context['_action_failed'] = true;
+                        log_message('warning', 'Workflow template {tpl} skipped for contact {id}: {msg}', ['tpl' => $templateName, 'id' => $contactId, 'msg' => $e->getMessage()]);
+                        break;
+                    }
+                }
                 $this->queue->enqueue($contactId, 'template', [
-                    'template_name' => $config['template_name'] ?? $config['name'] ?? '',
-                    'language'      => $config['language'] ?? 'en',
-                    'components'    => $config['components'] ?? [],
+                    'template_name' => $templateName,
+                    'language'      => $language,
+                    'components'    => $components,
                 ], null, (int) ($config['priority'] ?? 3));
                 break;
 
@@ -631,46 +661,33 @@ class AutomationEngine
                 if ($contactId <= 0) {
                     break;
                 }
-                $attr  = trim((string) ($config['attribute'] ?? ''));
-                $value = $this->interpolate((string) ($config['text'] ?? $config['value'] ?? $config['attributeNewValue'] ?? ''), $context);
-                if ($attr === '') {
-                    break;
+                $this->saveContactAttribute(
+                    $contactId,
+                    trim((string) ($config['attribute'] ?? '')),
+                    $this->interpolate((string) ($config['text'] ?? $config['value'] ?? $config['attributeNewValue'] ?? ''), $context),
+                    $context
+                );
+                break;
+
+            case 'ask_question':
+                $this->askQuestion($config, $context);
+                break;
+
+            case 'send_media':
+                if ($contactId <= 0) {
+                    throw new RuntimeException('send_media requires contact_id in context.');
                 }
-                $columns = ['name', 'email', 'country', 'notes', 'status', 'birthday', 'mobile'];
-                if (! isset($context['attributes']) || ! is_array($context['attributes'])) {
-                    $context['attributes'] = [];
+                $mediaType = strtolower((string) ($config['media_type'] ?? 'image'));
+                $url       = trim($this->interpolate((string) ($config['media_url'] ?? $config['url'] ?? ''), $context));
+                if (! in_array($mediaType, ['image', 'video', 'document'], true) || $url === '') {
+                    throw new RuntimeException('Send media needs a media type (image / video / document) and a public media URL.');
                 }
-                if (in_array($attr, $columns, true)) {
-                    $this->contacts->update($contactId, [$attr => $value !== '' ? $value : null]);
-                    if (! isset($context['contact']) || ! is_array($context['contact'])) {
-                        $context['contact'] = [];
-                    }
-                    $context['contact'][$attr]       = $value;
-                    $context['attributes'][$attr]    = $value;
-                    $context[$attr]                  = $value;
-                    break;
+                $caption = $this->interpolate((string) ($config['caption'] ?? $config['text'] ?? ''), $context);
+                $payload = ['link' => $url, 'caption' => $caption !== '' ? $caption : null];
+                if ($mediaType === 'document') {
+                    $payload['filename'] = trim((string) ($config['filename'] ?? '')) ?: (basename((string) parse_url($url, PHP_URL_PATH)) ?: 'document');
                 }
-                $contact = $this->contacts->find($contactId);
-                $fields  = [];
-                if (is_array($contact)) {
-                    $raw = $contact['custom_fields'] ?? [];
-                    if (is_string($raw)) {
-                        $decoded = json_decode($raw, true);
-                        $fields  = is_array($decoded) ? $decoded : [];
-                    } elseif (is_array($raw)) {
-                        $fields = $raw;
-                    }
-                }
-                $fields[$attr] = $value;
-                $this->contacts->update($contactId, ['custom_fields' => $fields]);
-                // Keep runtime context in sync for later webhook mapping in same run
-                $context['contact'] ??= [];
-                if (is_array($context['contact'])) {
-                    $context['contact']['custom_fields'] = $fields;
-                    $context['contact'][$attr]           = $value;
-                }
-                $context['attributes'][$attr] = $value;
-                $context[$attr]               = $value;
+                $this->queue->enqueue($contactId, $mediaType, $payload, null, (int) ($config['priority'] ?? 3));
                 break;
 
             case 'webhook_call':
@@ -717,6 +734,7 @@ class AutomationEngine
     {
         $count = 0;
         $count += $this->processDelayedJobs();
+        $count += $this->processAwaitingTimeouts();
         $count += $this->processBirthdayTriggers();
 
         return $count;
@@ -882,6 +900,366 @@ class AutomationEngine
     }
 
     /**
+     * Core fields (name, email…) update the contact row; anything else goes into custom_fields.
+     * Keeps the running context in sync for later nodes in the same run.
+     *
+     * @param array<string, mixed> $context
+     */
+    protected function saveContactAttribute(int $contactId, string $attr, string $value, array &$context): void
+    {
+        if ($contactId <= 0 || $attr === '') {
+            return;
+        }
+        if (! isset($context['attributes']) || ! is_array($context['attributes'])) {
+            $context['attributes'] = [];
+        }
+        if (! isset($context['contact']) || ! is_array($context['contact'])) {
+            $context['contact'] = [];
+        }
+
+        if ($attr !== 'mobile' && preg_match(ContactAttributeService::KEY_PATTERN, $attr)) {
+            try {
+                $value = service('contactAttributes')->setContactValue($contactId, $attr, $value);
+            } catch (\InvalidArgumentException $e) {
+                $context['_action_failed'] = true;
+                log_message('warning', 'Workflow attribute "{attr}" not saved for contact #{id}: {msg}', ['attr' => $attr, 'id' => $contactId, 'msg' => $e->getMessage()]);
+
+                return;
+            }
+            $fresh = $this->contacts->find($contactId);
+            if (is_array($fresh)) {
+                $context['contact']['custom_fields'] = $fresh['custom_fields'] ?? [];
+            }
+        } elseif ($attr === 'mobile') {
+            $this->contacts->update($contactId, [$attr => $value !== '' ? $value : null]);
+        } else {
+            $contact = $this->contacts->find($contactId);
+            $raw     = is_array($contact) ? ($contact['custom_fields'] ?? []) : [];
+            $fields  = is_string($raw) ? (json_decode($raw, true) ?: []) : (is_array($raw) ? $raw : []);
+            $fields[$attr] = $value;
+            $this->contacts->update($contactId, ['custom_fields' => $fields]);
+            $context['contact']['custom_fields'] = $fields;
+        }
+
+        $context['contact'][$attr]    = $value;
+        $context['attributes'][$attr] = $value;
+        $context[$attr]               = $value;
+    }
+
+    /**
+     * Options configured on an Ask question node, keyed by port id (opt_1, opt_2…).
+     *
+     * @param array<string, mixed> $config
+     *
+     * @return array<string, string>
+     */
+    public static function questionOptions(array $config): array
+    {
+        $raw = $config['options'] ?? [];
+        if (is_string($raw)) {
+            $raw = preg_split('/\r\n|\r|\n/', $raw) ?: [];
+        }
+        $options = [];
+        foreach ((array) $raw as $label) {
+            $label = trim((string) (is_array($label) ? ($label['title'] ?? $label['text'] ?? '') : $label));
+            if ($label !== '' && count($options) < 10) {
+                $options['opt_' . (count($options) + 1)] = $label;
+            }
+        }
+
+        return (string) ($config['reply_type'] ?? 'text') === 'text' ? [] : $options;
+    }
+
+    /**
+     * Send the question (text, up to 3 buttons, or a list of up to 10 options) and pause for the reply.
+     *
+     * @param array<string, mixed> $config
+     * @param array<string, mixed> $context
+     */
+    protected function askQuestion(array $config, array &$context, string $prefix = ''): void
+    {
+        $contactId = (int) ($context['contact_id'] ?? 0);
+        if ($contactId <= 0) {
+            throw new RuntimeException('Ask question requires contact_id in context.');
+        }
+        $question = trim($this->interpolate((string) ($config['text'] ?? $config['question'] ?? ''), $context));
+        if ($question === '') {
+            throw new RuntimeException('Ask question node has no question text.');
+        }
+        $body    = $prefix !== '' ? $prefix . "\n\n" . $question : $question;
+        $options = $this->questionOptions($config);
+
+        if ($options === []) {
+            $this->queue->enqueue($contactId, 'text', ['text' => $body], null, 2);
+        } elseif (count($options) <= 3 && (string) ($config['reply_type'] ?? '') === 'buttons') {
+            $buttons = [];
+            foreach ($options as $id => $label) {
+                $buttons[] = ['id' => $id, 'title' => mb_substr($label, 0, 20)];
+            }
+            $this->queue->enqueue($contactId, 'interactive_buttons', ['body' => $body, 'buttons' => $buttons], null, 2);
+        } else {
+            $rows = [];
+            foreach ($options as $id => $label) {
+                $rows[] = ['id' => $id, 'title' => mb_substr($label, 0, 24)];
+            }
+            $this->queue->enqueue($contactId, 'interactive_list', [
+                'body'        => $body,
+                'button_text' => mb_substr(trim((string) ($config['list_button'] ?? '')) ?: 'Choose', 0, 20),
+                'sections'    => [['title' => 'Options', 'rows' => $rows]],
+            ], null, 2);
+        }
+
+        $context['_await_reply']     = true;
+        $context['_stop_automation'] = true;
+    }
+
+    /**
+     * Park the run until the contact replies (or the timeout passes). One open question per contact.
+     *
+     * @param array<string, mixed> $askRule
+     * @param array<string, mixed> $context
+     */
+    protected function scheduleAwaitReply(int $automationId, array $askRule, array $context): void
+    {
+        $db        = db_connect();
+        $contactId = (int) ($context['contact_id'] ?? 0);
+        if ($contactId <= 0 || ! $db->tableExists('automation_delayed_jobs')) {
+            return;
+        }
+        $config  = $this->decodeJson($askRule['config'] ?? null);
+        $minutes = min(10080, max(1, (int) ($config['timeout_minutes'] ?? 1440)));
+        $now     = date('Y-m-d H:i:s');
+
+        $db->table('automation_delayed_jobs')
+            ->where('contact_id', $contactId)
+            ->where('status', 'awaiting_reply')
+            ->update(['status' => 'cancelled', 'updated_at' => $now]);
+
+        $ctx = $context;
+        unset($ctx['_stop_automation'], $ctx['_await_reply'], $ctx['_delayed_until'], $ctx['_delay_scheduled'], $ctx['_action_failed'], $ctx['_current_rule']);
+
+        $db->table('automation_delayed_jobs')->insert([
+            'automation_id'  => $automationId,
+            'contact_id'     => $contactId,
+            'resume_rule_id' => (int) $askRule['id'],
+            'context_json'   => json_encode($ctx),
+            'run_at'         => date('Y-m-d H:i:s', time() + $minutes * 60),
+            'status'         => 'awaiting_reply',
+            'created_at'     => $now,
+            'updated_at'     => $now,
+        ]);
+    }
+
+    /**
+     * Inbound message for a contact with an open Ask question: validate, save to the attribute,
+     * and continue on the chosen option's branch. Returns true when the message was consumed.
+     *
+     * @param array{content?: string, reply_id?: string, message_type?: string, message_id?: int} $inbound
+     */
+    public function handleAwaitedReply(int $contactId, array $inbound): bool
+    {
+        $db = db_connect();
+        if ($contactId <= 0 || ! $db->tableExists('automation_delayed_jobs')) {
+            return false;
+        }
+        $job = $db->table('automation_delayed_jobs')
+            ->where('contact_id', $contactId)
+            ->where('status', 'awaiting_reply')
+            ->where('run_at >', date('Y-m-d H:i:s'))
+            ->orderBy('id', 'DESC')
+            ->get(1)
+            ->getRowArray();
+        if (! is_array($job)) {
+            return false;
+        }
+
+        $jobId = (int) $job['id'];
+        $db->table('automation_delayed_jobs')->where('id', $jobId)->where('status', 'awaiting_reply')
+            ->update(['status' => 'processing', 'updated_at' => date('Y-m-d H:i:s')]);
+        if ($db->affectedRows() !== 1) {
+            return false;
+        }
+
+        $finish = static function (string $status) use ($db, $jobId): void {
+            $db->table('automation_delayed_jobs')->where('id', $jobId)->update(['status' => $status, 'updated_at' => date('Y-m-d H:i:s')]);
+        };
+
+        try {
+            $rule = $this->rules->find((int) $job['resume_rule_id']);
+            if (! is_array($rule)) {
+                $finish('failed');
+
+                return false;
+            }
+            $config  = $this->decodeJson($rule['config'] ?? null);
+            $context = $this->decodeJson($job['context_json'] ?? null);
+            $context['contact_id']    = $contactId;
+            $context['automation_id'] = (int) $job['automation_id'];
+            $context = $this->enrichContactContext($context);
+
+            $text    = trim((string) ($inbound['content'] ?? ''));
+            $options = $this->questionOptions($config);
+            $optId   = $options !== [] ? $this->matchOption($options, (string) ($inbound['reply_id'] ?? ''), $text) : null;
+            $answer  = $optId !== null ? $options[$optId] : $text;
+            $valid   = $options !== [] ? $optId !== null : $this->isValidAnswer($answer, (string) ($config['validation'] ?? 'any'));
+            $saveAs  = trim((string) ($config['save_as'] ?? $config['attribute'] ?? ''));
+            $typeErr = '';
+            if ($valid && $saveAs !== '' && preg_match(ContactAttributeService::KEY_PATTERN, $saveAs)) {
+                $typed = service('contactAttributes')->normalizeValue($saveAs, $answer);
+                $valid = $typed['ok'];
+                $typeErr = $typed['error'];
+            }
+
+            if (! $valid) {
+                $tries = (int) ($context['_ask_tries'] ?? 0) + 1;
+                if ($tries <= max(0, (int) ($config['max_retries'] ?? 1))) {
+                    $context['_ask_tries'] = $tries;
+                    $retry = trim((string) ($config['retry_text'] ?? ''))
+                        ?: ($typeErr !== '' ? $typeErr : ($options !== [] ? 'Please choose one of the options below.' : 'That does not look right. Please try again.'));
+                    $this->askQuestion($config, $context, $retry);
+                    $finish('done');
+                    $this->scheduleAwaitReply((int) $job['automation_id'], $rule, $context);
+
+                    return true;
+                }
+                $finish('done');
+                unset($context['_ask_tries']);
+                $context['_ask_invalid'] = true;
+                $this->continueAfter((int) $job['automation_id'], $rule, $rule['next_on_false'] ?? null, $context);
+
+                return true;
+            }
+
+            unset($context['_ask_tries']);
+            $this->saveContactAttribute($contactId, $saveAs, $answer, $context);
+            $answer = (string) ($context['attributes'][$saveAs] ?? $answer);
+            $context['answer']       = $answer;
+            $context['answer_id']    = $optId;
+            $finish('done');
+
+            $routes  = is_array($config['routes'] ?? null) ? $config['routes'] : [];
+            $nextRef = $optId !== null ? ($routes[$optId] ?? null) : ($rule['next_on_true'] ?? null);
+            $this->continueAfter((int) $job['automation_id'], $rule, $nextRef, $context);
+        } catch (Throwable $e) {
+            $finish('failed');
+            log_message('error', 'Ask question reply failed (job #{id}): {msg}', ['id' => $jobId, 'msg' => $e->getMessage()]);
+        }
+
+        return true;
+    }
+
+    /**
+     * Button / list id first, then the option label or its number ("2").
+     *
+     * @param array<string, string> $options
+     */
+    protected function matchOption(array $options, string $replyId, string $text): ?string
+    {
+        if ($replyId !== '' && isset($options[$replyId])) {
+            return $replyId;
+        }
+        $needle = mb_strtolower(trim($text));
+        if ($needle === '') {
+            return null;
+        }
+        foreach ($options as $id => $label) {
+            if (mb_strtolower($label) === $needle || mb_strtolower(mb_substr($label, 0, 24)) === $needle) {
+                return $id;
+            }
+        }
+        if (ctype_digit($needle) && isset($options['opt_' . (int) $needle])) {
+            return 'opt_' . (int) $needle;
+        }
+
+        return null;
+    }
+
+    public function isValidAnswer(string $answer, string $validation): bool
+    {
+        $answer = trim($answer);
+        if ($answer === '') {
+            return false;
+        }
+
+        return match ($validation) {
+            'number' => is_numeric(str_replace([',', ' '], '', $answer)),
+            'email'  => filter_var($answer, FILTER_VALIDATE_EMAIL) !== false,
+            'phone'  => preg_match('/^\+?[0-9][0-9\s\-]{6,18}$/', $answer) === 1,
+            default  => true,
+        };
+    }
+
+    /**
+     * Continue the graph after an Ask question on a specific branch. An unconnected branch ends the run.
+     *
+     * @param array<string, mixed> $fromRule
+     * @param array<string, mixed> $context
+     */
+    protected function continueAfter(int $automationId, array $fromRule, mixed $nextRef, array $context): void
+    {
+        if ($nextRef === null || $nextRef === '') {
+            return;
+        }
+        $rules  = $this->rules->where('automation_id', $automationId)->orderBy('step_order', 'ASC')->findAll();
+        $byId   = [];
+        $byStep = [];
+        foreach ($rules as $r) {
+            $byId[(int) $r['id']]            = $r;
+            $byStep[(int) $r['step_order']] = $r;
+        }
+        $next = $this->resolveNext($rules, $byId, $byStep, $fromRule, $nextRef);
+        if (is_array($next)) {
+            $this->resumeFromRule($automationId, (int) $next['id'], $context);
+        }
+    }
+
+    /**
+     * Open questions past their timeout continue on the "No reply" branch (or just close).
+     */
+    public function processAwaitingTimeouts(): int
+    {
+        $db = db_connect();
+        if (! $db->tableExists('automation_delayed_jobs')) {
+            return 0;
+        }
+        $jobs = $db->table('automation_delayed_jobs')
+            ->where('status', 'awaiting_reply')
+            ->where('run_at <=', date('Y-m-d H:i:s'))
+            ->orderBy('run_at', 'ASC')
+            ->limit(50)
+            ->get()
+            ->getResultArray();
+
+        $count = 0;
+        foreach ($jobs as $job) {
+            $jobId = (int) $job['id'];
+            $db->table('automation_delayed_jobs')->where('id', $jobId)->where('status', 'awaiting_reply')
+                ->update(['status' => 'processing', 'updated_at' => date('Y-m-d H:i:s')]);
+            if ($db->affectedRows() !== 1) {
+                continue;
+            }
+            $status = 'expired';
+            try {
+                $rule = $this->rules->find((int) $job['resume_rule_id']);
+                if (is_array($rule) && ! empty($rule['next_on_false'])) {
+                    $context = $this->decodeJson($job['context_json'] ?? null);
+                    $context['contact_id'] = (int) $job['contact_id'];
+                    $context['_ask_timed_out'] = true;
+                    unset($context['_ask_tries']);
+                    $this->continueAfter((int) $job['automation_id'], $rule, $rule['next_on_false'], $context);
+                }
+                $count++;
+            } catch (Throwable $e) {
+                $status = 'failed';
+                log_message('error', 'Ask question timeout job #{id} failed: {msg}', ['id' => $jobId, 'msg' => $e->getMessage()]);
+            }
+            $db->table('automation_delayed_jobs')->where('id', $jobId)->update(['status' => $status, 'updated_at' => date('Y-m-d H:i:s')]);
+        }
+
+        return $count;
+    }
+
+    /**
      * Send email to contact (or explicit `to`) via EmailProvider.
      *
      * @param array<string, mixed> $config
@@ -946,6 +1324,13 @@ class AutomationEngine
             if ($key === 'keyword' || $key === 'content') {
                 $hay = (string) ($context['content'] ?? $context['text'] ?? $context['keyword'] ?? '');
                 if (! str_contains(mb_strtolower($hay), mb_strtolower((string) $value))) {
+                    return false;
+                }
+                continue;
+            }
+            // Attribute trigger filters are strict: clearing a value must not match "city = Mumbai".
+            if (($key === 'attribute' || $key === 'attribute_value') && array_key_exists('attribute_value', $context)) {
+                if (! $this->looseEquals(trim((string) ($context[$key] ?? '')), trim((string) $value))) {
                     return false;
                 }
                 continue;

@@ -40,6 +40,7 @@
         form_response: 'New form response',
         keyword_matched: 'Keyword matched',
         tag_added: 'Tag added',
+        attribute_updated: 'Attribute updated',
         birthday: 'Birthday',
         campaign_replied: 'Campaign reply',
         schedule: 'Schedule',
@@ -50,6 +51,8 @@
         system_initiated: 'System initiated',
         response_message: 'Response message',
         collect_images: 'Collect Images',
+        ask_question: 'Ask question',
+        send_media: 'Send media',
         send_template: 'Send WA template',
         send_text: 'Send text',
         send_email: 'Send email',
@@ -80,7 +83,7 @@
     var TRIGGER_CONFIG_KEYS = [
         'keyword', 'content', 'event_topic', 'event_type', 'shopify_topic',
         'form_id', 'ad_id', 'page_id', 'token', 'secret', 'campaign_id',
-        'source', 'object', 'filter'
+        'source', 'object', 'filter', 'tag_id', 'attribute', 'attribute_value'
     ];
 
     function esc(s) {
@@ -217,6 +220,13 @@
         if (d.action_type === 'collect_images') {
             return (d.count || d.max_images || 1) + ' image(s)';
         }
+        if (d.action_type === 'ask_question') {
+            var q = d.text ? String(d.text).slice(0, 30) : 'Write question…';
+            return q + (d.save_as ? (' → ' + d.save_as) : '');
+        }
+        if (d.action_type === 'send_media') {
+            return (d.media_type || 'image') + (d.media_url ? (' · ' + String(d.media_url).replace(/^https?:\/\//, '').slice(0, 24)) : ' · URL…');
+        }
         if (d.action_type === 'add_tag' || d.action_type === 'remove_tag') {
             return d.tag_name || d.labelName || (d.tag_id ? ('Tag #' + d.tag_id) : 'Pick tag…');
         }
@@ -231,7 +241,40 @@
         return (!d.label || /\snode$/i.test(String(d.label))) ? '' : String(d.label);
     }
 
+    /** Ask question options (one per line), max 10; empty for free-text answers. */
+    function questionOptions(d) {
+        if (!d || (d.reply_type || 'text') === 'text') return [];
+        var raw = Array.isArray(d.options) ? d.options : String(d.options || '').split(/\r?\n/);
+        return raw.map(function (s) { return String(s).trim(); }).filter(Boolean).slice(0, 10);
+    }
+
+    function askQuestionPorts(d) {
+        var opts = questionOptions(d);
+        if (!opts.length) return ['true', 'false'];
+        return opts.map(function (_, i) { return 'opt_' + (i + 1); }).concat(['false']);
+    }
+
+    function portLabel(node, p) {
+        var d = node.data || {};
+        if (d.action_type === 'ask_question') {
+            if (p === 'true') return 'Answered';
+            if (p === 'false') return 'No reply';
+            var opt = questionOptions(d)[parseInt(String(p).slice(4), 10) - 1];
+            if (opt) return opt.length > 14 ? opt.slice(0, 13) + '…' : opt;
+        }
+        return p === 'true' ? 'Yes' : (p === 'false' ? 'No' : (String(p).indexOf('opt_') === 0 ? ('#' + String(p).slice(4)) : 'Out'));
+    }
+
+    /** Drop edges from ports an Ask question node no longer has (option removed / type changed). */
+    function pruneAskQuestionEdges(node) {
+        var valid = askQuestionPorts(node.data || {});
+        Flow.edges = Flow.edges.filter(function (e) {
+            return e.from !== node.id || valid.indexOf(e.port || 'out') >= 0;
+        });
+    }
+
     function portsForNode(node) {
+        if ((node.data || {}).action_type === 'ask_question') return askQuestionPorts(node.data);
         var ports = {};
         Flow.edges.forEach(function (e) {
             if (e.from === node.id) ports[e.port || 'out'] = true;
@@ -360,7 +403,7 @@
                     var top = Math.round(((i + 1) / (n + 1)) * 100);
                     var cls = p === 'true' ? 'true' : (p === 'false' ? 'false' : 'out');
                     ports += '<div class="flow-port ' + cls + '" data-port="' + esc(p) + '" data-node="' + esc(node.id) + '" style="top:' + top + '%;transform:translateY(-50%)"></div>';
-                    var lbl = p === 'true' ? 'Yes' : (p === 'false' ? 'No' : (String(p).indexOf('opt_') === 0 ? ('#' + String(p).slice(4)) : 'Out'));
+                    var lbl = portLabel(node, p);
                     ports += '<span class="flow-port-label" style="top:' + Math.max(8, top - 6) + '%">' + esc(lbl) + '</span>';
                 });
             } else if (node.type !== 'end') {
@@ -501,6 +544,28 @@
         });
         html += '</select>';
         html += '<label>Language</label><input class="form-control insp" data-k="language" value="' + esc(d.language || 'en_US') + '">';
+        html += templateVariablesHtml(d);
+        return html;
+    }
+
+    /** One value box per template placeholder; values may use {{contact.city}}, {{answer}} etc. */
+    function templateVariablesHtml(d) {
+        var tpl = (Flow.meta.templates || []).find(function (t) { return t.name === d.template_name; });
+        var vars = (tpl && tpl.variables) || [];
+        if (!vars.length) return '';
+        var saved = (d.variables && typeof d.variables === 'object') ? d.variables : {};
+        var html = '<label class="mt-2">Template variables</label>';
+        vars.forEach(function (v) {
+            html += '<div class="input-group input-group-sm mb-1"><span class="input-group-text"><code>{{' + esc(v.key) + '}}</code></span>' +
+                '<input class="form-control insp-var" data-var="' + esc(v.key) + '" list="inspTplVarList" value="' + esc(saved[v.key] || '') + '" placeholder="' + esc(v.example ? 'e.g. ' + v.example : '{{contact.name}}') + '"></div>';
+        });
+        html += '<datalist id="inspTplVarList">';
+        ['name', 'mobile', 'email'].concat(knownAttributes([])).forEach(function (k, i, all) {
+            if (all.indexOf(k) !== i) return;
+            html += '<option value="{{contact.' + esc(k) + '}}">';
+        });
+        html += '</datalist>';
+        html += inspHint('Pick a contact field / attribute ({{contact.city}}) or type fixed text. Contacts with an empty value are skipped (Meta rejects blank variables).');
         return html;
     }
 
@@ -531,15 +596,58 @@
         });
     }
 
-    function attributeSelectHtml(d) {
-        var cur = d.attribute || '';
-        var html = '<label>Attribute</label><input class="form-control insp" data-k="attribute" list="inspSetAttrList" value="' + esc(cur) + '" placeholder="e.g. source, name, city">';
-        html += '<datalist id="inspSetAttrList">';
-        knownAttributes([cur]).forEach(function (k) {
-            html += '<option value="' + esc(k) + '">';
+    var CORE_ATTR_LABELS = { name: 'Name', mobile: 'Mobile', email: 'Email', country: 'Country', notes: 'Notes', status: 'Status', birthday: 'Birthday' };
+
+    /** Allowed values for dropdown / Yes-No attributes (and contact status); [] = free value. */
+    function attrOptions(key) {
+        if (key === 'status') return ['active', 'inactive', 'blocked'];
+        var def = (Flow.meta.attribute_defs || {})[String(key || '')] || null;
+        if (!def) return [];
+        if (def.type === 'boolean') return ['Yes', 'No'];
+        return def.type === 'dropdown' ? (def.options || []) : [];
+    }
+
+    /**
+     * Attribute picker used everywhere in the builder: Attributes page definitions first,
+     * then contact fields, then older keys already saved on contacts (kept so old flows still show).
+     * opts: { k, label, cur, empty, noMobile }
+     */
+    function attrDropdownHtml(opts) {
+        var cur = String(opts.cur || '');
+        var defs = Flow.meta.attribute_defs || {};
+        var seen = {};
+        var opt = function (value, text) {
+            seen[value] = true;
+            return '<option value="' + esc(value) + '"' + (cur === value ? ' selected' : '') + '>' + esc(text) + '</option>';
+        };
+        var html = '<div class="d-flex justify-content-between align-items-end"><label>' + esc(opts.label || 'Attribute') + '</label>' +
+            '<a class="small" href="' + esc((window.APP && APP.baseUrl ? APP.baseUrl : '') + '/attributes') + '" target="_blank">Manage</a></div>';
+        html += '<select class="form-select insp" data-k="' + esc(opts.k) + '"><option value="">' + esc(opts.empty || '— Select attribute —') + '</option>';
+
+        var defKeys = Object.keys(defs);
+        if (defKeys.length) {
+            html += '<optgroup label="Attributes">';
+            defKeys.forEach(function (k) { html += opt(k, defs[k].label + (defs[k].label.toLowerCase() !== k.toLowerCase() ? ' (' + k + ')' : '')); });
+            html += '</optgroup>';
+        }
+        html += '<optgroup label="Contact fields">';
+        Object.keys(CORE_ATTR_LABELS).forEach(function (k) {
+            if (opts.noMobile && k === 'mobile') return;
+            if (!seen[k]) html += opt(k, CORE_ATTR_LABELS[k]);
         });
-        html += '</datalist>';
+        html += '</optgroup>';
+        var others = knownAttributes([cur]).filter(function (k) { return !seen[k] && !(opts.noMobile && k === 'mobile'); });
+        if (others.length) {
+            html += '<optgroup label="Other saved fields">';
+            others.forEach(function (k) { html += opt(k, k); });
+            html += '</optgroup>';
+        }
+        html += '</select>';
         return html;
+    }
+
+    function attributeSelectHtml(d, extra) {
+        return attrDropdownHtml($.extend({ k: 'attribute', cur: d.attribute || '' }, extra || {}));
     }
 
     function webhookHeaderHtml(d) {
@@ -660,6 +768,12 @@
             html += tagSelectHtml(d);
             html += inspHint('Optional: only when this specific tag is added.');
         }
+        if (t === 'attribute_updated') {
+            html += attributeSelectHtml(d, { empty: 'Any attribute' });
+            html += '<label>New value (optional)</label><input class="form-control insp" data-k="attribute_value" list="inspAttrValueList" value="' + esc(d.attribute_value || '') + '" placeholder="Blank = any change">';
+            html += '<datalist id="inspAttrValueList"></datalist><div class="small text-muted mt-1" id="inspAttrTypeHint"></div>';
+            html += inspHint('Fires when a contact attribute changes (contact edit, inbox, bulk update, keyword or another workflow). Blank attribute = any attribute. Use {{attribute}}, {{attribute_value}}, {{old_value}} in messages.');
+        }
         if (t === 'birthday' || t === 'schedule') {
             html += inspHint('Processed by the daily automations cron.');
         }
@@ -686,6 +800,44 @@
             html += '<label>How many images?</label><input type="number" min="1" max="20" class="form-control insp" data-k="count" value="' + esc(d.count || d.max_images || 1) + '">';
             html += '<label>Prompt message</label><textarea class="form-control insp" data-k="prompt" rows="3" placeholder="Please send your photo…">' + esc(d.prompt || d.text || '') + '</textarea>';
             html += inspHint('Asks the contact for images, then stores them on the contact until the count is met.');
+        } else if (a === 'ask_question') {
+            var rt = d.reply_type || 'text';
+            html += '<label>Question</label><textarea class="form-control insp" data-k="text" rows="3" placeholder="Which city are you from?">' + esc(d.text || '') + '</textarea>';
+            html += '<label>Answer type</label><select class="form-select insp" data-k="reply_type">';
+            [['text', 'Free text'], ['buttons', 'Buttons (max 3)'], ['list', 'List (max 10)']].forEach(function (p) {
+                html += '<option value="' + p[0] + '"' + (rt === p[0] ? ' selected' : '') + '>' + p[1] + '</option>';
+            });
+            html += '</select>';
+            if (rt === 'text') {
+                html += '<label>Validate answer</label><select class="form-select insp" data-k="validation">';
+                [['any', 'Any text'], ['number', 'Number'], ['email', 'Email'], ['phone', 'Phone number']].forEach(function (p) {
+                    html += '<option value="' + p[0] + '"' + ((d.validation || 'any') === p[0] ? ' selected' : '') + '>' + p[1] + '</option>';
+                });
+                html += '</select>';
+            } else {
+                var optText = Array.isArray(d.options) ? d.options.join('\n') : (d.options || '');
+                html += '<label>Options (one per line)</label><textarea class="form-control insp" data-k="options" rows="4" placeholder="Pune&#10;Mumbai&#10;Other">' + esc(optText) + '</textarea>';
+                html += inspHint(rt === 'buttons' ? 'Up to 3 buttons, 20 characters each. Each option gets its own path.' : 'Up to 10 rows, 24 characters each. Each option gets its own path.');
+                if (rt === 'list') {
+                    html += '<label>List button text</label><input class="form-control insp" data-k="list_button" maxlength="20" value="' + esc(d.list_button || 'Choose') + '">';
+                }
+            }
+            html += attrDropdownHtml({ k: 'save_as', label: 'Save answer to attribute', cur: d.save_as || '', empty: "— Don't save —", noMobile: true });
+            html += '<label>Wrong answer message</label><input class="form-control insp" data-k="retry_text" value="' + esc(d.retry_text || '') + '" placeholder="Please choose one of the options.">';
+            html += '<label>Wait for reply (minutes)</label><input type="number" min="1" max="10080" class="form-control insp" data-k="timeout_minutes" value="' + esc(d.timeout_minutes || 1440) + '">';
+            html += inspHint('The flow waits for the reply. A wrong answer is asked once more; no reply in time follows the "No reply" path. Use {{answer}} or {{attributes.' + (d.save_as || 'city') + '}} in later nodes.');
+        } else if (a === 'send_media') {
+            html += '<label>Media type</label><select class="form-select insp" data-k="media_type">';
+            ['image', 'video', 'document'].forEach(function (t) {
+                html += '<option value="' + t + '"' + ((d.media_type || 'image') === t ? ' selected' : '') + '>' + t + '</option>';
+            });
+            html += '</select>';
+            html += '<label>Media URL</label><input class="form-control insp" data-k="media_url" value="' + esc(d.media_url || '') + '" placeholder="https://…/brochure.pdf">';
+            html += '<label>Caption (optional)</label><textarea class="form-control insp" data-k="caption" rows="2">' + esc(d.caption || '') + '</textarea>';
+            if ((d.media_type || 'image') === 'document') {
+                html += '<label>File name (optional)</label><input class="form-control insp" data-k="filename" value="' + esc(d.filename || '') + '" placeholder="brochure.pdf">';
+            }
+            html += inspHint('URL must be public (https). Like text, media is delivered only inside the 24h window.');
         } else if (a === 'send_template') {
             html += templateSelectHtml(d);
             html += inspHint('WhatsApp policy: outside the 24h window this sends only to contacts with recorded WhatsApp opt-in; others are skipped automatically.');
@@ -693,9 +845,10 @@
             html += tagSelectHtml(d);
             html += '<label>Or tag name</label><input class="form-control insp" data-k="tag_name" value="' + esc(d.tag_name || d.labelName || '') + '" placeholder="Tag / label name">';
         } else if (a === 'set_attribute') {
-            html += attributeSelectHtml(d);
-            html += '<label>New value</label><input class="form-control insp" data-k="text" value="' + esc(d.text || d.attributeNewValue || '') + '" placeholder="Value or {{contact.name}}">';
-            html += inspHint('Core fields (name, mobile, email…) update the contact row; others go into custom attributes.');
+            html += attributeSelectHtml(d, { noMobile: true });
+            html += '<label>New value</label><input class="form-control insp" data-k="text" list="inspAttrValueList" value="' + esc(d.text || d.attributeNewValue || '') + '" placeholder="Value or {{contact.name}}">';
+            html += '<datalist id="inspAttrValueList"></datalist><div class="small text-muted mt-1" id="inspAttrTypeHint"></div>';
+            html += inspHint('Core fields (name, email…) update the contact row; others go into custom attributes. Use {{answer}} or {{message}}-style variables for dynamic values.');
         } else if (a === 'assign_agent') {
             html += agentSelectHtml(d);
         } else if (a === 'assign_bot') {
@@ -794,7 +947,19 @@
                     html += '<option value="' + pair[0] + '"' + ((d.operator || 'equals') === pair[0] ? ' selected' : '') + '>' + pair[1] + '</option>';
                 });
                 html += '</select>';
-                html += '<label>Value</label><input class="form-control insp" data-k="value" value="' + esc(d.value || '') + '">';
+                if (d.operator !== 'empty' && d.operator !== 'not_empty') {
+                    var condOpts = attrOptions(d.attribute);
+                    var condDef = (Flow.meta.attribute_defs || {})[String(d.attribute || '')] || null;
+                    if (condOpts.length) {
+                        html += '<label>Value</label><select class="form-select insp" data-k="value"><option value="">—</option>';
+                        condOpts.concat(d.value && condOpts.indexOf(d.value) < 0 ? [d.value] : []).forEach(function (o) {
+                            html += '<option value="' + esc(o) + '"' + (String(d.value || '') === String(o) ? ' selected' : '') + '>' + esc(o) + '</option>';
+                        });
+                        html += '</select>';
+                    } else {
+                        html += '<label>Value</label><input class="form-control insp" data-k="value" type="' + (condDef && condDef.type === 'date' ? 'date' : 'text') + '" value="' + esc(d.value || '') + '">';
+                    }
+                }
             } else {
                 html += '<label>Value</label><input class="form-control insp" data-k="value" value="' + esc(d.value || '') + '">';
             }
@@ -812,6 +977,9 @@
         }
 
         $body.html(html);
+        if (node.data && (node.data.action_type === 'set_attribute' || (node.type === 'trigger' && node.data.trigger_type === 'attribute_updated'))) {
+            refreshAttrValueHelp(node.data.attribute);
+        }
     }
 
     function applyInspector($el) {
@@ -840,12 +1008,27 @@
             node.data.label = ACTION_LABELS[v] || v;
             if (v === 'response_message' && !node.data.text) node.data.text = 'Hello {{contact.name}}!';
             if (v === 'collect_images' && !node.data.count) node.data.count = 1;
+            if (v === 'ask_question') applyAskQuestionDefaults(node);
+            if (v === 'send_media' && !node.data.media_type) node.data.media_type = 'image';
             if (v === 'delay' && !node.data.minutes) { node.data.minutes = 5; node.data.seconds = 300; }
             if ((v === 'webhook' || v === 'webhook_call') && !Array.isArray(node.data.values)) node.data.values = [];
             if ((v === 'webhook' || v === 'webhook_call') && (!node.data.header || typeof node.data.header !== 'object')) {
                 node.data.header = { key: 'Content-Type', value: 'application/json' };
             }
             if ((v === 'webhook' || v === 'webhook_call') && node.data.branches === undefined) node.data.branches = true;
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+            renderInspector();
+            return;
+        }
+        if (node.data.action_type === 'ask_question' && (k === 'reply_type' || k === 'options')) {
+            pruneAskQuestionEdges(node);
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+            if (k === 'reply_type') renderInspector();
+            return;
+        }
+        if (node.data.action_type === 'send_media' && k === 'media_type') {
             renderNodes();
             $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
             renderInspector();
@@ -865,13 +1048,49 @@
         }
         if (k === 'attribute') {
             node.data.attribute = v;
+            if (node.data.action_type === 'set_attribute' || node.data.trigger_type === 'attribute_updated') refreshAttrValueHelp(v);
+        }
+        if (node.type === 'condition' && node.data.condition_type === 'attribute_condition' && (k === 'attribute' || k === 'operator')) {
+            if (k === 'attribute') node.data.value = '';
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+            renderInspector();
+            return;
         }
         if (k === 'template_name') {
             var tpl = (Flow.meta.templates || []).find(function (t) { return t.name === v; });
             if (tpl) node.data.language = tpl.language || node.data.language || 'en_US';
+            node.data.variables = {};
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+            renderInspector();
+            return;
         }
         renderNodes();
         $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+    }
+
+    /** Value suggestions + type hint for "Update attribute" from Contacts → Attributes definitions. */
+    function refreshAttrValueHelp(key) {
+        var def = (Flow.meta.attribute_defs || {})[String(key || '').trim()] || null;
+        var type = def ? def.type : 'text';
+        var options = type === 'boolean' ? ['Yes', 'No'] : (type === 'dropdown' ? (def.options || []) : []);
+        var hints = {
+            number: 'Number attribute — e.g. 1200',
+            date: 'Date attribute — e.g. 2026-09-30 or 30/09/2026',
+            dropdown: 'Dropdown — choose one of: ' + options.join(', '),
+            boolean: 'Yes / No attribute'
+        };
+        $('#inspAttrValueList').html(options.map(function (o) { return '<option value="' + esc(o) + '">'; }).join(''));
+        $('#inspAttrTypeHint').text(def ? (def.label + ': ' + (hints[type] || 'Text attribute')) : (key ? 'Free-text attribute (not defined in Contacts → Attributes)' : ''));
+    }
+
+    function applyAskQuestionDefaults(node) {
+        var d = node.data;
+        if (!d.text) d.text = 'Which city are you from?';
+        if (!d.reply_type) d.reply_type = 'text';
+        if (!d.timeout_minutes) d.timeout_minutes = 1440;
+        if (!d.validation) d.validation = 'any';
     }
 
     function addNodeFromPalette(palette, extra, x, y) {
@@ -913,6 +1132,8 @@
                 node.data.attribute = '';
                 node.data.text = '';
             }
+            if (node.data.action_type === 'ask_question') applyAskQuestionDefaults(node);
+            if (node.data.action_type === 'send_media') node.data.media_type = 'image';
         }
         Flow.nodes.push(node);
         selectNode(node.id);
@@ -1208,6 +1429,13 @@
 
         $('#inspectorBody').on('change input', '.insp', function () {
             applyInspector($(this));
+        });
+        $('#inspectorBody').on('change input', '.insp-var', function () {
+            var node = findNode(Flow.selectedId);
+            if (!node) return;
+            node.data = node.data || {};
+            if (!node.data.variables || typeof node.data.variables !== 'object' || Array.isArray(node.data.variables)) node.data.variables = {};
+            node.data.variables[String($(this).data('var'))] = $(this).val();
         });
         $('#inspectorBody').on('change', '.insp-check', function () {
             var node = findNode(Flow.selectedId);
