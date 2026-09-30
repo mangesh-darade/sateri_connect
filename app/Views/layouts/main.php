@@ -58,6 +58,22 @@
                     <span class="nav-clock-date" id="navAppClockDate">---- -- ----</span>
                 </div>
             </li>
+            <li class="nav-item dropdown d-none" id="navSyncWrap">
+                <a class="nav-link app-topbar-icon position-relative" id="navSyncToggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" href="#" aria-expanded="false" aria-label="Sync status" title="Sync status">
+                    <i class="fas fa-rotate" id="navSyncIcon"></i>
+                    <span class="badge navbar-badge bg-danger d-none" id="navSyncBadge">!</span>
+                </a>
+                <div class="dropdown-menu dropdown-menu-end notif-panel" id="navSyncMenu">
+                    <div class="notif-panel-head">
+                        <div>
+                            <div class="notif-panel-title">Sync</div>
+                            <div class="notif-panel-sub" id="navSyncHeader">Runs automatically every 15 minutes</div>
+                        </div>
+                        <button type="button" class="notif-panel-action" id="navSyncNow">Sync now</button>
+                    </div>
+                    <div class="notif-panel-list" id="navSyncList"></div>
+                </div>
+            </li>
             <li class="nav-item dropdown" id="navNotifWrap">
                 <a class="nav-link app-topbar-icon" id="navNotifToggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" href="#" aria-expanded="false" aria-label="Notifications">
                     <i class="far fa-bell"></i>
@@ -737,6 +753,7 @@
         appName: <?= json_encode($appName) ?>,
         favicon: <?= json_encode($siteFavicon !== '' ? $siteFavicon : base_url('assets/img/avatar.png')) ?>,
         liveNotif: true,
+        autoSyncJobs: <?= json_encode(function_exists('can') ? (new \App\Libraries\AutoSyncService())->jobs(static fn (string $p): bool => can($p)) : []) ?>,
         timezone: <?= json_encode($appTimezone) ?>,
         whatsappProvider: <?= json_encode(function_exists('whatsapp_provider') ? whatsapp_provider() : 'cheerio') ?>,
         whatsappProviderShort: <?= json_encode(function_exists('whatsapp_provider_short') ? whatsapp_provider_short() : 'Cheerio') ?>,

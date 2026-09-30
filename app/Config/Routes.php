@@ -219,6 +219,9 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->get('wa-identity/refresh', 'WaIdentity::refresh');
     $routes->post('wa-identity/refresh', 'WaIdentity::refresh', ['filter' => 'csrf']);
 
+    // Background sync on app open (contacts, ElintOm customers, templates)
+    $routes->post('sync/auto', 'AutoSync::run', ['filter' => 'csrf']);
+
     // Automations
     $routes->get('automations', 'Automations::index');
     $routes->get('automations/create', 'Automations::create');

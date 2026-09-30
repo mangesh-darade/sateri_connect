@@ -1043,10 +1043,168 @@
     APP.applyWaIdentity = applyWaIdentity;
     APP.refreshWaIdentity = refreshWaIdentity;
 
+    /**
+     * Background sync (contacts, ElintOm customers, templates) when the app is opened.
+     * Jobs run in parallel; a failing job is reported but never stops the others.
+     * Server throttles each job per tenant; the browser also skips calls within the same window.
+     */
+    var AutoSync = {
+        storeKey: 'appAutoSyncState:' + (APP.baseUrl || ''),
+        intervalMs: 15 * 60 * 1000,
+        running: false,
+
+        jobs: function () {
+            return Array.isArray(APP.autoSyncJobs) ? APP.autoSyncJobs : [];
+        },
+
+        loadState: function () {
+            try { return JSON.parse(window.localStorage.getItem(this.storeKey) || '{}') || {}; } catch (e) { return {}; }
+        },
+
+        saveState: function (state) {
+            try { window.localStorage.setItem(this.storeKey, JSON.stringify(state)); } catch (e) {}
+        },
+
+        render: function (state) {
+            var jobs = this.jobs();
+            var failed = 0;
+            var html = jobs.map(function (job) {
+                var r = (state.results || {})[job.key] || {};
+                var icon = 'fa-circle text-muted';
+                var text = 'Waiting for first sync';
+                if (r.status === 'running') {
+                    icon = 'fa-spinner fa-spin text-primary';
+                    text = 'Syncing…';
+                } else if (r.status === 'ok') {
+                    icon = 'fa-circle-check text-success';
+                    text = r.message || 'Up to date';
+                } else if (r.status === 'error') {
+                    failed++;
+                    icon = 'fa-circle-exclamation text-danger';
+                    text = r.message || 'Sync failed';
+                }
+                var meta = r.at ? APP.formatTime(new Date(r.at).toISOString()) + (r.ms ? ' · ' + (r.ms / 1000).toFixed(1) + 's' : '') : '';
+                return '<div class="notif-item d-flex gap-2 align-items-start px-3 py-2">' +
+                    '<i class="fas ' + icon + ' mt-1"></i>' +
+                    '<div class="flex-grow-1 small"><div class="fw-semibold">' + APP.escapeHtml(job.label) + '</div>' +
+                    '<div class="text-break' + (r.status === 'error' ? ' text-danger' : ' text-muted') + '">' + APP.escapeHtml(text) + '</div>' +
+                    (meta ? '<div class="text-muted" style="font-size:.75rem">' + APP.escapeHtml(meta) + '</div>' : '') +
+                    '</div></div>';
+            }).join('');
+
+            $('#navSyncList').html(html);
+            $('#navSyncIcon').toggleClass('fa-spin', this.running);
+            $('#navSyncNow').prop('disabled', this.running).text(this.running ? 'Syncing…' : 'Sync now');
+            $('#navSyncBadge').toggleClass('d-none', this.running || failed === 0).text(failed || '!');
+            $('#navSyncHeader').text(this.running ? 'Sync in progress…'
+                : (failed ? failed + ' sync' + (failed > 1 ? 's' : '') + ' failed — others completed'
+                    : 'Runs automatically every 15 minutes'));
+        },
+
+        runJob: function (job, force, state) {
+            var self = this;
+            var started = Date.now();
+            state.results[job.key] = $.extend({}, state.results[job.key], { status: 'running' });
+            self.render(state);
+
+            return APP.post((APP.baseUrl || '') + '/sync/auto', { job: job.key, force: force ? 1 : 0 }, { global: false, timeout: 310000 })
+                .then(function (res) {
+                    var d = (res && res.data) || {};
+                    if (!d.ran && res && res.success) {
+                        state.results[job.key] = $.extend({}, state.results[job.key], { status: state.results[job.key].prev || 'ok' });
+                        return { job: job, ok: true, changed: 0 };
+                    }
+                    state.results[job.key] = {
+                        status: res && res.success ? 'ok' : 'error',
+                        message: (res && res.message) || '',
+                        ms: d.ms || (Date.now() - started),
+                        at: Date.now()
+                    };
+                    return { job: job, ok: !!(res && res.success), changed: d.changed || 0, message: res && res.message };
+                }, function (xhr) {
+                    var msg = (xhr.responseJSON && xhr.responseJSON.message) || (xhr.statusText === 'timeout' ? 'Timed out' : 'Request failed (' + (xhr.status || 'network') + ')');
+                    state.results[job.key] = { status: 'error', message: msg, ms: Date.now() - started, at: Date.now() };
+                    return $.Deferred().resolve({ job: job, ok: false, changed: 0, message: msg }).promise();
+                })
+                .always(function () {
+                    self.saveState(state);
+                    self.render(state);
+                });
+        },
+
+        run: function (force) {
+            var self = this;
+            var jobs = self.jobs();
+            var state = self.loadState();
+            state.results = state.results || {};
+            if (!jobs.length || self.running) return $.Deferred().resolve([]).promise();
+            if (!force && Date.now() - (state.lastRun || 0) < self.intervalMs - 5000) {
+                self.render(state);
+                return $.Deferred().resolve([]).promise();
+            }
+
+            Object.keys(state.results).forEach(function (k) { state.results[k].prev = state.results[k].status; });
+            state.lastRun = Date.now();
+            self.running = true;
+            self.saveState(state);
+
+            return $.when.apply($, jobs.map(function (job) { return self.runJob(job, force, state); }))
+                .then(function () {
+                    var outcomes = Array.prototype.slice.call(arguments);
+                    self.running = false;
+                    self.saveState(state);
+                    self.render(state);
+                    self.afterRun(outcomes, force);
+                    return outcomes;
+                });
+        },
+
+        afterRun: function (outcomes, force) {
+            var failed = outcomes.filter(function (o) { return o && !o.ok; });
+            var changed = outcomes.filter(function (o) { return o && o.ok && o.changed > 0; });
+
+            if (changed.some(function (o) { return o.job.key === 'contacts' || o.job.key === 'elintom'; })
+                && $.fn.DataTable && $.fn.DataTable.isDataTable('#contactsTable')) {
+                $('#contactsTable').DataTable().ajax.reload(null, false);
+            }
+            var errorKey = failed.map(function (o) { return o.job.key + ':' + o.message; }).join('|');
+            var state = this.loadState();
+            if (failed.length && (force || errorKey !== state.lastErrorKey)) {
+                APP.toast('Sync issue — ' + failed.map(function (o) { return o.job.label + ': ' + o.message; }).join(' | '), 'warning');
+            } else if (force && !failed.length) {
+                APP.toast('Sync complete.', 'success');
+            }
+            state.lastErrorKey = errorKey;
+            this.saveState(state);
+            $(document).trigger('app:autosync', [outcomes]);
+        },
+
+        init: function () {
+            if (!this.jobs().length) return;
+            var self = this;
+            $('#navSyncWrap').removeClass('d-none');
+            $(document).on('click', '#navSyncNow', function (e) {
+                e.preventDefault();
+                self.run(true);
+            });
+            self.run(false);
+            // Keep syncing while the app stays open; hidden tabs skip, the next visible tick catches up.
+            window.setInterval(function () {
+                if (!document.hidden) self.run(false);
+            }, self.intervalMs);
+            $(document).on('visibilitychange', function () {
+                if (!document.hidden) self.run(false);
+            });
+        }
+    };
+
+    APP.autoSync = function (force) { return AutoSync.run(!!force); };
+
     $(function () {
         initNavTimezoneClock();
         LiveNotif.start();
         refreshWaIdentityIfNeeded();
+        AutoSync.init();
 
         function refreshLucideIcons() {
             if (window.lucide && typeof window.lucide.createIcons === 'function') {
