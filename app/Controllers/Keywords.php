@@ -42,6 +42,8 @@ class Keywords extends BaseController
             'parents'      => model(KeywordModel::class)->where('parent_id', null)->orderBy('menu_order', 'ASC')->findAll(),
             'automations'  => model(\App\Models\AutomationModel::class)->where('is_active', 1)->orderBy('name', 'ASC')->findAll(),
             'templates'    => model(\App\Models\TemplateModel::class)->where('status', 'APPROVED')->orderBy('name', 'ASC')->findAll(),
+            'tags'         => model(\App\Models\TagModel::class)->orderBy('name', 'ASC')->findAll(),
+            'attributeKeys'=> \App\Libraries\ContactAttributes::knownKeys(),
         ]);
     }
 
@@ -60,6 +62,10 @@ class Keywords extends BaseController
         if (! $this->validate($rules)) {
             return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
         }
+        $actions = service('keywordBot')->parseActions($this->request->getPost());
+        if ($actions['errors'] !== []) {
+            return redirect()->back()->withInput()->with('errors', $actions['errors']);
+        }
 
         $payload = $this->request->getPost('response_payload');
         if (is_string($payload) && $payload !== '') {
@@ -74,11 +80,11 @@ class Keywords extends BaseController
             'match_type'       => $this->request->getPost('match_type'),
             'response_type'    => $this->request->getPost('response_type') ?: 'text',
             'response_content' => $this->request->getPost('response_content'),
-            'response_payload' => $this->normalizeKeywordPayload(
+            'response_payload' => $this->withKeywordActions($this->normalizeKeywordPayload(
                 is_array($payload) ? $payload : null,
                 (string) ($this->request->getPost('response_type') ?: 'text'),
                 (string) ($this->request->getPost('response_content') ?? '')
-            ),
+            ), $actions['actions']),
             'parent_id'        => $this->request->getPost('parent_id') ?: null,
             'menu_order'       => (int) ($this->request->getPost('menu_order') ?? ($maxOrder + 1)),
             'is_active'        => (int) ($this->request->getPost('is_active') ?? 0),
@@ -114,6 +120,8 @@ class Keywords extends BaseController
                 ->findAll(),
             'automations' => model(\App\Models\AutomationModel::class)->where('is_active', 1)->orderBy('name', 'ASC')->findAll(),
             'templates'   => model(\App\Models\TemplateModel::class)->where('status', 'APPROVED')->orderBy('name', 'ASC')->findAll(),
+            'tags'        => model(\App\Models\TagModel::class)->orderBy('name', 'ASC')->findAll(),
+            'attributeKeys' => \App\Libraries\ContactAttributes::knownKeys(),
         ]);
     }
 
@@ -136,6 +144,10 @@ class Keywords extends BaseController
         if (! $this->validate($rules)) {
             return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
         }
+        $actions = service('keywordBot')->parseActions($this->request->getPost());
+        if ($actions['errors'] !== []) {
+            return redirect()->back()->withInput()->with('errors', $actions['errors']);
+        }
 
         $payload = $this->request->getPost('response_payload');
         if (is_string($payload) && $payload !== '') {
@@ -148,11 +160,11 @@ class Keywords extends BaseController
             'match_type'       => $this->request->getPost('match_type'),
             'response_type'    => $this->request->getPost('response_type') ?: 'text',
             'response_content' => $this->request->getPost('response_content'),
-            'response_payload' => $this->normalizeKeywordPayload(
+            'response_payload' => $this->withKeywordActions($this->normalizeKeywordPayload(
                 is_array($payload) ? $payload : null,
                 (string) ($this->request->getPost('response_type') ?: 'text'),
                 (string) ($this->request->getPost('response_content') ?? '')
-            ),
+            ), $actions['actions']),
             'parent_id'        => $this->request->getPost('parent_id') ?: null,
             'menu_order'       => (int) ($this->request->getPost('menu_order') ?? 0),
             'is_active'        => (int) ($this->request->getPost('is_active') ?? 0),
@@ -246,5 +258,24 @@ class Keywords extends BaseController
         $payload['_generated'] = ! empty($payload['_generated']);
 
         return $payload;
+    }
+
+    /**
+     * Form "Also do" fields are the source of truth for `_actions` (stale JSON copies are replaced).
+     *
+     * @param array<string, mixed>|null $payload
+     * @param array<string, mixed>      $actions
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function withKeywordActions(?array $payload, array $actions): ?array
+    {
+        $payload = $payload ?? [];
+        unset($payload['_actions']);
+        if ($actions !== []) {
+            $payload['_actions'] = $actions;
+        }
+
+        return $payload === [] ? null : $payload;
     }
 }

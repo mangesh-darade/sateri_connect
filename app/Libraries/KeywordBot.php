@@ -61,6 +61,7 @@ class KeywordBot
         if ($match === null) {
             return ['matched' => false, 'keyword_id' => null, 'response' => null];
         }
+        $match['_inbound_text'] = $messageText;
 
         return $this->sendMatchedReply($contactId, $match);
     }
@@ -90,6 +91,11 @@ class KeywordBot
         $contact = $this->contacts->find($contactId);
         if ($contact === null) {
             throw new RuntimeException('Contact not found: ' . $contactId);
+        }
+
+        $this->applyKeywordActions($contactId, $match);
+        if (($match['response_type'] ?? '') === 'none') {
+            return ['matched' => true, 'keyword_id' => (int) $match['id'], 'response' => null];
         }
 
         $to = $this->api->normalizePhone((string) ($contact['mobile'] ?? ''));
@@ -156,6 +162,106 @@ class KeywordBot
         } finally {
             $this->api->clearForcedProvider();
             $this->sendProvider = null;
+        }
+    }
+
+    /**
+     * Keyword form "Also do" fields → payload `_actions` (add to groups, set attributes).
+     *
+     * @param array<string, mixed> $post
+     *
+     * @return array{actions: array{add_tags?: list<string>, set_attributes?: list<array{key: string, value: string}>}, errors: list<string>}
+     */
+    public function parseActions(array $post): array
+    {
+        $actions = [];
+        $errors  = [];
+
+        $tags = [];
+        foreach (explode(',', (string) ($post['kw_add_tags'] ?? '')) as $name) {
+            $name = trim($name);
+            if ($name === '') {
+                continue;
+            }
+            if (mb_strlen($name) > 100) {
+                $errors[] = "Group \"{$name}\" is too long (max 100 characters).";
+                continue;
+            }
+            $tags[mb_strtolower($name)] ??= $name;
+        }
+        if ($tags !== []) {
+            $actions['add_tags'] = array_values($tags);
+        }
+
+        $keys   = (array) ($post['kw_attr_key'] ?? []);
+        $values = (array) ($post['kw_attr_value'] ?? []);
+        $attrs  = service('contactAttributes');
+        $set    = [];
+        foreach ($keys as $i => $key) {
+            $key   = trim((string) $key);
+            $value = trim((string) ($values[$i] ?? ''));
+            if ($key === '') {
+                continue;
+            }
+            if (! preg_match(ContactAttributeService::KEY_PATTERN, $key) || $key === 'mobile') {
+                $errors[] = "Attribute \"{$key}\" is not a valid attribute name.";
+                continue;
+            }
+            $check = $attrs->normalizeValue($key, $value);
+            if (! $check['ok'] && ! str_contains($value, '{{')) {
+                $errors[] = $attrs->label($key) . ': ' . $check['error'];
+                continue;
+            }
+            $set[] = ['key' => $key, 'value' => $check['ok'] ? $check['value'] : $value];
+        }
+        if ($set !== []) {
+            $actions['set_attributes'] = $set;
+        }
+
+        return ['actions' => $actions, 'errors' => $errors];
+    }
+
+    /**
+     * Run a keyword's direct actions for the contact. Never blocks the reply.
+     * Attribute values may use {{message}} (the customer's text) and contact placeholders.
+     *
+     * @param array<string, mixed> $match
+     */
+    public function applyKeywordActions(int $contactId, array $match, string $inboundText = ''): void
+    {
+        $payload = $match['response_payload'] ?? null;
+        if (is_string($payload)) {
+            $payload = json_decode($payload, true);
+        }
+        $actions = is_array($payload) && is_array($payload['_actions'] ?? null) ? $payload['_actions'] : [];
+        if ($actions === []) {
+            return;
+        }
+
+        $tagModel = model(\App\Models\TagModel::class);
+        foreach ((array) ($actions['add_tags'] ?? []) as $name) {
+            try {
+                $tag = $tagModel->findOrCreateByName((string) $name);
+                if (! empty($tag['id'])) {
+                    $tagModel->attachContact((int) $tag['id'], $contactId);
+                }
+            } catch (Throwable $e) {
+                log_message('warning', 'Keyword #{id} add group "{tag}" failed: {msg}', ['id' => $match['id'] ?? 0, 'tag' => $name, 'msg' => $e->getMessage()]);
+            }
+        }
+
+        $attrs   = service('contactAttributes');
+        $contact = $this->contacts->find($contactId) ?? [];
+        $inbound = $inboundText !== '' ? $inboundText : (string) ($match['_inbound_text'] ?? '');
+        foreach ((array) ($actions['set_attributes'] ?? []) as $row) {
+            $key   = (string) ($row['key'] ?? '');
+            $value = str_replace('{{message}}', $inbound, (string) ($row['value'] ?? ''));
+            $value = service('quickReplies')->render($value, $contact);
+            try {
+                $attrs->setContactValue($contactId, $key, $value);
+            } catch (Throwable $e) {
+                log_message('warning', 'Keyword #{id} set attribute "{key}" failed: {msg}', ['id' => $match['id'] ?? 0, 'key' => $key, 'msg' => $e->getMessage()]);
+            }
         }
     }
 

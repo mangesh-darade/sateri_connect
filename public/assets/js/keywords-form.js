@@ -219,6 +219,10 @@
             });
         }
 
+        if (type === 'none') {
+            return Object.assign(base, { type: 'none' });
+        }
+
         if (type === 'menu') {
             return Object.assign(base, {
                 type: 'menu',

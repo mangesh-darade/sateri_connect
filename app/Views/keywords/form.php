@@ -61,6 +61,7 @@ $providerShort = function_exists('whatsapp_provider_short') ? whatsapp_provider_
                             'buttons'  => 'Reply buttons',
                             'menu'     => 'Menu (from children)',
                             'workflow' => 'Start workflow',
+                            'none'     => 'No reply (actions only)',
                         ];
                         $curType = old('response_type') ?? ($keyword['response_type'] ?? 'text');
                         foreach ($responseTypes as $v => $l):
@@ -139,6 +140,58 @@ $providerShort = function_exists('whatsapp_provider_short') ? whatsapp_provider_
                         echo esc(is_array($rp) ? json_encode($rp, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) : (string) $rp);
                     ?></textarea>
                     <div class="form-text" id="kwPayloadHint">Auto-generated for <?= esc($providerShort) ?>. Manual edits are kept until you change content/type or click Regenerate.</div>
+                </div>
+                <?php
+                $rpArr     = is_array($rp) ? $rp : (json_decode((string) $rp, true) ?: []);
+                $kwActions = is_array($rpArr['_actions'] ?? null) ? $rpArr['_actions'] : [];
+                $oldKeys   = old('kw_attr_key');
+                $oldValues = old('kw_attr_value');
+                $attrRows  = is_array($oldKeys)
+                    ? array_map(static fn ($k, $v) => ['key' => $k, 'value' => $v], $oldKeys, (array) $oldValues)
+                    : (array) ($kwActions['set_attributes'] ?? []);
+                $attrRows  = array_pad(array_values($attrRows), max(3, count($attrRows)), ['key' => '', 'value' => '']);
+                ?>
+                <div class="col-12">
+                    <hr class="my-2">
+                    <div class="fw-semibold small">Also do when this keyword matches <span class="text-muted fw-normal">(optional)</span></div>
+                    <div class="form-text mt-0 mb-2">Tag the customer and save details straight away — no workflow needed.</div>
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label" for="kwAddTags">Add to groups</label>
+                    <input type="text" name="kw_add_tags" id="kwAddTags" class="form-control" list="kwTagList" maxlength="500"
+                           value="<?= esc(old('kw_add_tags') ?? implode(', ', (array) ($kwActions['add_tags'] ?? []))) ?>"
+                           placeholder="e.g. Pricing lead, Pune">
+                    <datalist id="kwTagList">
+                        <?php foreach (($tags ?? []) as $tag): ?>
+                            <option value="<?= esc($tag['name']) ?>">
+                        <?php endforeach; ?>
+                    </datalist>
+                    <div class="form-text">Comma separated. New groups are created automatically.</div>
+                </div>
+                <div class="col-12">
+                    <div class="d-flex justify-content-between align-items-end mb-1">
+                        <label class="form-label mb-0">Set attributes</label>
+                        <a href="<?= site_url('attributes') ?>" class="small" target="_blank">Manage attributes</a>
+                    </div>
+                    <?php $kwAttrDefs = $attributeDefs ?? service('contactAttributes')->definitions(); ?>
+                    <?php foreach ($attrRows as $row): ?>
+                        <div class="row g-2 mb-1">
+                            <div class="col-5">
+                                <?= view('partials/attribute_select', [
+                                    'name'          => 'kw_attr_key[]',
+                                    'selected'      => (string) ($row['key'] ?? ''),
+                                    'attributeDefs' => $kwAttrDefs,
+                                    'attributeKeys' => $attributeKeys ?? [],
+                                    'class'         => 'form-select form-select-sm',
+                                ], ['saveData' => false]) ?>
+                            </div>
+                            <div class="col-7">
+                                <input type="text" name="kw_attr_value[]" class="form-control form-control-sm" maxlength="1000"
+                                       value="<?= esc((string) ($row['value'] ?? '')) ?>" placeholder="value, e.g. Pricing or {{message}}">
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                    <div class="form-text">Use <code>{{message}}</code> to save what the customer typed. Typed attributes (number, date, dropdown) are checked on save.</div>
                 </div>
             </div>
         </div>
