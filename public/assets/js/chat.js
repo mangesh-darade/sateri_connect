@@ -43,7 +43,7 @@
     }
 
     function escapeHtml(str) {
-        return $('<div>').text(str == null ? '' : String(str)).html();
+        return APP.escapeHtml(str);
     }
 
     function formatTime(ts) {

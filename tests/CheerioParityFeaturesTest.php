@@ -368,6 +368,10 @@ try {
     $hit = static fn (string $t) => (int) ($bot->findMatch($t)['id'] ?? 0);
     check('KM7 Keywords: exact "zqahi" only whole message; contains list matches "yo zqayo mangesh"',
         (int) $hit('ZQAHI') === $kwIds[0] && (int) $hit('zqahi mangesh') !== $kwIds[0] && (int) $hit('yo zqayo mangesh') === $kwIds[1]);
+    $contacts->update($c3, ['wa_opted_out_at' => date('Y-m-d H:i:s')]);
+    $optRes = $bot->matchAndReply($c3, 'zqahi');
+    check('KM8 Keywords: opted-out contact gets no auto-reply (policy gate before WhatsApp API)', ! empty($optRes['matched']) && $optRes['response'] === null, json_encode($optRes));
+    $contacts->update($c3, ['wa_opted_out_at' => null]);
     $db->table('keywords')->whereIn('id', $kwIds)->delete();
 
     // ---------------- 8. Delete definition keeps values ----------------

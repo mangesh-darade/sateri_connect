@@ -98,6 +98,15 @@ class KeywordBot
             return ['matched' => true, 'keyword_id' => (int) $match['id'], 'response' => null];
         }
 
+        // Same WhatsApp policy gate as the queue: no automated replies to opted-out / blocked contacts.
+        $kind  = ($match['response_type'] ?? '') === 'template' ? WhatsAppConsentService::KIND_TEMPLATE : WhatsAppConsentService::KIND_SESSION;
+        $check = service('whatsAppConsent')->eligibility($contact, $kind, true);
+        if (! $check['ok']) {
+            log_message('notice', 'KeywordBot reply skipped for contact {id}: {reason}', ['id' => $contactId, 'reason' => $check['message'] ?? 'policy']);
+
+            return ['matched' => true, 'keyword_id' => (int) $match['id'], 'response' => null];
+        }
+
         $to = $this->api->normalizePhone((string) ($contact['mobile'] ?? ''));
         if ($to === '') {
             throw new RuntimeException('Contact has no valid mobile number.');

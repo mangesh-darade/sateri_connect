@@ -28,7 +28,7 @@
     }
 
     function esc(s) {
-        return $('<div>').text(s == null ? '' : String(s)).html();
+        return APP.escapeHtml(s);
     }
 
     function toast(msg, type) {

@@ -91,9 +91,9 @@
                         return '<input type="checkbox" class="form-check-input contact-check" value="' + id + '" aria-label="Select contact">';
                     }
                 },
-                { data: 'name', defaultContent: '—' },
-                { data: 'mobile', defaultContent: '—' },
-                { data: 'email', defaultContent: '—' },
+                { data: 'name', defaultContent: '—', render: function (v) { return v ? escHtml(v) : '—'; } },
+                { data: 'mobile', defaultContent: '—', render: function (v) { return v ? escHtml(v) : '—'; } },
+                { data: 'email', defaultContent: '—', render: function (v) { return v ? escHtml(v) : '—'; } },
                 {
                     data: 'tags',
                     orderable: false,
@@ -111,8 +111,8 @@
                             var name = String(t.name || t || '');
                             var color = t.color || '#667085';
                             var short = name.length > 18 ? name.slice(0, 16) + '…' : name;
-                            return '<span class="badge contact-tag-badge me-1" style="background:' + color + '" title="' +
-                                $('<div>').text(name).html() + '">' + $('<div>').text(short).html() + '</span>';
+                            return '<span class="badge contact-tag-badge me-1" style="background:' + escHtml(color) + '" title="' +
+                                escHtml(name) + '">' + escHtml(short) + '</span>';
                         }).join('');
                     }
                 },
@@ -215,7 +215,7 @@
     };
 
     function escHtml(value) {
-        return $('<div>').text(value == null ? '' : String(value)).html();
+        return APP.escapeHtml(value);
     }
 
     function consentState(row) {
@@ -466,7 +466,7 @@
         });
 
         function esc(s) {
-            return $('<div>').text(s == null ? '' : String(s)).html();
+            return APP.escapeHtml(s);
         }
 
         function csrfHeaders() {

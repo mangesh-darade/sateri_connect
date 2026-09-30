@@ -52,7 +52,7 @@ class ContactExportService
 
         $out = fopen('php://temp', 'r+');
         fwrite($out, "\xEF\xBB\xBF"); // Excel: read Marathi / Hindi names as UTF-8
-        fputcsv($out, $header, ',', '"', '');
+        fputcsv($out, array_map([$this, 'safeCell'], $header), ',', '"', '');
         foreach ($rows as $c) {
             $line = [
                 $c['id'], $c['name'] ?? '', $c['mobile'] ?? '', $c['email'] ?? '', $c['country'] ?? '',
@@ -85,7 +85,7 @@ class ContactExportService
     /**
      * Stop spreadsheet formula injection (=, @, and +/- not followed by a number).
      */
-    protected function safeCell(mixed $value): string
+    public static function safeCell(mixed $value): string
     {
         $value = (string) $value;
         if ($value !== '' && (in_array($value[0], ['=', '@'], true) || (in_array($value[0], ['+', '-'], true) && ! is_numeric(substr($value, 1))))) {
