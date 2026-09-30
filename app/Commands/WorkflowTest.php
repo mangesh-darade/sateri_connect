@@ -220,6 +220,8 @@ class WorkflowTest extends BaseCommand
         $db->table('automation_delayed_jobs')->whereIn('automation_id', [$autoId, $termAutoId])->delete();
         $db->table('automation_rules')->whereIn('automation_id', [$autoId, $termAutoId])->delete();
         $db->table('automations')->whereIn('id', [$autoId, $termAutoId])->delete();
+        $db->table('message_queue')->where('contact_id', $contactId)->where('status', 'pending')->delete();
+        $db->table('sequence_enrollments')->where('contact_id', $contactId)->delete();
 
         CLI::newLine();
         CLI::write("Result: {$pass} passed, {$fail} failed", $fail > 0 ? 'red' : 'green');

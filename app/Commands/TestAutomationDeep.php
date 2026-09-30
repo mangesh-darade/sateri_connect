@@ -34,6 +34,9 @@ class TestAutomationDeep extends BaseCommand
         '--keep' => 'Keep temporary test automation instead of deleting it.',
     ];
 
+    /** Dummy number so test replies never queue for a real customer. */
+    protected const TEST_MOBILE = '919999003001';
+
     /** @var list<array{ok: bool, section: string, name: string, detail: string}> */
     protected array $results = [];
 
@@ -67,6 +70,10 @@ class TestAutomationDeep extends BaseCommand
         $this->sectionGraphPerTrigger();
         $this->sectionLiveTriggerFlows($contactId, $tagId, $keep);
         $this->sectionEndToEnd($contactId, $tagId, $keep);
+
+        if (! $keep) {
+            db_connect()->table('message_queue')->where('contact_id', $contactId)->where('status', 'pending')->delete();
+        }
 
         CLI::newLine();
         $pass = count(array_filter($this->results, static fn ($r) => $r['ok']));
@@ -111,7 +118,18 @@ class TestAutomationDeep extends BaseCommand
      */
     protected function pickContact(): ?array
     {
-        return model(ContactModel::class)->orderBy('id', 'ASC')->first();
+        $model   = model(ContactModel::class);
+        $contact = $model->findByMobile(self::TEST_MOBILE, true);
+        if ($contact === null) {
+            $id = (int) $model->insert(['channel' => 'whatsapp', 'name' => 'Automation Test', 'mobile' => self::TEST_MOBILE, 'status' => 'active']);
+
+            return $id > 0 ? $model->find($id) : null;
+        }
+        if (! empty($contact['deleted_at'])) {
+            db_connect()->table('contacts')->where('id', $contact['id'])->update(['deleted_at' => null]);
+        }
+
+        return $model->find((int) $contact['id']);
     }
 
     protected function ensureTag(string $name): int
