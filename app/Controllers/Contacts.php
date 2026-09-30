@@ -6,6 +6,8 @@ namespace App\Controllers;
 
 use App\Libraries\ActivityLogger;
 use App\Libraries\ContactAttributes;
+use App\Libraries\ContactExportService;
+use App\Libraries\ContactListFilter;
 use App\Models\ContactModel;
 use App\Models\InternalNoteModel;
 use App\Models\MessageModel;
@@ -28,24 +30,20 @@ class Contacts extends BaseController
         }
 
         return $this->render('contacts/index', [
-            'pageTitle' => 'Contacts',
-            'tags'      => model(TagModel::class)->orderBy('name', 'ASC')->findAll(),
+            'pageTitle'      => 'Contacts',
+            'tags'           => model(TagModel::class)->orderBy('name', 'ASC')->findAll(),
+            'attributeKeys'  => ContactAttributes::knownKeys(),
+            'attributeDefs'  => service('contactAttributes')->definitions(),
+            'attributeOps'   => ContactListFilter::ATTRIBUTE_OPS,
         ]);
     }
 
     protected function datatable(): ResponseInterface
     {
-        $draw       = (int) ($this->request->getGet('draw') ?? 1);
-        $start      = (int) ($this->request->getGet('start') ?? 0);
-        $length     = (int) ($this->request->getGet('length') ?? 25);
-        $search     = (string) ($this->request->getGet('search')['value'] ?? $this->request->getGet('search') ?? '');
-        $status     = (string) ($this->request->getGet('status') ?? '');
-        $tagId      = (int) ($this->request->getGet('tag_id') ?? 0);
-        $assignedTo = (int) ($this->request->getGet('assigned_to') ?? 0);
-        $consent    = (string) ($this->request->getGet('consent') ?? '');
-        if (! service('whatsAppConsent')->hasConsentColumns()) {
-            $consent = '';
-        }
+        $draw    = (int) ($this->request->getGet('draw') ?? 1);
+        $start   = (int) ($this->request->getGet('start') ?? 0);
+        $length  = (int) ($this->request->getGet('length') ?? 25);
+        $filters = ContactListFilter::fromInput($this->request->getGet() ?? []);
 
         $length = max(1, min(500, $length));
 
@@ -53,47 +51,13 @@ class Contacts extends BaseController
 
         $total = $db->table('contacts')->where('deleted_at', null)->countAllResults();
 
-        $applyFilters = static function ($builder) use ($search, $status, $tagId, $assignedTo, $consent) {
-            switch ($consent) {
-                case 'opted_in':
-                    $builder->where('c.wa_opt_in', 1)->where('c.wa_opted_out_at', null);
-                    break;
-                case 'no_opt_in':
-                    $builder->where('c.wa_opt_in', 0)->where('c.wa_opted_out_at', null);
-                    break;
-                case 'opted_out':
-                    $builder->where('c.wa_opted_out_at IS NOT NULL', null, false);
-                    break;
-                case 'suppressed':
-                    $builder->where('c.wa_suppressed_until >', date('Y-m-d H:i:s'));
-                    break;
-            }
-            if ($search !== '') {
-                $builder->groupStart()
-                    ->like('c.name', $search)
-                    ->orLike('c.mobile', $search)
-                    ->orLike('c.email', $search)
-                    ->groupEnd();
-            }
-            if ($status !== '') {
-                $builder->where('c.status', $status);
-            }
-            if ($tagId > 0) {
-                $builder->where('ct.tag_id', $tagId);
-            }
-            if ($assignedTo > 0) {
-                $builder->where('c.assigned_to', $assignedTo);
-            }
-
-            return $builder;
-        };
+        $applyFilters = static fn ($builder) => ContactListFilter::apply($builder, $filters);
 
         $countBuilder = $db->table('contacts c')
             ->select('c.id')
-            ->join('contact_tags ct', 'ct.contact_id = c.id', 'left')
             ->where('c.deleted_at', null);
         $applyFilters($countBuilder);
-        $recordsFiltered = (int) $countBuilder->distinct()->countAllResults();
+        $recordsFiltered = (int) $countBuilder->countAllResults();
 
         $builder = $db->table('contacts c')
             ->select('c.*, GROUP_CONCAT(DISTINCT CONCAT(t.name, "\x1f", IFNULL(t.color, "#667085")) ORDER BY t.name SEPARATOR "\x1e") AS tags_raw')
@@ -114,13 +78,17 @@ class Contacts extends BaseController
             5 => 'c.status',
             6 => 'c.last_message_at',
         ];
+        // Attribute columns follow "Last Message" in the same order as definitions() (keys are KEY_PATTERN-safe).
+        foreach (array_keys(service('contactAttributes')->definitions()) as $i => $attrKey) {
+            $columns[7 + $i] = "JSON_UNQUOTE(JSON_EXTRACT(c.custom_fields, '$.\"{$attrKey}\"'))";
+        }
         $orderBy = $columns[$orderCol] ?? 'c.id';
 
         // Default / activity sort: newest contacts first (NULL last_message_at no longer hides them).
         if ($orderBy === 'c.last_message_at') {
             $builder->orderBy('c.id', $orderDir);
         } else {
-            $builder->orderBy($orderBy, $orderDir)->orderBy('c.id', 'DESC');
+            $builder->orderBy($orderBy, $orderDir, ! str_starts_with($orderBy, 'JSON_'))->orderBy('c.id', 'DESC');
         }
 
         $rows = $builder
@@ -194,6 +162,7 @@ class Contacts extends BaseController
             'tags'      => model(TagModel::class)->orderBy('name', 'ASC')->findAll(),
             'selectedTags' => [],
             'attributeKeys' => ContactAttributes::knownKeys(),
+            'attributeDefs' => service('contactAttributes')->definitions(),
         ]);
     }
 
@@ -224,6 +193,10 @@ class Contacts extends BaseController
         if ($model->findByMobile($mobile) !== null) {
             return redirect()->back()->withInput()->with('error', 'A contact with this mobile number already exists.');
         }
+        $customFields = $this->validatedCustomFields();
+        if (is_string($customFields)) {
+            return redirect()->back()->withInput()->with('error', $customFields);
+        }
 
         $id = $model->insert([
             'name'          => $this->request->getPost('name'),
@@ -234,7 +207,7 @@ class Contacts extends BaseController
             'status'        => $this->request->getPost('status') ?: 'active',
             'birthday'      => $this->request->getPost('birthday') ?: null,
             'assigned_to'   => $this->request->getPost('assigned_to') ?: null,
-            'custom_fields' => $this->parseCustomFields(),
+            'custom_fields' => $customFields,
         ]);
 
         if (! $id) {
@@ -245,6 +218,9 @@ class Contacts extends BaseController
             (int) $id,
             (bool) $this->request->getPost('wa_opt_in'),
             (string) $this->request->getPost('wa_opt_in_source')
+        );
+        $consentNote = service('whatsAppConsent')->describeConsentRequest(
+            service('whatsAppConsent')->requestConsentIfPending($model->find((int) $id) ?? [])
         );
 
         $tagIds = $this->request->getPost('tag_ids') ?? $this->request->getPost('tags') ?? [];
@@ -273,7 +249,7 @@ class Contacts extends BaseController
             log_message('error', 'Contact create automation error: {msg}', ['msg' => $e->getMessage()]);
         }
 
-        return redirect()->to('/contacts/' . $id)->with('success', 'Contact created.');
+        return redirect()->to('/contacts/' . $id)->with('success', trim('Contact created. ' . $consentNote));
     }
 
     public function show(int $id): string|ResponseInterface
@@ -303,12 +279,16 @@ class Contacts extends BaseController
             log_message('warning', 'Contact notes load failed: {msg}', ['msg' => $e->getMessage()]);
         }
 
+        $assigned = ! empty($contact['assigned_to']) ? model(\App\Models\UserModel::class)->find((int) $contact['assigned_to']) : null;
+
         return $this->render('contacts/show', [
             'pageTitle'      => 'Contact: ' . ($contact['name'] ?: $contact['mobile']),
             'contact'        => $contact,
             'messages'       => $messages,
             'notes'          => $notes,
             'messages_total' => $messagesTotal,
+            'attributeRows'  => service('contactAttributes')->contactRows($contact),
+            'assignedName'   => is_array($assigned) ? (string) ($assigned['name'] ?? '') : '',
         ]);
     }
 
@@ -334,6 +314,7 @@ class Contacts extends BaseController
             'tags'         => model(TagModel::class)->orderBy('name', 'ASC')->findAll(),
             'selectedTags' => $selectedTags,
             'attributeKeys' => ContactAttributes::knownKeys(),
+            'attributeDefs' => service('contactAttributes')->definitions(),
         ]);
     }
 
@@ -374,6 +355,10 @@ class Contacts extends BaseController
         if ($dup !== null) {
             return redirect()->back()->withInput()->with('error', 'A contact with this mobile number already exists.');
         }
+        $customFields = $this->validatedCustomFields();
+        if (is_string($customFields)) {
+            return redirect()->back()->withInput()->with('error', $customFields);
+        }
 
         $ok = $model->update($id, [
             'name'          => $this->request->getPost('name'),
@@ -384,7 +369,7 @@ class Contacts extends BaseController
             'status'        => $this->request->getPost('status') ?: 'active',
             'birthday'      => $this->request->getPost('birthday') ?: null,
             'assigned_to'   => $this->request->getPost('assigned_to') ?: null,
-            'custom_fields' => $this->parseCustomFields(),
+            'custom_fields' => $customFields,
         ]);
 
         if (! $ok) {
@@ -400,6 +385,11 @@ class Contacts extends BaseController
         $tagIds = $this->request->getPost('tag_ids') ?? $this->request->getPost('tags') ?? [];
         $tagIds = array_map('intval', (array) $tagIds);
         $model->syncTags($id, $tagIds);
+
+        if (is_array($customFields)) {
+            $before = is_array($contact['custom_fields'] ?? null) ? $contact['custom_fields'] : (json_decode((string) ($contact['custom_fields'] ?? ''), true) ?: []);
+            service('contactAttributes')->notifyChanges($id, $before, $customFields);
+        }
 
         (new ActivityLogger())->log('update', 'contacts', 'Contact updated', ['contact_id' => $id]);
 
@@ -621,6 +611,36 @@ class Contacts extends BaseController
         return $this->jsonResponse(true, ['updated' => $n], $msg);
     }
 
+    /**
+     * Set (or clear, with an empty value) one attribute on selected contacts (AJAX).
+     */
+    public function bulkAttribute(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('contacts.edit')) {
+            return $denied;
+        }
+        $input = $this->request->getJSON(true) ?: $this->request->getPost();
+        $ids   = array_map('intval', (array) ($input['ids'] ?? []));
+        $key   = trim((string) ($input['attribute'] ?? ''));
+        $value = (string) ($input['value'] ?? '');
+        if ($key === '') {
+            return $this->jsonResponse(false, null, 'Choose an attribute.', [], 422);
+        }
+
+        try {
+            $n = service('contactAttributes')->bulkSet($ids, $key, $value);
+        } catch (\InvalidArgumentException $e) {
+            return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
+        }
+        (new ActivityLogger())->log('bulk_attribute', 'contacts', "Attribute {$key} updated", ['ids' => $ids, 'attribute' => $key, 'updated' => $n]);
+
+        $label = service('contactAttributes')->label($key);
+
+        return $this->jsonResponse(true, ['updated' => $n], trim($value) === ''
+            ? "{$label} cleared for {$n} contact(s)."
+            : "{$label} updated for {$n} contact(s).");
+    }
+
     public function importCsv(): string|ResponseInterface
     {
         if ($denied = $this->requirePermission('contacts.import')) {
@@ -721,6 +741,11 @@ class Contacts extends BaseController
         if (! empty($result['truncated'])) {
             $msg .= ' Row limit reached (max ' . \App\Libraries\ContactImportService::MAX_ROWS . ').';
         }
+        if (($result['consent_requested'] ?? 0) > 0) {
+            $msg .= " WhatsApp consent request sent to {$result['consent_requested']}.";
+        } elseif (($result['consent_note'] ?? '') !== '') {
+            $msg .= ' WhatsApp consent request not sent: ' . $result['consent_note'];
+        }
         if (($result['custom_fields_created'] ?? []) !== []) {
             $msg .= ' New CRM fields: ' . implode(', ', $result['custom_fields_created']) . '.';
         }
@@ -754,28 +779,10 @@ class Contacts extends BaseController
                 ->setBody($csv);
         }
 
-        $contacts = model(ContactModel::class)
-            ->where('deleted_at', null)
-            ->orderBy('id', 'ASC')
-            ->findAll();
-
-        $lines = ["id,name,mobile,email,country,status,created_at"];
-        foreach ($contacts as $c) {
-            $lines[] = implode(',', [
-                $c['id'],
-                '"' . str_replace('"', '""', (string) ($c['name'] ?? '')) . '"',
-                $c['mobile'] ?? '',
-                $c['email'] ?? '',
-                $c['country'] ?? '',
-                $c['status'] ?? '',
-                $c['created_at'] ?? '',
-            ]);
-        }
-
-        $csv = implode("\n", $lines);
+        $csv = (new ContactExportService())->csv(ContactListFilter::fromInput($this->request->getGet() ?? []));
 
         return $this->response
-            ->setHeader('Content-Type', 'text/csv')
+            ->setHeader('Content-Type', 'text/csv; charset=UTF-8')
             ->setHeader('Content-Disposition', 'attachment; filename="contacts_' . date('Ymd_His') . '.csv"')
             ->setBody($csv);
     }
@@ -922,6 +929,25 @@ class Contacts extends BaseController
             ->setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             ->setHeader('Content-Disposition', 'attachment; filename="contacts_sample.xlsx"')
             ->setBody($body);
+    }
+
+    /**
+     * Form custom attributes checked against their type (Contacts → Attributes).
+     *
+     * @return array<string, mixed>|string|null normalised fields, or an error message
+     */
+    protected function validatedCustomFields(): array|string|null
+    {
+        $fields = $this->parseCustomFields();
+        if (! is_array($fields) || $fields === []) {
+            return $fields;
+        }
+        $result = service('contactAttributes')->normalizeFields($fields);
+        if ($result['errors'] !== []) {
+            return implode(' ', $result['errors']);
+        }
+
+        return array_filter($result['fields'], static fn ($v): bool => $v !== '' && $v !== null);
     }
 
     protected function parseCustomFields(): ?array

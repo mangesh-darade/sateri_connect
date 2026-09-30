@@ -249,6 +249,7 @@ class ContactImportService
 
         $model    = model(ContactModel::class);
         $tagModel = model(TagModel::class);
+        $newIds   = [];
         $imported = 0;
         $skipped  = 0;
         $updated  = 0;
@@ -295,6 +296,23 @@ class ContactImportService
             }
 
             $customFields = is_array($values['custom_fields'] ?? null) ? $values['custom_fields'] : [];
+            if ($customFields !== []) {
+                // Defined attributes get the same type rules as the UI (12/05/2026 → 2026-05-12, "haan" → Yes…);
+                // an invalid cell is dropped with a note instead of failing the whole row.
+                $attrSvc = service('contactAttributes');
+                foreach ($customFields as $cfKey => $cfValue) {
+                    if ($attrSvc->definition((string) $cfKey) === null || trim((string) $cfValue) === '') {
+                        continue;
+                    }
+                    $check = $attrSvc->normalizeValue((string) $cfKey, (string) $cfValue);
+                    if ($check['ok']) {
+                        $customFields[$cfKey] = $check['value'];
+                    } else {
+                        unset($customFields[$cfKey]);
+                        $errors[] = $mobile . ': ' . $attrSvc->label((string) $cfKey) . ' "' . $cfValue . '" skipped — ' . $check['error'];
+                    }
+                }
+            }
             if ($existing !== null) {
                 $prev = $existing['custom_fields'] ?? [];
                 if (is_string($prev)) {
@@ -332,6 +350,7 @@ class ContactImportService
                 $contactId = (int) $model->insert($payload);
                 if ($contactId > 0) {
                     $imported++;
+                    $newIds[] = $contactId;
                 } else {
                     $skipped++;
                     $errors[] = $mobile . ': ' . implode(', ', $model->errors());
@@ -359,7 +378,18 @@ class ContactImportService
         fclose($handle);
         @unlink($path);
 
+        // New contacts without recorded consent get the Agree / Stop consent request.
+        $consentRequested = 0;
+        $consentNote      = '';
+        if ($consent === null && $newIds !== []) {
+            $consentService   = service('whatsAppConsent');
+            $consentRequested = $consentService->requestConsentForContacts($model->whereIn('id', $newIds)->findAll());
+            $consentNote      = $consentService->lastConsentError();
+        }
+
         return [
+            'consent_requested'     => $consentRequested,
+            'consent_note'          => $consentNote,
             'imported'              => $imported,
             'updated'               => $updated,
             'skipped'               => $skipped,

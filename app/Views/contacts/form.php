@@ -113,49 +113,91 @@ if (! is_array($selectedTags)) {
                         <?php endif; ?>
                     </div>
                 </div>
+                <?php
+                $attributeDefs = $attributeDefs ?? [];
+                $cf = $contact['custom_fields'] ?? [];
+                if (is_string($cf)) {
+                    $decoded = json_decode($cf, true);
+                    $cf = is_array($decoded) ? $decoded : [];
+                }
+                if (! is_array($cf)) {
+                    $cf = [];
+                }
+                $oldKeys = old('attr_key');
+                $oldVals = old('attr_value');
+                if (is_array($oldKeys)) {
+                    $cf = [];
+                    foreach ($oldKeys as $i => $k) {
+                        $cf[(string) $k] = is_array($oldVals) ? (string) ($oldVals[$i] ?? '') : '';
+                    }
+                }
+                $extraFields = array_filter($cf, static fn ($v, $k) => ! str_starts_with((string) $k, '_') && ! isset($attributeDefs[$k]), ARRAY_FILTER_USE_BOTH);
+                $isCreate    = empty($contact['id']);
+                ?>
                 <div class="col-12">
-                    <div class="d-flex align-items-center justify-content-between mb-1">
-                        <label class="form-label mb-0">Contact attributes</label>
-                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btnAddAttr"><i class="fas fa-plus me-1"></i> Add</button>
-                    </div>
-                    <p class="text-muted small mb-2">Custom fields used in workflow webhooks (e.g. source, business_name).</p>
-                    <div id="attrRows">
-                        <?php
-                        $cf = $contact['custom_fields'] ?? [];
-                        if (is_string($cf)) {
-                            $decoded = json_decode($cf, true);
-                            $cf = is_array($decoded) ? $decoded : [];
-                        }
-                        if (! is_array($cf)) {
-                            $cf = [];
-                        }
-                        $oldKeys = old('attr_key');
-                        $oldVals = old('attr_value');
-                        if (is_array($oldKeys)) {
-                            $cf = [];
-                            foreach ($oldKeys as $i => $k) {
-                                $cf[(string) $k] = is_array($oldVals) ? (string) ($oldVals[$i] ?? '') : '';
-                            }
-                        }
-                        if ($cf === []):
-                        ?>
-                            <div class="row g-2 align-items-center mb-2 attr-row">
-                                <div class="col-md-4">
-                                    <input type="text" name="attr_key[]" class="form-control" list="attrKeyList" placeholder="Key (e.g. source)">
-                                </div>
-                                <div class="col-md-7">
-                                    <input type="text" name="attr_value[]" class="form-control" placeholder="Value">
-                                </div>
-                                <div class="col-md-1">
-                                    <button type="button" class="btn btn-outline-danger btn-sm btn-remove-attr" title="Remove">&times;</button>
-                                </div>
+                    <div class="border-top pt-3">
+                        <div class="d-flex align-items-center justify-content-between mb-1">
+                            <label class="form-label mb-0 fw-semibold">Contact attributes <span class="text-muted fw-normal small">(optional)</span></label>
+                            <?php if (function_exists('can') && can('contacts.view')): ?>
+                                <a href="<?= site_url('attributes') ?>" class="small" target="_blank">Manage attributes</a>
+                            <?php endif; ?>
+                        </div>
+                        <p class="text-muted small mb-2">Extra details about this contact. Used in workflows, filters, campaigns and the contacts list. Leave blank if not known.</p>
+
+                        <?php if ($attributeDefs !== []): ?>
+                            <div class="row g-2 mb-2">
+                                <?php foreach ($attributeDefs as $key => $def): ?>
+                                    <?php
+                                    $val     = $cf[$key] ?? '';
+                                    $val     = is_scalar($val) ? (string) $val : json_encode($val);
+                                    $type    = (string) $def['type'];
+                                    $default = (string) ($def['default_value'] ?? '');
+                                    $inputId = 'attr_' . $key;
+                                    ?>
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1" for="<?= esc($inputId, 'attr') ?>"><?= esc($def['label']) ?></label>
+                                        <input type="hidden" name="attr_key[]" value="<?= esc($key, 'attr') ?>">
+                                        <?php if ($type === 'dropdown' || $type === 'boolean'): ?>
+                                            <?php
+                                            $options = $type === 'boolean' ? ['Yes', 'No'] : (array) $def['options'];
+                                            if ($val !== '' && ! in_array($val, $options, true)) {
+                                                $options[] = $val;
+                                            }
+                                            ?>
+                                            <select name="attr_value[]" id="<?= esc($inputId, 'attr') ?>" class="form-select">
+                                                <option value=""><?= $isCreate && $default !== '' ? esc('Default: ' . $default) : '—' ?></option>
+                                                <?php foreach ($options as $opt): ?>
+                                                    <option value="<?= esc($opt, 'attr') ?>"<?= $val === (string) $opt ? ' selected' : '' ?>><?= esc($opt) ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        <?php else: ?>
+                                            <input name="attr_value[]" id="<?= esc($inputId, 'attr') ?>" class="form-control"
+                                                type="<?= $type === 'date' ? 'date' : 'text' ?>"
+                                                <?= $type === 'number' ? 'inputmode="decimal"' : '' ?>
+                                                value="<?= esc($val, 'attr') ?>"
+                                                placeholder="<?= esc($isCreate && $default !== '' ? 'Default: ' . $default : ($type === 'number' ? 'Number' : ''), 'attr') ?>">
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endforeach; ?>
                             </div>
-                        <?php else: ?>
-                            <?php foreach ($cf as $k => $v): ?>
-                                <?php if (str_starts_with((string) $k, '_')) continue; ?>
+                        <?php endif; ?>
+
+                        <?php if ($attributeDefs === []): ?>
+                            <div class="text-muted small mb-2">No attributes defined yet.
+                                <?php if (function_exists('can') && can('contacts.view')): ?>
+                                    Create them in <a href="<?= site_url('attributes') ?>" target="_blank">Contacts → Attributes</a>, then they appear here.
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
+
+                        <?php if ($extraFields !== []): ?>
+                            <div class="small text-muted mt-2 mb-1">Other saved fields <span class="fw-normal">(not defined in Attributes — from import, workflow or webhook)</span></div>
+                        <?php endif; ?>
+                        <div id="attrRows">
+                            <?php foreach ($extraFields as $k => $v): ?>
                                 <div class="row g-2 align-items-center mb-2 attr-row">
                                     <div class="col-md-4">
-                                        <input type="text" name="attr_key[]" class="form-control" list="attrKeyList" value="<?= esc((string) $k) ?>" placeholder="Key">
+                                        <input type="text" name="attr_key[]" class="form-control-plaintext small text-muted" value="<?= esc((string) $k) ?>" readonly>
                                     </div>
                                     <div class="col-md-7">
                                         <input type="text" name="attr_value[]" class="form-control" value="<?= esc(is_scalar($v) ? (string) $v : json_encode($v)) ?>" placeholder="Value">
@@ -165,13 +207,8 @@ if (! is_array($selectedTags)) {
                                     </div>
                                 </div>
                             <?php endforeach; ?>
-                        <?php endif; ?>
+                        </div>
                     </div>
-                    <datalist id="attrKeyList">
-                        <?php foreach (($attributeKeys ?? []) as $ak): ?>
-                            <option value="<?= esc($ak) ?>"></option>
-                        <?php endforeach; ?>
-                    </datalist>
                 </div>
             </div>
         </div>
@@ -188,23 +225,10 @@ if (! is_array($selectedTags)) {
 <?= $this->section('scripts') ?>
 <script>
 (function ($) {
-    function rowHtml() {
-        return '<div class="row g-2 align-items-center mb-2 attr-row">' +
-            '<div class="col-md-4"><input type="text" name="attr_key[]" class="form-control" list="attrKeyList" placeholder="Key (e.g. source)"></div>' +
-            '<div class="col-md-7"><input type="text" name="attr_value[]" class="form-control" placeholder="Value"></div>' +
-            '<div class="col-md-1"><button type="button" class="btn btn-outline-danger btn-sm btn-remove-attr" title="Remove">&times;</button></div>' +
-            '</div>';
-    }
-    $('#btnAddAttr').on('click', function () { $('#attrRows').append(rowHtml()); });
     $('#waOptIn').on('change', function () {
         $('#waOptInSource').prop('disabled', !this.checked).prop('required', this.checked);
     }).trigger('change');
     $('#attrRows').on('click', '.btn-remove-attr', function () {
-        var $rows = $('#attrRows .attr-row');
-        if ($rows.length <= 1) {
-            $(this).closest('.attr-row').find('input').val('');
-            return;
-        }
         $(this).closest('.attr-row').remove();
     });
 })(jQuery);

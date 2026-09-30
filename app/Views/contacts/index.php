@@ -22,7 +22,8 @@
     </form>
 <?php endif; ?>
 <?php if (function_exists('can') && can('contacts.export')): ?>
-    <a href="<?= site_url('contacts/export') ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-file-export me-1"></i> Export</a>
+    <a href="<?= site_url('contacts/export') ?>" id="btnExportContacts" class="btn btn-outline-secondary btn-sm"
+       title="Download filtered contacts with groups, consent and all attributes"><i class="fas fa-file-export me-1"></i> Export</a>
 <?php endif; ?>
 <?= $this->endSection() ?>
 
@@ -61,6 +62,18 @@
                     <option value="<?= (int) $agent['id'] ?>"><?= esc($agent['name']) ?></option>
                 <?php endforeach; ?>
             </select>
+            <select id="filterAttrKey" class="form-select form-select-sm" style="max-width:160px" title="Filter by attribute">
+                <option value="">Any attribute</option>
+                <?php foreach (($attributeKeys ?? []) as $key): ?>
+                    <option value="<?= esc($key) ?>"><?= esc(isset($attributeDefs[$key]) ? $attributeDefs[$key]['label'] : $key) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <select id="filterAttrOp" class="form-select form-select-sm d-none" style="max-width:135px">
+                <?php foreach (($attributeOps ?? []) as $op => $label): ?>
+                    <option value="<?= esc($op) ?>"><?= esc($label) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <input type="text" id="filterAttrValue" class="form-control form-control-sm d-none" style="max-width:140px" placeholder="Value">
             <button type="button" id="btnFilterContacts" class="btn btn-sm btn-wa"><i class="fas fa-filter me-1"></i> Filter</button>
             <div class="filter-bar-actions">
                 <button type="button" id="btnDetectDuplicates" class="btn btn-sm btn-outline-secondary"><i class="fas fa-clone me-1"></i> Duplicates</button>
@@ -70,11 +83,18 @@
                 <?php if (function_exists('can') && can('contacts.edit')): ?>
                     <button type="button" id="btnBulkTags" class="btn btn-sm btn-soft-secondary"><i class="fas fa-tags me-1"></i> Bulk groups</button>
                     <button type="button" id="btnBulkConsent" class="btn btn-sm btn-soft-secondary"><i class="fab fa-whatsapp me-1"></i> WhatsApp consent</button>
+                    <button type="button" id="btnBulkAttribute" class="btn btn-sm btn-soft-secondary"><i class="fas fa-pen-to-square me-1"></i> Set attribute</button>
                 <?php endif; ?>
             </div>
         </div>
 
-        <table id="contactsTable" class="table table-sm table-hover align-middle w-100">
+        <?php
+        $attrColumns = [];
+        foreach (($attributeDefs ?? []) as $key => $def) {
+            $attrColumns[] = ['key' => (string) $key, 'label' => (string) $def['label'], 'type' => (string) $def['type']];
+        }
+        ?>
+        <table id="contactsTable" class="table table-sm table-hover align-middle w-100" data-attr-columns="<?= esc(json_encode($attrColumns), 'attr') ?>">
             <thead>
                 <tr>
                     <th class="dt-check-col" scope="col">
@@ -86,6 +106,9 @@
                     <th>Groups</th>
                     <th>Status</th>
                     <th>Last Message</th>
+                    <?php foreach ($attrColumns as $col): ?>
+                        <th class="text-nowrap" title="Attribute: <?= esc($col['key'], 'attr') ?>"><?= esc($col['label']) ?></th>
+                    <?php endforeach; ?>
                     <th class="text-end">Actions</th>
                 </tr>
             </thead>
@@ -158,6 +181,46 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-wa" id="btnApplyBulkConsent">Apply</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="bulkAttributeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Set attribute</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label" for="bulkAttrKey">Attribute</label>
+                    <select id="bulkAttrKey" class="form-select">
+                        <option value="">Choose…</option>
+                        <?php foreach (($attributeKeys ?? []) as $key): ?>
+                            <?php if (in_array($key, ['name', 'mobile', 'notes'], true)) { continue; } ?>
+                            <?php $def = $attributeDefs[$key] ?? null; ?>
+                            <option value="<?= esc($key) ?>" data-type="<?= esc($def['type'] ?? 'text') ?>"
+                                    data-options="<?= esc(json_encode($def['options'] ?? []), 'attr') ?>">
+                                <?= esc($def['label'] ?? $key) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label" for="bulkAttrValue">Value</label>
+                    <input type="text" id="bulkAttrValue" class="form-control" maxlength="1000" placeholder="Leave empty to clear">
+                    <select id="bulkAttrValueSelect" class="form-select d-none"></select>
+                </div>
+                <p class="small text-muted mb-0">
+                    Applies to the selected contacts. Typed attributes (number, date, dropdown, yes/no) are checked before saving.
+                    <a href="<?= site_url('attributes') ?>">Manage attributes</a>
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-wa" id="btnApplyBulkAttribute">Apply</button>
             </div>
         </div>
     </div>

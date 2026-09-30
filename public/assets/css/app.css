@@ -2675,6 +2675,40 @@ body.layout-fixed .main-sidebar > .sidebar {
     box-shadow: 0 4px 12px rgba(0,0,0,.15);
 }
 .emoji-picker.open { display: block; }
+.quick-reply-menu {
+    position: absolute;
+    bottom: 70px;
+    left: 1rem;
+    right: 1rem;
+    max-width: 460px;
+    max-height: 280px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: .5rem;
+    z-index: 21;
+    box-shadow: 0 4px 12px rgba(0,0,0,.15);
+}
+.quick-reply-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    background: transparent;
+    padding: .45rem .75rem;
+    border-bottom: 1px solid #f1f3f5;
+}
+.quick-reply-item:last-child { border-bottom: 0; }
+.quick-reply-item.active, .quick-reply-item:hover { background: #f4effe; }
+.quick-reply-item .qr-shortcut { font-family: var(--bs-font-monospace); font-size: .8rem; color: #8e53f7; }
+.quick-reply-item .qr-preview { display: block; font-size: .8rem; color: #6c757d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-contact-canvas { width: 340px; }
+.chat-contact-canvas .cc-section { margin-bottom: 1.25rem; }
+.chat-contact-canvas .cc-section-title { font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: #6c757d; margin-bottom: .5rem; }
+.chat-contact-canvas .cc-tag { display: inline-flex; align-items: center; gap: .25rem; padding: .15rem .5rem; border-radius: 999px; font-size: .78rem; margin: 0 .25rem .25rem 0; color: #fff; }
+.chat-contact-canvas .cc-tag button { border: 0; background: transparent; color: inherit; padding: 0; line-height: 1; opacity: .8; }
+.chat-contact-canvas .cc-attr { margin-bottom: .5rem; }
+.chat-contact-canvas .cc-attr label { font-size: .78rem; color: #6c757d; margin-bottom: .1rem; }
 .emoji-picker button {
     border: 0;
     background: transparent;
@@ -4845,3 +4879,46 @@ body.chat-page-active .content-wrapper {
         transform: translateY(-1px);
     }
 }
+
+/* Contact detail page */
+.contact-hero,
+.contact-page .dash-panel { height: auto; }
+.contact-hero .panel-body { padding: 1rem 1.1rem; }
+.contact-hero-avatar { width: 64px; height: 64px; font-size: 1.35rem; flex-shrink: 0; }
+.contact-hero-name { font-family: var(--font-display); font-size: 1.25rem; color: var(--wa-ink); }
+.contact-hero-stats { display: flex; gap: .5rem; flex-wrap: wrap; }
+.contact-hero-stats > div {
+    background: var(--wa-mist); border: 1px solid var(--border); border-radius: 10px;
+    padding: .45rem .8rem; min-width: 110px; text-align: center;
+}
+.contact-hero-stats span { display: block; font-weight: 600; font-size: .85rem; color: var(--wa-ink); }
+.contact-hero-stats small { color: #6c757d; font-size: .7rem; text-transform: uppercase; letter-spacing: .03em; }
+.contact-detail-list { list-style: none; margin: 0; padding: 0; }
+.contact-detail-list li {
+    display: flex; align-items: flex-start; gap: .5rem;
+    padding: .45rem 0; border-bottom: 1px dashed var(--border); font-size: .85rem;
+}
+.contact-detail-list li:last-child { border-bottom: 0; }
+.contact-detail-list li > i { width: 16px; margin-top: .2rem; color: var(--wa-green); text-align: center; }
+.contact-detail-list .label { color: #6c757d; min-width: 105px; }
+.contact-detail-list .value { margin-left: auto; text-align: right; font-weight: 500; color: var(--wa-ink); word-break: break-word; }
+.contact-tabs .nav-link { padding: .35rem .8rem; font-size: .85rem; border-radius: 8px; color: var(--wa-ink); }
+.contact-tabs .nav-link.active { background: var(--wa-green); color: #fff; }
+.contact-tabs .nav-link.active .badge { background: rgba(255,255,255,.25) !important; color: #fff !important; }
+.contact-history { background: var(--wa-chat-bg); max-height: 620px; min-height: 320px; overflow-y: auto; padding: .75rem 1rem; }
+.contact-history .msg-bubble { max-width: 75%; font-size: .88rem; }
+.contact-history .msg-status .badge { font-size: .62rem; }
+.contact-note-profile { background: var(--wa-mist); border-radius: 8px; padding: .6rem .75rem; font-size: .88rem; }
+.contact-note-item { padding: .6rem 0; border-bottom: 1px solid var(--border); font-size: .88rem; }
+.contact-note-item:last-child { border-bottom: 0; }
+@media (max-width: 767.98px) {
+    .contact-hero-stats { width: 100%; }
+    .contact-hero-stats > div { flex: 1; min-width: 0; }
+    .contact-history .msg-bubble { max-width: 88%; }
+}
+
+/* Contacts list: only the table scrolls sideways (attribute columns), controls stay put */
+.contacts-table-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.contacts-table-scroll > #contactsTable { margin-bottom: 0; }
+.contacts-table-scroll > #contactsTable td,
+.contacts-table-scroll > #contactsTable th { white-space: nowrap; }

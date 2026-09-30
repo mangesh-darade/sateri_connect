@@ -24,6 +24,31 @@
         var $table = $('#contactsTable');
         if (!$table.length || !$.fn.DataTable) return;
 
+        // Deep link from Attributes page: /contacts?attr_key=city&attr_op=not_empty
+        var qs = new URLSearchParams(window.location.search);
+        if (qs.get('attr_key') && $('#filterAttrKey option[value="' + qs.get('attr_key').replace(/"/g, '') + '"]').length) {
+            $('#filterAttrKey').val(qs.get('attr_key'));
+            if (qs.get('attr_op')) $('#filterAttrOp').val(qs.get('attr_op'));
+            if (qs.get('attr_value')) $('#filterAttrValue').val(qs.get('attr_value'));
+            if (Contacts.syncAttrValueInput) Contacts.syncAttrValueInput();
+        }
+
+        var attrColumns = $table.data('attr-columns') || [];
+        var attrColumnDefs = attrColumns.map(function (col) {
+            return {
+                data: null,
+                defaultContent: '—',
+                render: function (v, type, row) {
+                    var cf = (row && row.custom_fields) || {};
+                    var val = cf[col.key];
+                    if (val === undefined || val === null || String(val) === '') return '<span class="text-muted">—</span>';
+                    var s = String(val);
+                    var short = s.length > 28 ? s.slice(0, 26) + '…' : s;
+                    return '<span class="text-nowrap" title="' + escHtml(s) + '">' + escHtml(short) + '</span>';
+                }
+            };
+        });
+
         Contacts.table = $table.DataTable({
             processing: true,
             serverSide: true,
@@ -49,14 +74,15 @@
                     d.tag_id = $('#filterTag').val();
                     d.assigned_to = $('#filterAssigned').val();
                     d.consent = $('#filterConsent').val();
+                    $.extend(d, Contacts.attributeFilter());
                 }
             },
             columnDefs: [
                 { targets: 0, width: '42px', className: 'dt-check-col', orderable: false, searchable: false },
                 { targets: 4, className: 'dt-tags-col', orderable: false },
-                { targets: 7, width: '108px', className: 'text-end', orderable: false, searchable: false }
+                { targets: -1, width: '108px', className: 'text-end', orderable: false, searchable: false }
             ],
-            columns: [
+            columns: [].concat([
                 {
                     data: 'id',
                     orderable: false,
@@ -107,7 +133,8 @@
                         // Keep date+time on one line when possible
                         return '<span class="text-nowrap text-muted small">' + $('<div>').text(s).html() + '</span>';
                     }
-                },
+                }
+            ], attrColumnDefs, [
                 {
                     data: 'id',
                     orderable: false,
@@ -121,12 +148,16 @@
                         return html;
                     }
                 }
-            ],
-            order: [[0, 'desc']],
+            ]),
+            order: [],
             createdRow: function (row) {
                 $(row).addClass('contact-row-clickable').css('cursor', 'pointer');
             }
         });
+
+        if (!$table.parent().hasClass('contacts-table-scroll')) {
+            $table.wrap('<div class="contacts-table-scroll"></div>');
+        }
 
         Contacts.table.on('draw', function () {
             $('#checkAllContacts').prop('checked', false);
@@ -146,9 +177,41 @@
         $('#btnFilterContacts').on('click', function () {
             Contacts.table.ajax.reload();
         });
-        $('#filterStatus, #filterTag, #filterAssigned, #filterConsent').on('change', function () {
+        $('#filterStatus, #filterTag, #filterAssigned, #filterConsent, #filterAttrOp').on('change', function () {
             Contacts.table.ajax.reload();
         });
+        $('#filterAttrKey').on('change', function () {
+            var on = !!$(this).val();
+            $('#filterAttrOp').toggleClass('d-none', !on);
+            Contacts.syncAttrValueInput();
+            Contacts.table.ajax.reload();
+        });
+        $('#filterAttrOp').on('change', Contacts.syncAttrValueInput);
+        $('#filterAttrValue').on('keydown', function (e) {
+            if (e.key === 'Enter') Contacts.table.ajax.reload();
+        });
+        $('#btnExportContacts').on('click', function () {
+            var params = $.extend({
+                status: $('#filterStatus').val(),
+                tag_id: $('#filterTag').val(),
+                assigned_to: $('#filterAssigned').val(),
+                consent: $('#filterConsent').val(),
+                search: Contacts.table ? Contacts.table.search() : ''
+            }, Contacts.attributeFilter());
+            Object.keys(params).forEach(function (k) { if (!params[k]) delete params[k]; });
+            this.href = base() + '/contacts/export' + ($.isEmptyObject(params) ? '' : '?' + $.param(params));
+        });
+    };
+
+    Contacts.attributeFilter = function () {
+        var key = $('#filterAttrKey').val();
+        if (!key) return {};
+        return { attr_key: key, attr_op: $('#filterAttrOp').val(), attr_value: $('#filterAttrValue').val() };
+    };
+
+    Contacts.syncAttrValueInput = function () {
+        var needsValue = !!$('#filterAttrKey').val() && ['is_empty', 'not_empty'].indexOf($('#filterAttrOp').val()) === -1;
+        $('#filterAttrValue').toggleClass('d-none', !needsValue);
     };
 
     function escHtml(value) {
@@ -338,6 +401,58 @@
             .fail(function (xhr) {
                 APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Consent update failed', 'error');
             });
+    };
+
+    Contacts.bulkAttributeValue = function () {
+        var $opt = $('#bulkAttrKey option:selected');
+        return $opt.data('type') === 'dropdown' || $opt.data('type') === 'boolean'
+            ? $('#bulkAttrValueSelect').val() || ''
+            : $('#bulkAttrValue').val() || '';
+    };
+
+    Contacts.syncBulkAttributeInput = function () {
+        var $opt = $('#bulkAttrKey option:selected');
+        var type = $opt.data('type') || 'text';
+        var options = type === 'boolean' ? ['Yes', 'No'] : ($opt.data('options') || []);
+        var useSelect = type === 'dropdown' || type === 'boolean';
+        $('#bulkAttrValue').toggleClass('d-none', useSelect)
+            .attr('type', type === 'date' ? 'date' : (type === 'number' ? 'number' : 'text'));
+        $('#bulkAttrValueSelect').toggleClass('d-none', !useSelect).html(
+            '<option value="">(clear value)</option>' + options.map(function (o) {
+                return '<option value="' + escHtml(o) + '">' + escHtml(o) + '</option>';
+            }).join('')
+        );
+    };
+
+    Contacts.bulkAttribute = function () {
+        var ids = Contacts.selectedIds();
+        var key = $('#bulkAttrKey').val();
+        if (!ids.length) {
+            APP.toast('Select at least one contact', 'warning');
+            return;
+        }
+        if (!key) {
+            APP.toast('Choose an attribute', 'warning');
+            return;
+        }
+        var value = Contacts.bulkAttributeValue();
+        var run = function () {
+            APP.post(base() + '/contacts/bulk-attribute', { ids: ids, attribute: key, value: value })
+                .done(function (res) {
+                    APP.toast(res.message || 'Attribute updated');
+                    APP.hideModal('#bulkAttributeModal');
+                    if (Contacts.table) Contacts.table.ajax.reload(null, false);
+                })
+                .fail(function (xhr) {
+                    APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Attribute update failed', 'error');
+                });
+        };
+        if (String(value).trim() === '') {
+            APP.confirm({ title: 'Clear this attribute?', text: 'The value will be removed from ' + ids.length + ' contact(s).', confirmText: 'Clear' })
+                .then(function (r) { if (r.isConfirmed) run(); });
+            return;
+        }
+        run();
     };
 
     Contacts.initImport = function () {
@@ -589,6 +704,16 @@
             $('#bulkConsentSourceWrap').toggleClass('d-none', $(this).val() !== 'opt_in');
         });
         $('#btnApplyBulkConsent').on('click', function () { Contacts.bulkConsent(); });
+        $('#btnBulkAttribute').on('click', function () {
+            if (!Contacts.selectedIds().length) {
+                APP.toast('Select at least one contact', 'warning');
+                return;
+            }
+            Contacts.syncBulkAttributeInput();
+            APP.showModal('#bulkAttributeModal');
+        });
+        $('#bulkAttrKey').on('change', Contacts.syncBulkAttributeInput);
+        $('#btnApplyBulkAttribute').on('click', function () { Contacts.bulkAttribute(); });
         $('#btnDetectDuplicates').on('click', function () {
             APP.get(base() + '/contacts/duplicates').done(function (res) {
                 var rows = res.data || res.duplicates || [];
