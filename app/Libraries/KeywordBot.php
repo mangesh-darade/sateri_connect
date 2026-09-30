@@ -648,17 +648,7 @@ class KeywordBot
 
     protected function matches(string $normalizedMessage, string $keyword, string $matchType): bool
     {
-        $needle = mb_strtolower(trim($keyword));
-        if ($needle === '') {
-            return false;
-        }
-
-        return match ($matchType) {
-            'exact' => $normalizedMessage === $needle,
-            'starts_with' => str_starts_with($normalizedMessage, $needle),
-            'contains' => str_contains($normalizedMessage, $needle),
-            default => $normalizedMessage === $needle,
-        };
+        return KeywordMatcher::matches($normalizedMessage, $keyword, $matchType);
     }
 
     /**

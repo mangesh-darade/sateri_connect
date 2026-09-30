@@ -34,14 +34,16 @@ $providerShort = function_exists('whatsapp_provider_short') ? whatsapp_provider_
                 <div class="col-md-6">
                     <label class="form-label">Keyword <span class="text-danger">*</span></label>
                     <input type="text" name="keyword" class="form-control" required value="<?= esc(old('keyword') ?? ($keyword['keyword'] ?? '')) ?>" placeholder="hi, help, menu…">
+                    <div class="form-text">Separate several keywords with commas. Case and punctuation are ignored.</div>
                 </div>
                 <div class="col-6 col-md-3">
                     <label class="form-label">Match type</label>
                     <select name="match_type" class="form-select">
-                        <?php foreach (['exact' => 'Exact', 'contains' => 'Contains', 'starts_with' => 'Starts with'] as $v => $l): ?>
+                        <?php foreach (\App\Libraries\KeywordMatcher::TYPES as $v => $l): ?>
                             <option value="<?= $v ?>" <?= (old('match_type') ?? ($keyword['match_type'] ?? 'exact')) === $v ? 'selected' : '' ?>><?= $l ?></option>
                         <?php endforeach; ?>
                     </select>
+                    <div class="form-text">Exact: only “hi”. Contains: “hi mangesh”, “ok hi” (not “this”). Starts with: “hi mangesh”.</div>
                 </div>
                 <div class="col-6 col-md-3">
                     <label class="form-label">Menu order</label>

@@ -107,21 +107,8 @@ class KeywordModel extends Model
      */
     public function matchMessage(string $message): ?array
     {
-        $message = trim($message);
-        $keywords = $this->getActive();
-
-        foreach ($keywords as $keyword) {
-            $needle = (string) $keyword['keyword'];
-            $type   = $keyword['match_type'] ?? 'exact';
-
-            $matched = match ($type) {
-                'exact'       => strcasecmp($message, $needle) === 0,
-                'contains'    => stripos($message, $needle) !== false,
-                'starts_with' => stripos($message, $needle) === 0,
-                default       => false,
-            };
-
-            if ($matched) {
+        foreach ($this->getActive() as $keyword) {
+            if (\App\Libraries\KeywordMatcher::matches($message, (string) $keyword['keyword'], (string) ($keyword['match_type'] ?? 'exact'))) {
                 return $keyword;
             }
         }
