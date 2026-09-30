@@ -626,6 +626,31 @@ class Webhooks extends Controller
             return;
         }
 
+        // Reply to an open workflow "Ask question": continue that flow instead of starting new ones.
+        if ($autoReplyAllowed) {
+            try {
+                $wa = service('whatsApp');
+                $wa->forceProvider($activeProvider);
+                if (service('automationEngine')->handleAwaitedReply($contactId, [
+                    'content'      => (string) ($parsed['content'] ?? ''),
+                    'reply_id'     => (string) ($parsed['reply_id'] ?? ''),
+                    'message_type' => (string) ($parsed['type'] ?? ''),
+                    'message_id'   => (int) $messageId,
+                ])) {
+                    service('queueService')->processBatch(30);
+
+                    return;
+                }
+            } catch (Throwable $e) {
+                log_message('error', 'Workflow question reply error: {msg}', ['msg' => $e->getMessage()]);
+            }
+        }
+
+        // First message from a customer who has not answered consent yet: ask with Agree / Stop.
+        if ($autoReplyAllowed) {
+            $consent->requestConsentIfPending($contactModel->find($contactId) ?? $contact, $activeProvider);
+        }
+
         // Keyword bot — only when inbound number matches Settings → active provider
         $keywordText = trim((string) ($parsed['content'] ?? ''));
         $replyId     = (string) ($parsed['reply_id'] ?? '');

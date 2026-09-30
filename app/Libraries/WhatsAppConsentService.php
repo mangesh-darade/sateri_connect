@@ -88,6 +88,9 @@ class WhatsAppConsentService
 
     protected WhatsAppConfig $config;
 
+    /** Why the last requestConsentIfPending() send failed ('' when sent or skipped). */
+    protected string $lastConsentError = '';
+
     public function __construct(?WhatsAppConfig $config = null)
     {
         $this->config = $config ?? config(WhatsAppConfig::class);
@@ -203,6 +206,7 @@ class WhatsAppConsentService
     {
         $excluded = [];
         $eligible = [];
+        $pending  = [];
         $seen     = [];
 
         foreach ($contacts as $contact) {
@@ -221,6 +225,9 @@ class WhatsAppConsentService
             $check = $this->eligibility($contact, self::KIND_CAMPAIGN);
             if (! $check['ok']) {
                 $excluded[$check['reason']] = ($excluded[$check['reason']] ?? 0) + 1;
+                if ($check['reason'] === 'no_opt_in') {
+                    $pending[] = $contact;
+                }
                 continue;
             }
 
@@ -246,9 +253,10 @@ class WhatsAppConsentService
         }
 
         return [
-            'eligible'       => $eligible,
-            'excluded'       => $excluded,
-            'excluded_total' => array_sum($excluded),
+            'eligible'        => $eligible,
+            'excluded'        => $excluded,
+            'excluded_total'  => array_sum($excluded),
+            'pending_consent' => $pending,
         ];
     }
 
@@ -530,6 +538,12 @@ class WhatsAppConsentService
                     'error_message' => self::POLICY_PREFIX . ' contact opted out.',
                     'updated_at'    => date('Y-m-d H:i:s'),
                 ]);
+            if ($db->tableExists('automation_delayed_jobs')) {
+                $db->table('automation_delayed_jobs')
+                    ->where('contact_id', $contactId)
+                    ->whereIn('status', ['pending', 'awaiting_reply'])
+                    ->update(['status' => 'cancelled', 'updated_at' => date('Y-m-d H:i:s')]);
+            }
             if ($db->tableExists('sequence_enrollments')) {
                 $db->table('sequence_enrollments')
                     ->where('contact_id', $contactId)
@@ -736,6 +750,254 @@ class WhatsAppConsentService
             ['consent_request' => true, 'buttons' => $buttons]
         );
         $this->log('wa_consent_request', 'WhatsApp consent request sent', ['contact_id' => (int) ($contact['id'] ?? 0)]);
+    }
+
+    /**
+     * Contact has neither agreed nor stopped, and was not asked within the resend cooldown.
+     *
+     * @param array<string, mixed> $contact
+     */
+    public function needsConsentRequest(array $contact): bool
+    {
+        if (! $this->config->autoConsentRequest || ! $this->hasConsentColumns() || (int) ($contact['id'] ?? 0) <= 0
+            || ! array_key_exists('wa_consent_requested_at', $contact)) {
+            return false;
+        }
+        if (in_array(strtolower((string) ($contact['status'] ?? 'active')), ['blocked', 'inactive'], true)) {
+            return false;
+        }
+        if ($this->hasOptIn($contact) || $this->isOptedOut($contact) || $this->isSuppressed($contact)) {
+            return false;
+        }
+
+        $last = strtotime((string) ($contact['wa_consent_requested_at'] ?? '')) ?: 0;
+
+        return $last === 0 || $last < time() - max(1, $this->config->consentRequestResendDays) * 86400;
+    }
+
+    /**
+     * Ask a pending contact for consent: Agree / Stop buttons inside the 24h window, otherwise the
+     * approved consent template. Never throws; returns how it was asked, or null when skipped/failed.
+     *
+     * @param array<string, mixed> $contact
+     */
+    public function requestConsentIfPending(array $contact, ?string $provider = null): ?string
+    {
+        $this->lastConsentError = '';
+        if (! $this->needsConsentRequest($contact)) {
+            return null;
+        }
+
+        $contactId = (int) $contact['id'];
+        try {
+            if (function_exists('contact_within_24h_window') && contact_within_24h_window($contact, true)) {
+                $this->sendConsentRequest($contact, $provider);
+                $how = 'buttons';
+            } else {
+                $this->sendConsentTemplate($contact, $provider);
+                $how = 'template';
+            }
+        } catch (Throwable $e) {
+            log_message('warning', 'Consent request skipped for contact {id}: {msg}', ['id' => $contactId, 'msg' => $e->getMessage()]);
+            $this->lastConsentError = trim(str_replace(self::POLICY_PREFIX, '', $e->getMessage()));
+
+            return null;
+        }
+
+        model(ContactModel::class)->update($contactId, ['wa_consent_requested_at' => date('Y-m-d H:i:s')]);
+
+        return $how;
+    }
+
+    public function lastConsentError(): string
+    {
+        return $this->lastConsentError;
+    }
+
+    /**
+     * Result line for the operator after a consent request attempt ('' when nothing to say).
+     */
+    public function describeConsentRequest(?string $how): string
+    {
+        if ($how === 'template') {
+            return 'WhatsApp consent request (Agree / Stop) sent.';
+        }
+        if ($how === 'buttons') {
+            return 'WhatsApp consent buttons (Agree / Stop) sent.';
+        }
+
+        return $this->lastConsentError !== '' ? 'WhatsApp consent request not sent: ' . $this->lastConsentError : '';
+    }
+
+    /**
+     * @param list<array<string, mixed>> $contacts
+     *
+     * @return int Contacts asked. The first failure reason stays in lastConsentError().
+     */
+    public function requestConsentForContacts(array $contacts, ?string $provider = null): int
+    {
+        $sent   = 0;
+        $error  = '';
+        $limit  = max(0, $this->config->consentRequestBatchLimit);
+        foreach ($contacts as $contact) {
+            if ($limit > 0 && $sent >= $limit) {
+                break;
+            }
+            if ($this->requestConsentIfPending($contact, $provider) !== null) {
+                $sent++;
+            } elseif ($error === '' && $this->lastConsentError !== '') {
+                $error = $this->lastConsentError;
+            }
+        }
+        $this->lastConsentError = $sent === 0 ? $error : '';
+
+        return $sent;
+    }
+
+    /**
+     * Policy denial text; for "no opt-in" also asks the customer for consent (once per cooldown).
+     *
+     * @param array<string, mixed> $contact
+     * @param array{ok: bool, reason: string, message: string} $check
+     */
+    public function denialWithConsentRequest(array $contact, array $check, ?string $provider = null): string
+    {
+        if (($check['reason'] ?? '') !== 'no_opt_in') {
+            return (string) $check['message'];
+        }
+        if ($this->requestConsentIfPending($contact, $provider) !== null) {
+            return $check['message'] . ' A WhatsApp consent request (Agree / Stop) was sent instead.';
+        }
+        if ($this->lastConsentError !== '') {
+            return $check['message'] . ' Consent request not sent: ' . $this->lastConsentError;
+        }
+        $asked = (string) ($contact['wa_consent_requested_at'] ?? '');
+
+        return $asked !== ''
+            ? $check['message'] . ' Consent was requested on ' . $asked . '; waiting for the customer to tap Agree.'
+            : (string) $check['message'];
+    }
+
+    /**
+     * Business-initiated consent ask via the approved consent template (Agree / Stop quick replies).
+     *
+     * @param array<string, mixed> $contact
+     *
+     * @throws RuntimeException Template missing / not approved, messaging limit, or provider error.
+     */
+    public function sendConsentTemplate(array $contact, ?string $provider = null): void
+    {
+        $template = $this->consentTemplate();
+        if ($template === null || strtoupper((string) ($template['status'] ?? '')) !== 'APPROVED') {
+            $status = $template !== null ? strtoupper((string) ($template['status'] ?? '')) : ($this->ensureConsentTemplate()['status'] ?? '');
+            throw new RuntimeException(
+                'consent template "' . $this->config->consentTemplateName . '" is '
+                . ($status !== '' && $status !== null ? $status : 'not created') . ' on Meta — it goes out automatically once approved.'
+            );
+        }
+
+        $this->assertWithinMessagingLimit(1, null);
+
+        $name     = (string) $template['name'];
+        $language = (string) ($template['language'] ?? $this->config->consentTemplateLanguage);
+        $this->sendAndStore(
+            $contact,
+            $provider,
+            static fn ($api, string $to): array => $api->sendTemplate($to, $name, $language, []),
+            $name,
+            'template',
+            ['consent_request' => true, 'template' => $name, 'language' => $language]
+        );
+        $this->log('wa_consent_request', 'WhatsApp consent template sent', ['contact_id' => (int) ($contact['id'] ?? 0)]);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function consentTemplate(): ?array
+    {
+        try {
+            $row = model(TemplateModel::class)
+                ->where('name', $this->config->consentTemplateName)
+                ->where('language', $this->config->consentTemplateLanguage)
+                ->orderBy('id', 'DESC')
+                ->first();
+        } catch (Throwable) {
+            return null;
+        }
+
+        return is_array($row) ? $row : null;
+    }
+
+    /**
+     * Create the consent template on Meta for this tenant if it does not exist locally.
+     * Approval arrives through the message_template_status_update webhook.
+     *
+     * @return array{action: string, status: ?string, message: string}
+     */
+    public function ensureConsentTemplate(): array
+    {
+        $existing = $this->consentTemplate();
+        if ($existing !== null) {
+            return ['action' => 'exists', 'status' => strtoupper((string) ($existing['status'] ?? '')), 'message' => 'Consent template already present.'];
+        }
+
+        $settings = service('settingsService');
+        if ($settings->getWhatsAppProvider() !== SettingsService::PROVIDER_META) {
+            return ['action' => 'skipped', 'status' => null, 'message' => 'Consent template auto-create is available for the Meta provider only.'];
+        }
+        $wabaId = trim((string) ($settings->getMetaConfig()['waba_id'] ?? ''));
+        if ($wabaId === '') {
+            return ['action' => 'skipped', 'status' => null, 'message' => 'WABA ID missing; cannot create the consent template.'];
+        }
+
+        $name       = $this->config->consentTemplateName;
+        $language   = $this->config->consentTemplateLanguage;
+        $body       = $this->config->consentTemplateBody;
+        $components = [
+            ['type' => 'BODY', 'text' => $body],
+            ['type' => 'BUTTONS', 'buttons' => [
+                ['type' => 'QUICK_REPLY', 'text' => $this->config->consentAgreeLabel],
+                ['type' => 'QUICK_REPLY', 'text' => $this->config->consentStopLabel],
+            ]],
+        ];
+
+        try {
+            $response = service('whatsApp')->createTemplate([
+                'name'                  => $name,
+                'language'              => $language,
+                'category'              => 'MARKETING',
+                'components'            => $components,
+                'allow_category_change' => true,
+            ]);
+        } catch (Throwable $e) {
+            log_message('error', 'Consent template create failed: {msg}', ['msg' => $e->getMessage()]);
+            $message = MetaApiErrorMapper::humanize($e->getMessage(), (int) $e->getCode());
+            $this->notifyTemplate('WhatsApp consent template not created', 'Meta refused "' . $name . '": ' . $message);
+
+            return ['action' => 'failed', 'status' => null, 'message' => $message];
+        }
+
+        $data   = is_array($response['data'] ?? null) ? $response['data'] : $response;
+        $status = strtoupper((string) ($data['status'] ?? 'PENDING')) ?: 'PENDING';
+        $model  = model(TemplateModel::class);
+        $row    = [
+            'waba_id'       => $wabaId,
+            'meta_id'       => ! empty($data['id']) ? (string) $data['id'] : null,
+            'name'          => $name,
+            'language'      => $language,
+            'category'      => 'MARKETING',
+            'template_type' => 'default',
+            'status'        => $status,
+            'body'          => $body,
+            'buttons'       => $components[1]['buttons'],
+            'raw_payload'   => ['components' => $components, 'response' => $data],
+            'synced_at'     => date('Y-m-d H:i:s'),
+        ];
+        $model->insert(array_intersect_key($row, array_flip($model->allowedFields)));
+        $this->log('wa_consent_template', 'WhatsApp consent template submitted to Meta', ['status' => $status]);
+
+        return ['action' => 'created', 'status' => $status, 'message' => 'Consent template submitted to Meta (' . $status . ').'];
     }
 
     /**
@@ -1121,6 +1383,16 @@ class WhatsAppConsentService
 
         if ($template !== null && $update !== []) {
             $model->update((int) $template['id'], $update);
+        }
+
+        if ($name === $this->config->consentTemplateName && in_array($event, ['APPROVED', 'REJECTED'], true)) {
+            $this->notifyTemplate(
+                $event === 'APPROVED' ? 'WhatsApp consent template approved' : 'WhatsApp consent template rejected',
+                $event === 'APPROVED'
+                    ? 'Customers without an answer now get the Agree / Stop consent request automatically.'
+                    : 'Meta rejected "' . $name . '"' . (! empty($update['rejected_reason']) ? ' (' . $update['rejected_reason'] . ')' : '')
+                        . '. Change consentTemplateBody and consentTemplateName in Config/WhatsApp.php; the new template is submitted automatically.'
+            );
         }
 
         $quality = strtoupper((string) ($value['new_quality_score'] ?? ''));

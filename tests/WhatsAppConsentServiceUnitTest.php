@@ -153,7 +153,7 @@ check('empty exclusion summary', Consent::describeExclusions([]) === '');
 // --- Wiring (source checks) ----------------------------------------------
 $root = dirname(__DIR__);
 $queue = file_get_contents($root . '/app/Libraries/QueueService.php');
-check('queue dispatch enforces consent', str_contains($queue, 'assertEligible'));
+check('queue dispatch enforces consent', str_contains($queue, '->eligibility(') && str_contains($queue, 'denialWithConsentRequest'));
 check('queue retry skips non-retryable errors', str_contains($queue, 'isRetryableError'));
 $hook = file_get_contents($root . '/app/Controllers/Webhooks.php');
 check('webhook handles STOP/START before bots', str_contains($hook, 'handleConsentKeyword'));

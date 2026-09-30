@@ -322,7 +322,14 @@ class QueueService
         $kind = ! empty($item['campaign_id'])
             ? WhatsAppConsentService::KIND_CAMPAIGN
             : ($type === 'template' ? WhatsAppConsentService::KIND_TEMPLATE : WhatsAppConsentService::KIND_SESSION);
-        service('whatsAppConsent')->assertEligible($contact, $kind, $withinWindow);
+        $consent = service('whatsAppConsent');
+        $check   = $consent->eligibility($contact, $kind, $withinWindow);
+        if (! $check['ok']) {
+            throw new RuntimeException(
+                WhatsAppConsentService::POLICY_PREFIX . ' ' . $consent->denialWithConsentRequest($contact, $check),
+                422
+            );
+        }
 
         return match ($type) {
             'text' => $this->api->sendText(

@@ -114,6 +114,25 @@ class WhatsApp extends BaseConfig
     public string $consentStopLabel = 'Stop';
 
     /**
+     * Ask every contact who has neither agreed nor stopped: buttons inside the 24h window,
+     * otherwise the auto-created consent template. Blocked business sends ask instead.
+     */
+    public bool $autoConsentRequest = true;
+
+    /** Auto-created per tenant on Meta; quick replies use the Agree / Stop labels above. */
+    public string $consentTemplateName = 'wa_consent_request';
+
+    public string $consentTemplateLanguage = 'en_US';
+
+    public string $consentTemplateBody = 'Hello! Would you like to receive updates and offers from us on WhatsApp? Tap Agree to subscribe or Stop to opt out. You can unsubscribe anytime.';
+
+    /** Unanswered consent requests are re-sent at most once per this many days (repeat asks get numbers blocked). */
+    public int $consentRequestResendDays = 7;
+
+    /** Max consent requests per bulk action (import / campaign start). 0 = no cap. */
+    public int $consentRequestBatchLimit = 200;
+
+    /**
      * Minutes before a catch-all "any incoming message → reply" automation (no keyword
      * filter, no condition) replies again to the same contact. Stops reply spam and
      * bot-to-bot loops. 0 disables.

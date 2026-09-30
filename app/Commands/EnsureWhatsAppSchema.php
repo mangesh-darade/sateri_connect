@@ -36,6 +36,7 @@ class EnsureWhatsAppSchema extends BaseCommand
                 'wa_opted_out_at'     => 'DATETIME NULL DEFAULT NULL',
                 'wa_suppressed_until' => 'DATETIME NULL DEFAULT NULL',
                 'wa_suppress_reason'  => 'VARCHAR(191) NULL DEFAULT NULL',
+                'wa_consent_requested_at' => 'DATETIME NULL DEFAULT NULL',
             ],
             'conversations' => [
                 'channel' => "VARCHAR(20) NOT NULL DEFAULT 'whatsapp'",
@@ -61,6 +62,7 @@ class EnsureWhatsAppSchema extends BaseCommand
             'contacts.wa_opted_out_at'      => 'wa_opt_in_source',
             'contacts.wa_suppressed_until'  => 'wa_opted_out_at',
             'contacts.wa_suppress_reason'   => 'wa_suppressed_until',
+            'contacts.wa_consent_requested_at' => 'wa_suppress_reason',
             'conversations.channel'         => 'contact_id',
             'conversations.page_id'         => 'channel',
             'messages.channel'              => 'conversation_id',

@@ -58,7 +58,7 @@ $cleanup = static function () use ($db, $tplName, $mobile): void {
         $db->table('campaigns')->whereIn('template_id', $tplIds)->delete();
         $db->table('templates')->whereIn('id', $tplIds)->delete();
     }
-    $ids = array_column($db->table('contacts')->select('id')->where('mobile', $mobile)->get()->getResultArray(), 'id');
+    $ids = array_column($db->table('contacts')->select('id')->whereIn('mobile', [$mobile, '919000000883'])->get()->getResultArray(), 'id');
     if ($ids !== []) {
         foreach (['message_queue', 'messages', 'conversations', 'contact_tags', 'internal_notes'] as $t) {
             if ($db->tableExists($t)) {
@@ -164,6 +164,39 @@ try {
         'new_category'          => 'MARKETING',
     ]);
     check('template_category_update updates local category', ($templates->find($tplId)['category'] ?? '') === 'MARKETING');
+
+    // --- 4. Auto consent request (no provider call) --------------------------
+    $pid = (int) $contacts->insert(['name' => 'Pending Consent', 'mobile' => '919000000883', 'status' => 'active']);
+    $pending = $contacts->find($pid);
+    check('new contact without answer needs consent request', $consent->needsConsentRequest($pending));
+
+    $split = $consent->splitCampaignAudience([$pending]);
+    check('campaign split returns no-opt-in contact as pending consent', count($split['pending_consent']) === 1 && $split['eligible'] === []);
+
+    $contacts->update($pid, ['wa_consent_requested_at' => date('Y-m-d H:i:s', time() - 3600)]);
+    $asked = $contacts->find($pid);
+    check('asked within cooldown is not asked again', ! $consent->needsConsentRequest($asked));
+    $denial = $consent->denialWithConsentRequest($asked, $consent->eligibility($asked, Consent::KIND_CAMPAIGN));
+    check('blocked send explains consent already requested', str_contains($denial, 'waiting for the customer to tap Agree'), $denial);
+
+    $contacts->update($pid, ['wa_consent_requested_at' => date('Y-m-d H:i:s', time() - 8 * 86400)]);
+    check('unanswered request is re-sent after cooldown', $consent->needsConsentRequest($contacts->find($pid)));
+
+    $tpl = $consent->consentTemplate();
+    if ($tpl !== null && strtoupper((string) $tpl['status']) !== 'APPROVED') {
+        $due    = $contacts->find($pid);
+        $denial = $consent->denialWithConsentRequest($due, $consent->eligibility($due, Consent::KIND_CAMPAIGN));
+        check('unapproved consent template explains why nothing was sent', str_contains($denial, 'Consent request not sent') && str_contains($denial, (string) $tpl['status']), $denial);
+        check('failed consent request is not marked as asked', empty($contacts->find($pid)['wa_consent_requested_at']) || strtotime((string) $contacts->find($pid)['wa_consent_requested_at']) < time() - 86400);
+    }
+
+    check('template quick reply "Agree" opts in', $consent->detectButtonIntent('Agree', 'Agree') === Consent::INTENT_OPT_IN);
+    check('template quick reply "Stop" opts out', $consent->detectButtonIntent('Stop', 'Stop') === Consent::INTENT_OPT_OUT);
+
+    $consent->optIn($pid, 'whatsapp_button', null, false);
+    check('agreed contact is never asked again', ! $consent->needsConsentRequest($contacts->find($pid)));
+    $consent->optOut($pid, 'whatsapp_button: Stop');
+    check('stopped contact is never asked again', ! $consent->needsConsentRequest($contacts->find($pid)));
 
     // --- 5. Erasure ---------------------------------------------------------
     $cid = (int) $contacts->insert([

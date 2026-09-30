@@ -169,7 +169,7 @@ class Messages extends BaseApiController
 
         return $check['ok']
             ? null
-            : $this->respondError($check['message'], ['policy_reason' => $check['reason']], 422);
+            : $this->respondError($consent->denialWithConsentRequest($contact, $check), ['policy_reason' => $check['reason']], 422);
     }
 
     public function sendText(): ResponseInterface
