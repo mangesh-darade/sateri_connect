@@ -143,6 +143,24 @@ class Services extends BaseService
     /**
      * WhatsApp policy guard: opt-in/out, suppression, frequency cap, account health.
      */
+    public static function contactAttributes(bool $getShared = true)
+    {
+        if ($getShared) {
+            return static::getSharedInstance('contactAttributes');
+        }
+
+        return new \App\Libraries\ContactAttributeService();
+    }
+
+    public static function quickReplies(bool $getShared = true)
+    {
+        if ($getShared) {
+            return static::getSharedInstance('quickReplies');
+        }
+
+        return new \App\Libraries\QuickReplyService();
+    }
+
     public static function whatsAppConsent(bool $getShared = true)
     {
         if ($getShared) {

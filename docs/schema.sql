@@ -129,6 +129,18 @@ CREATE TABLE IF NOT EXISTS `campaigns` (
   CONSTRAINT `campaigns_created_by_foreign` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `campaigns_template_id_foreign` FOREIGN KEY (`template_id`) REFERENCES `templates` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+CREATE TABLE IF NOT EXISTS `contact_attributes` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `attr_key` varchar(50) NOT NULL,
+  `label` varchar(100) NOT NULL,
+  `type` varchar(20) NOT NULL DEFAULT 'text',
+  `options` text,
+  `default_value` varchar(255) DEFAULT NULL,
+  `created_at` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `attr_key` (`attr_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 CREATE TABLE IF NOT EXISTS `contact_tags` (
   `contact_id` int unsigned NOT NULL,
   `tag_id` int unsigned NOT NULL,
@@ -156,6 +168,7 @@ CREATE TABLE IF NOT EXISTS `contacts` (
   `wa_opted_out_at` datetime DEFAULT NULL,
   `wa_suppressed_until` datetime DEFAULT NULL,
   `wa_suppress_reason` varchar(191) DEFAULT NULL,
+  `wa_consent_requested_at` datetime DEFAULT NULL,
   `created_at` datetime DEFAULT NULL,
   `updated_at` datetime DEFAULT NULL,
   `deleted_at` datetime DEFAULT NULL,
@@ -340,6 +353,17 @@ CREATE TABLE IF NOT EXISTS `permissions` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `slug` (`slug`),
   KEY `module` (`module`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+CREATE TABLE IF NOT EXISTS `quick_replies` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `shortcut` varchar(50) NOT NULL,
+  `title` varchar(100) NOT NULL,
+  `message` text NOT NULL,
+  `created_by` int unsigned DEFAULT NULL,
+  `created_at` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `shortcut` (`shortcut`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 CREATE TABLE IF NOT EXISTS `rate_limits` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,

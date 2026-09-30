@@ -58,6 +58,7 @@ class ContactAttributes
         } catch (\Throwable $e) {
             // ignore — builder still has core + defaults
         }
+        $extra = array_merge($extra, array_keys(service('contactAttributes')->definitions()));
 
         $keys = array_values(array_unique(array_merge($keys, $extra)));
         sort($keys, SORT_NATURAL | SORT_FLAG_CASE);

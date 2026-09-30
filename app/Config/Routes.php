@@ -97,6 +97,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('contacts/bulk-delete', 'Contacts::bulkDelete', ['filter' => 'csrf']);
     $routes->post('contacts/bulk-tags', 'Contacts::bulkTags', ['filter' => 'csrf']);
     $routes->post('contacts/(:num)/erase', 'Contacts::erase/$1', ['filter' => 'csrf']);
+    $routes->post('contacts/bulk-attribute', 'Contacts::bulkAttribute', ['filter' => 'csrf']);
     $routes->post('contacts/bulk-consent', 'Contacts::bulkConsent', ['filter' => 'csrf']);
     $routes->post('contacts/(:num)/consent', 'Contacts::consent/$1', ['filter' => 'csrf']);
     $routes->post('contacts/sync-cheerio', 'Contacts::syncFromCheerio', ['filter' => 'csrf']);
@@ -105,6 +106,16 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->get('contacts/(:num)/edit', 'Contacts::edit/$1');
     $routes->post('contacts/(:num)', 'Contacts::update/$1', ['filter' => 'csrf']);
     $routes->post('contacts/(:num)/delete', 'Contacts::delete/$1', ['filter' => 'csrf']);
+
+    // Contact attribute definitions + inbox quick replies
+    $routes->get('attributes', 'Attributes::index');
+    $routes->post('attributes', 'Attributes::store', ['filter' => 'csrf']);
+    $routes->post('attributes/(:num)', 'Attributes::update/$1', ['filter' => 'csrf']);
+    $routes->post('attributes/(:num)/delete', 'Attributes::delete/$1', ['filter' => 'csrf']);
+    $routes->get('quick-replies', 'QuickReplies::index');
+    $routes->post('quick-replies', 'QuickReplies::store', ['filter' => 'csrf']);
+    $routes->post('quick-replies/(:num)', 'QuickReplies::update/$1', ['filter' => 'csrf']);
+    $routes->post('quick-replies/(:num)/delete', 'QuickReplies::delete/$1', ['filter' => 'csrf']);
 
     // Customer Groups (campaign audience lists — backed by tags)
     $routes->get('customer-groups', 'CustomerGroups::index');
@@ -186,6 +197,10 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('chat/assign', 'Chat::assign', ['filter' => 'csrf']);
     $routes->post('chat/status', 'Chat::setStatus', ['filter' => 'csrf']);
     $routes->get('chat/search', 'Chat::search');
+    $routes->get('chat/contact/(:num)', 'Chat::contactPanel/$1');
+    $routes->post('chat/contact-attribute', 'Chat::saveContactAttribute', ['filter' => 'csrf']);
+    $routes->post('chat/contact-tag', 'Chat::contactTag', ['filter' => 'csrf']);
+    $routes->get('chat/quick-replies', 'Chat::quickReplies');
 
     // Live notifications (header bell + browser alerts)
     $routes->get('notifications/poll', 'Notifications::poll');

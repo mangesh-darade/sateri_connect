@@ -295,6 +295,12 @@
                     'badge' => $inboxBadge,
                     'children' => $teamChildren,
                 ];
+                $inboxItems[] = [
+                    'label' => 'Quick Replies',
+                    'icon' => 'zap',
+                    'url' => site_url('quick-replies'),
+                    'match' => ['quick-replies'],
+                ];
             }
             if ($inboxItems !== []) {
                 $navGroups[] = ['title' => 'Inbox', 'items' => $inboxItems];
@@ -306,10 +312,11 @@
                     'label' => 'Contacts',
                     'icon' => 'users',
                     'url' => site_url('contacts'),
-                    'match' => ['contacts', 'customer-groups'],
+                    'match' => ['contacts', 'customer-groups', 'attributes'],
                     'children' => [
                         ['label' => 'All Contacts', 'icon' => 'users', 'url' => site_url('contacts'), 'match' => ['contacts']],
                         ['label' => 'Customer Groups', 'icon' => 'tags', 'url' => site_url('customer-groups'), 'match' => ['customer-groups']],
+                        ['label' => 'Attributes', 'icon' => 'list-plus', 'url' => site_url('attributes'), 'match' => ['attributes']],
                         ['label' => 'Import Contacts', 'icon' => 'file-up', 'url' => site_url('contacts/import'), 'match' => ['contacts/import']],
                         ['label' => 'Duplicate Check', 'icon' => 'copy', 'url' => site_url('contacts/duplicates'), 'match' => ['contacts/duplicates']],
                     ],

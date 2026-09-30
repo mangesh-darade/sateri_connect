@@ -34,6 +34,7 @@ class ContactModel extends Model
         'wa_opted_out_at',
         'wa_suppressed_until',
         'wa_suppress_reason',
+        'wa_consent_requested_at',
     ];
 
     protected bool $allowEmptyInserts = false;
@@ -58,9 +59,33 @@ class ContactModel extends Model
     protected $skipValidation       = false;
     protected $cleanValidationRules = true;
 
-    protected $beforeInsert = ['encodeCustomFields'];
+    protected $beforeInsert = ['applyAttributeDefaults', 'encodeCustomFields'];
     protected $beforeUpdate = ['encodeCustomFields'];
     protected $afterFind    = ['decodeCustomFields'];
+
+    /**
+     * New contacts get the default value of each defined attribute (Settings → Attributes).
+     *
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    protected function applyAttributeDefaults(array $data): array
+    {
+        if (! isset($data['data']) || ! is_array($data['data'])) {
+            return $data;
+        }
+        $fields = $data['data']['custom_fields'] ?? [];
+        if (is_string($fields)) {
+            $fields = json_decode($fields, true);
+        }
+        $fields   = is_array($fields) ? $fields : [];
+        $withDefs = service('contactAttributes')->withDefaults($fields);
+        if ($withDefs !== $fields) {
+            $data['data']['custom_fields'] = $withDefs;
+        }
+
+        return $data;
+    }
 
     /**
      * @param array<string, mixed> $data
