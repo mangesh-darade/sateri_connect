@@ -88,12 +88,7 @@
             </div>
         </div>
 
-        <?php
-        $attrColumns = [];
-        foreach (($attributeDefs ?? []) as $key => $def) {
-            $attrColumns[] = ['key' => (string) $key, 'label' => (string) $def['label'], 'type' => (string) $def['type']];
-        }
-        ?>
+        <?php $attrColumns = $attrColumns ?? []; ?>
         <table id="contactsTable" class="table table-sm table-hover align-middle w-100" data-attr-columns="<?= esc(json_encode($attrColumns), 'attr') ?>">
             <thead>
                 <tr>
@@ -107,7 +102,11 @@
                     <th>Status</th>
                     <th>Last Message</th>
                     <?php foreach ($attrColumns as $col): ?>
-                        <th class="text-nowrap" title="Attribute: <?= esc($col['key'], 'attr') ?>"><?= esc($col['label']) ?></th>
+                        <?php if ($col['defined']): ?>
+                            <th class="text-nowrap" title="Attribute: <?= esc($col['key'], 'attr') ?>"><?= esc($col['label']) ?></th>
+                        <?php else: ?>
+                            <th class="text-nowrap" title="Saved on contacts but not added under Contacts → Attributes yet"><?= esc($col['label']) ?> <i class="fas fa-circle-info text-muted small"></i></th>
+                        <?php endif; ?>
                     <?php endforeach; ?>
                     <th class="text-end">Actions</th>
                 </tr>

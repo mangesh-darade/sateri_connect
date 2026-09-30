@@ -123,6 +123,25 @@ class ContactAttributeService
     }
 
     /**
+     * Contacts list attribute columns: every defined attribute, then the most used keys saved on contacts
+     * (e.g. by a workflow) that are not defined yet.
+     *
+     * @return list<array{key: string, label: string, type: string, defined: bool}>
+     */
+    public function listColumns(int $maxUndefined = 15): array
+    {
+        $columns = [];
+        foreach ($this->definitions() as $key => $def) {
+            $columns[] = ['key' => (string) $key, 'label' => (string) $def['label'], 'type' => (string) $def['type'], 'defined' => true];
+        }
+        foreach (array_slice(array_keys($this->undefinedKeys()), 0, max(0, $maxUndefined)) as $key) {
+            $columns[] = ['key' => (string) $key, 'label' => (string) $key, 'type' => 'text', 'defined' => false];
+        }
+
+        return $columns;
+    }
+
+    /**
      * Where an attribute key is referenced: workflows (trigger / update / condition / ask-question /
      * template variables / {{contact.key}} text), keywords (set-attribute actions) and campaigns (attr:key variables).
      *

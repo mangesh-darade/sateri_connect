@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Libraries\ActivityLogger;
+use App\Libraries\ContactAttributeService;
 use App\Libraries\ContactAttributes;
 use App\Libraries\ContactExportService;
 use App\Libraries\ContactListFilter;
@@ -34,6 +35,7 @@ class Contacts extends BaseController
             'tags'           => model(TagModel::class)->orderBy('name', 'ASC')->findAll(),
             'attributeKeys'  => ContactAttributes::knownKeys(),
             'attributeDefs'  => service('contactAttributes')->definitions(),
+            'attrColumns'    => service('contactAttributes')->listColumns(),
             'attributeOps'   => ContactListFilter::ATTRIBUTE_OPS,
         ]);
     }
@@ -78,9 +80,10 @@ class Contacts extends BaseController
             5 => 'c.status',
             6 => 'c.last_message_at',
         ];
-        // Attribute columns follow "Last Message" in the same order as definitions() (keys are KEY_PATTERN-safe).
-        foreach (array_keys(service('contactAttributes')->definitions()) as $i => $attrKey) {
-            $columns[7 + $i] = "JSON_UNQUOTE(JSON_EXTRACT(c.custom_fields, '$.\"{$attrKey}\"'))";
+        // Attribute columns send their key as the DataTables column name.
+        $attrKey = (string) ($this->request->getGet('columns')[$orderCol]['name'] ?? '');
+        if ($orderCol >= 7 && preg_match(ContactAttributeService::KEY_PATTERN, $attrKey) === 1) {
+            $columns[$orderCol] = "JSON_UNQUOTE(JSON_EXTRACT(c.custom_fields, '$.\"{$attrKey}\"'))";
         }
         $orderBy = $columns[$orderCol] ?? 'c.id';
 

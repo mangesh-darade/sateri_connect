@@ -37,6 +37,7 @@
         var attrColumnDefs = attrColumns.map(function (col) {
             return {
                 data: null,
+                name: col.key,
                 defaultContent: '—',
                 render: function (v, type, row) {
                     var cf = (row && row.custom_fields) || {};
