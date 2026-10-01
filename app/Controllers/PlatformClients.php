@@ -44,16 +44,23 @@ class PlatformClients extends BaseController
 
     public function metaTech(): string|ResponseInterface
     {
-        $repo  = new MasterTenantRepository();
-        $tech  = $repo->getPlatformMetaTechProvider();
+        $repo = new MasterTenantRepository();
+        $tech = $repo->getPlatformMetaTechProvider();
         $tech['app_secret'] = $this->maskSecret((string) ($tech['app_secret'] ?? ''));
 
+        $baseUrl = rtrim(site_url(), '/');
+
         return view('platform/meta_tech', [
-            'pageTitle'    => 'Embedded Signup (Tech Provider)',
-            'navActive'    => 'meta-tech',
-            'tech'         => $tech,
-            'platformName' => (string) session('platform_admin_name'),
-            'sdkOrigin'    => rtrim(site_url(), '/'),
+            'pageTitle'          => 'Embedded Signup (Tech Provider)',
+            'navActive'          => 'meta-tech',
+            'tech'               => $tech,
+            'platformName'       => (string) session('platform_admin_name'),
+            'sdkOrigin'          => $baseUrl,
+            'webhookUrl'         => site_url('webhooks'),
+            'webhookVerifyToken' => (string) ($tech['webhook_verify_token'] ?? ''),
+            'privacyUrl'         => site_url('privacy-policy'),
+            'termsUrl'           => site_url('terms'),
+            'dataDeletionUrl'    => site_url('data-deletion'),
         ]);
     }
 
@@ -62,10 +69,11 @@ class PlatformClients extends BaseController
         $repo = new MasterTenantRepository();
         try {
             $repo->setPlatformMetaTechProvider([
-                'app_id'      => (string) $this->request->getPost('app_id'),
-                'config_id'   => (string) $this->request->getPost('config_id'),
-                'app_secret'  => (string) $this->request->getPost('app_secret'),
-                'api_version' => (string) ($this->request->getPost('api_version') ?: 'v25.0'),
+                'app_id'               => (string) $this->request->getPost('app_id'),
+                'config_id'            => (string) $this->request->getPost('config_id'),
+                'app_secret'           => (string) $this->request->getPost('app_secret'),
+                'api_version'          => (string) ($this->request->getPost('api_version') ?: 'v25.0'),
+                'webhook_verify_token' => (string) $this->request->getPost('webhook_verify_token'),
             ]);
         } catch (\Throwable $e) {
             return redirect()->back()->withInput()->with('error', $e->getMessage());
@@ -257,6 +265,133 @@ class PlatformClients extends BaseController
         ]);
 
         return redirect()->to('/dashboard')->with('success', 'Opened workspace: ' . $key);
+    }
+
+    public function settings(): string|ResponseInterface
+    {
+        $repo     = new MasterTenantRepository();
+        $branding = $repo->getPlatformBranding();
+
+        return view('platform/settings', [
+            'pageTitle'    => 'Platform Settings',
+            'navActive'    => 'settings',
+            'branding'     => $branding,
+            'platformName' => (string) session('platform_admin_name'),
+        ]);
+    }
+
+    public function saveSettings(): ResponseInterface
+    {
+        $repo = new MasterTenantRepository();
+
+        $name    = trim((string) $this->request->getPost('site_name'));
+        $tagline = trim((string) $this->request->getPost('site_tagline'));
+
+        if ($name !== '') {
+            $repo->setPlatformSetting('platform_site_name', $name);
+        }
+        $repo->setPlatformSetting('platform_site_tagline', $tagline);
+
+        // Powered by attribution settings
+        $poweredByEnabled = (string) $this->request->getPost('powered_by_enabled') === '1' ? '1' : '0';
+        $repo->setPlatformSetting('platform_powered_by_enabled', $poweredByEnabled);
+
+        $poweredByName = trim((string) $this->request->getPost('powered_by_name'));
+        $repo->setPlatformSetting('platform_powered_by_name', $poweredByName !== '' ? $poweredByName : 'Sateri Technologies');
+
+        $poweredByUrl = trim((string) $this->request->getPost('powered_by_url'));
+        $repo->setPlatformSetting('platform_powered_by_url', $poweredByUrl !== '' ? $poweredByUrl : 'https://sateritechnologies.com');
+
+        // Remove logo / favicon / powered_by_logo if requested
+        if ((string) $this->request->getPost('remove_logo') === '1') {
+            $currentLogo = $repo->getPlatformSetting('platform_logo');
+            $this->deletePlatformUpload($currentLogo);
+            $repo->setPlatformSetting('platform_logo', '');
+        }
+        if ((string) $this->request->getPost('remove_favicon') === '1') {
+            $currentFavicon = $repo->getPlatformSetting('platform_favicon');
+            $this->deletePlatformUpload($currentFavicon);
+            $repo->setPlatformSetting('platform_favicon', '');
+        }
+        if ((string) $this->request->getPost('remove_powered_by_logo') === '1') {
+            $currentPLogo = $repo->getPlatformSetting('platform_powered_by_logo');
+            $this->deletePlatformUpload($currentPLogo);
+            $repo->setPlatformSetting('platform_powered_by_logo', '');
+        }
+
+        // Upload new Logo / App Icon
+        $logoFile = $this->request->getFile('site_logo');
+        if ($logoFile !== null && $logoFile->isValid() && $logoFile->getError() !== UPLOAD_ERR_NO_FILE) {
+            $newPath = $this->handlePlatformUpload($logoFile, 'platform_logo', 2 * 1024 * 1024);
+            if ($newPath !== '') {
+                $currentLogo = $repo->getPlatformSetting('platform_logo');
+                $this->deletePlatformUpload($currentLogo);
+                $repo->setPlatformSetting('platform_logo', $newPath);
+            }
+        }
+
+        // Upload new Favicon
+        $favFile = $this->request->getFile('site_favicon');
+        if ($favFile !== null && $favFile->isValid() && $favFile->getError() !== UPLOAD_ERR_NO_FILE) {
+            $newPath = $this->handlePlatformUpload($favFile, 'platform_favicon', 512 * 1024);
+            if ($newPath !== '') {
+                $currentFav = $repo->getPlatformSetting('platform_favicon');
+                $this->deletePlatformUpload($currentFav);
+                $repo->setPlatformSetting('platform_favicon', $newPath);
+            }
+        }
+
+        // Upload new Powered By Logo
+        $pLogoFile = $this->request->getFile('powered_by_logo');
+        if ($pLogoFile !== null && $pLogoFile->isValid() && $pLogoFile->getError() !== UPLOAD_ERR_NO_FILE) {
+            $newPPath = $this->handlePlatformUpload($pLogoFile, 'platform_powered_by', 1024 * 1024);
+            if ($newPPath !== '') {
+                $currentPLogo = $repo->getPlatformSetting('platform_powered_by_logo');
+                $this->deletePlatformUpload($currentPLogo);
+                $repo->setPlatformSetting('platform_powered_by_logo', $newPPath);
+            }
+        }
+
+        return redirect()->to('/platform/settings')->with('success', 'Platform branding and settings updated.');
+    }
+
+    protected function handlePlatformUpload($file, string $prefix, int $maxBytes): string
+    {
+        $ext = strtolower((string) $file->getExtension());
+        if (! in_array($ext, ['png', 'jpg', 'jpeg', 'webp', 'gif', 'ico', 'svg'], true)) {
+            return '';
+        }
+        if ($file->getSize() > $maxBytes) {
+            return '';
+        }
+
+        $dir = FCPATH . 'uploads' . DIRECTORY_SEPARATOR . 'platform' . DIRECTORY_SEPARATOR;
+        if (! is_dir($dir) && ! @mkdir($dir, 0755, true)) {
+            return '';
+        }
+
+        $safeExt = $ext !== '' ? $ext : 'png';
+        if ($safeExt === 'jpeg') {
+            $safeExt = 'jpg';
+        }
+        $newName = $prefix . '-' . bin2hex(random_bytes(6)) . '.' . $safeExt;
+        $file->move($dir, $newName);
+
+        return 'uploads/platform/' . $newName;
+    }
+
+    protected function deletePlatformUpload(string $relativePath): void
+    {
+        $relativePath = str_replace(['../', '..\\'], '', $relativePath);
+        $relativePath = ltrim(str_replace('\\', '/', $relativePath), '/');
+        if ($relativePath === '' || ! str_starts_with($relativePath, 'uploads/platform/')) {
+            return;
+        }
+
+        $full = FCPATH . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+        if (is_file($full)) {
+            @unlink($full);
+        }
     }
 
     protected function maskSecret(string $value): string

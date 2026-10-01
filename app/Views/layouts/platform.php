@@ -77,11 +77,23 @@ $brandInitial = mb_strtoupper(mb_substr($platformSiteName !== '' ? $platformSite
                     <i class="fas fa-right-from-bracket" aria-hidden="true"></i>
                     <span>Logout</span>
                 </a>
+                <?php if (! empty($platformBranding['powered_by_enabled'])): ?>
+                    <div style="margin-top:0.75rem;padding-top:0.65rem;border-top:1px solid rgba(255,255,255,0.08);font-size:0.7rem;color:rgba(232,238,240,0.5);display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:wrap">
+                        <span>Powered by</span>
+                        <a href="<?= esc($platformBranding['powered_by_url']) ?>" target="_blank" rel="noopener noreferrer" style="color:#7dd3fc;text-decoration:none;font-weight:600;display:inline-flex;align-items:center;gap:4px">
+                            <?php if (! empty($platformBranding['powered_by_logo_url'])): ?>
+                                <img src="<?= esc($platformBranding['powered_by_logo_url']) ?>" alt="Logo" style="height:13px;width:auto;vertical-align:middle;border-radius:2px">
+                            <?php endif; ?>
+                            <span><?= esc($platformBranding['powered_by_name']) ?></span>
+                            <i class="fas fa-arrow-up-right-from-square" style="font-size:8px"></i>
+                        </a>
+                    </div>
+                <?php endif; ?>
             </div>
         </nav>
     </aside>
 
-    <div class="platform-main">
+    <div class="platform-main" style="display:flex;flex-direction:column;min-height:100vh">
         <header class="platform-topbar">
             <div class="platform-topbar-copy">
                 <p class="platform-eyebrow">Super admin</p>
@@ -99,9 +111,27 @@ $brandInitial = mb_strtoupper(mb_substr($platformSiteName !== '' ? $platformSite
             <div class="platform-alert platform-alert-err"><?= esc(session()->getFlashdata('error')) ?></div>
         <?php endif; ?>
 
-        <div class="platform-content">
+        <div class="platform-content" style="flex:1">
             <?= $this->renderSection('content') ?>
         </div>
+
+        <footer style="padding:1.25rem 2rem;margin-top:auto;border-top:1px solid var(--pf-line);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;font-size:0.8rem;color:var(--pf-muted)">
+            <div>
+                &copy; <?= date('Y') ?> <strong><?= esc($platformSiteName) ?></strong>. All rights reserved.
+            </div>
+            <?php if (! empty($platformBranding['powered_by_enabled'])): ?>
+                <div style="display:inline-flex;align-items:center;gap:6px">
+                    <span>Powered by</span>
+                    <a href="<?= esc($platformBranding['powered_by_url']) ?>" target="_blank" rel="noopener noreferrer" style="color:var(--pf-teal);font-weight:700;display:inline-flex;align-items:center;gap:5px;text-decoration:none">
+                        <?php if (! empty($platformBranding['powered_by_logo_url'])): ?>
+                            <img src="<?= esc($platformBranding['powered_by_logo_url']) ?>" alt="<?= esc($platformBranding['powered_by_name']) ?>" style="height:15px;width:auto;vertical-align:middle;border-radius:2px">
+                        <?php endif; ?>
+                        <span><?= esc($platformBranding['powered_by_name']) ?></span>
+                        <i class="fas fa-arrow-up-right-from-square" style="font-size:9px"></i>
+                    </a>
+                </div>
+            <?php endif; ?>
+        </footer>
     </div>
 </div>
 <?= $this->renderSection('scripts') ?>

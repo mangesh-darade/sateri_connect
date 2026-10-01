@@ -42,7 +42,7 @@ class Users extends BaseController
 
         return $this->render('users/form', [
             'pageTitle' => 'Create User',
-            'user'      => null,
+            'editUser'  => null,
             'roles'     => model(RoleModel::class)->orderBy('name', 'ASC')->findAll(),
         ]);
     }
@@ -105,7 +105,7 @@ class Users extends BaseController
 
         return $this->render('users/form', [
             'pageTitle' => 'Edit User',
-            'user'      => $user,
+            'editUser'  => $user,
             'roles'     => model(RoleModel::class)->orderBy('name', 'ASC')->findAll(),
         ]);
     }

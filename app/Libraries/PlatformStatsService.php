@@ -229,7 +229,7 @@ class PlatformStatsService
                         ->getResultArray();
                 }
                 if ($db->tableExists('users')) {
-                    $usersActive = (int) $db->table('users')->where('status', 'active')->countAllResults();
+                    $usersActive = (int) $db->table('users')->where('status', 'active')->where('deleted_at', null)->countAllResults();
                 }
                 if ($db->tableExists('messages')) {
                     $last = $db->table('messages')->selectMax('created_at')->get()->getRowArray();
@@ -330,7 +330,7 @@ class PlatformStatsService
             $db->query('SELECT 1');
 
             $base['users'] = $db->tableExists('users')
-                ? (int) $db->table('users')->countAllResults()
+                ? (int) $db->table('users')->where('deleted_at', null)->countAllResults()
                 : 0;
             $base['contacts'] = $db->tableExists('contacts')
                 ? (int) $db->table('contacts')->where('deleted_at', null)->countAllResults()

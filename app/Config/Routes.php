@@ -37,6 +37,15 @@ $routes->match(['get', 'post'], 'reset-password/(:segment)', 'Auth::resetPasswor
 
 /*
  * --------------------------------------------------------------------
+ * Meta Platform Compliance & Public Legal Pages
+ * --------------------------------------------------------------------
+ */
+$routes->get('privacy-policy', 'Home::privacyPolicy');
+$routes->get('terms', 'Home::terms');
+$routes->match(['get', 'post'], 'data-deletion', 'Home::dataDeletion');
+
+/*
+ * --------------------------------------------------------------------
  * Platform super admin (all clients)
  * --------------------------------------------------------------------
  */
@@ -46,6 +55,8 @@ $routes->group('platform', ['filter' => 'platformAuth'], static function ($route
     $routes->post('clients', 'PlatformClients::store', ['filter' => 'csrf']);
     $routes->get('meta-tech', 'PlatformClients::metaTech');
     $routes->post('meta-tech', 'PlatformClients::saveMetaTech', ['filter' => 'csrf']);
+    $routes->get('settings', 'PlatformClients::settings');
+    $routes->post('settings', 'PlatformClients::saveSettings', ['filter' => 'csrf']);
     $routes->get('clients/(:segment)', 'PlatformClients::show/$1');
     $routes->post('clients/(:segment)/meta', 'PlatformClients::saveMeta/$1', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/login', 'PlatformClients::saveLogin/$1', ['filter' => 'csrf']);

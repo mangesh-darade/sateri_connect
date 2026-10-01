@@ -6,7 +6,7 @@
 
 <?= $this->section('content') ?>
 <?php
-$formUser = $user ?? $edit_user ?? $userRow ?? $editUser ?? $user_form ?? [];
+$formUser = $editUser ?? $edit_user ?? $userRow ?? $user_form ?? [];
 $isEdit = ! empty($formUser['id']);
 $action = $isEdit ? site_url('users/' . (int) $formUser['id']) : site_url('users');
 ?>

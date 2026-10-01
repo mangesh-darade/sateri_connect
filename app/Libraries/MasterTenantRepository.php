@@ -522,6 +522,50 @@ class MasterTenantRepository
     }
 
     /**
+     * Platform Super Admin branding (site name, tagline, logo, favicon, powered by).
+     *
+     * @return array{site_name: string, site_tagline: string, site_logo: string, site_favicon: string, logo_url: string, favicon_url: string, powered_by_enabled: bool, powered_by_name: string, powered_by_url: string, powered_by_logo: string, powered_by_logo_url: string}
+     */
+    public function getPlatformBranding(): array
+    {
+        $siteName         = $this->getPlatformSetting('platform_site_name', 'Sateri Platform');
+        $siteTagline      = $this->getPlatformSetting('platform_site_tagline', 'Super Admin Console');
+        $logo             = $this->getPlatformSetting('platform_logo', '');
+        $favicon          = $this->getPlatformSetting('platform_favicon', '');
+        $poweredByEnabled = $this->getPlatformSetting('platform_powered_by_enabled', '1');
+        $poweredByName    = $this->getPlatformSetting('platform_powered_by_name', 'Sateri Technologies');
+        $poweredByUrl     = $this->getPlatformSetting('platform_powered_by_url', 'https://sateritechnologies.com');
+        $poweredByLogo    = $this->getPlatformSetting('platform_powered_by_logo', '');
+
+        $logoUrl = '';
+        if ($logo !== '') {
+            $logoUrl = base_url(ltrim($logo, '/'));
+        }
+        $faviconUrl = '';
+        if ($favicon !== '') {
+            $faviconUrl = base_url(ltrim($favicon, '/'));
+        }
+        $poweredByLogoUrl = '';
+        if ($poweredByLogo !== '') {
+            $poweredByLogoUrl = base_url(ltrim($poweredByLogo, '/'));
+        }
+
+        return [
+            'site_name'           => $siteName !== '' ? $siteName : 'Sateri Platform',
+            'site_tagline'        => $siteTagline !== '' ? $siteTagline : 'Super Admin Console',
+            'site_logo'           => $logo,
+            'site_favicon'        => $favicon,
+            'logo_url'            => $logoUrl,
+            'favicon_url'         => $faviconUrl,
+            'powered_by_enabled'  => $poweredByEnabled === '1',
+            'powered_by_name'     => $poweredByName !== '' ? $poweredByName : 'Sateri Technologies',
+            'powered_by_url'      => $poweredByUrl !== '' ? $poweredByUrl : 'https://sateritechnologies.com',
+            'powered_by_logo'     => $poweredByLogo,
+            'powered_by_logo_url' => $poweredByLogoUrl,
+        ];
+    }
+
+    /**
      * Shared Meta Tech Provider app used for Embedded Signup across all tenants.
      *
      * @return array{app_id: string, config_id: string, app_secret: string, api_version: string, ready: bool, source: string}
@@ -534,11 +578,13 @@ class MasterTenantRepository
         $apiVersion = 'v25.0';
         $source     = 'none';
 
+        $webhookVerifyToken = '';
         if (self::masterConfigured()) {
-            $appId      = trim($this->getPlatformSetting('meta_tech_app_id'));
-            $configId   = trim($this->getPlatformSetting('meta_tech_config_id'));
-            $appSecret  = trim($this->decryptSecret($this->getPlatformSetting('meta_tech_app_secret')));
-            $apiVersion = trim($this->getPlatformSetting('meta_tech_api_version', 'v25.0')) ?: 'v25.0';
+            $appId              = trim($this->getPlatformSetting('meta_tech_app_id'));
+            $configId           = trim($this->getPlatformSetting('meta_tech_config_id'));
+            $appSecret          = trim($this->decryptSecret($this->getPlatformSetting('meta_tech_app_secret')));
+            $apiVersion         = trim($this->getPlatformSetting('meta_tech_api_version', 'v25.0')) ?: 'v25.0';
+            $webhookVerifyToken = trim($this->getPlatformSetting('webhook_verify_token'));
             if ($appId !== '' || $configId !== '') {
                 $source = 'platform';
             }
@@ -563,19 +609,23 @@ class MasterTenantRepository
         if ($envVer !== '') {
             $apiVersion = $envVer;
         }
+        if ($webhookVerifyToken === '') {
+            $webhookVerifyToken = trim((string) env('meta.webhookVerifyToken', env('META_WEBHOOK_VERIFY_TOKEN', '')));
+        }
 
         return [
-            'app_id'      => $appId,
-            'config_id'   => $configId,
-            'app_secret'  => $appSecret,
-            'api_version' => $apiVersion,
-            'ready'       => $appId !== '' && $configId !== '' && $appSecret !== '',
-            'source'      => $source,
+            'app_id'               => $appId,
+            'config_id'            => $configId,
+            'app_secret'           => $appSecret,
+            'api_version'          => $apiVersion,
+            'webhook_verify_token' => $webhookVerifyToken,
+            'ready'                => $appId !== '' && $configId !== '' && $appSecret !== '',
+            'source'               => $source,
         ];
     }
 
     /**
-     * @param array{app_id?: string, config_id?: string, app_secret?: string, api_version?: string} $data
+     * @param array{app_id?: string, config_id?: string, app_secret?: string, api_version?: string, webhook_verify_token?: string} $data
      */
     public function setPlatformMetaTechProvider(array $data): void
     {
@@ -592,6 +642,9 @@ class MasterTenantRepository
         if (array_key_exists('api_version', $data)) {
             $ver = trim((string) $data['api_version']);
             $this->setPlatformSetting('meta_tech_api_version', $ver !== '' ? $ver : 'v25.0');
+        }
+        if (array_key_exists('webhook_verify_token', $data)) {
+            $this->setPlatformSetting('webhook_verify_token', trim((string) $data['webhook_verify_token']));
         }
         if (array_key_exists('app_secret', $data)) {
             $secret = trim((string) $data['app_secret']);
