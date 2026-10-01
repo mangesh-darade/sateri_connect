@@ -3,7 +3,20 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= esc($pageTitle ?? 'Platform') ?> | Sateri Platform</title>
+    <?php
+    $masterRepo = new \App\Libraries\MasterTenantRepository();
+    $platformBranding = $masterRepo->getPlatformBranding();
+    $platformSiteName = $platformBranding['site_name'];
+    $platformTagline  = $platformBranding['site_tagline'];
+    $platformFavicon  = $platformBranding['favicon_url'];
+    $platformLogoUrl  = $platformBranding['logo_url'];
+    ?>
+    <title><?= esc($pageTitle ?? 'Platform') ?> | <?= esc($platformSiteName) ?></title>
+    <?php if ($platformFavicon !== ''): ?>
+        <link rel="icon" href="<?= esc($platformFavicon) ?>">
+        <link rel="shortcut icon" href="<?= esc($platformFavicon) ?>">
+        <link rel="apple-touch-icon" href="<?= esc($platformFavicon) ?>">
+    <?php endif; ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
@@ -14,16 +27,21 @@
 <?php
 $navActive = (string) ($navActive ?? '');
 $platformName = (string) ($platformName ?? 'Admin');
+$brandInitial = mb_strtoupper(mb_substr($platformSiteName !== '' ? $platformSiteName : 'S', 0, 1));
 ?>
 <div class="platform-frame">
     <aside class="platform-sidebar" aria-label="Platform menu">
-        <div class="platform-sidebar-brand">
-            <div class="platform-rail-mark">S</div>
-            <div>
-                <div class="platform-sidebar-name">Sateri</div>
-                <div class="platform-sidebar-sub">Platform Admin</div>
-            </div>
-        </div>
+        <a href="<?= site_url('platform/clients') ?>" class="platform-sidebar-brand" style="text-decoration:none;color:inherit">
+            <?php if ($platformLogoUrl !== ''): ?>
+                <img src="<?= esc($platformLogoUrl) ?>" alt="<?= esc($platformSiteName) ?>" style="max-height:36px;max-width:140px;object-fit:contain;border-radius:6px">
+            <?php else: ?>
+                <div class="platform-rail-mark"><?= esc($brandInitial) ?></div>
+                <div>
+                    <div class="platform-sidebar-name"><?= esc($platformSiteName) ?></div>
+                    <div class="platform-sidebar-sub"><?= esc($platformTagline) ?></div>
+                </div>
+            <?php endif; ?>
+        </a>
 
         <nav class="platform-side-nav">
             <div class="platform-side-label">Overview</div>
@@ -44,6 +62,10 @@ $platformName = (string) ($platformName ?? 'Admin');
             <a href="<?= site_url('platform/meta-tech') ?>" class="platform-side-link<?= $navActive === 'meta-tech' ? ' is-active' : '' ?>">
                 <i class="fab fa-meta" aria-hidden="true"></i>
                 <span>Embedded Signup</span>
+            </a>
+            <a href="<?= site_url('platform/settings') ?>" class="platform-side-link<?= $navActive === 'settings' ? ' is-active' : '' ?>">
+                <i class="fas fa-sliders-h" aria-hidden="true"></i>
+                <span>Settings &amp; Branding</span>
             </a>
 
             <div class="platform-side-footer">
