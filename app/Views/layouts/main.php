@@ -605,6 +605,27 @@
                     </ul>
                 <?php endforeach; ?>
             </nav>
+            <?php
+            $pbEnabled = function_exists('setting') ? (string) setting('powered_by_enabled', '1') === '1' : true;
+            $pbName    = function_exists('setting') ? trim((string) setting('powered_by_name', '')) : '';
+            $pbUrl     = function_exists('setting') ? trim((string) setting('powered_by_url', '')) : '';
+            $pbLogo    = function_exists('setting') ? trim((string) setting('powered_by_logo', '')) : '';
+            $pbLogoUrl = $pbLogo !== '' ? base_url(ltrim($pbLogo, '/')) : '';
+            if ($pbEnabled && $pbName === '' && \App\Libraries\MasterTenantRepository::masterConfigured()) {
+                try {
+                    $plat = (new \App\Libraries\MasterTenantRepository())->getPlatformBranding();
+                    if (! empty($plat['powered_by_enabled'])) {
+                        $pbName    = trim((string) ($plat['powered_by_name'] ?? ''));
+                        $pbUrl     = trim((string) ($plat['powered_by_url'] ?? ''));
+                        $pbLogoUrl = trim((string) ($plat['powered_by_logo_url'] ?? ''));
+                    }
+                } catch (\Throwable $e) {}
+            }
+            if ($pbName === '') {
+                $pbName = 'Sateri Technologies';
+                $pbUrl  = 'https://sateritechnologies.com';
+            }
+            ?>
             <?php if (function_exists('can') && can('settings.view')): ?>
             <div class="sidebar-footer-links">
                 <ul class="nav nav-pills nav-sidebar flex-column mb-0">
@@ -615,6 +636,18 @@
                         </a>
                     </li>
                 </ul>
+                <?php if ($pbEnabled && $pbName !== ''): ?>
+                <div style="padding:8px 12px;margin:6px 8px 4px;border-radius:6px;background:rgba(255,255,255,0.04);font-size:0.72rem;color:rgba(255,255,255,0.6);display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap">
+                    <span>Powered by</span>
+                    <a href="<?= esc($pbUrl !== '' ? $pbUrl : '#') ?>" target="_blank" rel="noopener noreferrer" style="color:#38bdf8;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+                        <?php if ($pbLogoUrl !== ''): ?>
+                            <img src="<?= esc($pbLogoUrl) ?>" alt="Logo" style="height:12px;width:auto;vertical-align:middle;border-radius:2px">
+                        <?php endif; ?>
+                        <span><?= esc($pbName) ?></span>
+                        <i class="fas fa-external-link-alt" style="font-size:8px"></i>
+                    </a>
+                </div>
+                <?php endif; ?>
             </div>
             <?php endif; ?>
         </div>
@@ -731,6 +764,17 @@
     <footer class="main-footer">
         <strong>&copy; <?= date('Y') ?> <?= esc(function_exists('setting') ? (string) setting('app_name', 'WhatsApp Automation Platform') : 'WhatsApp Automation Platform') ?></strong>
         · <?= esc(function_exists('whatsapp_provider_label') ? whatsapp_provider_label() : 'WhatsApp API') ?>
+        <?php if ($pbEnabled && $pbName !== ''): ?>
+            <span class="ms-2">· Powered by
+                <a href="<?= esc($pbUrl !== '' ? $pbUrl : '#') ?>" target="_blank" rel="noopener noreferrer" style="font-weight:600;text-decoration:none;color:inherit;display:inline-flex;align-items:center;gap:4px">
+                    <?php if ($pbLogoUrl !== ''): ?>
+                        <img src="<?= esc($pbLogoUrl) ?>" alt="Logo" style="height:14px;width:auto;vertical-align:middle;border-radius:2px">
+                    <?php endif; ?>
+                    <span><?= esc($pbName) ?></span>
+                    <i class="fas fa-external-link-alt ms-1" style="font-size:9px"></i>
+                </a>
+            </span>
+        <?php endif; ?>
         <div class="float-end d-none d-sm-inline-block">v1.0.0</div>
     </footer>
     <?php endif; ?>

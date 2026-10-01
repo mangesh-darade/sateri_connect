@@ -607,6 +607,64 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                 </div>
                             </div>
                         </div>
+
+                        <?php
+                        $poweredByLogoUrl = ! empty($app['powered_by_logo']) ? base_url(ltrim((string) $app['powered_by_logo'], '/')) : '';
+                        $isPbEnabled      = (string) ($app['powered_by_enabled'] ?? '1') === '1';
+                        $pbName           = (string) ($app['powered_by_name'] ?? '');
+                        $pbUrl            = (string) ($app['powered_by_url'] ?? '');
+                        ?>
+                        <div class="settings-panel mb-3">
+                            <div class="d-flex align-items-center justify-content-between mb-3">
+                                <div>
+                                    <h6 class="settings-panel-label mb-0">&quot;Powered By&quot; Attribution</h6>
+                                    <div class="form-text mt-0">Display developer, platform, or white-label attribution in footer and sidebar.</div>
+                                </div>
+                                <div class="form-check form-switch mb-0">
+                                    <input class="form-check-input" type="checkbox" name="powered_by_enabled" value="1" id="tenantPoweredByToggle" <?= $isPbEnabled ? 'checked' : '' ?> style="cursor:pointer">
+                                    <label class="form-check-label fw-bold" for="tenantPoweredByToggle">Enable attribution</label>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Brand / Provider Name</label>
+                                    <input type="text" name="powered_by_name" id="tenantPoweredByName" class="form-control" value="<?= esc($pbName) ?>" placeholder="e.g. Sateri Technologies">
+                                    <div class="form-text">Company or product name displayed after &quot;Powered by&quot;. Leave blank to use platform default.</div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Destination Website Link</label>
+                                    <input type="url" name="powered_by_url" id="tenantPoweredByUrl" class="form-control" value="<?= esc($pbUrl) ?>" placeholder="https://sateritechnologies.com">
+                                    <div class="form-text">Clickable link for the powered by attribution badge.</div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Provider Micro-Logo / Icon</label>
+                                    <input type="file" name="powered_by_logo" id="tenantPoweredByLogoInput" class="form-control" accept=".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif">
+                                    <div class="form-text">Small brand logo (max 1 MB, PNG/JPG/WebP). Displayed next to the provider name.</div>
+                                    <?php if ($poweredByLogoUrl !== ''): ?>
+                                        <div class="d-flex align-items-center gap-3 mt-2 branding-preview">
+                                            <img src="<?= esc($poweredByLogoUrl) ?>" alt="Logo preview" style="max-height:22px;width:auto;border-radius:2px" id="tenantPbLogoPreview">
+                                            <div class="form-check mb-0">
+                                                <input class="form-check-input" type="checkbox" name="remove_powered_by_logo" value="1" id="removePoweredByLogo">
+                                                <label class="form-check-label" for="removePoweredByLogo">Remove logo</label>
+                                            </div>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Attribution Preview</label>
+                                    <div class="p-2 border rounded bg-light d-flex align-items-center gap-2" style="min-height:38px">
+                                        <span class="text-muted small">Powered by</span>
+                                        <a href="<?= esc($pbUrl !== '' ? $pbUrl : '#') ?>" id="tenantPbPreviewLink" target="_blank" rel="noopener" style="font-weight:600;text-decoration:none">
+                                            <img src="<?= esc($poweredByLogoUrl) ?>" alt="Logo" id="tenantPbPreviewImg" style="height:14px;width:auto;vertical-align:middle;<?= $poweredByLogoUrl !== '' ? '' : 'display:none;' ?>">
+                                            <span id="tenantPbPreviewText"><?= esc($pbName !== '' ? $pbName : 'Sateri Technologies') ?></span>
+                                            <i class="fas fa-external-link-alt ms-1" style="font-size:9px"></i>
+                                        </a>
+                                    </div>
+                                    <div class="form-text">Real-time preview of how attribution appears across the console.</div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="settings-panel">
                             <h6 class="settings-panel-label">Application</h6>
                             <div class="row">
@@ -1854,6 +1912,23 @@ $(function () {
                 APP.toast(msg, 'error');
                 $btn.prop('disabled', false).html(html);
             });
+    });
+
+    // Live update for Tenant Powered By Preview
+    $('#tenantPoweredByName').on('input', function () {
+        $('#tenantPbPreviewText').text($(this).val().trim() || 'Sateri Technologies');
+    });
+    $('#tenantPoweredByUrl').on('input', function () {
+        $('#tenantPbPreviewLink').attr('href', $(this).val().trim() || '#');
+    });
+    $('#tenantPoweredByLogoInput').on('change', function (e) {
+        if (e.target.files && e.target.files[0]) {
+            var reader = new FileReader();
+            reader.onload = function (ev) {
+                $('#tenantPbPreviewImg').attr('src', ev.target.result).show();
+            };
+            reader.readAsDataURL(e.target.files[0]);
+        }
     });
 });
 </script>

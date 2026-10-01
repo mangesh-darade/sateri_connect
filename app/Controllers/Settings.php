@@ -84,13 +84,17 @@ class Settings extends BaseController
                 ->orderBy('name', 'ASC')
                 ->findAll(),
             'app'       => [
-                'app_name'      => (string) $settings->get('app_name', 'WhatsApp Automation'),
-                'app_tagline'   => (string) $settings->get('app_tagline', 'Automation console'),
-                'app_timezone'  => (string) ($settings->get('app_timezone') ?: $settings->get('timezone', 'UTC')),
-                'app_email'     => (string) $settings->get('app_email', ''),
-                'app_url'       => (string) $settings->get('app_url', site_url()),
-                'site_logo'     => (string) $settings->get('site_logo', ''),
-                'site_favicon'  => (string) $settings->get('site_favicon', ''),
+                'app_name'           => (string) $settings->get('app_name', 'WhatsApp Automation'),
+                'app_tagline'        => (string) $settings->get('app_tagline', 'Automation console'),
+                'app_timezone'       => (string) ($settings->get('app_timezone') ?: $settings->get('timezone', 'UTC')),
+                'app_email'          => (string) $settings->get('app_email', ''),
+                'app_url'            => (string) $settings->get('app_url', site_url()),
+                'site_logo'          => (string) $settings->get('site_logo', ''),
+                'site_favicon'       => (string) $settings->get('site_favicon', ''),
+                'powered_by_enabled' => (string) $settings->get('powered_by_enabled', '1'),
+                'powered_by_name'    => (string) $settings->get('powered_by_name', ''),
+                'powered_by_url'     => (string) $settings->get('powered_by_url', ''),
+                'powered_by_logo'    => (string) $settings->get('powered_by_logo', ''),
             ],
             'smtp' => [
                 'smtp_host'       => (string) $settings->get('smtp_host', ''),
@@ -276,11 +280,13 @@ class Settings extends BaseController
 
             if (in_array($section, ['all', 'app'], true)) {
                 $appKeys = [
-                    'app_name'     => 'general',
-                    'app_tagline'  => 'general',
-                    'app_timezone' => 'general',
-                    'app_email'    => 'general',
-                    'app_url'      => 'general',
+                    'app_name'        => 'general',
+                    'app_tagline'     => 'general',
+                    'app_timezone'    => 'general',
+                    'app_email'       => 'general',
+                    'app_url'         => 'general',
+                    'powered_by_name' => 'general',
+                    'powered_by_url'  => 'general',
                 ];
                 foreach ($appKeys as $key => $group) {
                     $val = $this->request->getPost($key);
@@ -292,6 +298,9 @@ class Settings extends BaseController
                     }
                 }
 
+                $pbEnabled = $this->request->getPost('powered_by_enabled') ? '1' : '0';
+                $settings->set('powered_by_enabled', $pbEnabled, 'general');
+
                 if ((string) $this->request->getPost('remove_site_logo') === '1') {
                     $this->deleteBrandingFile((string) $settings->get('site_logo', ''));
                     $settings->set('site_logo', '', 'general');
@@ -300,6 +309,10 @@ class Settings extends BaseController
                     $this->deleteBrandingFile((string) $settings->get('site_favicon', ''));
                     $settings->set('site_favicon', '', 'general');
                 }
+                if ((string) $this->request->getPost('remove_powered_by_logo') === '1') {
+                    $this->deleteBrandingFile((string) $settings->get('powered_by_logo', ''));
+                    $settings->set('powered_by_logo', '', 'general');
+                }
 
                 $this->saveBrandingUpload($settings, 'site_logo', [
                     'image/png', 'image/jpeg', 'image/webp', 'image/gif',
@@ -307,6 +320,9 @@ class Settings extends BaseController
                 $this->saveBrandingUpload($settings, 'site_favicon', [
                     'image/png', 'image/x-icon', 'image/vnd.microsoft.icon', 'image/jpeg', 'image/webp', 'image/gif',
                 ], 512 * 1024);
+                $this->saveBrandingUpload($settings, 'powered_by_logo', [
+                    'image/png', 'image/jpeg', 'image/webp', 'image/gif',
+                ], 1024 * 1024);
             }
 
             if (in_array($section, ['all', 'smtp'], true)) {
