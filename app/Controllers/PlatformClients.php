@@ -82,6 +82,73 @@ class PlatformClients extends BaseController
         return redirect()->to('/platform/meta-tech')->with('success', 'Tech Provider Embedded Signup credentials saved. Clients can Connect WhatsApp without creating their own Meta app.');
     }
 
+    /**
+     * Live test of Meta Tech Provider credentials against Meta Graph API.
+     */
+    public function testMetaTech(): ResponseInterface
+    {
+        $repo = new MasterTenantRepository();
+        $tech = $repo->getPlatformMetaTechProvider();
+
+        $appId      = trim((string) ($this->request->getPost('app_id') ?: ($tech['app_id'] ?? '')));
+        $appSecret  = trim((string) ($this->request->getPost('app_secret') ?: ''));
+        $configId   = trim((string) ($this->request->getPost('config_id') ?: ($tech['config_id'] ?? '')));
+        $apiVersion = trim((string) ($this->request->getPost('api_version') ?: ($tech['api_version'] ?? 'v25.0'))) ?: 'v25.0';
+
+        // If secret was not re-typed in form, fall back to decrypted stored secret
+        if ($appSecret === '' || str_contains($appSecret, '•')) {
+            $appSecret = trim((string) ($tech['app_secret'] ?? ''));
+        }
+
+        if ($appId === '' || $appSecret === '') {
+            return $this->response->setStatusCode(422)->setJSON([
+                'status'  => 'error',
+                'message' => 'App ID and App Secret are required to test the Meta connection.',
+            ]);
+        }
+
+        $appAccessToken = $appId . '|' . $appSecret;
+        $url = 'https://graph.facebook.com/' . $apiVersion . '/' . $appId . '?fields=id,name,category,link&access_token=' . urlencode($appAccessToken);
+
+        try {
+            $client = \Config\Services::curlrequest([
+                'timeout'         => 15,
+                'http_errors'     => false,
+                'connect_timeout' => 10,
+                'verify'          => true,
+            ]);
+
+            $res = $client->request('GET', $url, [
+                'headers' => ['Accept' => 'application/json'],
+            ]);
+
+            $status = $res->getStatusCode();
+            $body   = (string) $res->getBody();
+            $data   = json_decode($body, true);
+
+            if ($status >= 200 && $status < 300 && ! empty($data['id'])) {
+                $appName  = (string) ($data['name'] ?? 'Meta App');
+                $category = (string) ($data['category'] ?? '');
+                return $this->response->setStatusCode(200)->setJSON([
+                    'status'  => 'success',
+                    'message' => 'Connected successfully to Meta Graph API! App: "' . $appName . '" (ID: ' . $data['id'] . ')' . ($category !== '' ? ' · Category: ' . $category : ''),
+                    'data'    => $data,
+                ]);
+            }
+
+            $metaError = (string) ($data['error']['message'] ?? ('HTTP ' . $status . ': ' . $body));
+            return $this->response->setStatusCode(400)->setJSON([
+                'status'  => 'error',
+                'message' => 'Meta API returned error: ' . $metaError,
+            ]);
+        } catch (\Throwable $e) {
+            return $this->response->setStatusCode(500)->setJSON([
+                'status'  => 'error',
+                'message' => 'Failed to reach Meta servers: ' . $e->getMessage(),
+            ]);
+        }
+    }
+
     public function store(): ResponseInterface
     {
         $result = (new TenantProvisionService())->provision([

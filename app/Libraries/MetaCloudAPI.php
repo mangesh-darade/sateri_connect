@@ -1346,8 +1346,16 @@ class MetaCloudAPI
         }
 
         $token = $verifyToken ?: (string) ($meta['verify_token'] ?? '');
+        if ($token === '' && MasterTenantRepository::masterConfigured()) {
+            try {
+                $tech  = (new MasterTenantRepository())->getPlatformMetaTechProvider();
+                $token = trim((string) ($tech['webhook_verify_token'] ?? ''));
+            } catch (\Throwable $e) {
+                // Ignore error, fallback to exception below
+            }
+        }
         if ($token === '') {
-            throw new RuntimeException('Meta webhook verify token is empty. Generate it in Settings → Webhooks.');
+            throw new RuntimeException('Meta webhook verify token is empty. Configure it in Platform → Embedded Signup or Settings → Webhooks.');
         }
 
         // Configure the app-level default first. This is the Graph API equivalent of
@@ -1402,6 +1410,23 @@ class MetaCloudAPI
         if ($callback === '') {
             $resolved = $this->settings->resolveWebhookPublicConfig();
             $callback = (string) ($resolved['public_callback'] ?? $resolved['auto_callback'] ?? '');
+        }
+
+        if (($appId === '' || $appSecret === '' || $verify === '') && MasterTenantRepository::masterConfigured()) {
+            try {
+                $tech = (new MasterTenantRepository())->getPlatformMetaTechProvider();
+                if ($appId === '') {
+                    $appId = trim((string) ($tech['app_id'] ?? ''));
+                }
+                if ($appSecret === '') {
+                    $appSecret = trim((string) ($tech['app_secret'] ?? ''));
+                }
+                if ($verify === '') {
+                    $verify = trim((string) ($tech['webhook_verify_token'] ?? ''));
+                }
+            } catch (\Throwable $e) {
+                // Ignore
+            }
         }
 
         if ($appId === '') {
@@ -1643,11 +1668,23 @@ class MetaCloudAPI
         ];
 
         $appId = trim((string) ($this->settings->getMetaConfig()['app_id'] ?? ''));
+        $appSource = 'tenant';
+        if ($appId === '' && MasterTenantRepository::masterConfigured()) {
+            try {
+                $tech = (new MasterTenantRepository())->getPlatformMetaTechProvider();
+                $appId = trim((string) ($tech['app_id'] ?? ''));
+                if ($appId !== '') {
+                    $appSource = 'platform';
+                }
+            } catch (\Throwable $e) {
+                // Ignore
+            }
+        }
         $checklist[] = [
             'id'     => 'app_id',
             'label'  => 'Meta App ID configured',
             'ok'     => $appId !== '',
-            'detail' => $appId !== '' ? $appId : 'Save Meta App ID in Settings',
+            'detail' => $appId !== '' ? ($appId . ($appSource === 'platform' ? ' (Platform Tech Provider)' : '')) : 'Save Meta App ID in Settings or Platform Tech Provider',
         ];
 
         $info      = null;

@@ -108,14 +108,18 @@ $source = (string) ($tech['source'] ?? 'none');
                     </div>
                 </div>
 
-                <div class="platform-actions" style="margin-top:0.5rem;display:flex;gap:0.75rem;align-items:center">
+                <div class="platform-actions" style="margin-top:0.5rem;display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap">
                     <button type="submit" class="btn-pf btn-pf-primary" style="padding:0.6rem 1.25rem">
                         <i class="fas fa-save me-1"></i> Save Tech Provider
+                    </button>
+                    <button type="button" class="btn-pf" id="btnTestMetaTech" style="padding:0.6rem 1.25rem;border-color:var(--pf-teal);color:var(--pf-teal);font-weight:700">
+                        <i class="fas fa-plug me-1"></i> Test Meta API
                     </button>
                     <a class="btn-pf" href="https://developers.facebook.com/apps/" target="_blank" rel="noopener">
                         <i class="fas fa-external-link-alt me-1"></i> Meta App Dashboard
                     </a>
                 </div>
+                <div id="metaTestResult" style="display:none;margin-top:1rem;padding:0.75rem 1rem;border-radius:8px;font-size:0.85rem"></div>
             </form>
         </section>
 
@@ -298,5 +302,56 @@ function copyValue(elementId, btn) {
         document.execCommand('copy');
     });
 }
+
+document.getElementById('btnTestMetaTech').addEventListener('click', function() {
+    var btn = this;
+    var originalHtml = btn.innerHTML;
+    var resultBox = document.getElementById('metaTestResult');
+
+    var form = btn.closest('form');
+    var formData = new FormData(form);
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Testing Meta API...';
+    resultBox.style.display = 'none';
+
+    fetch('<?= site_url('platform/meta-tech/test') ?>', {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: formData
+    })
+    .then(function(res) {
+        return res.json().then(function(data) {
+            return { ok: res.ok, data: data };
+        });
+    })
+    .then(function(res) {
+        resultBox.style.display = 'block';
+        if (res.ok && res.data.status === 'success') {
+            resultBox.style.background = '#e8f6ef';
+            resultBox.style.color = '#0d5c40';
+            resultBox.style.border = '1px solid #b9dfcb';
+            resultBox.innerHTML = '<i class="fas fa-check-circle me-1"></i> ' + (res.data.message || 'Meta connection verified.');
+        } else {
+            resultBox.style.background = '#fdecea';
+            resultBox.style.color = '#8f1f16';
+            resultBox.style.border = '1px solid #f0bfb8';
+            resultBox.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> ' + (res.data.message || 'Failed to verify Meta API.');
+        }
+    })
+    .catch(function(err) {
+        resultBox.style.display = 'block';
+        resultBox.style.background = '#fdecea';
+        resultBox.style.color = '#8f1f16';
+        resultBox.style.border = '1px solid #f0bfb8';
+        resultBox.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> Request error: ' + err.message;
+    })
+    .finally(function() {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+    });
+});
 </script>
 <?= $this->endSection() ?>

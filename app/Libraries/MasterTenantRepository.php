@@ -232,6 +232,11 @@ class MasterTenantRepository
                     $tokens[] = $t;
                 }
             }
+
+            $envToken = trim((string) env('meta.webhookVerifyToken', env('META_WEBHOOK_VERIFY_TOKEN', '')));
+            if ($envToken !== '') {
+                $tokens[] = $envToken;
+            }
         } catch (Throwable $e) {
             log_message('debug', 'MasterTenantRepository::allVerifyTokens: {msg}', ['msg' => $e->getMessage()]);
         }
@@ -260,15 +265,20 @@ class MasterTenantRepository
                 }
             }
 
-            $platform = $this->db()->table('platform_settings')
-                ->where('key', 'webhook_app_secret')
+            $platformRows = $this->db()->table('platform_settings')
+                ->whereIn('key', ['meta_tech_app_secret', 'webhook_app_secret'])
                 ->get()
-                ->getRowArray();
-            if (is_array($platform)) {
-                $s = $this->decryptSecret((string) ($platform['value'] ?? ''));
+                ->getResultArray();
+            foreach ($platformRows as $pRow) {
+                $s = $this->decryptSecret((string) ($pRow['value'] ?? ''));
                 if ($s !== '') {
                     $secrets[] = $s;
                 }
+            }
+
+            $envSecret = trim((string) env('meta.techAppSecret', env('META_TECH_APP_SECRET', '')));
+            if ($envSecret !== '') {
+                $secrets[] = $envSecret;
             }
         } catch (Throwable $e) {
             log_message('debug', 'MasterTenantRepository::allAppSecrets: {msg}', ['msg' => $e->getMessage()]);
