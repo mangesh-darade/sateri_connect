@@ -8,9 +8,8 @@ use CodeIgniter\Database\Config;
 
 /**
  * Multi-tenant DBs:
- * - Legacy: applyBySubdomain() switch for known Host slugs
+ * - Single domain / Subdomain: localhost or dynamic .env default fallback
  * - Portal: master DB (sateri_master) + session/JWT/webhook routing
- * Connection credentials are NOT read from .env for default (except optional master.* / tenancy.*).
  */
 class Database extends Config
 {
@@ -50,25 +49,17 @@ class Database extends Config
                 $this->default['port']     = 3306;
                 break;
 
-            case 'androidtestings':
-                $this->default['hostname'] = 'localhost';
-                $this->default['username'] = 'stadmin_android';
-                $this->default['password'] = '1ub~UI7Yvgg~2txx';
-                $this->default['database'] = 'stadmin_android';
-                $this->default['DBDriver'] = 'MySQLi';
-                $this->default['port']     = 3306;
-                break;
-
-            case 'demoelintommetaapi':
-                $this->default['hostname'] = 'localhost';
-                $this->default['username'] = 'stadmin_demometaapi';
-                $this->default['password'] = 'sG96cd07$';
-                $this->default['database'] = 'stadmin_demometaapi';
-                $this->default['DBDriver'] = 'MySQLi';
-                $this->default['port']     = 3306;
-                break;
-
             default:
+                // Single domain / subdomain default fallback from .env
+                $defaultDb = (string) env('database.default.database', env('DB_DATABASE', ''));
+                if ($defaultDb !== '') {
+                    $this->default['hostname'] = (string) env('database.default.hostname', env('DB_HOST', 'localhost'));
+                    $this->default['username'] = (string) env('database.default.username', env('DB_USER', 'root'));
+                    $this->default['password'] = (string) env('database.default.password', env('DB_PASS', ''));
+                    $this->default['database'] = $defaultDb;
+                    $this->default['DBDriver'] = (string) env('database.default.DBDriver', 'MySQLi');
+                    $this->default['port']     = (int) env('database.default.port', env('DB_PORT', 3306));
+                }
                 break;
         }
     }
