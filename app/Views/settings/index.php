@@ -1255,6 +1255,25 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                             </a>
                         </div>
 
+                        <!-- Live API Base URL Card -->
+                        <div class="card p-3 mb-4 border-0 shadow-sm" style="background: linear-gradient(135deg, #0b1329 0%, #1e293b 100%); color: #fff; border-radius: 12px;">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                <div>
+                                    <span class="badge bg-success mb-1" style="font-size: 0.72rem; letter-spacing: 0.05em;">LIVE API BASE ENDPOINT</span>
+                                    <div class="font-monospace fw-bold fs-6 text-warning" id="liveApiBaseUrlText"><?= esc(site_url('api/v1')) ?></div>
+                                    <p class="small text-light opacity-75 mb-0" style="font-size: 0.8rem;">Use this endpoint URL in your external CRM, billing system, or Postman environment.</p>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-sm btn-outline-light" type="button" onclick="navigator.clipboard.writeText('<?= esc(site_url('api/v1')) ?>'); alert('API Base URL copied to clipboard: <?= esc(site_url('api/v1')) ?>');">
+                                        <i class="fas fa-copy me-1"></i> Copy Base URL
+                                    </button>
+                                    <a href="<?= site_url('api/v1/postman') ?>" class="btn btn-sm btn-warning text-dark fw-semibold">
+                                        <i class="fas fa-file-arrow-down me-1"></i> Postman Collection
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Generated Key Display Alert (Hidden by default) -->
                         <div id="newKeyAlert" class="alert alert-success d-none mb-4 shadow-sm border-2">
                             <div class="d-flex align-items-center justify-content-between mb-2">

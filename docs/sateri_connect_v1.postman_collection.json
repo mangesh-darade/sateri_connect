@@ -17,7 +17,8 @@
   "variable": [
     {
       "key": "base_url",
-      "value": "http://localhost/sateri_connect/api/v1",
+      "value": "https://api.yourdomain.com/api/v1",
+      "description": "API Base URL (automatically populated when downloaded from your server)",
       "type": "string"
     },
     {

@@ -62,8 +62,27 @@ class DocsController extends BaseController
         }
 
         $content = (string) file_get_contents($file);
-        $baseUrl = rtrim(site_url(), '/') . '/api/v1';
-        $content = str_replace('http://localhost/sateri_connect/api/v1', $baseUrl, $content);
+        $data    = json_decode($content, true);
+
+        // Dynamically compute exact API v1 base URL from current server host & protocol
+        $apiBaseUrl = rtrim(site_url('api/v1'), '/');
+
+        if (is_array($data)) {
+            // Dynamically inject active server base_url variable
+            if (isset($data['variable']) && is_array($data['variable'])) {
+                foreach ($data['variable'] as &$var) {
+                    if (($var['key'] ?? '') === 'base_url') {
+                        $var['value'] = $apiBaseUrl;
+                    }
+                }
+                unset($var);
+            }
+
+            $content = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        } else {
+            // Fallback replacement for any hardcoded url pattern
+            $content = preg_replace('/"value":\s*"https?:\/\/[^"]+\/api\/v1"/', '"value": "' . $apiBaseUrl . '"', $content);
+        }
 
         return $this->response
             ->setHeader('Content-Type', 'application/json')
