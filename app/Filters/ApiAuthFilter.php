@@ -20,6 +20,21 @@ class ApiAuthFilter implements FilterInterface
 {
     public function before(RequestInterface $request, $arguments = null)
     {
+        // Multi-tenant resolution:
+        // 1. If session tenant exists (e.g. testing from browser API docs console)
+        \App\Libraries\TenantResolver::ensureFromSession();
+
+        // 2. Explicit header X-Tenant-Key / X-Tenant
+        $tenantHeader = trim((string) ($request->getHeaderLine('X-Tenant-Key') ?: $request->getHeaderLine('X-Tenant')));
+        if ($tenantHeader !== '') {
+            (new \App\Libraries\TenantConnection())->apply($tenantHeader, 'api_header');
+        } elseif (\App\Libraries\MasterTenantRepository::masterConfigured() && ! \App\Libraries\TenantContext::has()) {
+            $hostKey = \App\Libraries\SubdomainDatabase::detectSubdomain();
+            if ($hostKey !== 'localhost' && $hostKey !== '') {
+                (new \App\Libraries\TenantConnection())->apply($hostKey, 'subdomain');
+            }
+        }
+
         $apiKey = trim((string) $request->getHeaderLine('X-API-Key'));
         $header = (string) $request->getHeaderLine('Authorization');
         $bearerToken = '';
@@ -61,6 +76,22 @@ class ApiAuthFilter implements FilterInterface
         // 1. Verify against api_tokens table (permanent external developer keys)
         $tokenModel  = model(ApiTokenModel::class);
         $apiTokenRow = $tokenModel->findValidByPlainText($rawToken);
+
+        // If not found in currently active DB and master multi-tenant routing is active, scan active tenants
+        if ($apiTokenRow === null && str_starts_with($rawToken, 'sc_live_') && \App\Libraries\MasterTenantRepository::masterConfigured()) {
+            $master     = new \App\Libraries\MasterTenantRepository();
+            $connection = new \App\Libraries\TenantConnection($master);
+            foreach ($master->listActiveTenants() as $tenant) {
+                $tKey = (string) ($tenant['key'] ?? '');
+                if ($tKey !== '' && $connection->apply($tKey, 'api_token_lookup')) {
+                    $candidateRow = model(ApiTokenModel::class)->findValidByPlainText($rawToken);
+                    if ($candidateRow !== null) {
+                        $apiTokenRow = $candidateRow;
+                        break;
+                    }
+                }
+            }
+        }
 
         if ($apiTokenRow !== null) {
             $userId = (int) ($apiTokenRow['user_id'] ?? 0);
