@@ -64,7 +64,7 @@ Create a new customer or update an existing customer by phone number. Automatica
 * **Request Body:**
   ```json
   {
-    "phone": "+919876543210",
+    "phone": "+917744010738",
     "name": "Mangesh Darade",
     "email": "mangesh@example.com",
     "tags": ["VIP Customer", "Website Lead"],
@@ -81,7 +81,7 @@ Create a new customer or update an existing customer by phone number. Automatica
     -H "X-API-Key: sc_live_YOUR_KEY" \
     -H "Content-Type: application/json" \
     -d '{
-      "phone": "+919876543210",
+      "phone": "+917744010738",
       "name": "Mangesh Darade",
       "email": "mangesh@example.com",
       "tags": ["VIP Customer"]
@@ -98,7 +98,7 @@ Sends a direct text message to a customer.
 * **Request Body:**
   ```json
   {
-    "to": "+919876543210",
+    "to": "+917744010738",
     "text": "Hello Mangesh! Your order #ORD-9988 has been dispatched."
   }
   ```
@@ -110,7 +110,7 @@ Sends a direct text message to a customer.
     "data": {
       "message_id": 849,
       "wamid": "wamid.HBgLMOTE5ODc2NTQzMjEwFQIAEhgWM0VCNTA...",
-      "to": "919876543210",
+      "to": "917744010738",
       "status": "sent"
     }
   }
@@ -125,7 +125,7 @@ Send an officially approved Meta WhatsApp template to initiate a conversation or
 * **Request Body:**
   ```json
   {
-    "to": "+919876543210",
+    "to": "+917744010738",
     "template_name": "order_confirmation",
     "language": "en_US",
     "variables": ["Mangesh", "ORD-9988", "Rs. 1,499"]
@@ -141,7 +141,7 @@ Send an officially approved Meta WhatsApp template to initiate a conversation or
     -H "X-API-Key: sc_live_YOUR_KEY" \
     -H "Content-Type: application/json" \
     -d '{
-      "to": "+919876543210",
+      "to": "+917744010738",
       "template_name": "order_confirmation",
       "language": "en_US",
       "variables": ["Mangesh", "ORD-9988", "1499"]
@@ -167,7 +167,7 @@ Check whether a WhatsApp message was sent, delivered, or read by the customer.
     "data": {
       "message_id": 849,
       "wamid": "wamid.HBgLMOTE5ODc2NTQzMjEwFQIA...",
-      "to": "+919876543210",
+      "to": "+917744010738",
       "status": "read",
       "sent_at": "2026-10-03 07:15:00",
       "delivered_at": "2026-10-03 07:15:02",
@@ -184,7 +184,7 @@ Send document invoices, receipts, brochures, or photos directly to customers.
 * **Request Body:**
   ```json
   {
-    "to": "+919876543210",
+    "to": "+917744010738",
     "type": "document",
     "url": "https://your-domain.com/invoices/INV-9988.pdf",
     "caption": "Your monthly tax invoice statement.",
@@ -198,7 +198,7 @@ Send document invoices, receipts, brochures, or photos directly to customers.
     -H "X-API-Key: sc_live_YOUR_KEY" \
     -H "Content-Type: application/json" \
     -d '{
-      "to": "+919876543210",
+      "to": "+917744010738",
       "type": "document",
       "url": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
       "caption": "Your tax invoice #INV-2026-001",
@@ -225,7 +225,7 @@ Check whether a WhatsApp message was sent, delivered, or read by the customer.
     "data": {
       "message_id": 849,
       "wamid": "wamid.HBgLMOTE5ODc2NTQzMjEwFQIA...",
-      "to": "+919876543210",
+      "to": "+917744010738",
       "status": "read",
       "sent_at": "2026-10-03 07:15:00",
       "delivered_at": "2026-10-03 07:15:02",
@@ -261,7 +261,7 @@ Trigger automated multi-step flows built in the Sateri Connect Visual Flow Build
   ```json
   {
     "event": "order_placed",
-    "phone": "+919876543210",
+    "phone": "+917744010738",
     "name": "Mangesh",
     "data": {
       "order_number": "ORD-12345",

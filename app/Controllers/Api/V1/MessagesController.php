@@ -23,7 +23,7 @@ class MessagesController extends BaseV1Controller
      *
      * Body payload (JSON):
      * {
-     *   "to": "+919876543210",
+     *   "to": "+917744010738",
      *   "text": "Hello! Your appointment is confirmed for tomorrow."
      * }
      */
@@ -35,7 +35,7 @@ class MessagesController extends BaseV1Controller
         $text  = trim((string) ($input['text'] ?? $input['message'] ?? ''));
 
         if ($rawTo === '') {
-            return $this->respondValidationError(['to' => 'Recipient phone number is required (e.g. +919876543210).']);
+            return $this->respondValidationError(['to' => 'Recipient phone number is required (e.g. +917744010738).']);
         }
         if ($text === '') {
             return $this->respondValidationError(['text' => 'Message text cannot be empty.']);
@@ -113,7 +113,7 @@ class MessagesController extends BaseV1Controller
      *
      * Body payload (JSON):
      * {
-     *   "to": "+919876543210",
+     *   "to": "+917744010738",
      *   "template_name": "order_confirmation",
      *   "language": "en_US",
      *   "variables": ["Mangesh", "ORD-9988", "1500"]
@@ -263,7 +263,7 @@ class MessagesController extends BaseV1Controller
      *
      * Body payload (JSON):
      * {
-     *   "to": "+919876543210",
+     *   "to": "+917744010738",
      *   "type": "document", // image | document | video | audio
      *   "url": "https://example.com/invoice.pdf",
      *   "caption": "Your monthly statement",
@@ -281,7 +281,7 @@ class MessagesController extends BaseV1Controller
         $filename = trim((string) ($input['filename'] ?? 'file'));
 
         if ($rawTo === '') {
-            return $this->respondValidationError(['to' => 'Recipient phone number is required (e.g. +919876543210).']);
+            return $this->respondValidationError(['to' => 'Recipient phone number is required (e.g. +917744010738).']);
         }
         if ($url === '') {
             return $this->respondValidationError(['url' => 'Media URL (https://...) or Meta media ID is required.']);

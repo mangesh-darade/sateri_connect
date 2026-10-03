@@ -161,7 +161,7 @@ class TemplatesController extends BaseV1Controller
             'buttons'        => $buttons,
             'variables'      => $variables,
             'sample_send_payload' => [
-                'to'            => '+919876543210',
+                'to'            => '+917744010738',
                 'template_name' => $row['name'],
                 'language'      => $row['language'] ?? 'en_US',
                 'variables'     => $sampleVars,

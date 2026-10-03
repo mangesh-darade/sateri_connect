@@ -355,7 +355,7 @@
   "event": "message_received",
   "contact": {
     "id": 1042,
-    "phone": "+919876543210",
+    "phone": "+917744010738",
     "name": "Mangesh Darade"
   },
   "message": {
@@ -381,7 +381,7 @@
                 method: 'POST',
                 url: BASE_URL + '/contacts/upsert',
                 body: {
-                    phone: '+919876543210',
+                    phone: '+917744010738',
                     name: 'Mangesh Darade',
                     email: 'mangesh@example.com',
                     tags: ['VIP Customer', 'Website Lead'],
@@ -395,7 +395,7 @@
                 method: 'POST',
                 url: BASE_URL + '/messages/send-text',
                 body: {
-                    to: '+919876543210',
+                    to: '+917744010738',
                     text: 'Hello Mangesh! Your order #ORD-9988 has been confirmed.'
                 }
             },
@@ -403,7 +403,7 @@
                 method: 'POST',
                 url: BASE_URL + '/messages/send-media',
                 body: {
-                    to: '+919876543210',
+                    to: '+917744010738',
                     type: 'document',
                     url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
                     caption: 'Here is your monthly invoice statement.',
@@ -414,7 +414,7 @@
                 method: 'POST',
                 url: BASE_URL + '/messages/send-template',
                 body: {
-                    to: '+919876543210',
+                    to: '+917744010738',
                     template_name: 'order_confirmation',
                     language: 'en_US',
                     variables: ['Mangesh', 'ORD-9988', 'Rs. 1,499']
@@ -435,7 +435,7 @@
                 url: BASE_URL + '/automations/trigger',
                 body: {
                     event: 'order_placed',
-                    phone: '+919876543210',
+                    phone: '+917744010738',
                     name: 'Mangesh',
                     data: {
                         order_id: 'ORD-9988',

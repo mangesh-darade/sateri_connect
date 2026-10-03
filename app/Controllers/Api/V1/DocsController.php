@@ -102,7 +102,7 @@ class DocsController extends BaseController
                         'Content-Type' => 'application/json',
                     ],
                     'body' => [
-                        'phone'             => '+919876543210',
+                        'phone'             => '+917744010738',
                         'name'              => 'Mangesh Darade',
                         'email'             => 'mangesh@example.com',
                         'tags'              => ['VIP Customer', 'Website Lead'],
@@ -116,7 +116,7 @@ class DocsController extends BaseController
                         'message' => 'Customer contact updated successfully.',
                         'data'    => [
                             'id'            => 1042,
-                            'phone'         => '+919876543210',
+                            'phone'         => '+917744010738',
                             'name'          => 'Mangesh Darade',
                             'email'         => 'mangesh@example.com',
                             'status'        => 'active',
@@ -136,7 +136,7 @@ class DocsController extends BaseController
                         'Content-Type' => 'application/json',
                     ],
                     'body' => [
-                        'to'   => '+919876543210',
+                        'to'   => '+917744010738',
                         'text' => 'Hello! Your support ticket #123 has been resolved.',
                     ],
                     'response' => [
@@ -145,7 +145,7 @@ class DocsController extends BaseController
                         'data'    => [
                             'message_id' => 849,
                             'wamid'      => 'wamid.HBgLMOTE5ODc2NTQzMjEwFQIAEhgWM0VCNTA...',
-                            'to'         => '919876543210',
+                            'to'         => '917744010738',
                             'status'     => 'sent',
                         ],
                     ],
@@ -160,7 +160,7 @@ class DocsController extends BaseController
                         'Content-Type' => 'application/json',
                     ],
                     'body' => [
-                        'to'            => '+919876543210',
+                        'to'            => '+917744010738',
                         'template_name' => 'order_confirmation',
                         'language'      => 'en_US',
                         'variables'     => ['Mangesh', 'ORD-9988', 'Rs. 1,499'],
@@ -208,7 +208,7 @@ class DocsController extends BaseController
                     ],
                     'body' => [
                         'event' => 'order_placed',
-                        'phone' => '+919876543210',
+                        'phone' => '+917744010738',
                         'name'  => 'Mangesh',
                         'data'  => [
                             'order_id' => 'ORD-9988',
@@ -242,7 +242,7 @@ class DocsController extends BaseController
                                 [
                                     'id'     => 1042,
                                     'name'   => 'Mangesh Darade',
-                                    'phone'  => '+919876543210',
+                                    'phone'  => '+917744010738',
                                     'email'  => 'mangesh@example.com',
                                     'status' => 'active',
                                 ],
@@ -263,7 +263,7 @@ class DocsController extends BaseController
                         'Content-Type' => 'application/json',
                     ],
                     'body' => [
-                        'to'       => '+919876543210',
+                        'to'       => '+917744010738',
                         'type'     => 'document',
                         'url'      => 'https://example.com/invoice.pdf',
                         'caption'  => 'Invoice #INV-2026-001',
@@ -275,7 +275,7 @@ class DocsController extends BaseController
                         'data'    => [
                             'message_id' => 852,
                             'wamid'      => 'wamid.HBgLMOTE5ODc2NTQzMjEwFQIAEhgWM0VCNTA...',
-                            'to'         => '919876543210',
+                            'to'         => '917744010738',
                             'type'       => 'document',
                             'media_url'  => 'https://example.com/invoice.pdf',
                             'status'     => 'sent',

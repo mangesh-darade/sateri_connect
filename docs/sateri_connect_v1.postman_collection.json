@@ -39,7 +39,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"phone\": \"+919876543210\",\n  \"name\": \"Mangesh Darade\",\n  \"email\": \"mangesh@example.com\",\n  \"tags\": [\"VIP Customer\", \"Website Lead\"],\n  \"custom_attributes\": {\n    \"city\": \"Pune\",\n    \"plan\": \"Enterprise\",\n    \"order_count\": \"5\"\n  }\n}"
+              "raw": "{\n  \"phone\": \"+917744010738\",\n  \"name\": \"Mangesh Darade\",\n  \"email\": \"mangesh@example.com\",\n  \"tags\": [\"VIP Customer\", \"Website Lead\"],\n  \"custom_attributes\": {\n    \"city\": \"Pune\",\n    \"plan\": \"Enterprise\",\n    \"order_count\": \"5\"\n  }\n}"
             },
             "url": {
               "raw": "{{base_url}}/contacts/upsert",
@@ -73,9 +73,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/contacts/+919876543210",
+              "raw": "{{base_url}}/contacts/+917744010738",
               "host": ["{{base_url}}"],
-              "path": ["contacts", "+919876543210"]
+              "path": ["contacts", "+917744010738"]
             },
             "description": "Retrieve contact details, tags, and custom fields by contact ID or phone."
           }
@@ -94,7 +94,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"to\": \"+919876543210\",\n  \"text\": \"Hello Mangesh! Your order #ORD-9988 has been confirmed.\"\n}"
+              "raw": "{\n  \"to\": \"+917744010738\",\n  \"text\": \"Hello Mangesh! Your order #ORD-9988 has been confirmed.\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/messages/send-text",
@@ -113,7 +113,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"to\": \"+919876543210\",\n  \"type\": \"document\",\n  \"url\": \"https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf\",\n  \"caption\": \"Here is your tax invoice #INV-2026-001.\",\n  \"filename\": \"invoice_2026_001.pdf\"\n}"
+              "raw": "{\n  \"to\": \"+917744010738\",\n  \"type\": \"document\",\n  \"url\": \"https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf\",\n  \"caption\": \"Here is your tax invoice #INV-2026-001.\",\n  \"filename\": \"invoice_2026_001.pdf\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/messages/send-media",
@@ -132,7 +132,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"to\": \"+919876543210\",\n  \"template_name\": \"order_confirmation\",\n  \"language\": \"en_US\",\n  \"variables\": [\"Mangesh\", \"ORD-9988\", \"Rs. 1,499\"],\n  \"header_media_url\": \"https://example.com/receipt.pdf\"\n}"
+              "raw": "{\n  \"to\": \"+917744010738\",\n  \"template_name\": \"order_confirmation\",\n  \"language\": \"en_US\",\n  \"variables\": [\"Mangesh\", \"ORD-9988\", \"Rs. 1,499\"],\n  \"header_media_url\": \"https://example.com/receipt.pdf\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/messages/send-template",
@@ -205,7 +205,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"event\": \"order_placed\",\n  \"phone\": \"+919876543210\",\n  \"name\": \"Mangesh\",\n  \"data\": {\n    \"order_id\": \"ORD-9988\",\n    \"total\": 1499,\n    \"product\": \"Premium Plan\"\n  }\n}"
+              "raw": "{\n  \"event\": \"order_placed\",\n  \"phone\": \"+917744010738\",\n  \"name\": \"Mangesh\",\n  \"data\": {\n    \"order_id\": \"ORD-9988\",\n    \"total\": 1499,\n    \"product\": \"Premium Plan\"\n  }\n}"
             },
             "url": {
               "raw": "{{base_url}}/automations/trigger",
