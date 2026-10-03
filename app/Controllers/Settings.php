@@ -136,6 +136,8 @@ class Settings extends BaseController
         $aiDisplay['api_key'] = $this->maskSecret((string) $aiCfg['api_key']);
         $data['ai'] = $aiDisplay;
 
+        $data['apiTokens'] = model(\App\Models\ApiTokenModel::class)->orderBy('id', 'DESC')->findAll(30);
+
         return $this->render('settings/index', $data);
     }
 
@@ -507,6 +509,38 @@ class Settings extends BaseController
         $res = service('aiService')->testConnection($apiKey, $model);
 
         return $this->jsonResponse($res['success'], $res, $res['message']);
+    }
+
+    public function generateApiToken(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('settings.edit')) {
+            return $denied;
+        }
+
+        $name = trim((string) ($this->request->getPost('name') ?: 'External API Client'));
+        $userId = (int) (session('user_id') ?: 1);
+
+        $tokenModel = model(\App\Models\ApiTokenModel::class);
+        $result = $tokenModel->createToken($userId, $name, ['*']);
+
+        return $this->jsonResponse(true, [
+            'id'         => $result['token']['id'] ?? null,
+            'name'       => $name,
+            'plain_text' => $result['plain_text'],
+            'created_at' => date('Y-m-d H:i:s'),
+        ], 'API Key generated successfully.');
+    }
+
+    public function deleteApiToken(int $id): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('settings.edit')) {
+            return $denied;
+        }
+
+        $tokenModel = model(\App\Models\ApiTokenModel::class);
+        $tokenModel->delete($id);
+
+        return $this->jsonResponse(true, null, 'API Key revoked successfully.');
     }
 
     protected function emailProviderLabel(string $provider): string

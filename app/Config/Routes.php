@@ -95,6 +95,8 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('settings/sync-elintom', 'Settings::syncElintOm', ['filter' => 'csrf']);
     $routes->post('settings/test-whatsapp', 'Settings::testCheerio', ['filter' => 'csrf']); // active provider via UI uses specific buttons
     $routes->post('settings/test-ai', 'Settings::testAi', ['filter' => 'csrf']);
+    $routes->post('settings/api-tokens/generate', 'Settings::generateApiToken', ['filter' => 'csrf']);
+    $routes->post('settings/api-tokens/(:num)/delete', 'Settings::deleteApiToken/$1', ['filter' => 'csrf']);
     $routes->post('copilot/ask', 'AiCopilot::ask', ['filter' => 'csrf']);
     $routes->get('copilot/history', 'AiCopilot::history');
 
@@ -354,3 +356,29 @@ $routes->group('api', ['namespace' => 'App\Controllers\Api'], static function ($
         $routes->get('reports/stats', 'Reports::stats', ['filter' => 'permission:reports.view']);
     });
 });
+
+/*
+ * --------------------------------------------------------------------
+ * Public REST API v1 & Developer Documentation
+ * --------------------------------------------------------------------
+ */
+$routes->get('api/docs', 'Api\V1\DocsController::index');
+$routes->get('api/v1/spec', 'Api\V1\DocsController::spec');
+$routes->get('api/v1/postman', 'Api\V1\DocsController::postman');
+
+$routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1', 'filter' => 'apiAuth'], static function ($routes) {
+    // Customer Contacts
+    $routes->post('contacts/upsert', 'ContactsController::upsert');
+    $routes->get('contacts/search', 'ContactsController::search');
+    $routes->get('contacts/(:segment)', 'ContactsController::show/$1');
+
+    // Direct & Template WhatsApp Messages
+    $routes->post('messages/send-text', 'MessagesController::sendText');
+    $routes->post('messages/send-template', 'MessagesController::sendTemplate');
+    $routes->get('messages/(:segment)/status', 'MessagesController::status/$1');
+
+    // Automations & Webhooks
+    $routes->post('automations/trigger', 'AutomationsController::trigger');
+    $routes->get('automations', 'AutomationsController::index');
+});
+

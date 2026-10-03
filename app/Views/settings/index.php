@@ -108,6 +108,15 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                         </span>
                     </button>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabApiKeys" type="button" role="tab" aria-controls="tabApiKeys" aria-selected="false">
+                        <i class="fas fa-key" aria-hidden="true"></i>
+                        <span>
+                            <span class="settings-nav-label">Developer API Keys</span>
+                            <span class="settings-nav-hint">REST API · Integrations</span>
+                        </span>
+                    </button>
+                </li>
             </ul>
         </nav>
 
@@ -1233,6 +1242,98 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                             </div>
                         </div>
                     </div>
+
+                    <!-- Developer API Keys Tab -->
+                    <div class="tab-pane fade" id="tabApiKeys" role="tabpanel">
+                        <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom flex-wrap gap-2">
+                            <div>
+                                <h4 class="fw-bold mb-1"><i class="fas fa-key text-success me-2"></i>Developer REST API &amp; Secret Keys</h4>
+                                <p class="text-muted small mb-0">Manage permanent API keys for external systems, WooCommerce, Shopify, CRM, and custom scripts.</p>
+                            </div>
+                            <a href="<?= site_url('api/docs') ?>" target="_blank" class="btn btn-sm btn-outline-success">
+                                <i class="fas fa-book-open me-1"></i> Interactive API Docs
+                            </a>
+                        </div>
+
+                        <!-- Generated Key Display Alert (Hidden by default) -->
+                        <div id="newKeyAlert" class="alert alert-success d-none mb-4 shadow-sm border-2">
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <div class="fw-bold text-success"><i class="fas fa-check-circle me-1"></i> New API Key Generated!</div>
+                                <button type="button" class="btn-close" id="btnCloseKeyAlert"></button>
+                            </div>
+                            <p class="small text-dark mb-2">Make sure to copy your API key now. <strong>You will not be able to see it again!</strong></p>
+                            <div class="input-group">
+                                <input type="text" id="newKeySecretInput" class="form-control font-monospace fw-bold bg-white" readonly>
+                                <button class="btn btn-success" type="button" id="btnCopyNewKey">
+                                    <i class="fas fa-copy me-1"></i> Copy Key
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Generate Form Card -->
+                        <div class="card p-3 mb-4 border bg-light">
+                            <div class="row g-2 align-items-center">
+                                <div class="col-md-7">
+                                    <label class="form-label small fw-semibold mb-1" for="apiKeyNameInput">Key Description / Client Name</label>
+                                    <input type="text" class="form-control form-control-sm" id="apiKeyNameInput" placeholder="e.g. WooCommerce Store, CRM Sync, Zapier" value="External API Client">
+                                </div>
+                                <div class="col-md-5 d-flex align-items-end">
+                                    <button type="button" class="btn btn-sm btn-wa w-100" id="btnGenerateApiKey">
+                                        <i class="fas fa-plus-circle me-1"></i> Generate Secret Key
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Existing API Keys Table -->
+                        <h6 class="fw-bold mb-2">Active API Keys</h6>
+                        <div class="table-responsive bg-white border rounded">
+                            <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;" id="apiTokensTable">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Token Identifier</th>
+                                        <th>Created</th>
+                                        <th>Last Used</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php $tokens = $apiTokens ?? []; ?>
+                                    <?php if (empty($tokens)): ?>
+                                        <tr id="noApiTokensRow">
+                                            <td colspan="5" class="text-center py-4 text-muted">
+                                                <i class="fas fa-key fs-4 d-block mb-1 text-secondary opacity-50"></i>
+                                                No API keys generated yet. Click "Generate Secret Key" above.
+                                            </td>
+                                        </tr>
+                                    <?php else: ?>
+                                        <?php foreach ($tokens as $tk): ?>
+                                            <tr id="tokenRow_<?= (int) $tk['id'] ?>">
+                                                <td class="fw-semibold text-dark"><?= esc($tk['name']) ?></td>
+                                                <td><code class="text-secondary">sc_live_••••<?= substr(hash('crc32', (string) $tk['id']), 0, 6) ?></code></td>
+                                                <td class="text-muted"><?= esc($tk['created_at'] ?? '—') ?></td>
+                                                <td>
+                                                    <?= ! empty($tk['last_used_at']) ? '<span class="badge bg-success-subtle text-success">' . esc($tk['last_used_at']) . '</span>' : '<span class="text-muted">Never</span>' ?>
+                                                </td>
+                                                <td class="text-end">
+                                                    <button type="button" class="btn btn-xs btn-outline-danger js-delete-api-token" data-id="<?= (int) $tk['id'] ?>">
+                                                        <i class="fas fa-trash-alt me-1"></i> Revoke
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="mt-4 p-3 bg-white rounded border">
+                            <h6 class="fw-bold text-dark mb-1"><i class="fas fa-terminal text-primary me-2"></i>Quick Example Header</h6>
+                            <p class="small text-muted mb-2">Include this header in all HTTP requests to your Sateri Connect endpoints:</p>
+                            <pre class="p-2 bg-dark text-white rounded small m-0 code-font">X-API-Key: sc_live_YOUR_API_KEY_HERE</pre>
+                        </div>
+                    </div>
                 </div>
 
                 <?php if (function_exists('can') && can('settings.edit')): ?>
@@ -2048,6 +2149,85 @@ $(function () {
                 APP.toast(msg, 'error');
             })
             .always(function () { $btn.prop('disabled', false); });
+    });
+
+    // Developer API Keys Handlers
+    $('#btnGenerateApiKey').on('click', function () {
+        var $btn = $(this);
+        var name = $.trim($('#apiKeyNameInput').val()) || 'External API Client';
+        $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i> Generating…');
+
+        APP.post(APP.baseUrl + '/settings/api-tokens/generate', { name: name })
+            .done(function (res) {
+                if (res && res.data && res.data.plain_text) {
+                    var token = res.data.plain_text;
+                    $('#newKeySecretInput').val(token);
+                    $('#newKeyAlert').removeClass('d-none');
+                    APP.toast('API Key generated! Copy it now.', 'success');
+
+                    // Add row to table
+                    $('#noApiTokensRow').remove();
+                    var newRow =
+                        '<tr id="tokenRow_' + res.data.id + '">' +
+                            '<td class="fw-semibold text-dark">' + APP.escapeHtml(name) + '</td>' +
+                            '<td><code class="text-secondary">sc_live_••••' + token.slice(-6) + '</code></td>' +
+                            '<td class="text-muted">Just now</td>' +
+                            '<td><span class="text-muted">Never</span></td>' +
+                            '<td class="text-end">' +
+                                '<button type="button" class="btn btn-xs btn-outline-danger js-delete-api-token" data-id="' + res.data.id + '">' +
+                                    '<i class="fas fa-trash-alt me-1"></i> Revoke' +
+                                '</button>' +
+                            '</td>' +
+                        '</tr>';
+                    $('#apiTokensTable tbody').prepend(newRow);
+                } else {
+                    APP.toast((res && res.message) || 'Failed to generate key', 'error');
+                }
+            })
+            .fail(function (xhr) {
+                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Key generation failed';
+                APP.toast(msg, 'error');
+            })
+            .always(function () {
+                $btn.prop('disabled', false).html('<i class="fas fa-plus-circle me-1"></i> Generate Secret Key');
+            });
+    });
+
+    $('#btnCopyNewKey').on('click', function () {
+        var el = document.getElementById('newKeySecretInput');
+        if (el) {
+            el.select();
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(el.value);
+            }
+            var $b = $(this);
+            $b.html('<i class="fas fa-check me-1"></i> Copied!');
+            setTimeout(function () {
+                $b.html('<i class="fas fa-copy me-1"></i> Copy Key');
+            }, 2000);
+            APP.toast('API Key copied to clipboard!', 'success');
+        }
+    });
+
+    $('#btnCloseKeyAlert').on('click', function () {
+        $('#newKeyAlert').addClass('d-none');
+    });
+
+    $(document).on('click', '.js-delete-api-token', function () {
+        var id = $(this).attr('data-id');
+        if (!confirm('Are you sure you want to revoke this API Key? Any external systems using it will stop working immediately.')) {
+            return;
+        }
+        var $row = $('#tokenRow_' + id);
+        APP.post(APP.baseUrl + '/settings/api-tokens/' + id + '/delete', {})
+            .done(function () {
+                $row.fadeOut(300, function () { $(this).remove(); });
+                APP.toast('API Key revoked', 'success');
+            })
+            .fail(function (xhr) {
+                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to revoke key';
+                APP.toast(msg, 'error');
+            });
     });
 
     // Live update for Tenant Powered By Preview

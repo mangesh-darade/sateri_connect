@@ -95,7 +95,7 @@ class ApiTokenModel extends Model
      */
     public function createToken(int $userId, string $name, array $abilities = ['*'], ?string $expiresAt = null): array
     {
-        $plainText = bin2hex(random_bytes(32));
+        $plainText = 'sc_live_' . bin2hex(random_bytes(24));
         $hash      = hash('sha256', $plainText);
 
         $id = $this->insert([

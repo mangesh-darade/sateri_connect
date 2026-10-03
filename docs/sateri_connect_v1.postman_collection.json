@@ -1,0 +1,179 @@
+{
+  "info": {
+    "_postman_id": "c7a8b910-3456-4abc-9def-satericonnectv1",
+    "name": "Sateri Connect REST API (v1)",
+    "description": "Enterprise WhatsApp Cloud API Automation, Customer CRM, and Template Messaging API Collection for external developers.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      { "key": "key", "value": "X-API-Key", "type": "string" },
+      { "key": "value", "value": "{{api_key}}", "type": "string" },
+      { "key": "in", "value": "header", "type": "string" }
+    ]
+  },
+  "event": [],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost/sateri_connect/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "api_key",
+      "value": "sc_live_YOUR_SECRET_API_KEY",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Customer Contacts",
+      "item": [
+        {
+          "name": "Upsert Contact (Create / Update)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+919876543210\",\n  \"name\": \"Mangesh Darade\",\n  \"email\": \"mangesh@example.com\",\n  \"tags\": [\"VIP Customer\", \"Website Lead\"],\n  \"custom_attributes\": {\n    \"city\": \"Pune\",\n    \"plan\": \"Enterprise\",\n    \"order_count\": \"5\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/contacts/upsert",
+              "host": ["{{base_url}}"],
+              "path": ["contacts", "upsert"]
+            },
+            "description": "Create or update a customer with name, email, tags, and custom attributes. Automatically triggers contact automations."
+          }
+        },
+        {
+          "name": "Search Contacts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/contacts/search?q=Mangesh&page=1&per_page=25",
+              "host": ["{{base_url}}"],
+              "path": ["contacts", "search"],
+              "query": [
+                { "key": "q", "value": "Mangesh", "description": "Search by name, phone or email" },
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "25" }
+              ]
+            },
+            "description": "Search customer contacts by query."
+          }
+        },
+        {
+          "name": "Get Contact by ID or Phone",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/contacts/+919876543210",
+              "host": ["{{base_url}}"],
+              "path": ["contacts", "+919876543210"]
+            },
+            "description": "Retrieve contact details, tags, and custom fields by contact ID or phone."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. WhatsApp Messages",
+      "item": [
+        {
+          "name": "Send Direct WhatsApp Text",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"+919876543210\",\n  \"text\": \"Hello Mangesh! Your order #ORD-9988 has been confirmed.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/messages/send-text",
+              "host": ["{{base_url}}"],
+              "path": ["messages", "send-text"]
+            },
+            "description": "Send direct text message within 24-hour customer service window."
+          }
+        },
+        {
+          "name": "Send WhatsApp Approved Template",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"+919876543210\",\n  \"template_name\": \"order_confirmation\",\n  \"language\": \"en_US\",\n  \"variables\": [\"Mangesh\", \"ORD-9988\", \"Rs. 1,499\"],\n  \"header_media_url\": \"https://example.com/receipt.pdf\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/messages/send-template",
+              "host": ["{{base_url}}"],
+              "path": ["messages", "send-template"]
+            },
+            "description": "Send approved Meta template message anytime, even outside 24h window."
+          }
+        },
+        {
+          "name": "Check Message Delivery Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/messages/1/status",
+              "host": ["{{base_url}}"],
+              "path": ["messages", "1", "status"]
+            },
+            "description": "Check if a message was sent, delivered, or read by customer using internal message ID or WhatsApp WAMID."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Automations & Webhooks",
+      "item": [
+        {
+          "name": "Trigger Automation Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"order_placed\",\n  \"phone\": \"+919876543210\",\n  \"name\": \"Mangesh\",\n  \"data\": {\n    \"order_id\": \"ORD-9988\",\n    \"total\": 1499,\n    \"product\": \"Premium Plan\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/automations/trigger",
+              "host": ["{{base_url}}"],
+              "path": ["automations", "trigger"]
+            },
+            "description": "Trigger an automated workflow via custom webhook event (e.g. order_placed, new_lead, payment_success)."
+          }
+        },
+        {
+          "name": "List Active Automations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/automations",
+              "host": ["{{base_url}}"],
+              "path": ["automations"]
+            },
+            "description": "List all active automations available for triggering."
+          }
+        }
+      ]
+    }
+  ]
+}
