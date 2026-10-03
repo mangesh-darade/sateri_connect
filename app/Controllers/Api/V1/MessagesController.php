@@ -34,8 +34,9 @@ class MessagesController extends BaseV1Controller
         $rawTo = (string) ($input['to'] ?? $input['phone'] ?? $input['mobile'] ?? '');
         $text  = trim((string) ($input['text'] ?? $input['message'] ?? ''));
 
-        if ($rawTo === '') {
-            return $this->respondValidationError(['to' => 'Recipient phone number is required (e.g. +917744010738).']);
+        $digits = preg_replace('/\D/', '', $rawTo);
+        if ($rawTo === '' || strlen($digits) < 7 || strlen($digits) > 15) {
+            return $this->respondValidationError(['to' => 'A valid recipient phone number is required (7 to 15 digits with country code, e.g. +917744010738).']);
         }
         if ($text === '') {
             return $this->respondValidationError(['text' => 'Message text cannot be empty.']);
@@ -51,7 +52,20 @@ class MessagesController extends BaseV1Controller
             $contact = $contactModel->findOrCreateForChannel('whatsapp', $phone, ['mobile' => $phone]);
             $contactId = (int) $contact['id'];
 
-            // 24-hour customer service window check
+            // Meta Policy: Check recipient opt-out status (STOP)
+            $consentService = new \App\Libraries\WhatsAppConsentService();
+            if ($consentService->isOptedOut($contact)) {
+                return $this->respondError(
+                    'Recipient has opted out of WhatsApp messages from this business (STOP). Under Meta policy, messages cannot be delivered.',
+                    422,
+                    ['policy' => 'meta_consent', 'code' => 'RECIPIENT_OPTED_OUT']
+                );
+            }
+            if (($contact['status'] ?? '') === 'blocked') {
+                return $this->respondError('Recipient contact is marked as blocked in your CRM.', 403);
+            }
+
+            // Meta Policy: 24-hour customer service window check
             $within24h = is_within_24h_window($contact['last_reply_at'] ?? null);
             if (! $within24h) {
                 return $this->respondError(
@@ -127,11 +141,15 @@ class MessagesController extends BaseV1Controller
         $templateName = trim((string) ($input['template_name'] ?? $input['name'] ?? ''));
         $language     = trim((string) ($input['language'] ?? 'en_US'));
 
-        if ($rawTo === '') {
-            return $this->respondValidationError(['to' => 'Recipient phone number is required.']);
+        $digits = preg_replace('/\D/', '', $rawTo);
+        if ($rawTo === '' || strlen($digits) < 7 || strlen($digits) > 15) {
+            return $this->respondValidationError(['to' => 'A valid recipient phone number is required (7 to 15 digits with country code, e.g. +917744010738).']);
         }
         if ($templateName === '') {
             return $this->respondValidationError(['template_name' => 'Approved template name is required.']);
+        }
+        if (! preg_match('/^[a-z0-9_]{1,150}$/i', $templateName)) {
+            return $this->respondValidationError(['template_name' => 'Invalid template name format. Must be alphanumeric and underscore characters only.']);
         }
 
         $phone = preg_replace('/[^\d+]/', '', trim($rawTo));
@@ -140,6 +158,19 @@ class MessagesController extends BaseV1Controller
         try {
             $contact = $contactModel->findOrCreateForChannel('whatsapp', $phone, ['mobile' => $phone]);
             $contactId = (int) $contact['id'];
+
+            // Meta Policy: Check recipient opt-out status (STOP)
+            $consentService = new \App\Libraries\WhatsAppConsentService();
+            if ($consentService->isOptedOut($contact)) {
+                return $this->respondError(
+                    'Recipient has opted out of WhatsApp messages from this business (STOP). Under Meta policy, messages cannot be delivered.',
+                    422,
+                    ['policy' => 'meta_consent', 'code' => 'RECIPIENT_OPTED_OUT']
+                );
+            }
+            if (($contact['status'] ?? '') === 'blocked') {
+                return $this->respondError('Recipient contact is marked as blocked in your CRM.', 403);
+            }
 
             $guard = new WhatsAppTemplateSendGuard();
             $tpl   = $guard->resolveApprovedTemplate(null, $templateName, $language);
@@ -295,6 +326,10 @@ class MessagesController extends BaseV1Controller
         }
 
         $phone = preg_replace('/[^\d+]/', '', trim($rawTo));
+        $phoneDigits = ltrim($phone, '+');
+        if (strlen($phoneDigits) < 7 || strlen($phoneDigits) > 15) {
+            return $this->respondValidationError(['to' => 'Invalid phone number length. Must be in E.164 format (7-15 digits, e.g. +917744010738).']);
+        }
         $contactModel = model(ContactModel::class);
 
         // Security: SSRF and Media ID validation
@@ -323,6 +358,19 @@ class MessagesController extends BaseV1Controller
         try {
             $contact = $contactModel->findOrCreateForChannel('whatsapp', $phone, ['mobile' => $phone]);
             $contactId = (int) $contact['id'];
+
+            // Meta Policy: Check recipient opt-out status (STOP)
+            $consentService = new \App\Libraries\WhatsAppConsentService();
+            if ($consentService->isOptedOut($contact)) {
+                return $this->respondError(
+                    'Recipient has opted out of WhatsApp messages from this business (STOP). Under Meta policy, messages cannot be delivered.',
+                    422,
+                    ['policy' => 'meta_consent', 'code' => 'RECIPIENT_OPTED_OUT']
+                );
+            }
+            if (($contact['status'] ?? '') === 'blocked') {
+                return $this->respondError('Recipient contact is marked as blocked in your CRM.', 403);
+            }
 
             // 24-hour service window check for free-form media messages
             $within24h = is_within_24h_window($contact['last_reply_at'] ?? null);
