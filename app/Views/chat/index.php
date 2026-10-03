@@ -202,7 +202,9 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
                         <button type="button" class="btn btn-light rounded-circle" id="btnEmoji" title="Emoji"><i class="far fa-smile"></i></button>
                         <button type="button" class="btn btn-light rounded-circle" id="btnAttach" title="Attach"><i class="fas fa-paperclip"></i></button>
                         <button type="button" class="btn btn-light rounded-circle" id="btnQuickReply" title="Quick replies (type /)"><i class="fas fa-bolt"></i></button>
+                        <?php if (function_exists('is_ai_enabled') && is_ai_enabled()): ?>
                         <button type="button" class="btn btn-light rounded-circle text-primary" id="btnAiSuggest" title="AI Suggest Reply (Gemini Copilot)"><i class="fas fa-magic"></i></button>
+                        <?php endif; ?>
                         <input type="file" id="chatFile" class="d-none" accept="image/*,application/pdf,video/*,audio/*">
                         <textarea id="chatInput" class="form-control" rows="1" placeholder="Type a message"></textarea>
                         <button type="button" class="btn btn-wa rounded-circle" id="btnChatSend" title="Send"><i class="fas fa-paper-plane"></i></button>

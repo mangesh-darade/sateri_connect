@@ -21,6 +21,10 @@ class AiCopilot extends BaseController
             return $this->jsonResponse(false, null, 'Unauthenticated. Please log in.', [], 401);
         }
 
+        if (function_exists('is_ai_enabled') && ! is_ai_enabled()) {
+            return $this->jsonResponse(false, null, 'AI Assistant & Gemini Auto-Bot is disabled in Settings.', [], 403);
+        }
+
         // Rate limiting: max 15 requests/min per user, max 30 requests/min per IP
         $userId = (int) session('user_id');
         $cache = service('cache');

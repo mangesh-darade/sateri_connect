@@ -172,3 +172,15 @@ if (! function_exists('is_cheerio_email_provider')) {
         return email_provider() === 'cheerio';
     }
 }
+
+if (! function_exists('is_ai_enabled')) {
+    /** Whether AI Assistant & Gemini Auto-Bot is enabled in Settings */
+    function is_ai_enabled(): bool
+    {
+        try {
+            return (bool) setting('ai_enabled', 0);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+}
