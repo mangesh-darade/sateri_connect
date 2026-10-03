@@ -151,9 +151,13 @@ class MessagesController extends BaseV1Controller
                 $components = $guard->buildBodyComponents($tpl, []);
             }
 
-            // Handle media header if provided
+            // Handle media header if provided (with SSRF protection)
             $headerMediaUrl = trim((string) ($input['header_media_url'] ?? ''));
             if ($headerMediaUrl !== '') {
+                if (! $this->validateSafeUrl($headerMediaUrl)) {
+                    return $this->respondValidationError(['header_media_url' => 'Disallowed or invalid header media URL.']);
+                }
+
                 $mediaType = strtolower((string) ($tpl['header_type'] ?? 'image'));
                 $components[] = [
                     'type'       => 'header',
@@ -293,6 +297,29 @@ class MessagesController extends BaseV1Controller
         $phone = preg_replace('/[^\d+]/', '', trim($rawTo));
         $contactModel = model(ContactModel::class);
 
+        // Security: SSRF and Media ID validation
+        $isMediaId = (! str_starts_with($url, 'http://') && ! str_starts_with($url, 'https://'));
+        if ($isMediaId) {
+            if (! preg_match('/^[a-zA-Z0-9_\-]{5,100}$/', $url)) {
+                return $this->respondValidationError(['url' => 'Invalid Meta media ID format. Must be an alphanumeric ID.']);
+            }
+        } else {
+            if (! $this->validateSafeUrl($url)) {
+                return $this->respondValidationError(['url' => 'Disallowed or invalid media URL (internal network addresses, loopback, and non-HTTP protocols are blocked).']);
+            }
+        }
+
+        // Caption length limit (WhatsApp Meta max 1024 characters)
+        if (mb_strlen($caption) > 1024) {
+            return $this->respondValidationError(['caption' => 'Media caption exceeds WhatsApp maximum length of 1024 characters.']);
+        }
+
+        // Sanitize display filename (prevent path traversal / directory injection)
+        $filename = basename(preg_replace('/[^a-zA-Z0-9_\-\. ]/', '', $filename));
+        if ($filename === '') {
+            $filename = 'document_' . date('Ymd_His');
+        }
+
         try {
             $contact = $contactModel->findOrCreateForChannel('whatsapp', $phone, ['mobile' => $phone]);
             $contactId = (int) $contact['id'];
@@ -309,7 +336,6 @@ class MessagesController extends BaseV1Controller
 
             $wa = service('whatsApp');
             $normPhone = $wa->normalizePhone((string) ($contact['mobile'] ?? $phone));
-            $isMediaId = (! str_starts_with($url, 'http://') && ! str_starts_with($url, 'https://'));
 
             $sendRes = match ($type) {
                 'image'    => $wa->sendImage($normPhone, $url, $caption !== '' ? $caption : null, $isMediaId),

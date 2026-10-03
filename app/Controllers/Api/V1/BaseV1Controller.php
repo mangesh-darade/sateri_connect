@@ -80,6 +80,55 @@ abstract class BaseV1Controller extends BaseController
     }
 
     /**
+     * Validate URL to prevent SSRF (Server-Side Request Forgery) attacks.
+     * Blocks internal IPs, AWS/GCP metadata endpoints (169.254.169.254), loopback (127.0.0.1), and unsafe protocols.
+     */
+    protected function validateSafeUrl(string $url): bool
+    {
+        $url = trim($url);
+        if ($url === '' || filter_var($url, FILTER_VALIDATE_URL) === false) {
+            return false;
+        }
+
+        $parts = parse_url($url);
+        if (! isset($parts['scheme'], $parts['host'])) {
+            return false;
+        }
+
+        $scheme = strtolower($parts['scheme']);
+        if (! in_array($scheme, ['http', 'https'], true)) {
+            return false;
+        }
+
+        $host = strtolower($parts['host']);
+        if ($host === 'localhost' || str_ends_with($host, '.local') || str_ends_with($host, '.internal')) {
+            return ENVIRONMENT === 'development';
+        }
+
+        // Check if host is direct IP address
+        if (filter_var($host, FILTER_VALIDATE_IP)) {
+            if (ENVIRONMENT === 'development' && in_array($host, ['127.0.0.1', '::1'], true)) {
+                return true;
+            }
+
+            // Reject private, loopback, and link-local cloud metadata IPs (169.254.169.254)
+            return filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false;
+        }
+
+        // Resolve DNS hostname to verify IP
+        $ip = gethostbyname($host);
+        if ($ip !== $host && filter_var($ip, FILTER_VALIDATE_IP)) {
+            if (ENVIRONMENT === 'development' && in_array($ip, ['127.0.0.1', '::1'], true)) {
+                return true;
+            }
+
+            return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false;
+        }
+
+        return true;
+    }
+
+    /**
      * Get JSON request payload with post fallback.
      *
      * @return array<string, mixed>

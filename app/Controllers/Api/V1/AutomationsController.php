@@ -39,12 +39,23 @@ class AutomationsController extends BaseV1Controller
         if ($event === '') {
             return $this->respondValidationError(['event' => 'Event or trigger name is required (e.g. order_placed, webhook).']);
         }
+        if (! preg_match('/^[a-zA-Z0-9_\-\.]{1,100}$/', $event)) {
+            return $this->respondValidationError(['event' => 'Invalid event name format. Use alphanumeric, dashes, dots, or underscores (max 100 chars).']);
+        }
 
         $rawPhone = (string) ($input['phone'] ?? $input['mobile'] ?? '');
         $phone    = preg_replace('/[^\d+]/', '', trim($rawPhone));
 
         $contactId = (int) ($input['contact_id'] ?? 0);
-        $name      = trim((string) ($input['name'] ?? ''));
+        $name      = trim(strip_tags((string) ($input['name'] ?? '')));
+        if (mb_strlen($name) > 255) {
+            $name = mb_substr($name, 0, 255);
+        }
+
+        $customData = is_array($input['data'] ?? null) ? $input['data'] : (is_array($input['payload'] ?? null) ? $input['payload'] : []);
+        if (strlen(json_encode($customData)) > 65536) {
+            return $this->respondValidationError(['data' => 'Payload data exceeds maximum allowed size of 64KB.']);
+        }
 
         try {
             $contactModel = model(ContactModel::class);
@@ -57,8 +68,6 @@ class AutomationsController extends BaseV1Controller
                     return $this->respondError('Contact ID not found.', 404);
                 }
             }
-
-            $customData = is_array($input['data'] ?? null) ? $input['data'] : (is_array($input['payload'] ?? null) ? $input['payload'] : []);
 
             $context = array_merge($customData, [
                 'event'      => $event,

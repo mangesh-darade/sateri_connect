@@ -366,6 +366,14 @@ $routes->get('api/docs', 'Api\V1\DocsController::index');
 $routes->get('api/v1/spec', 'Api\V1\DocsController::spec');
 $routes->get('api/v1/postman', 'Api\V1\DocsController::postman');
 
+$routes->options('api/v1/(:any)', static function () {
+    return service('response')
+        ->setStatusCode(200)
+        ->setHeader('Access-Control-Allow-Origin', '*')
+        ->setHeader('Access-Control-Allow-Headers', 'X-API-Key, Authorization, Content-Type, Accept')
+        ->setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+});
+
 $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1', 'filter' => 'apiAuth'], static function ($routes) {
     // Customer Contacts
     $routes->post('contacts/upsert', 'ContactsController::upsert');

@@ -65,8 +65,9 @@ class AccountController extends BaseV1Controller
                 $wabaInfo['status'] = ($hasKey && $hasApp) ? 'connected' : 'incomplete_config';
             }
         } catch (Throwable $e) {
+            log_message('error', 'API Account::index WABA status error: ' . $e->getMessage());
             $wabaInfo['status'] = 'error';
-            $wabaInfo['error']  = $e->getMessage();
+            $wabaInfo['error']  = 'Unable to fetch WhatsApp Business Account details.';
         }
 
         // Token and User details from session

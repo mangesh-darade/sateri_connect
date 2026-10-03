@@ -47,16 +47,38 @@ class ContactsController extends BaseV1Controller
         $contactModel = model(ContactModel::class);
         $wasCreated   = false;
 
-        $name   = trim((string) ($input['name'] ?? ''));
+        $name   = trim(strip_tags((string) ($input['name'] ?? '')));
         $email  = trim((string) ($input['email'] ?? ''));
-        $notes  = trim((string) ($input['notes'] ?? ''));
+        $notes  = trim(strip_tags((string) ($input['notes'] ?? '')));
 
-        // Handle custom attributes
+        if ($name !== '' && mb_strlen($name) > 255) {
+            return $this->respondValidationError(['name' => 'Name cannot exceed 255 characters.']);
+        }
+
+        if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+            return $this->respondValidationError(['email' => 'Invalid email address format.']);
+        }
+
+        if ($notes !== '' && mb_strlen($notes) > 5000) {
+            return $this->respondValidationError(['notes' => 'Notes cannot exceed 5000 characters.']);
+        }
+
+        // Handle custom attributes (limit to max 50 keys to prevent resource exhaustion)
+        $rawCustom = $input['custom_attributes'] ?? $input['custom_fields'] ?? [];
         $customFields = [];
-        if (! empty($input['custom_attributes']) && is_array($input['custom_attributes'])) {
-            $customFields = $input['custom_attributes'];
-        } elseif (! empty($input['custom_fields']) && is_array($input['custom_fields'])) {
-            $customFields = $input['custom_fields'];
+        if (is_array($rawCustom)) {
+            $count = 0;
+            foreach ($rawCustom as $k => $v) {
+                if (++$count > 50) {
+                    break;
+                }
+                $cleanKey = substr(trim(preg_replace('/[^a-zA-Z0-9_\-]/', '', (string) $k)), 0, 100);
+                if ($cleanKey === '') {
+                    continue;
+                }
+                $cleanVal = is_scalar($v) ? substr(trim((string) $v), 0, 5000) : substr(json_encode($v), 0, 5000);
+                $customFields[$cleanKey] = $cleanVal;
+            }
         }
 
         try {
@@ -71,10 +93,10 @@ class ContactsController extends BaseV1Controller
             if ($name !== '' && $contact['name'] !== $name) {
                 $updates['name'] = $name;
             }
-            if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            if ($email !== '' && ($contact['email'] ?? '') !== $email) {
                 $updates['email'] = $email;
             }
-            if ($notes !== '') {
+            if ($notes !== '' && ($contact['notes'] ?? '') !== $notes) {
                 $updates['notes'] = $notes;
             }
 
@@ -96,7 +118,7 @@ class ContactsController extends BaseV1Controller
                 $contact = array_merge($contact, $updates);
             }
 
-            // Handle Tags
+            // Handle Tags (max 20 tags, sanitized)
             $tagsInput = $input['tags'] ?? [];
             if (is_string($tagsInput)) {
                 $tagsInput = array_map('trim', explode(',', $tagsInput));
@@ -106,9 +128,14 @@ class ContactsController extends BaseV1Controller
             if (is_array($tagsInput) && $tagsInput !== []) {
                 $tagModel = model(TagModel::class);
                 $db = \Config\Database::connect();
+                $tagCount = 0;
 
                 foreach ($tagsInput as $tagName) {
-                    $tagName = trim((string) $tagName);
+                    if (++$tagCount > 20) {
+                        break;
+                    }
+                    $tagName = trim(strip_tags((string) $tagName));
+                    $tagName = substr(preg_replace('/[^\p{L}\p{N}\s_\-]/u', '', $tagName), 0, 50);
                     if ($tagName === '') {
                         continue;
                     }
@@ -185,6 +212,11 @@ class ContactsController extends BaseV1Controller
      */
     public function show(string $idOrPhone): ResponseInterface
     {
+        $idOrPhone = trim($idOrPhone);
+        if ($idOrPhone === '' || mb_strlen($idOrPhone) > 50) {
+            return $this->respondError('Invalid contact identifier.', 400);
+        }
+
         $contactModel = model(ContactModel::class);
 
         $contact = null;
@@ -193,7 +225,8 @@ class ContactsController extends BaseV1Controller
         }
 
         if (! $contact) {
-            $contact = $contactModel->findByMobile($idOrPhone);
+            $cleanPhone = preg_replace('/[^\d+]/', '', $idOrPhone);
+            $contact = $contactModel->findByMobile($cleanPhone);
         }
 
         if (! $contact) {
@@ -224,7 +257,11 @@ class ContactsController extends BaseV1Controller
      */
     public function search(): ResponseInterface
     {
-        $q       = trim((string) $this->request->getGet('q'));
+        $q       = trim(strip_tags((string) $this->request->getGet('q')));
+        if (mb_strlen($q) > 100) {
+            $q = mb_substr($q, 0, 100);
+        }
+
         $page    = max(1, (int) ($this->request->getGet('page') ?? 1));
         $perPage = min(100, max(5, (int) ($this->request->getGet('per_page') ?? 25)));
 

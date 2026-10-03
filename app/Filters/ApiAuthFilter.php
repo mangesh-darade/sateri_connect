@@ -92,9 +92,24 @@ class ApiAuthFilter implements FilterInterface
                 }
             }
 
-            // If token has specific abilities, filter permissions
+            // If token has specific abilities, enforce least-privilege scope check
             $abilities = $apiTokenRow['abilities'] ?? ['*'];
-            if (is_array($abilities) && ! in_array('*', $abilities, true)) {
+            if (! is_array($abilities)) {
+                $abilities = ['*'];
+            }
+
+            $requiredAbility = $this->resolveRequiredAbility($request);
+            if ($requiredAbility !== '' && ! in_array('*', $abilities, true) && ! in_array($requiredAbility, $abilities, true)) {
+                return service('response')
+                    ->setStatusCode(403)
+                    ->setJSON([
+                        'status'  => 'error',
+                        'success' => false,
+                        'message' => "Forbidden: This API token lacks the required ability [{$requiredAbility}].",
+                    ]);
+            }
+
+            if (! in_array('*', $abilities, true)) {
                 $permissions = array_values(array_intersect($permissions, $abilities));
             }
 
@@ -199,5 +214,41 @@ class ApiAuthFilter implements FilterInterface
     public function after(RequestInterface $request, ResponseInterface $response, $arguments = null)
     {
         return null;
+    }
+
+    /**
+     * Map request endpoint and HTTP method to required token ability scope.
+     */
+    protected function resolveRequiredAbility(RequestInterface $request): string
+    {
+        $uri    = (string) $request->getUri()->getPath();
+        $method = strtoupper($request->getMethod());
+
+        if (str_contains($uri, 'contacts/upsert') && $method === 'POST') {
+            return 'contacts:write';
+        }
+        if (str_contains($uri, 'contacts') && $method === 'GET') {
+            return 'contacts:read';
+        }
+        if (str_contains($uri, 'messages/send') && $method === 'POST') {
+            return 'messages:send';
+        }
+        if (str_contains($uri, 'messages') && $method === 'GET') {
+            return 'messages:read';
+        }
+        if (str_contains($uri, 'templates') && $method === 'GET') {
+            return 'templates:read';
+        }
+        if (str_contains($uri, 'automations/trigger') && $method === 'POST') {
+            return 'automations:trigger';
+        }
+        if (str_contains($uri, 'automations') && $method === 'GET') {
+            return 'automations:read';
+        }
+        if (str_contains($uri, 'account') && $method === 'GET') {
+            return 'account:read';
+        }
+
+        return '';
     }
 }
