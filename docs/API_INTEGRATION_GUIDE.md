@@ -177,8 +177,83 @@ Check whether a WhatsApp message was sent, delivered, or read by the customer.
   ```
 
 ---
+### 3.4 Send WhatsApp Media (PDF Invoice, Image, Video, Audio)
+Send document invoices, receipts, brochures, or photos directly to customers.
 
-### 3.5 Trigger Automation Workflow / Webhook
+* **Endpoint:** `POST /api/v1/messages/send-media`
+* **Request Body:**
+  ```json
+  {
+    "to": "+919876543210",
+    "type": "document",
+    "url": "https://your-domain.com/invoices/INV-9988.pdf",
+    "caption": "Your monthly tax invoice statement.",
+    "filename": "invoice_INV9988.pdf"
+  }
+  ```
+* **Supported Media Types:** `document` (PDF, Excel, Doc), `image` (JPEG, PNG, WebP), `video` (MP4), `audio` (AAC, MP3, OGG).
+* **cURL Example:**
+  ```bash
+  curl -X POST "https://your-domain.com/api/v1/messages/send-media" \
+    -H "X-API-Key: sc_live_YOUR_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "to": "+919876543210",
+      "type": "document",
+      "url": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+      "caption": "Your tax invoice #INV-2026-001",
+      "filename": "invoice_001.pdf"
+    }'
+  ```
+
+---
+
+### 3.5 Check Message Delivery Status
+Check whether a WhatsApp message was sent, delivered, or read by the customer.
+
+* **Endpoint:** `GET /api/v1/messages/{message_id_or_wamid}/status`
+* **cURL Example:**
+  ```bash
+  curl -X GET "https://your-domain.com/api/v1/messages/849/status" \
+    -H "X-API-Key: sc_live_YOUR_KEY"
+  ```
+* **Success Response (200 OK):**
+  ```json
+  {
+    "status": "success",
+    "message": "Message status retrieved.",
+    "data": {
+      "message_id": 849,
+      "wamid": "wamid.HBgLMOTE5ODc2NTQzMjEwFQIA...",
+      "to": "+919876543210",
+      "status": "read",
+      "sent_at": "2026-10-03 07:15:00",
+      "delivered_at": "2026-10-03 07:15:02",
+      "read_at": "2026-10-03 07:15:10"
+    }
+  }
+  ```
+
+---
+
+### 3.6 Discover & List WhatsApp Templates
+Discover all active Meta WhatsApp templates, their categories, language, and required parameters schema.
+
+* **Endpoint:** `GET /api/v1/templates?status=APPROVED&page=1&per_page=25`
+* **cURL Example:**
+  ```bash
+  curl -X GET "https://your-domain.com/api/v1/templates?status=APPROVED" \
+    -H "X-API-Key: sc_live_YOUR_KEY"
+  ```
+* **Inspect Specific Template:**
+  ```bash
+  curl -X GET "https://your-domain.com/api/v1/templates/order_confirmation" \
+    -H "X-API-Key: sc_live_YOUR_KEY"
+  ```
+
+---
+
+### 3.7 Trigger Automation Workflow / Webhook
 Trigger automated multi-step flows built in the Sateri Connect Visual Flow Builder using custom events (e.g. `order_placed`, `lead_received`, `payment_success`, `appointment_booked`).
 
 * **Endpoint:** `POST /api/v1/automations/trigger`
@@ -195,54 +270,30 @@ Trigger automated multi-step flows built in the Sateri Connect Visual Flow Build
     }
   }
   ```
-* **Success Response (200 OK):**
-  ```json
-  {
-    "status": "success",
-    "message": "Automation event triggered successfully.",
-    "data": {
-      "event": "order_placed",
-      "contact_id": 1042,
-      "matched": 1,
-      "executed": 1
-    }
-  }
-  ```
 
 ---
 
-### 3.6 Search Customer Contacts
-* **Endpoint:** `GET /api/v1/contacts/search?q=Mangesh&page=1&per_page=25`
-* **cURL Example:**
-  ```bash
-  curl -X GET "https://your-domain.com/api/v1/contacts/search?q=9876543210" \
-    -H "X-API-Key: sc_live_YOUR_KEY"
-  ```
+### 3.8 Account & WABA Health Check
+Verify API key permissions, connected WhatsApp phone number ID, and system operational status.
+
+* **Account Overview:** `GET /api/v1/account`
+* **Liveness Ping:** `GET /api/v1/health`
 
 ---
 
-## 4. Inbound Webhooks
-
-Configure your receiving server URL under **Settings &rarr; Webhooks** to get real-time JSON pushes whenever a customer messages your WhatsApp business number:
-
-```json
-{
-  "event": "message_received",
-  "contact": {
-    "id": 1042,
-    "phone": "+919876543210",
-    "name": "Mangesh Darade"
-  },
-  "message": {
-    "wamid": "wamid.HBgLMOTE5ODc...",
-    "type": "text",
-    "text": "Can I get pricing for the enterprise plan?",
-    "timestamp": 1727938500
-  }
-}
-```
+## 4. Rate Limiting & Throttling
+To protect server resources and prevent accidental abuse, the API enforces a rate limit:
+* **Default Limit:** **60 requests per minute** per API Key & IP.
+* **Header:** Responses exceeding the limit return `HTTP 429 Too Many Requests` with a `Retry-After: 60` header.
 
 ---
 
-## 5. Interactive Web UI
-Visit `/api/docs` in your browser for the full interactive developer reference with one-click copy buttons and live schemas.
+## 5. Postman Collection
+Download the official pre-configured Postman Collection with real sample data:
+* **Download Endpoint:** `GET /api/v1/postman`
+* Includes all endpoints, dynamic variables `{{base_url}}` & `{{api_key}}`.
+
+---
+
+## 6. Interactive Web UI
+Visit `/api/docs` in your browser for the full interactive developer reference with live testing console, copyable cURL snippets, and real-time response latency viewer.

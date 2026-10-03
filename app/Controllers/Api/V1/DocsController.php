@@ -253,6 +253,106 @@ class DocsController extends BaseController
                         ],
                     ],
                 ],
+                [
+                    'title'       => 'Send WhatsApp Media (Image / PDF / Video)',
+                    'method'      => 'POST',
+                    'path'        => '/api/v1/messages/send-media',
+                    'description' => 'Send invoice PDFs, product photos, videos, or audio files with optional caption.',
+                    'headers'     => [
+                        'X-API-Key'    => 'sc_live_your_api_key',
+                        'Content-Type' => 'application/json',
+                    ],
+                    'body' => [
+                        'to'       => '+919876543210',
+                        'type'     => 'document',
+                        'url'      => 'https://example.com/invoice.pdf',
+                        'caption'  => 'Invoice #INV-2026-001',
+                        'filename' => 'invoice_001.pdf',
+                    ],
+                    'response' => [
+                        'status'  => 'success',
+                        'message' => 'Media message sent successfully.',
+                        'data'    => [
+                            'message_id' => 852,
+                            'wamid'      => 'wamid.HBgLMOTE5ODc2NTQzMjEwFQIAEhgWM0VCNTA...',
+                            'to'         => '919876543210',
+                            'type'       => 'document',
+                            'media_url'  => 'https://example.com/invoice.pdf',
+                            'status'     => 'sent',
+                        ],
+                    ],
+                ],
+                [
+                    'title'       => 'List WhatsApp Templates',
+                    'method'      => 'GET',
+                    'path'        => '/api/v1/templates?status=APPROVED&page=1&per_page=25',
+                    'description' => 'Discover all approved Meta WhatsApp templates with their categories, parameters, and variable schema.',
+                    'headers'     => [
+                        'X-API-Key' => 'sc_live_your_api_key',
+                    ],
+                    'response' => [
+                        'status'  => 'success',
+                        'message' => 'Templates retrieved successfully.',
+                        'data'    => [
+                            'templates' => [
+                                [
+                                    'id'              => 12,
+                                    'name'            => 'order_confirmation',
+                                    'language'        => 'en_US',
+                                    'category'        => 'UTILITY',
+                                    'status'          => 'APPROVED',
+                                    'body'            => 'Hello {{1}}, your order {{2}} has been confirmed for Rs. {{3}}.',
+                                    'variables_count' => 3,
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'title'       => 'Account & WhatsApp Diagnostics',
+                    'method'      => 'GET',
+                    'path'        => '/api/v1/account',
+                    'description' => 'Verify API token abilities, role, and connected WhatsApp Business Account (WABA) status.',
+                    'headers'     => [
+                        'X-API-Key' => 'sc_live_your_api_key',
+                    ],
+                    'response' => [
+                        'status'  => 'success',
+                        'message' => 'Account profile and WhatsApp status retrieved.',
+                        'data'    => [
+                            'account' => [
+                                'user_id' => 1,
+                                'name'    => 'Admin User',
+                                'role'    => 'super-admin',
+                            ],
+                            'whatsapp' => [
+                                'provider' => 'meta',
+                                'status'   => 'connected',
+                            ],
+                            'system' => [
+                                'version'  => 'v1.0.0',
+                                'time_utc' => '2026-10-03 07:15:00 UTC',
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'title'       => 'API Health Check',
+                    'method'      => 'GET',
+                    'path'        => '/api/v1/health',
+                    'description' => 'Quick liveness check endpoint to monitor API service availability.',
+                    'headers'     => [
+                        'X-API-Key' => 'sc_live_your_api_key',
+                    ],
+                    'response' => [
+                        'status'  => 'success',
+                        'message' => 'Service is operational.',
+                        'data'    => [
+                            'status'   => 'healthy',
+                            'time_utc' => '2026-10-03 07:15:00',
+                        ],
+                    ],
+                ],
             ],
         ];
     }

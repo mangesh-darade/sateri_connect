@@ -372,13 +372,22 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1', 'filter' => '
     $routes->get('contacts/search', 'ContactsController::search');
     $routes->get('contacts/(:segment)', 'ContactsController::show/$1');
 
-    // Direct & Template WhatsApp Messages
+    // Direct, Template & Media WhatsApp Messages
     $routes->post('messages/send-text', 'MessagesController::sendText');
     $routes->post('messages/send-template', 'MessagesController::sendTemplate');
+    $routes->post('messages/send-media', 'MessagesController::sendMedia');
     $routes->get('messages/(:segment)/status', 'MessagesController::status/$1');
+
+    // WhatsApp Templates Discovery
+    $routes->get('templates', 'TemplatesController::index');
+    $routes->get('templates/(:segment)', 'TemplatesController::show/$1');
 
     // Automations & Webhooks
     $routes->post('automations/trigger', 'AutomationsController::trigger');
     $routes->get('automations', 'AutomationsController::index');
+
+    // Account & Health Diagnostics
+    $routes->get('account', 'AccountController::index');
+    $routes->get('health', 'AccountController::health');
 });
 

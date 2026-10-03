@@ -221,10 +221,14 @@
                             <select class="form-select form-select-sm" id="testerEndpointSelect">
                                 <option value="contacts_upsert">POST /api/v1/contacts/upsert — Create or Update Contact</option>
                                 <option value="messages_text">POST /api/v1/messages/send-text — Send WhatsApp Direct Text</option>
+                                <option value="messages_media">POST /api/v1/messages/send-media — Send Media (PDF / Image / Video)</option>
                                 <option value="messages_template">POST /api/v1/messages/send-template — Send Approved Template</option>
                                 <option value="messages_status">GET /api/v1/messages/{id}/status — Check Message Status</option>
+                                <option value="templates_list">GET /api/v1/templates — List WhatsApp Templates</option>
                                 <option value="automations_trigger">POST /api/v1/automations/trigger — Trigger Workflow Event</option>
                                 <option value="contacts_search">GET /api/v1/contacts/search — Search Contacts</option>
+                                <option value="account_info">GET /api/v1/account — Account & WABA Status</option>
+                                <option value="health_check">GET /api/v1/health — API Health Check</option>
                             </select>
                         </div>
                         <div class="col-md-6">
@@ -395,6 +399,17 @@
                     text: 'Hello Mangesh! Your order #ORD-9988 has been confirmed.'
                 }
             },
+            messages_media: {
+                method: 'POST',
+                url: BASE_URL + '/messages/send-media',
+                body: {
+                    to: '+919876543210',
+                    type: 'document',
+                    url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+                    caption: 'Here is your monthly invoice statement.',
+                    filename: 'invoice_2026.pdf'
+                }
+            },
             messages_template: {
                 method: 'POST',
                 url: BASE_URL + '/messages/send-template',
@@ -408,6 +423,11 @@
             messages_status: {
                 method: 'GET',
                 url: BASE_URL + '/messages/1/status',
+                body: null
+            },
+            templates_list: {
+                method: 'GET',
+                url: BASE_URL + '/templates?status=APPROVED&page=1&per_page=25',
                 body: null
             },
             automations_trigger: {
@@ -427,6 +447,16 @@
             contacts_search: {
                 method: 'GET',
                 url: BASE_URL + '/contacts/search?q=Mangesh&page=1&per_page=25',
+                body: null
+            },
+            account_info: {
+                method: 'GET',
+                url: BASE_URL + '/account',
+                body: null
+            },
+            health_check: {
+                method: 'GET',
+                url: BASE_URL + '/health',
                 body: null
             }
         };

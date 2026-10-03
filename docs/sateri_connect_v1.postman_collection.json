@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "c7a8b910-3456-4abc-9def-satericonnectv1",
     "name": "Sateri Connect REST API (v1)",
-    "description": "Enterprise WhatsApp Cloud API Automation, Customer CRM, and Template Messaging API Collection for external developers.",
+    "description": "Enterprise WhatsApp Cloud API Automation, Customer CRM, Media & Template Messaging API Collection for external developers.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -105,6 +105,25 @@
           }
         },
         {
+          "name": "Send WhatsApp Media (Image / PDF / Video / Audio)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"+919876543210\",\n  \"type\": \"document\",\n  \"url\": \"https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf\",\n  \"caption\": \"Here is your tax invoice #INV-2026-001.\",\n  \"filename\": \"invoice_2026_001.pdf\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/messages/send-media",
+              "host": ["{{base_url}}"],
+              "path": ["messages", "send-media"]
+            },
+            "description": "Send media message (image, document/PDF, video, audio) with optional caption and document filename."
+          }
+        },
+        {
           "name": "Send WhatsApp Approved Template",
           "request": {
             "method": "POST",
@@ -139,7 +158,43 @@
       ]
     },
     {
-      "name": "3. Automations & Webhooks",
+      "name": "3. WhatsApp Templates",
+      "item": [
+        {
+          "name": "List Approved Templates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/templates?status=APPROVED&page=1&per_page=25",
+              "host": ["{{base_url}}"],
+              "path": ["templates"],
+              "query": [
+                { "key": "status", "value": "APPROVED" },
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "25" }
+              ]
+            },
+            "description": "Discover all approved WhatsApp templates with their categories, language, and dynamic variables schema."
+          }
+        },
+        {
+          "name": "Get Template Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/templates/order_confirmation",
+              "host": ["{{base_url}}"],
+              "path": ["templates", "order_confirmation"]
+            },
+            "description": "Get single template details, body text, buttons, and sample payload for send-template."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Automations & Webhooks",
       "item": [
         {
           "name": "Trigger Automation Event",
@@ -171,6 +226,37 @@
               "path": ["automations"]
             },
             "description": "List all active automations available for triggering."
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Account & Diagnostics",
+      "item": [
+        {
+          "name": "Account & WhatsApp Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/account",
+              "host": ["{{base_url}}"],
+              "path": ["account"]
+            },
+            "description": "Fetch API key profile, user role, and connected WhatsApp Business Account (WABA) status."
+          }
+        },
+        {
+          "name": "Health / Ping Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Verify API service operational status and server time."
           }
         }
       ]

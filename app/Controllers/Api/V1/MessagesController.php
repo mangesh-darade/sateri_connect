@@ -256,4 +256,111 @@ class MessagesController extends BaseV1Controller
             'error'        => $msg['error_message'] ?? null,
         ], 'Message status retrieved.');
     }
+
+    /**
+     * Send WhatsApp Media message (Image, Document/PDF, Video, Audio).
+     * POST /api/v1/messages/send-media
+     *
+     * Body payload (JSON):
+     * {
+     *   "to": "+919876543210",
+     *   "type": "document", // image | document | video | audio
+     *   "url": "https://example.com/invoice.pdf",
+     *   "caption": "Your monthly statement",
+     *   "filename": "invoice_1024.pdf"
+     * }
+     */
+    public function sendMedia(): ResponseInterface
+    {
+        $input = $this->getJsonPayload();
+
+        $rawTo    = (string) ($input['to'] ?? $input['phone'] ?? $input['mobile'] ?? '');
+        $type     = strtolower(trim((string) ($input['type'] ?? $input['media_type'] ?? 'image')));
+        $url      = trim((string) ($input['url'] ?? $input['media_url'] ?? $input['link'] ?? ''));
+        $caption  = trim((string) ($input['caption'] ?? ''));
+        $filename = trim((string) ($input['filename'] ?? 'file'));
+
+        if ($rawTo === '') {
+            return $this->respondValidationError(['to' => 'Recipient phone number is required (e.g. +919876543210).']);
+        }
+        if ($url === '') {
+            return $this->respondValidationError(['url' => 'Media URL (https://...) or Meta media ID is required.']);
+        }
+        if (! in_array($type, ['image', 'document', 'video', 'audio'], true)) {
+            return $this->respondValidationError(['type' => 'Media type must be one of: image, document, video, audio.']);
+        }
+
+        $phone = preg_replace('/[^\d+]/', '', trim($rawTo));
+        $contactModel = model(ContactModel::class);
+
+        try {
+            $contact = $contactModel->findOrCreateForChannel('whatsapp', $phone, ['mobile' => $phone]);
+            $contactId = (int) $contact['id'];
+
+            // 24-hour service window check for free-form media messages
+            $within24h = is_within_24h_window($contact['last_reply_at'] ?? null);
+            if (! $within24h) {
+                return $this->respondError(
+                    'Customer is outside the WhatsApp 24-hour service window. Meta requires an approved template message to initiate conversations.',
+                    422,
+                    ['suggestion' => 'Use endpoint POST /api/v1/messages/send-template with media header support.']
+                );
+            }
+
+            $wa = service('whatsApp');
+            $normPhone = $wa->normalizePhone((string) ($contact['mobile'] ?? $phone));
+            $isMediaId = (! str_starts_with($url, 'http://') && ! str_starts_with($url, 'https://'));
+
+            $sendRes = match ($type) {
+                'image'    => $wa->sendImage($normPhone, $url, $caption !== '' ? $caption : null, $isMediaId),
+                'document' => $wa->sendDocument($normPhone, $url, $caption !== '' ? $caption : null, $filename !== '' ? $filename : null, $isMediaId),
+                'video'    => $wa->sendVideo($normPhone, $url, $caption !== '' ? $caption : null, $isMediaId),
+                'audio'    => $wa->sendAudio($normPhone, $url, $isMediaId),
+            };
+
+            $wamid = (string) ($sendRes['messages'][0]['id'] ?? $sendRes['id'] ?? uniqid('msg_'));
+
+            $convModel    = model(ConversationModel::class);
+            $conversation = $convModel->findOrCreateForContact($contactId);
+
+            $msgModel = model(MessageModel::class);
+            $msgId    = $msgModel->insert([
+                'contact_id'          => $contactId,
+                'conversation_id'     => (int) $conversation['id'],
+                'channel'             => 'whatsapp',
+                'direction'           => 'outbound',
+                'message_type'        => $type,
+                'media_url'           => $url,
+                'external_message_id' => $wamid,
+                'wa_message_id'       => $wamid,
+                'wamid'               => $wamid,
+                'content'             => $caption !== '' ? $caption : '[' . ucfirst($type) . ']',
+                'status'              => 'sent',
+                'is_read'             => 1,
+            ]);
+
+            $convModel->update((int) $conversation['id'], [
+                'last_message_id' => $msgId,
+                'last_message_at' => date('Y-m-d H:i:s'),
+                'status'          => 'open',
+            ]);
+
+            return $this->respondSuccess([
+                'message_id'   => (int) $msgId,
+                'wamid'        => $wamid,
+                'to'           => $normPhone,
+                'type'         => $type,
+                'media_url'    => $url,
+                'caption'      => $caption,
+                'status'       => 'sent',
+                'delivered_at' => null,
+                'created_at'   => date('Y-m-d H:i:s'),
+            ], 'Media message sent successfully.', 201);
+        } catch (Throwable $e) {
+            log_message('error', 'API Messages::sendMedia error: ' . $e->getMessage());
+
+            return $this->respondError('Failed to send WhatsApp media message: ' . $e->getMessage(), 500);
+        }
+    }
 }
+

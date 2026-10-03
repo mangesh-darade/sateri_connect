@@ -40,6 +40,24 @@ class ApiAuthFilter implements FilterInterface
                 ]);
         }
 
+        // Rate limiting: max 60 requests per minute per token & IP
+        $throttler   = service('throttler');
+        $throttleKey = 'api_throttle_' . md5($rawToken . '_' . $request->getIPAddress());
+        if ($throttler->check($throttleKey, 60, MINUTE) === false) {
+            return service('response')
+                ->setStatusCode(429)
+                ->setHeader('Retry-After', '60')
+                ->setJSON([
+                    'status'  => 'error',
+                    'success' => false,
+                    'message' => 'Rate limit exceeded. Maximum 60 requests per minute allowed.',
+                    'data'    => [
+                        'retry_after_seconds' => 60,
+                        'limit_per_minute'    => 60,
+                    ],
+                ]);
+        }
+
         // 1. Verify against api_tokens table (permanent external developer keys)
         $tokenModel  = model(ApiTokenModel::class);
         $apiTokenRow = $tokenModel->findValidByPlainText($rawToken);

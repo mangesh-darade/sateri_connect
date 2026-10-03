@@ -86,9 +86,13 @@ abstract class BaseV1Controller extends BaseController
      */
     protected function getJsonPayload(): array
     {
-        $json = $this->request->getJSON(true);
-        if (is_array($json)) {
-            return $json;
+        try {
+            $json = $this->request->getJSON(true);
+            if (is_array($json)) {
+                return $json;
+            }
+        } catch (\Throwable) {
+            // Soft-catch malformed JSON to fallback to raw decode or empty array
         }
 
         $post = $this->request->getPost();
