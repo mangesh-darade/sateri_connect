@@ -702,7 +702,7 @@ class Webhooks extends Controller
             $wa = service('whatsApp');
             $wa->forceProvider($activeProvider);
 
-            service('automationEngine')->processTrigger('message_received', [
+            $autoRes1 = service('automationEngine')->processTrigger('message_received', [
                 'contact_id'   => $contactId,
                 'message_id'   => $messageId,
                 'message_type' => $msgType,
@@ -717,9 +717,10 @@ class Webhooks extends Controller
                 log_message('error', 'Sequence exit-on-reply failed: {msg}', ['msg' => $e->getMessage()]);
             }
 
+            $autoRes2 = ['matched' => 0, 'executed' => 0];
             // Keyword bot already answered — a second keyword-flow reply is a duplicate.
             if ($runKeywordMatch && ! $botMatched) {
-                service('automationEngine')->processTrigger('keyword', [
+                $autoRes2 = service('automationEngine')->processTrigger('keyword', [
                     'contact_id'   => $contactId,
                     'content'      => $keywordText,
                     'text'         => $keywordText,
@@ -734,6 +735,13 @@ class Webhooks extends Controller
                 service('queueService')->processBatch(30);
             } catch (Throwable $qe) {
                 log_message('error', 'Post-automation queue flush failed: {msg}', ['msg' => $qe->getMessage()]);
+            }
+
+            // AI Smart Assistant / Fallback:
+            // When neither Keyword Bot nor Automation workflows triggered, invoke AI
+            $hasExecutedAction = ($autoRes1['executed'] ?? 0) > 0 || ($autoRes2['executed'] ?? 0) > 0;
+            if (! $botMatched && ! $hasExecutedAction && $runKeywordMatch) {
+                $this->handleAiAutoReply($contactId, (int) $conversation['id'], $keywordText, $from, $channel, $activeProvider);
             }
         } catch (Throwable $e) {
             log_message('error', 'Automation trigger error: {msg}', ['msg' => $e->getMessage()]);
@@ -951,5 +959,87 @@ class Webhooks extends Controller
         }
 
         return $object !== '' ? $object : 'unknown';
+    }
+
+    /**
+     * AI-powered auto-reply with strict anti-ban, anti-loop, and rate limit guardrails.
+     */
+    protected function handleAiAutoReply(int $contactId, int $conversationId, string $userMessage, string $from, string $channel, string $activeProvider): void
+    {
+        try {
+            $aiService = service('aiService');
+            if (! $aiService->isConfigured()) {
+                return;
+            }
+
+            $contactModel = model(ContactModel::class);
+            $contact = $contactModel->find($contactId);
+            if (! is_array($contact)) {
+                return;
+            }
+
+            $convModel = model(ConversationModel::class);
+            $conversation = $convModel->find($conversationId);
+            if (! is_array($conversation)) {
+                return;
+            }
+
+            // Strict anti-ban safety gate (opt-out, 24h window, consecutive limit, agent active)
+            $gate = $aiService->canReply($contact, $conversation, $userMessage);
+            if (! $gate['allowed']) {
+                log_message('notice', 'AI reply skipped for contact #{cid} ({phone}): reason={reason}', [
+                    'cid'    => $contactId,
+                    'phone'  => $from,
+                    'reason' => $gate['reason'],
+                ]);
+
+                // If user specifically requested human assistance, escalate cleanly
+                if ($gate['reason'] === 'human_requested') {
+                    service('whatsAppConsent')->escalateToHuman($contact, $activeProvider);
+                }
+
+                return;
+            }
+
+            // Load last 4 messages for conversational context
+            $messagesModel = model(MessageModel::class);
+            $recent = $messagesModel->where('contact_id', $contactId)
+                ->orderBy('id', 'DESC')
+                ->findAll(4);
+            $recent = array_reverse($recent);
+
+            $reply = $aiService->generateReply($userMessage, $contact, $conversation, $recent);
+            if ($reply === null || trim($reply) === '') {
+                return;
+            }
+
+            $wa = service('whatsApp');
+            $wa->forceProvider($activeProvider);
+
+            $sendRes = $wa->sendText($from, $reply);
+            $wamid = (string) ($sendRes['messages'][0]['id'] ?? $sendRes['id'] ?? '');
+
+            $replyMsgId = $messagesModel->insert([
+                'contact_id'          => $contactId,
+                'conversation_id'     => $conversationId,
+                'channel'             => $channel,
+                'direction'           => 'outbound',
+                'message_type'        => 'text',
+                'external_message_id' => $wamid !== '' ? $wamid : null,
+                'wa_message_id'       => $wamid !== '' ? $wamid : null,
+                'wamid'               => $wamid !== '' ? $wamid : null,
+                'content'             => $reply,
+                'status'              => 'sent',
+                'is_read'             => 1,
+            ]);
+
+            $convModel->update($conversationId, [
+                'last_message_id' => $replyMsgId,
+                'last_message_at' => date('Y-m-d H:i:s'),
+                'status'          => 'open',
+            ]);
+        } catch (Throwable $e) {
+            log_message('error', 'AI auto-reply handler failed: {msg}', ['msg' => $e->getMessage()]);
+        }
     }
 }

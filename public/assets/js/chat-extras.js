@@ -278,4 +278,100 @@
     }
     $('#chatFilterAttrKey, #chatFilterAttrOp').on('change', syncAttrFilter);
     syncAttrFilter();
+
+    /* ---------------- AI Copilot (Gemini Integration) ---------------- */
+
+    var $aiShelf = $('#aiSuggestionsShelf');
+    var $aiList = $('#aiSuggestionsList');
+    var $btnAiSuggest = $('#btnAiSuggest');
+    var $btnAiSummary = $('#btnChatAiSummary');
+    var $summaryModal = $('#aiSummaryModal');
+    var $summaryBody = $('#aiSummaryBody');
+
+    $('#btnCloseAiSuggestions').on('click', function () {
+        $aiShelf.addClass('d-none');
+    });
+
+    $btnAiSuggest.on('click', function () {
+        var cid = Chat.contactId || 0;
+        if (!cid) {
+            APP.toast('Please select a conversation first', 'warning');
+            return;
+        }
+
+        var $btn = $(this);
+        var oldHtml = $btn.html();
+        $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+        $aiShelf.removeClass('d-none');
+        $aiList.html('<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i> Gemini generating reply suggestions…</span>');
+
+        APP.post(base() + '/chat/ai-suggest', {
+            contact_id: cid,
+            message: $('#chatInput').val()
+        })
+            .done(function (res) {
+                var suggestions = (res && res.data && res.data.suggestions) || [];
+                if (!suggestions.length) {
+                    $aiList.html('<span class="text-muted small">No suggestions generated. Make sure AI is enabled in Settings.</span>');
+                    return;
+                }
+                var html = suggestions.map(function (s) {
+                    return '<button type="button" class="btn btn-sm btn-outline-success rounded-pill px-3 py-1 text-start ai-suggestion-pill" data-text="' + esc(s) + '">'
+                        + '<i class="fas fa-magic me-1 small"></i> ' + esc(s) + '</button>';
+                }).join('');
+                $aiList.html(html);
+            })
+            .fail(function (xhr) {
+                var msg = apiError(xhr, 'Failed to fetch AI suggestions');
+                $aiList.html('<span class="text-danger small">' + esc(msg) + '</span>');
+                APP.toast(msg, 'error');
+            })
+            .always(function () {
+                $btn.prop('disabled', false).html(oldHtml);
+            });
+    });
+
+    $aiList.on('click', '.ai-suggestion-pill', function () {
+        var text = $(this).data('text');
+        if (text) {
+            $('#chatInput').val(text).focus();
+            $aiShelf.addClass('d-none');
+            APP.toast('Suggestion copied to composer', 'info');
+        }
+    });
+
+    $btnAiSummary.on('click', function () {
+        var cid = Chat.contactId || 0;
+        if (!cid) {
+            APP.toast('Please select a conversation first', 'warning');
+            return;
+        }
+
+        var modalInstance = bootstrap.Modal.getOrCreateInstance($summaryModal[0]);
+        $summaryBody.html('<div class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin fa-2x mb-2 text-primary"></i><div>Analyzing chat history with Gemini…</div></div>');
+        modalInstance.show();
+
+        APP.post(base() + '/chat/ai-summary', { contact_id: cid })
+            .done(function (res) {
+                var summary = (res && res.data && res.data.summary) || 'No summary generated.';
+                var formatted = esc(summary).replace(/\n/g, '<br>');
+                $summaryBody.html('<div class="p-3 bg-light rounded border text-dark" style="white-space:pre-wrap;line-height:1.6;" id="aiSummaryContent">' + formatted + '</div>');
+            })
+            .fail(function (xhr) {
+                var msg = apiError(xhr, 'Could not generate summary');
+                $summaryBody.html('<div class="alert alert-danger mb-0">' + esc(msg) + '</div>');
+            });
+    });
+
+    $('#btnCopyAiSummary').on('click', function () {
+        var text = $('#aiSummaryContent').text() || '';
+        if (!text) {
+            APP.toast('Nothing to copy', 'warning');
+            return;
+        }
+        navigator.clipboard.writeText(text).then(function () {
+            APP.toast('Summary copied to clipboard', 'success');
+        });
+    });
 })(window, jQuery);
+

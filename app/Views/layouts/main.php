@@ -41,6 +41,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11.10.8/dist/sweetalert2.min.css">
     <link rel="stylesheet" href="<?= asset_url('assets/css/app.css') ?>">
     <link rel="stylesheet" href="<?= asset_url('assets/css/sidebar.css') ?>">
+    <link rel="stylesheet" href="<?= asset_url('assets/css/ai-copilot.css') ?>">
     <?= $this->renderSection('styles') ?>
 </head>
 <body class="hold-transition sidebar-mini layout-fixed<?= ! empty($fullBleed) ? ' flow-builder-page' : '' ?><?= ! empty($chatPage) ? ' chat-page-active' : '' ?>">
@@ -126,6 +127,12 @@
                         <button type="button" class="notif-panel-action" id="navNotifBrowserBtn">Enable browser alerts</button>
                     </div>
                 </div>
+            </li>
+            <li class="nav-item d-flex align-items-center me-2">
+                <button type="button" class="btn btn-sm ai-copilot-trigger-btn d-flex align-items-center gap-1 shadow-sm px-2 py-1" id="btnOpenAiCopilot" title="AI Copilot">
+                    <i class="fas fa-wand-magic-sparkles text-success"></i>
+                    <span class="d-none d-md-inline fw-semibold" style="font-size:0.83rem;">AI Copilot</span>
+                </button>
             </li>
             <li class="nav-item dropdown user-menu">
                 <?php
@@ -812,6 +819,8 @@
     };
 </script>
 <script src="<?= asset_url('assets/js/app.js') ?>"></script>
+<?= view('partials/ai_copilot_drawer') ?>
+<script src="<?= asset_url('assets/js/ai-copilot.js') ?>"></script>
 <?= $this->renderSection('scripts') ?>
 </body>
 </html>

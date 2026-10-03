@@ -183,4 +183,18 @@ class Services extends BaseService
 
         return new \App\Libraries\EmailProvider();
     }
+
+    /**
+     * AI Assistant & Gemini Bot service.
+     *
+     * @return \App\Libraries\AiService
+     */
+    public static function aiService(bool $getShared = true)
+    {
+        if ($getShared) {
+            return static::getSharedInstance('aiService');
+        }
+
+        return new \App\Libraries\AiService();
+    }
 }

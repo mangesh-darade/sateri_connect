@@ -94,7 +94,9 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('settings/test-elintom', 'Settings::testElintOm', ['filter' => 'csrf']);
     $routes->post('settings/sync-elintom', 'Settings::syncElintOm', ['filter' => 'csrf']);
     $routes->post('settings/test-whatsapp', 'Settings::testCheerio', ['filter' => 'csrf']); // active provider via UI uses specific buttons
-    $routes->post('settings/setup-webhook', 'Settings::setupWebhook', ['filter' => 'csrf']);
+    $routes->post('settings/test-ai', 'Settings::testAi', ['filter' => 'csrf']);
+    $routes->post('copilot/ask', 'AiCopilot::ask', ['filter' => 'csrf']);
+    $routes->get('copilot/history', 'AiCopilot::history');
 
     // Contacts
     $routes->get('contacts', 'Contacts::index');
@@ -210,6 +212,8 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('chat/status', 'Chat::setStatus', ['filter' => 'csrf']);
     $routes->get('chat/search', 'Chat::search');
     $routes->get('chat/contact/(:num)', 'Chat::contactPanel/$1');
+    $routes->post('chat/ai-suggest', 'Chat::aiSuggest', ['filter' => 'csrf']);
+    $routes->post('chat/ai-summary', 'Chat::aiSummary', ['filter' => 'csrf']);
     $routes->post('chat/contact-attribute', 'Chat::saveContactAttribute', ['filter' => 'csrf']);
     $routes->post('chat/contact-tag', 'Chat::contactTag', ['filter' => 'csrf']);
     $routes->get('chat/quick-replies', 'Chat::quickReplies');

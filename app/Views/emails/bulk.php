@@ -89,7 +89,7 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
                         <input type="text" class="form-control" id="bulkCampaign" name="campaign_name"
                                value="<?= esc(old('campaign_name') ?? $defaultCampaign) ?>"
                                placeholder="bulk-<?= esc(date('Ymd-His')) ?>">
-                        <div class="form-text">Blank ठेवल्यास auto campaign नाव तयार होईल.</div>
+                        <div class="form-text">Leave blank to automatically generate a campaign name.</div>
                     </div>
                     <div class="col-12">
                         <label class="form-label" for="bulkSubject">Subject <span class="text-danger">*</span></label>

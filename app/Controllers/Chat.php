@@ -1191,4 +1191,75 @@ class Chat extends BaseController
             log_message('debug', 'Cheerio status poll aborted: {msg}', ['msg' => $e->getMessage()]);
         }
     }
+
+    /**
+     * AI Copilot: Generate quick reply suggestions for Live Chat.
+     */
+    public function aiSuggest(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('chat.view')) {
+            return $denied;
+        }
+
+        $contactId = (int) ($this->request->getPost('contact_id') ?? 0);
+        $userMessage = trim((string) ($this->request->getPost('message') ?? ''));
+
+        if ($contactId <= 0) {
+            return $this->jsonResponse(false, null, 'Contact ID is required', [], 400);
+        }
+
+        $aiService = service('aiService');
+        if (! $aiService->isConfigured()) {
+            return $this->jsonResponse(false, null, 'AI assistant is not configured or disabled in Settings.', [], 422);
+        }
+
+        $messages = model(MessageModel::class)
+            ->where('contact_id', $contactId)
+            ->orderBy('id', 'DESC')
+            ->findAll(6);
+        $messages = array_reverse($messages);
+
+        if ($userMessage === '' && ! empty($messages)) {
+            for ($i = count($messages) - 1; $i >= 0; $i--) {
+                if (($messages[$i]['direction'] ?? '') === 'inbound') {
+                    $userMessage = (string) ($messages[$i]['content'] ?? '');
+                    break;
+                }
+            }
+        }
+
+        $suggestions = $aiService->suggestReplies($userMessage, $messages);
+
+        return $this->jsonResponse(true, ['suggestions' => $suggestions]);
+    }
+
+    /**
+     * AI Copilot: Generate brief conversation summary for agents.
+     */
+    public function aiSummary(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('chat.view')) {
+            return $denied;
+        }
+
+        $contactId = (int) ($this->request->getPost('contact_id') ?? 0);
+        if ($contactId <= 0) {
+            return $this->jsonResponse(false, null, 'Contact ID is required', [], 400);
+        }
+
+        $aiService = service('aiService');
+        if (! $aiService->isConfigured()) {
+            return $this->jsonResponse(false, null, 'AI assistant is not configured or disabled in Settings.', [], 422);
+        }
+
+        $messages = model(MessageModel::class)
+            ->where('contact_id', $contactId)
+            ->orderBy('id', 'DESC')
+            ->findAll(20);
+        $messages = array_reverse($messages);
+
+        $summary = $aiService->summarizeChat($messages);
+
+        return $this->jsonResponse(true, ['summary' => $summary]);
+    }
 }

@@ -99,6 +99,15 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                         </span>
                     </button>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabAi" type="button" role="tab" aria-controls="tabAi" aria-selected="false">
+                        <i class="fas fa-robot" aria-hidden="true"></i>
+                        <span>
+                            <span class="settings-nav-label">AI Bot & Copilot</span>
+                            <span class="settings-nav-hint">Gemini · Anti-Ban Rules</span>
+                        </span>
+                    </button>
+                </li>
             </ul>
         </nav>
 
@@ -919,9 +928,9 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                 <div class="settings-step-body">
                                     <p class="small text-muted mb-2">
                                         <?php if ($isWhMeta): ?>
-                                            हा token Save URL / Save Settings केल्यावर configured Meta App मध्ये API ने sync होतो.
+                                            This token syncs automatically to your configured Meta App via Graph API when you click Save URL or Save Settings.
                                         <?php else: ?>
-                                            हा token Cheerio webhook form मध्ये paste करायचा. App + provider दोन्ही ठिकाणी <strong>same</strong> असावा.
+                                            Paste this token into the Cheerio webhook form. It must be <strong>identical</strong> in both your App and provider settings.
                                         <?php endif; ?>
                                     </p>
                                     <label class="form-label">Webhook Verify Token</label>
@@ -961,14 +970,14 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                     <p class="small text-muted mb-2" id="webhookAutoHint"><?= esc($wh['hint'] ?? '') ?></p>
                                     <?php if ($whMode === 'local'): ?>
                                         <ol class="small text-muted mb-3 ps-3">
-                                            <li>Start: <code>cloudflared tunnel --url http://127.0.0.1:80</code></li>
-                                            <li>Browser मध्ये Settings <strong>tunnel HTTPS URL</strong> वरून उघडा</li>
-                                            <li><strong>Auto-generate</strong> क्लिक → Save (किंवा paste)</li>
+                                            <li>Start tunnel: <code>cloudflared tunnel --url http://127.0.0.1:80</code></li>
+                                            <li>Open Settings in browser using the <strong>tunnel HTTPS URL</strong></li>
+                                            <li>Click <strong>Auto</strong> → Save (or paste manually)</li>
                                         </ol>
                                     <?php else: ?>
                                         <p class="small text-muted mb-3">
-                                            Live domain वर Settings उघडताच callback <strong>auto-detect + save</strong> होते.
-                                            <strong>Auto</strong> पुन्हा detect करण्यासाठी वापरा. Override फक्त गरज असल्यास.
+                                            On a live domain, callback URL is <strong>auto-detected and saved</strong> when opening Settings.
+                                            Use <strong>Auto</strong> to re-detect anytime. Override only if necessary.
                                         </p>
                                     <?php endif; ?>
                                     <label class="form-label" for="webhookPublicBase">Public HTTPS base</label>
@@ -997,14 +1006,14 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                 <div class="settings-step-head">
                                     <span class="settings-step-num">3</span>
                                     <div class="settings-step-copy">
-                                        <strong><?= $isWhMeta ? 'Meta API sync + test' : 'Cheerio madhe paste + test' ?></strong>
+                                        <strong><?= $isWhMeta ? 'Meta API sync & test' : 'Paste into provider & test' ?></strong>
                                         <span class="badge <?= $step3 ? 'text-bg-success' : 'text-bg-secondary' ?>" id="badgeStep3">
                                             <?= $step3 ? 'Ready' : 'Waiting' ?>
                                         </span>
                                     </div>
                                 </div>
                                 <div class="settings-step-body">
-                                    <label class="form-label" for="webhookPublicCallback">Callback URL (editable — provider madhe paste)</label>
+                                    <label class="form-label" for="webhookPublicCallback">Callback URL (editable — copy into provider)</label>
                                     <div class="input-group mb-2">
                                         <input type="url" class="form-control font-monospace" id="webhookPublicCallback"
                                                name="webhook_public_callback"
@@ -1019,21 +1028,21 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                         </button>
                                     </div>
                                     <div class="form-text mb-3">
-                                        Full callback URL edit / paste karu shakta. Save kelya var host save hoto; path auto-correct hoto.
+                                        You can edit or paste the full callback URL. Saving updates the host and auto-formats the webhook path.
                                     </div>
 
                                     <div class="settings-guide mb-3 small">
                                         <?php if ($isWhMeta): ?>
                                             <div class="alert alert-info border-0 py-2 px-3 small mb-3" role="note">
-                                                <strong>Automatic Meta setup:</strong> <strong>Save URL</strong> किंवा footer मधील
-                                                <strong>Save Settings</strong> configured App ID/WABA ID साठी Callback URL,
-                                                Verify Token, <code>messages</code> fields आणि WABA override Graph API ने sync करते.
+                                                <strong>Automatic Meta setup:</strong> Clicking <strong>Save URL</strong> or footer
+                                                <strong>Save Settings</strong> syncs the Callback URL, Verify Token, <code>messages</code> fields,
+                                                and WABA overrides directly to Meta via Graph API.
                                             </div>
                                             <div class="fw-semibold mb-2">Required Meta credentials:</div>
                                             <ol class="mb-2 ps-3">
-                                                <li>Access Token, WABA ID, App ID आणि App Secret Settings → Provider मध्ये save असावेत.</li>
-                                                <li>Public callback valid HTTPS असावा आणि Meta verification request ला accessible असावा.</li>
-                                                <li>API warning दिसल्यासच <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener">Meta Dashboard</a> मध्ये manual fallback वापरा.</li>
+                                                <li>Access Token, WABA ID, App ID, and App Secret must be saved under Settings → Provider.</li>
+                                                <li>Public callback must be a valid HTTPS URL reachable by Meta verification requests.</li>
+                                                <li>Use manual fallback in the <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener">Meta Dashboard</a> only if an API warning appears.</li>
                                             </ol>
                                         <?php else: ?>
                                             <div class="fw-semibold mb-2">Cheerio / WABA webhook form:</div>
@@ -1120,6 +1129,106 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                         <li>Test connection</li>
                                         <li>Sync customers (or use Contacts page button)</li>
                                     </ol>
+                                </aside>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane fade" id="tabAi" role="tabpanel">
+                        <div class="settings-pane-header">
+                            <h2 class="settings-pane-title"><i class="fas fa-robot text-wa me-2"></i> AI Assistant & Gemini Auto-Bot</h2>
+                            <p class="settings-pane-sub">Power your WhatsApp customer support with Google Gemini 1.5 Flash. Built-in anti-ban guardrails, rate limiting, and 24-hour service window awareness.</p>
+                        </div>
+
+                        <div class="row g-4">
+                            <div class="col-lg-8">
+                                <div class="card mb-4 border-0 shadow-sm">
+                                    <div class="card-body">
+                                        <div class="d-flex align-items-center justify-content-between mb-3 pb-3 border-bottom">
+                                            <div>
+                                                <h6 class="mb-1 fw-bold">Enable AI Auto-Bot</h6>
+                                                <div class="text-muted small">When active, AI answers inbound customer queries when no keyword rules match.</div>
+                                            </div>
+                                            <div class="form-check form-switch fs-4 mb-0">
+                                                <input class="form-check-input" type="checkbox" role="switch" name="ai_enabled" value="1" id="aiEnabled" <?= !empty($ai['enabled']) ? 'checked' : '' ?>>
+                                            </div>
+                                        </div>
+
+                                        <div class="row g-3">
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold">AI Provider</label>
+                                                <select name="ai_provider" class="form-select" id="aiProvider">
+                                                    <option value="gemini" selected>Google Gemini (Recommended)</option>
+                                                </select>
+                                                <div class="form-text">Lowest latency & cost-effective for multi-lingual chats.</div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold">Model</label>
+                                                <select name="ai_model" class="form-select" id="aiModel">
+                                                    <option value="gemini-flash-latest" <?= in_array($ai['model'] ?? '', ['gemini-flash-latest', 'gemini-1.5-flash', ''], true) ? 'selected' : '' ?>>Gemini Flash (Latest & Recommended)</option>
+                                                    <option value="gemini-2.5-flash" <?= ($ai['model'] ?? '') === 'gemini-2.5-flash' ? 'selected' : '' ?>>Gemini 2.5 Flash</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold">Gemini API Key</label>
+                                                <div class="input-group">
+                                                    <input type="password" name="ai_api_key" id="aiApiKey" class="form-control font-monospace" value="<?= esc($ai['api_key'] ?? '') ?>" placeholder="Paste Gemini API Key (e.g. AIza... or AQ...)" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true">
+                                                    <button type="button" class="btn btn-outline-secondary toggle-secret"><i class="fas fa-eye"></i></button>
+                                                    <button type="button" class="btn btn-outline-primary" id="btnTestAi"><i class="fas fa-plug me-1"></i> Test Connection</button>
+                                                </div>
+                                                <div id="aiTestResult" class="mt-2 small"></div>
+                                                <div class="form-text">Get your free API key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio</a>.</div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold">Business / Brand Name</label>
+                                                <input type="text" name="ai_business_name" class="form-control" value="<?= esc($ai['business_name'] ?? '') ?>" placeholder="e.g. Sateri Connect">
+                                            </div>
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold">System Instructions & Business FAQ (Knowledge Base)</label>
+                                                <textarea name="ai_system_prompt" class="form-control font-monospace small" rows="5" placeholder="Define your business details, products, working hours, pricing guidelines, etc."><?= esc($ai['system_prompt'] ?? '') ?></textarea>
+                                                <div class="form-text">AI strictly follows this prompt to answer queries in Marathi, Hindi, and English.</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="card border-0 shadow-sm">
+                                    <div class="card-header bg-light-subtle py-3">
+                                        <h6 class="mb-0 fw-bold"><i class="fas fa-shield-alt text-danger me-2"></i> WhatsApp Anti-Ban & Loop Prevention Guardrails</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row g-3">
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold">Max Consecutive AI Replies</label>
+                                                <input type="number" min="1" max="10" name="ai_max_consecutive_replies" class="form-control" value="<?= esc($ai['max_consecutive_replies'] ?? 3) ?>">
+                                                <div class="form-text">Prevents endless bot-to-bot ping pong loops. Bot pauses and alerts staff after this limit.</div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold">Cooldown Between Replies (seconds)</label>
+                                                <input type="number" min="2" max="60" name="ai_cooldown_seconds" class="form-control" value="<?= esc($ai['cooldown_seconds'] ?? 3) ?>">
+                                                <div class="form-text">Enforces natural human response spacing. Meta blocks instant machine blasts.</div>
+                                            </div>
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold">Human Takeover Keywords (comma separated)</label>
+                                                <input type="text" name="ai_human_keywords" class="form-control" value="<?= esc($ai['human_keywords'] ?? '') ?>" placeholder="human,agent,support,representative,manus,madat">
+                                                <div class="form-text">When customer types any of these, AI instantly halts and hands over the chat to a human agent.</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-lg-4">
+                                <aside class="wp-creds-aside">
+                                    <p class="wp-aside-kicker">Built-in Meta Safety</p>
+                                    <ul class="list-unstyled small mb-4">
+                                        <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i><strong>24h Service Window:</strong> AI only replies within the active service window opened by customer.</li>
+                                        <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i><strong>Opt-Out Compliance:</strong> STOP, UNSUBSCRIBE, and CANCEL automatically override and disable AI.</li>
+                                        <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i><strong>Anti-Loop Guard:</strong> Cooldown & consecutive reply caps protect number quality rating.</li>
+                                        <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i><strong>Content Safety:</strong> Guardrails prevent unauthorized discounts or policy-violating messages.</li>
+                                    </ul>
+                                    <p class="wp-aside-kicker">Live Chat Copilot</p>
+                                    <p class="text-muted small">In Live Chat inbox, agents can click <strong>"AI Suggest"</strong> for 3 instant reply options or <strong>"Summarize Chat"</strong> for quick lead notes.</p>
                                 </aside>
                             </div>
                         </div>
@@ -1912,6 +2021,33 @@ $(function () {
                 APP.toast(msg, 'error');
                 $btn.prop('disabled', false).html(html);
             });
+    });
+
+    $('#btnTestAi').on('click', function () {
+        var $btn = $(this);
+        var $out = $('#aiTestResult');
+        var apiKey = ($('#aiApiKey').val() || '').toString().trim();
+        var model = ($('#aiModel').val() || '').toString().trim();
+
+        $btn.prop('disabled', true);
+        $out.html('<span class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i> Testing connection to Gemini API…</span>');
+
+        APP.post(APP.baseUrl + '/settings/test-ai', {
+            api_key: apiKey,
+            model: model
+        })
+            .done(function (res) {
+                var ok = !!(res && res.success);
+                var msg = (res && res.message) || (ok ? 'Connected' : 'Connection failed');
+                $out.html('<span class="' + (ok ? 'text-success fw-semibold' : 'text-danger') + '">' + $('<div>').text(msg).html() + '</span>');
+                APP.toast(msg, ok ? 'success' : 'error');
+            })
+            .fail(function (xhr) {
+                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Gemini API test failed';
+                $out.html('<span class="text-danger">' + $('<div>').text(msg).html() + '</span>');
+                APP.toast(msg, 'error');
+            })
+            .always(function () { $btn.prop('disabled', false); });
     });
 
     // Live update for Tenant Powered By Preview

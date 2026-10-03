@@ -40,6 +40,7 @@ class SettingsService
         'smtp_password',
         'sendgrid_api_key',
         'elintom_api_private_key',
+        'ai_api_key',
     ];
 
     public function __construct(?SettingModel $settings = null, ?EncryptionService $encryption = null)
@@ -916,5 +917,76 @@ class SettingsService
         $port = isset($parts['port']) ? (':' . (int) $parts['port']) : '';
 
         return 'https://' . $host . $port;
+    }
+
+    /**
+     * AI Bot & Copilot settings.
+     *
+     * @return array{
+     *     enabled: bool,
+     *     provider: string,
+     *     api_key: string,
+     *     model: string,
+     *     system_prompt: string,
+     *     business_name: string,
+     *     max_consecutive_replies: int,
+     *     cooldown_seconds: int,
+     *     human_keywords: string
+     * }
+     */
+    public function getAiConfig(): array
+    {
+        return [
+            'enabled'                 => (bool) ($this->get('ai_enabled', 0)),
+            'provider'                => (string) ($this->get('ai_provider', 'gemini')),
+            'api_key'                 => (string) ($this->get('ai_api_key', '')),
+            'model'                   => (string) ($this->get('ai_model', 'gemini-flash-latest')),
+            'system_prompt'           => (string) ($this->get('ai_system_prompt', "You are an official, polite WhatsApp AI assistant for our business.\nAnswer customer questions concisely in English, Marathi, or Hindi based on the language they use.\nKeep answers within 2-3 sentences max.")),
+            'business_name'           => (string) ($this->get('ai_business_name', (string) ($this->get('app_name', 'Our Business')))),
+            'max_consecutive_replies' => (int) ($this->get('ai_max_consecutive_replies', 3)),
+            'cooldown_seconds'        => (int) ($this->get('ai_cooldown_seconds', 3)),
+            'human_keywords'          => (string) ($this->get('ai_human_keywords', 'human,agent,support,representative,manus,madat,manushya,call')),
+        ];
+    }
+
+    /**
+     * Persist AI settings.
+     *
+     * @param array<string, mixed> $config
+     */
+    public function setAiConfig(array $config): void
+    {
+        $map = [
+            'enabled'                 => ['ai_enabled', 'ai', false],
+            'provider'                => ['ai_provider', 'ai', false],
+            'api_key'                 => ['ai_api_key', 'ai', true],
+            'model'                   => ['ai_model', 'ai', false],
+            'system_prompt'           => ['ai_system_prompt', 'ai', false],
+            'business_name'           => ['ai_business_name', 'ai', false],
+            'max_consecutive_replies' => ['ai_max_consecutive_replies', 'ai', false],
+            'cooldown_seconds'        => ['ai_cooldown_seconds', 'ai', false],
+            'human_keywords'          => ['ai_human_keywords', 'ai', false],
+        ];
+
+        foreach ($map as $inputKey => [$settingKey, $group, $encrypt]) {
+            if (! array_key_exists($inputKey, $config)) {
+                continue;
+            }
+
+            $val = $config[$inputKey];
+            if ($inputKey === 'enabled') {
+                $val = ! empty($val) ? '1' : '0';
+            } elseif ($inputKey === 'api_key') {
+                $val = trim((string) $val);
+                if ($val === '') {
+                    // Don't overwrite existing secret if left blank/masked in UI
+                    continue;
+                }
+            } elseif (is_numeric($val)) {
+                $val = (string) $val;
+            }
+
+            $this->set($settingKey, $val, $group, $encrypt);
+        }
     }
 }

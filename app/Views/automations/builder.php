@@ -30,6 +30,9 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
             <span class="flow-zoom-label" id="flowZoomLabel">100%</span>
             <button type="button" class="btn btn-sm btn-outline-secondary" id="btnFlowZoomIn" title="Zoom in"><i class="fas fa-search-plus"></i></button>
             <button type="button" class="btn btn-sm btn-outline-secondary" id="btnFlowZoomFit" title="Fit to view"><i class="fas fa-compress-arrows-alt"></i></button>
+            <button type="button" class="btn btn-sm btn-copilot-builder d-inline-flex align-items-center gap-1 js-open-ai-copilot" id="btnOpenAiCopilotBuilder" title="Open AI Copilot to edit or design this workflow">
+                <i class="fas fa-wand-magic-sparkles text-success"></i> <span>AI Copilot</span>
+            </button>
             <button type="button" class="btn btn-sm btn-wa" id="btnFlowSave"><i class="fas fa-save me-1"></i> Save</button>
         </div>
     </header>

@@ -157,6 +157,9 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
                     </button>
                     <?php endif; ?>
                     <?php if ($canSend): ?>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="btnChatAiSummary" title="AI Summary of Conversation">
+                        <i class="fas fa-magic me-1"></i><span class="d-none d-sm-inline">AI Summary</span>
+                    </button>
                     <button type="button" class="btn btn-sm btn-outline-secondary" id="btnTemplateReply" title="Template reply">
                         <i class="fas fa-file-alt"></i><span class="d-none d-sm-inline ms-1">Template</span>
                     </button>
@@ -186,12 +189,20 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
                     <?php endforeach; ?>
                 </div>
                 <div class="quick-reply-menu d-none" id="quickReplyMenu" role="listbox" aria-label="Quick replies"></div>
+                <div class="chat-ai-suggestions d-none px-3 py-2 border-top bg-light" id="aiSuggestionsShelf">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <span class="small fw-bold text-success"><i class="fas fa-magic me-1"></i> AI Suggestions:</span>
+                        <button type="button" class="btn-close" id="btnCloseAiSuggestions" style="font-size:0.65rem;" aria-label="Close"></button>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2" id="aiSuggestionsList"></div>
+                </div>
                 <?php if ($canSend): ?>
                 <div class="chat-composer" id="chatComposer">
                     <div class="chat-composer-free" id="chatComposerFree">
                         <button type="button" class="btn btn-light rounded-circle" id="btnEmoji" title="Emoji"><i class="far fa-smile"></i></button>
                         <button type="button" class="btn btn-light rounded-circle" id="btnAttach" title="Attach"><i class="fas fa-paperclip"></i></button>
                         <button type="button" class="btn btn-light rounded-circle" id="btnQuickReply" title="Quick replies (type /)"><i class="fas fa-bolt"></i></button>
+                        <button type="button" class="btn btn-light rounded-circle text-primary" id="btnAiSuggest" title="AI Suggest Reply (Gemini Copilot)"><i class="fas fa-magic"></i></button>
                         <input type="file" id="chatFile" class="d-none" accept="image/*,application/pdf,video/*,audio/*">
                         <textarea id="chatInput" class="form-control" rows="1" placeholder="Type a message"></textarea>
                         <button type="button" class="btn btn-wa rounded-circle" id="btnChatSend" title="Send"><i class="fas fa-paper-plane"></i></button>
@@ -352,6 +363,27 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
     </div>
 </div>
 <?= view('chat/transfer_modals', ['tags' => $tags ?? []]) ?>
+
+<div class="modal fade" id="aiSummaryModal" tabindex="-1" aria-labelledby="aiSummaryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="aiSummaryModalLabel"><i class="fas fa-magic text-primary me-2"></i> AI Conversation Summary</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="aiSummaryBody">
+                <div class="text-center py-4 text-muted">
+                    <i class="fas fa-spinner fa-spin fa-2x mb-2 text-primary"></i>
+                    <div>Generating AI summary with Gemini…</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="btnCopyAiSummary"><i class="fas fa-copy me-1"></i> Copy</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>

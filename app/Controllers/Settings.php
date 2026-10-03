@@ -131,6 +131,11 @@ class Settings extends BaseController
             'private_key' => $this->maskSecret((string) ($elintomCfg['private_key'] ?? '')),
         ];
 
+        $aiCfg = $settings->getAiConfig();
+        $aiDisplay = $aiCfg;
+        $aiDisplay['api_key'] = $this->maskSecret((string) $aiCfg['api_key']);
+        $data['ai'] = $aiDisplay;
+
         return $this->render('settings/index', $data);
     }
 
@@ -369,6 +374,26 @@ class Settings extends BaseController
                 $elintom->setConfig($payload);
             }
 
+            if (in_array($section, ['all', 'ai'], true)) {
+                $aiPayload = [
+                    'enabled'                 => $this->request->getPost('ai_enabled') ? '1' : '0',
+                    'provider'                => trim((string) $this->request->getPost('ai_provider')) ?: 'gemini',
+                    'model'                   => trim((string) $this->request->getPost('ai_model')) ?: 'gemini-flash-latest',
+                    'system_prompt'           => trim((string) $this->request->getPost('ai_system_prompt')),
+                    'business_name'           => trim((string) $this->request->getPost('ai_business_name')),
+                    'max_consecutive_replies' => (int) ($this->request->getPost('ai_max_consecutive_replies') ?? 3),
+                    'cooldown_seconds'        => (int) ($this->request->getPost('ai_cooldown_seconds') ?? 3),
+                    'human_keywords'          => trim((string) $this->request->getPost('ai_human_keywords')),
+                ];
+
+                $aiKey = trim((string) $this->request->getPost('ai_api_key'));
+                if ($aiKey !== '' && ! str_contains($aiKey, '•')) {
+                    $aiPayload['api_key'] = $aiKey;
+                }
+
+                $settings->setAiConfig($aiPayload);
+            }
+
             // Saving Meta/Webhook settings also performs the Graph API equivalent of
             // Meta Dashboard's "Verify and save" for this configured App + WABA.
             if (
@@ -465,6 +490,23 @@ class Settings extends BaseController
         } catch (\Throwable $e) {
             return $this->jsonResponse(false, null, $e->getMessage(), [], 500);
         }
+    }
+
+    public function testAi(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('settings.view')) {
+            return $denied;
+        }
+
+        $apiKey = trim((string) ($this->request->getPost('api_key') ?: ($this->safeGetJSON()['api_key'] ?? '')));
+        if (str_contains($apiKey, '•') || $apiKey === '') {
+            $apiKey = null;
+        }
+        $model = trim((string) ($this->request->getPost('model') ?: ($this->safeGetJSON()['model'] ?? ''))) ?: null;
+
+        $res = service('aiService')->testConnection($apiKey, $model);
+
+        return $this->jsonResponse($res['success'], $res, $res['message']);
     }
 
     protected function emailProviderLabel(string $provider): string

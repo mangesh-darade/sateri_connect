@@ -1,6 +1,6 @@
 /**
- * Cheerio-style visual workflow canvas for Automations.
- */
+* Cheerio-style visual workflow canvas for Automations.
+*/
 (function (window, $) {
     'use strict';
 
@@ -1502,9 +1502,74 @@
         bind();
         applyViewport();
         var t = Flow.nodes.find(function (n) { return n.type === 'trigger'; });
-        if (t && t.data) $('#flowTriggerPill').text(TRIGGER_LABELS[t.data.trigger_type] || t.data.trigger_type || '');
         setTimeout(fitView, 60);
+
+        try {
+            var pending = sessionStorage.getItem('ai_pending_flow');
+            if (pending) {
+                var pData = JSON.parse(pending);
+                sessionStorage.removeItem('ai_pending_flow');
+                if (pData && pData.nodes && pData.nodes.length) {
+                    setTimeout(function () {
+                        Flow.setGraph(pData.nodes, pData.edges, pData.workflow_name);
+                    }, 120);
+                }
+            }
+        } catch (e) { }
     });
+
+    Flow.setGraph = function (nodes, edges, workflowName) {
+        Flow.nodes = Array.isArray(nodes) ? nodes : [];
+        Flow.edges = Array.isArray(edges) ? edges : [];
+
+        if (workflowName) {
+            $('#flowName').val(String(workflowName).slice(0, 120));
+        }
+
+        var validIds = {};
+        Flow.nodes.forEach(function (n) {
+            if ((n.x === undefined || n.y === undefined) && n.position) {
+                n.x = n.position.x || 40;
+                n.y = n.position.y || 40;
+            }
+            n.id = String(n.id || nextId('node'));
+            n.type = String(n.type || 'action');
+            n.x = Number(n.x);
+            n.y = Number(n.y);
+            if (!isFinite(n.x)) n.x = 40;
+            if (!isFinite(n.y)) n.y = 40;
+            if (!n.data || typeof n.data !== 'object') n.data = {};
+            validIds[n.id] = true;
+
+            var m = String(n.id).match(/(\d+)/);
+            if (m) Flow.uid = Math.max(Flow.uid, parseInt(m[1], 10) + 1);
+        });
+
+        // Drop any dangling edges pointing to non-existent nodes
+        Flow.edges = Flow.edges.filter(function (e) {
+            return e && validIds[e.from] && validIds[e.to];
+        });
+
+        renderNodes();
+        drawEdges();
+        var t = Flow.nodes.find(function (n) { return n.type === 'trigger'; });
+        if (t && t.data) {
+            $('#flowTriggerPill').text(TRIGGER_LABELS[t.data.trigger_type] || t.data.trigger_type || '');
+        }
+        setTimeout(fitView, 60);
+    };
+
+    Flow.getGraph = function () {
+        return {
+            workflow_name: $('#flowName').val() || '',
+            selected_node_id: Flow.selectedId,
+            nodes: Flow.nodes || [],
+            edges: Flow.edges || []
+        };
+    };
+
+    Flow.save = save;
 
     window.WorkflowFlow = Flow;
 })(window, jQuery);
+
