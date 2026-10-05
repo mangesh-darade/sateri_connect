@@ -30,9 +30,23 @@ class Contacts extends BaseController
             return $this->datatable();
         }
 
+        $db = db_connect();
+        $totalContacts = (int) $db->table('contacts')->where('deleted_at', null)->countAllResults();
+        $optedInCount  = (int) $db->table('contacts')->where('deleted_at', null)->where('wa_opt_in', 1)->countAllResults();
+        $activeCount   = (int) $db->table('contacts')->where('deleted_at', null)->where('status', 'active')->countAllResults();
+        $tags          = model(TagModel::class)->orderBy('name', 'ASC')->findAll();
+        $agents        = model(\App\Models\UserModel::class)->where('status', 'active')->orderBy('name', 'ASC')->findAll();
+
         return $this->render('contacts/index', [
             'pageTitle'      => 'Contacts',
-            'tags'           => model(TagModel::class)->orderBy('name', 'ASC')->findAll(),
+            'tags'           => $tags,
+            'agents'         => $agents,
+            'stats'          => [
+                'total'    => $totalContacts,
+                'opted_in' => $optedInCount,
+                'active'   => $activeCount,
+                'groups'   => count($tags),
+            ],
             'attributeKeys'  => ContactAttributes::knownKeys(),
             'attributeDefs'  => service('contactAttributes')->definitions(),
             'attrColumns'    => service('contactAttributes')->listColumns(),

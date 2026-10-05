@@ -46,6 +46,7 @@ class WhatsAppConsentService
 
     /** @var array<string, string> */
     public const OPT_IN_SOURCES = [
+        'direct_input'      => 'Direct input / Admin',
         'website_form'      => 'Website / landing page form',
         'checkout'          => 'Checkout / booking tick box',
         'in_store'          => 'In-store / counter (recorded)',
@@ -204,10 +205,11 @@ class WhatsAppConsentService
      */
     public function splitCampaignAudience(array $contacts, ?int $campaignId = null): array
     {
-        $excluded = [];
-        $eligible = [];
-        $pending  = [];
-        $seen     = [];
+        $excluded         = [];
+        $eligible         = [];
+        $pending          = [];
+        $seen             = [];
+        $excludedContacts = [];
 
         foreach ($contacts as $contact) {
             $phone = function_exists('normalize_phone')
@@ -215,17 +217,42 @@ class WhatsAppConsentService
                 : preg_replace('/\D+/', '', (string) ($contact['mobile'] ?? ''));
             if ($phone === '' || $phone === null) {
                 $excluded['no_phone'] = ($excluded['no_phone'] ?? 0) + 1;
+                $excludedContacts[] = [
+                    'id'          => (int) ($contact['id'] ?? 0),
+                    'name'        => (string) ($contact['name'] ?? ''),
+                    'mobile'      => (string) ($contact['mobile'] ?? ''),
+                    'email'       => (string) ($contact['email'] ?? ''),
+                    'reason_code' => 'no_phone',
+                    'reason'      => self::EXCLUSION_LABELS['no_phone'] ?? 'No valid mobile',
+                ];
                 continue;
             }
             if (isset($seen[$phone])) {
                 $excluded['duplicate'] = ($excluded['duplicate'] ?? 0) + 1;
+                $excludedContacts[] = [
+                    'id'          => (int) ($contact['id'] ?? 0),
+                    'name'        => (string) ($contact['name'] ?? ''),
+                    'mobile'      => (string) ($contact['mobile'] ?? ''),
+                    'email'       => (string) ($contact['email'] ?? ''),
+                    'reason_code' => 'duplicate',
+                    'reason'      => self::EXCLUSION_LABELS['duplicate'] ?? 'Duplicate mobile',
+                ];
                 continue;
             }
 
             $check = $this->eligibility($contact, self::KIND_CAMPAIGN);
             if (! $check['ok']) {
-                $excluded[$check['reason']] = ($excluded[$check['reason']] ?? 0) + 1;
-                if ($check['reason'] === 'no_opt_in') {
+                $reasonCode = (string) ($check['reason'] ?? 'unknown');
+                $excluded[$reasonCode] = ($excluded[$reasonCode] ?? 0) + 1;
+                $excludedContacts[] = [
+                    'id'          => (int) ($contact['id'] ?? 0),
+                    'name'        => (string) ($contact['name'] ?? ''),
+                    'mobile'      => (string) ($contact['mobile'] ?? ''),
+                    'email'       => (string) ($contact['email'] ?? ''),
+                    'reason_code' => $reasonCode,
+                    'reason'      => self::EXCLUSION_LABELS[$reasonCode] ?? ($check['message'] ?? $reasonCode),
+                ];
+                if ($reasonCode === 'no_opt_in') {
                     $pending[] = $contact;
                 }
                 continue;
@@ -245,6 +272,14 @@ class WhatsAppConsentService
             foreach ($eligible as $contact) {
                 if (($recent[(int) ($contact['id'] ?? 0)] ?? 0) >= $cap) {
                     $excluded['frequency_cap'] = ($excluded['frequency_cap'] ?? 0) + 1;
+                    $excludedContacts[] = [
+                        'id'          => (int) ($contact['id'] ?? 0),
+                        'name'        => (string) ($contact['name'] ?? ''),
+                        'mobile'      => (string) ($contact['mobile'] ?? ''),
+                        'email'       => (string) ($contact['email'] ?? ''),
+                        'reason_code' => 'frequency_cap',
+                        'reason'      => self::EXCLUSION_LABELS['frequency_cap'] ?? 'Already got campaign in last 24h',
+                    ];
                     continue;
                 }
                 $kept[] = $contact;
@@ -253,10 +288,11 @@ class WhatsAppConsentService
         }
 
         return [
-            'eligible'        => $eligible,
-            'excluded'        => $excluded,
-            'excluded_total'  => array_sum($excluded),
-            'pending_consent' => $pending,
+            'eligible'          => $eligible,
+            'excluded'          => $excluded,
+            'excluded_total'    => array_sum($excluded),
+            'excluded_contacts' => $excludedContacts,
+            'pending_consent'   => $pending,
         ];
     }
 

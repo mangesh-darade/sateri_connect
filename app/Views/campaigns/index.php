@@ -149,7 +149,13 @@ $campaigns = $campaigns ?? [];
                                         <div class="text-muted small"><?= esc($created) ?></div>
                                     <?php endif; ?>
                                 </td>
-                                <td class="text-muted"><?= esc($c['label'] !== '' ? $c['label'] : '—') ?></td>
+                                <td>
+                                    <?php if ($c['label'] !== ''): ?>
+                                        <span class="badge rounded-pill bg-light text-dark border px-2 py-1"><i class="fas fa-tag me-1 text-muted"></i><?= esc($c['label']) ?></span>
+                                    <?php else: ?>
+                                        <span class="text-muted">—</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="text-muted small"><?= esc($c['campaign_type'] ?? '—') ?></td>
                                 <td>
                                     <?php if ($channel === 'email'): ?>

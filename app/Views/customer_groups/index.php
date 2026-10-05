@@ -8,7 +8,7 @@
 <?php endif; ?>
 <?php if (function_exists('can') && can('contacts.create')): ?>
     <button type="button" class="btn btn-wa btn-sm" id="btnAddContactToGroup">
-        <i class="fas fa-user-plus me-1"></i> Add Contacts
+        <i class="fas fa-plus me-1"></i> Add Group
     </button>
 <?php endif; ?>
 <?= $this->endSection() ?>
@@ -35,7 +35,7 @@
                 <?php if (empty($groups)): ?>
                     <tr>
                         <td colspan="4" class="text-center text-muted py-4">
-                            No customer groups yet. Add a contact to create your first group for campaigns.
+                            No customer groups yet. Click Add Group to create your first audience list for campaigns.
                         </td>
                     </tr>
                 <?php else: ?>
@@ -85,17 +85,17 @@
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="addContactGroupModalLabel">Add a contact</h5>
+                <h5 class="modal-title" id="addContactGroupModalLabel">Add Group</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="addContactGroupForm" autocomplete="off">
+            <form id="addContactGroupForm" autocomplete="off" novalidate>
                 <div class="modal-body">
                     <div id="addContactGroupErrors" class="alert alert-danger d-none py-2 px-3 small" role="alert"></div>
                     <div class="mb-3">
                         <div class="form-check mb-2">
                             <input class="form-check-input" type="radio" name="mode" id="modeNewGroup" value="new" checked>
                             <label class="form-check-label" for="modeNewGroup">
-                                Add contacts to new list
+                                Create new group
                                 <span class="text-muted small ms-1" id="groupNameCount">0/30</span>
                             </label>
                         </div>
@@ -107,7 +107,7 @@
 
                         <div class="form-check mb-2">
                             <input class="form-check-input" type="radio" name="mode" id="modeExistingGroup" value="existing">
-                            <label class="form-check-label" for="modeExistingGroup">Add contacts to existing list</label>
+                            <label class="form-check-label" for="modeExistingGroup">Add contact to existing group</label>
                         </div>
                         <div id="existingGroupFields" class="ps-4 mb-2 d-none">
                             <select class="form-select form-select-sm" id="existingGroupId" name="group_id">
@@ -120,24 +120,30 @@
                         </div>
                     </div>
 
-                    <div class="row g-3">
-                        <div class="col-md-4">
-                            <input type="text" class="form-control" name="name" id="contactName" placeholder="Name" maxlength="150">
-                            <div class="invalid-feedback" id="err_name"></div>
+                    <div class="pt-2 border-top">
+                        <div class="text-muted small mb-2 d-flex align-items-center justify-content-between">
+                            <span><i class="fas fa-user-plus me-1"></i> Contact details</span>
+                            <span id="contactOptionalBadge" class="badge bg-light text-muted border fw-normal">Optional</span>
                         </div>
-                        <div class="col-md-4">
-                            <input type="text" class="form-control" name="mobile" id="contactMobile" placeholder="91XXXXXXXXXX" required>
-                            <div class="invalid-feedback" id="err_mobile"></div>
-                        </div>
-                        <div class="col-md-4">
-                            <input type="email" class="form-control" name="email" id="contactEmail" placeholder="Email">
-                            <div class="invalid-feedback" id="err_email"></div>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <input type="text" class="form-control" name="name" id="contactName" placeholder="Name" maxlength="150">
+                                <div class="invalid-feedback" id="err_name"></div>
+                            </div>
+                            <div class="col-md-4">
+                                <input type="text" class="form-control" name="mobile" id="contactMobile" placeholder="91XXXXXXXXXX">
+                                <div class="invalid-feedback" id="err_mobile"></div>
+                            </div>
+                            <div class="col-md-4">
+                                <input type="email" class="form-control" name="email" id="contactEmail" placeholder="Email">
+                                <div class="invalid-feedback" id="err_email"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-wa" id="btnSaveContactGroup">Save Contact</button>
+                    <button type="submit" class="btn btn-wa" id="btnSaveContactGroup">Save Group</button>
                 </div>
             </form>
         </div>

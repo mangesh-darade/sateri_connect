@@ -92,9 +92,42 @@
                         return '<input type="checkbox" class="form-check-input contact-check" value="' + id + '" aria-label="Select contact">';
                     }
                 },
-                { data: 'name', defaultContent: '—', render: function (v) { return v ? escHtml(v) : '—'; } },
-                { data: 'mobile', defaultContent: '—', render: function (v) { return v ? escHtml(v) : '—'; } },
-                { data: 'email', defaultContent: '—', render: function (v) { return v ? escHtml(v) : '—'; } },
+                {
+                    data: 'name',
+                    defaultContent: '—',
+                    render: function (v, type, row) {
+                        var name = v ? escHtml(v) : (row && row.mobile ? escHtml(row.mobile) : 'Unnamed Contact');
+                        var initial = (name.replace(/^\+/, '').charAt(0) || '#').toUpperCase();
+                        var colors = ['#25D366', '#128C7E', '#3B82F6', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#06B6D4', '#6366F1'];
+                        var code = initial.charCodeAt(0) || 0;
+                        var bg = colors[code % colors.length];
+
+                        return '<div class="d-flex align-items-center gap-2">' +
+                            '<span class="contact-avatar-circle" style="background:' + bg + ';" aria-hidden="true">' + escHtml(initial) + '</span>' +
+                            '<div class="contact-name-cell">' +
+                                '<span class="contact-name-title">' + name + '</span>' +
+                                (row && row.external_id ? '<span class="text-muted d-block contact-sub-id">ID: ' + escHtml(row.external_id) + '</span>' : '') +
+                            '</div>' +
+                        '</div>';
+                    }
+                },
+                {
+                    data: 'mobile',
+                    defaultContent: '—',
+                    render: function (v) {
+                        if (!v) return '<span class="text-muted">—</span>';
+                        var phone = escHtml(v);
+                        return '<span class="contact-phone-badge"><i class="fab fa-whatsapp text-success me-1"></i>' + phone + '</span>';
+                    }
+                },
+                {
+                    data: 'email',
+                    defaultContent: '—',
+                    render: function (v) {
+                        if (!v) return '<span class="text-muted">—</span>';
+                        return '<span class="text-muted small text-truncate d-inline-block" style="max-width:160px;" title="' + escHtml(v) + '"><i class="far fa-envelope text-secondary me-1"></i>' + escHtml(v) + '</span>';
+                    }
+                },
                 {
                     data: 'tags',
                     orderable: false,
@@ -142,9 +175,9 @@
                     searchable: false,
                     render: function (id) {
                         var html = '<div class="table-actions justify-content-end">';
-                        html += '<a class="btn btn-sm btn-outline-secondary" href="' + base() + '/contacts/' + id + '" title="View"><i class="fas fa-eye"></i></a>';
-                        html += '<a class="btn btn-sm btn-outline-secondary" href="' + base() + '/contacts/' + id + '/edit" title="Edit"><i class="fas fa-edit"></i></a>';
-                        html += '<button type="button" class="btn btn-sm btn-outline-danger" data-confirm-delete data-url="' + base() + '/contacts/' + id + '/delete" title="Delete"><i class="fas fa-trash"></i></button>';
+                        html += '<a class="btn btn-sm btn-icon-action" href="' + base() + '/contacts/' + id + '" title="View Contact"><i class="fas fa-eye"></i></a>';
+                        html += '<a class="btn btn-sm btn-icon-action" href="' + base() + '/contacts/' + id + '/edit" title="Edit Contact"><i class="fas fa-edit"></i></a>';
+                        html += '<button type="button" class="btn btn-sm btn-icon-action text-danger" data-confirm-delete data-url="' + base() + '/contacts/' + id + '/delete" title="Delete"><i class="fas fa-trash-alt"></i></button>';
                         html += '</div>';
                         return html;
                     }
@@ -162,6 +195,9 @@
 
         Contacts.table.on('draw', function () {
             $('#checkAllContacts').prop('checked', false);
+            if (typeof Contacts.updateBulkBar === 'function') {
+                Contacts.updateBulkBar();
+            }
         });
 
         $table.on('click', 'tbody tr', function (e) {
@@ -306,8 +342,26 @@
             +     detailRow('Email', detailValue(row.email))
             +     detailRow('Country', detailValue(row.country))
             +     detailRow('Status', detailValue(row.status))
-            +     detailRow('WhatsApp consent', consentBadge(row)
-                    + (row.wa_opt_in_source ? ' <span class="small text-muted">via ' + escHtml(row.wa_opt_in_source) + '</span>' : ''))
+            +     (function () {
+                    var sourceMap = {
+                        direct_input: 'Direct Entry',
+                        website_form: 'Website Form',
+                        checkout: 'Checkout',
+                        in_store: 'In-Store',
+                        whatsapp_chat: 'WhatsApp Chat',
+                        whatsapp_keyword: 'START Keyword',
+                        whatsapp_button: 'WhatsApp Button',
+                        click_to_whatsapp: 'Click-to-WhatsApp',
+                        phone_call: 'Phone Call',
+                        paper_form: 'Paper Form',
+                        import: 'Import List',
+                        api: 'API',
+                        other: 'Direct Entry'
+                    };
+                    var srcLabel = row.wa_opt_in_source ? (sourceMap[row.wa_opt_in_source] || row.wa_opt_in_source.replace(/_/g, ' ')) : '';
+                    return detailRow('WhatsApp consent', consentBadge(row)
+                        + (srcLabel ? ' <span class="small text-muted">via ' + escHtml(srcLabel) + '</span>' : ''));
+                  })()
             +     detailRow('Birthday', detailValue(row.birthday_display || row.birthday))
             +     detailRow('Channel', detailValue(row.channel))
             +     detailRow('External ID', detailValue(row.external_id))
@@ -682,14 +736,32 @@
         });
     };
 
+    Contacts.updateBulkBar = function () {
+        var total = $('.contact-check').length;
+        var checked = $('.contact-check:checked').length;
+        $('#checkAllContacts').prop('checked', total > 0 && total === checked);
+        var $bar = $('#contactsBulkBar');
+        if ($bar.length) {
+            if (checked > 0) {
+                $('#selectedContactsCount').text(checked);
+                $bar.stop(true, true).slideDown(150);
+            } else {
+                $bar.stop(true, true).slideUp(150);
+            }
+        }
+    };
+
     $(function () {
         $(document).on('change', '#checkAllContacts', function () {
             $('.contact-check').prop('checked', this.checked);
+            Contacts.updateBulkBar();
         });
         $(document).on('change', '.contact-check', function () {
-            var total = $('.contact-check').length;
-            var checked = $('.contact-check:checked').length;
-            $('#checkAllContacts').prop('checked', total > 0 && total === checked);
+            Contacts.updateBulkBar();
+        });
+        $(document).on('click', '#btnDeselectAllContacts', function () {
+            $('#checkAllContacts, .contact-check').prop('checked', false);
+            Contacts.updateBulkBar();
         });
         $('#btnBulkDelete').on('click', function () { Contacts.bulkDelete(); });
         $('#btnBulkTags').on('click', function () { APP.showModal('#bulkTagsModal'); });

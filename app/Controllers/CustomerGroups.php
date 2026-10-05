@@ -90,6 +90,20 @@ class CustomerGroups extends BaseController
         $contactName  = trim((string) ($input['name'] ?? ''));
         $email        = trim((string) ($input['email'] ?? ''));
         $mobile       = normalize_phone((string) ($input['mobile'] ?? ''));
+
+        if ($mode === 'new' && $mobile === '') {
+            (new ActivityLogger())->log('create', 'customer_groups', 'Customer group created', [
+                'group_id' => $tagId,
+                'name'     => $name,
+            ]);
+
+            return $this->jsonResponse(true, [
+                'group_id'      => $tagId,
+                'created'       => true,
+                'contact_saved' => false,
+            ], 'Customer group "' . $name . '" created successfully.');
+        }
+
         $contactModel = model(ContactModel::class);
         $existing     = $contactModel->findByMobile($mobile);
         $created      = false;
@@ -362,10 +376,16 @@ class CustomerGroups extends BaseController
         $email     = trim((string) ($input['email'] ?? ''));
         $name      = trim((string) ($input['name'] ?? ''));
 
-        if ($mobileRaw === '') {
-            $errors['mobile'] = 'Mobile number is required.';
-        } elseif ($mobile === '' || strlen($mobile) < 10 || strlen($mobile) > 15) {
-            $errors['mobile'] = 'Enter a valid mobile number (10–15 digits, with country code).';
+        if ($mode === 'existing') {
+            if ($mobileRaw === '') {
+                $errors['mobile'] = 'Mobile number is required.';
+            } elseif ($mobile === '' || strlen($mobile) < 10 || strlen($mobile) > 15) {
+                $errors['mobile'] = 'Enter a valid mobile number (10–15 digits, with country code).';
+            }
+        } elseif ($mobileRaw !== '') {
+            if ($mobile === '' || strlen($mobile) < 10 || strlen($mobile) > 15) {
+                $errors['mobile'] = 'Enter a valid mobile number (10–15 digits, with country code).';
+            }
         }
 
         if ($email !== '' && ! filter_var($email, FILTER_VALIDATE_EMAIL)) {

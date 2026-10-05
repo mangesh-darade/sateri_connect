@@ -191,6 +191,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('campaigns/(:num)/delete', 'Campaigns::delete/$1', ['filter' => 'csrf']);
     $routes->get('campaigns/(:num)/analytics', 'Campaigns::analytics/$1');
     $routes->get('campaigns/(:num)/queue-status', 'Campaigns::queueStatus/$1');
+    $routes->get('campaigns/(:num)/progress', 'Campaigns::progress/$1');
 
     // Templates
     $routes->get('templates', 'Templates::index');

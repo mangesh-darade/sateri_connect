@@ -26,11 +26,19 @@
             $('#existingGroupFields').removeClass('d-none');
             $('#newGroupName').prop('required', false);
             $('#existingGroupId').prop('required', true);
+            $('#contactMobile').prop('required', true);
+            $('#contactOptionalBadge').text('Required').removeClass('text-muted').addClass('text-danger');
+            $('#addContactGroupModalLabel').text('Add Contact to Group');
+            $('#btnSaveContactGroup').text('Save Contact');
         } else {
             $('#existingGroupFields').addClass('d-none');
             $('#newGroupFields').removeClass('d-none');
             $('#newGroupName').prop('required', true);
             $('#existingGroupId').prop('required', false);
+            $('#contactMobile').prop('required', false);
+            $('#contactOptionalBadge').text('Optional').removeClass('text-danger').addClass('text-muted');
+            $('#addContactGroupModalLabel').text('Add Group');
+            $('#btnSaveContactGroup').text('Save Group');
         }
         clearFieldErrors();
     }
@@ -99,6 +107,12 @@
             if (!payload.group_id) {
                 errors.group_id = 'Select an existing customer group.';
             }
+            var mobile = digitsOnly(payload.mobile);
+            if (!String(payload.mobile || '').trim()) {
+                errors.mobile = 'Mobile number is required.';
+            } else if (mobile.length < 10 || mobile.length > 15) {
+                errors.mobile = 'Enter a valid mobile number (10–15 digits, with country code).';
+            }
         } else {
             var gname = (payload.group_name || '').trim();
             if (!gname) {
@@ -108,13 +122,13 @@
             } else if (gname.length > 30) {
                 errors.group_name = 'Group name must be 30 characters or less.';
             }
-        }
 
-        var mobile = digitsOnly(payload.mobile);
-        if (!String(payload.mobile || '').trim()) {
-            errors.mobile = 'Mobile number is required.';
-        } else if (mobile.length < 10 || mobile.length > 15) {
-            errors.mobile = 'Enter a valid mobile number (10–15 digits, with country code).';
+            if (String(payload.mobile || '').trim()) {
+                var mobile = digitsOnly(payload.mobile);
+                if (mobile.length < 10 || mobile.length > 15) {
+                    errors.mobile = 'Enter a valid mobile number (10–15 digits, with country code).';
+                }
+            }
         }
 
         var email = String(payload.email || '').trim();
@@ -216,7 +230,7 @@
             })
             .fail(function (xhr) {
                 var body = xhr.responseJSON || {};
-                var msg = body.message || 'Unable to save contact';
+                var msg = body.message || (mode === 'new' ? 'Unable to save customer group' : 'Unable to save contact');
                 showFieldErrors(body.errors || {}, msg);
                 APP.toast(msg, 'error');
             })

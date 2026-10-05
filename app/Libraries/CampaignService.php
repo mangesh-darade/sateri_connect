@@ -652,11 +652,23 @@ class CampaignService
             }
         }
 
-        $payload['_audience'] = [
+        $existingAudience = is_array($payload['_audience'] ?? null) ? $payload['_audience'] : [];
+
+        $payload['_audience'] = array_merge($existingAudience, [
             'all'         => ! empty($audience['all']),
-            'contact_ids' => array_values(array_map('intval', $audience['contact_ids'] ?? [])),
-            'tag_ids'     => array_values(array_map('intval', $audience['tag_ids'] ?? [])),
-        ];
+            'contact_ids' => array_values(array_map('intval', $audience['contact_ids'] ?? ($existingAudience['contact_ids'] ?? []))),
+            'tag_ids'     => array_values(array_map('intval', $audience['tag_ids'] ?? ($existingAudience['tag_ids'] ?? []))),
+        ]);
+
+        if (isset($audience['label_id'])) {
+            $payload['_audience']['label_id'] = (int) $audience['label_id'];
+        }
+        if (! empty($audience['label_name'])) {
+            $payload['_audience']['label_name'] = (string) $audience['label_name'];
+        }
+        if (isset($audience['attributes'])) {
+            $payload['_audience']['attributes'] = $audience['attributes'];
+        }
 
         $this->campaigns->update($campaignId, ['payload' => $payload]);
     }
@@ -872,6 +884,15 @@ class CampaignService
 
         $waSplit = $this->consent->splitCampaignAudience($contacts);
 
+        $eligibleList = array_map(static fn (array $c): array => [
+            'id'        => (int) ($c['id'] ?? 0),
+            'name'      => (string) ($c['name'] ?? ''),
+            'mobile'    => (string) ($c['mobile'] ?? ''),
+            'email'     => (string) ($c['email'] ?? ''),
+            'status'    => 'eligible',
+            'reason'    => 'Ready to send (WhatsApp opt-in recorded)',
+        ], $waSplit['eligible']);
+
         return [
             'contacts'          => $contacts,
             'contact_ids'       => $ids,
@@ -882,6 +903,8 @@ class CampaignService
             'wa_eligible_count' => count($waSplit['eligible']),
             'wa_excluded'       => $waSplit['excluded'],
             'wa_excluded_text'  => WhatsAppConsentService::describeExclusions($waSplit['excluded']),
+            'wa_eligible_list'  => $eligibleList,
+            'wa_excluded_list'  => $waSplit['excluded_contacts'] ?? [],
         ];
     }
 

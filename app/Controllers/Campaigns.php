@@ -125,7 +125,21 @@ class Campaigns extends BaseController
 
         $campaign = model(CampaignModel::class)->find($id);
         if ($campaign === null) {
+            if ($this->request->isAJAX()) {
+                return $this->jsonResponse(false, null, 'Campaign not found.', [], 404);
+            }
+
             return redirect()->to('/campaigns')->with('error', 'Campaign not found.');
+        }
+
+        if (($campaign['status'] ?? '') === 'running') {
+            service('campaignService')->completeIfFinished($id);
+            try {
+                (new \App\Libraries\QueueService())->processBatch(10);
+                service('campaignService')->completeIfFinished($id);
+            } catch (Throwable $e) {
+                // Ignore queue batch error on show page
+            }
         }
 
         model(CampaignModel::class)->updateStats($id);
@@ -138,6 +152,10 @@ class Campaigns extends BaseController
             ->orderBy('campaign_contacts.id', 'DESC')
             ->findAll(500);
 
+        if ($this->request->isAJAX()) {
+            return $this->progressResponse($campaign, $recipients);
+        }
+
         $template = null;
         if (! empty($campaign['template_id'])) {
             $template = model(TemplateModel::class)->find((int) $campaign['template_id']);
@@ -149,6 +167,83 @@ class Campaigns extends BaseController
             'recipients' => $recipients,
             'template'   => $template,
             'tags'       => model(TagModel::class)->orderBy('name', 'ASC')->findAll(),
+        ]);
+    }
+
+    public function progress(int $id): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('campaigns.view')) {
+            return $denied;
+        }
+
+        $campaign = model(CampaignModel::class)->find($id);
+        if ($campaign === null) {
+            return $this->jsonResponse(false, null, 'Campaign not found.', [], 404);
+        }
+
+        if (($campaign['status'] ?? '') === 'running') {
+            service('campaignService')->completeIfFinished($id);
+            try {
+                (new \App\Libraries\QueueService())->processBatch(10);
+                service('campaignService')->completeIfFinished($id);
+            } catch (Throwable $e) {
+                // Ignore queue batch error on live poll
+            }
+        }
+
+        model(CampaignModel::class)->updateStats($id);
+        $campaign = model(CampaignModel::class)->find($id);
+
+        $recipients = model(CampaignContactModel::class)
+            ->select('campaign_contacts.*, contacts.name, contacts.mobile')
+            ->join('contacts', 'contacts.id = campaign_contacts.contact_id', 'left')
+            ->where('campaign_contacts.campaign_id', $id)
+            ->orderBy('campaign_contacts.id', 'DESC')
+            ->findAll(500);
+
+        return $this->progressResponse($campaign, $recipients);
+    }
+
+    /**
+     * @param array<string, mixed> $campaign
+     * @param list<array<string, mixed>> $recipients
+     */
+    protected function progressResponse(array $campaign, array $recipients): ResponseInterface
+    {
+        $total = max(1, (int) ($campaign['total_contacts'] ?? 1));
+        $sent  = (int) ($campaign['sent_count'] ?? 0);
+        $pct   = min(100, (int) round(($sent / $total) * 100));
+
+        $recipientsData = [];
+        foreach ($recipients as $r) {
+            $recipientsData[] = [
+                'id'           => (int) ($r['id'] ?? 0),
+                'name'         => (string) ($r['name'] ?? ''),
+                'mobile'       => (string) ($r['mobile'] ?? ''),
+                'status'       => (string) ($r['status'] ?? ''),
+                'status_badge' => view('partials/status_badge', ['status' => $r['status'] ?? '']),
+                'sent_at'      => ! empty($r['sent_at']) ? format_app_datetime($r['sent_at']) : (! empty($r['processed_at']) ? format_app_datetime($r['processed_at']) : '—'),
+                'delivered_at' => ! empty($r['delivered_at']) ? format_app_datetime($r['delivered_at']) : '—',
+                'read_at'      => ! empty($r['read_at']) ? format_app_datetime($r['read_at']) : '—',
+                'error'        => (string) ($r['error_message'] ?? ''),
+            ];
+        }
+
+        return $this->jsonResponse(true, [
+            'id'              => (int) $campaign['id'],
+            'name'            => (string) ($campaign['name'] ?? ''),
+            'status'          => (string) ($campaign['status'] ?? 'draft'),
+            'status_badge'    => view('partials/status_badge', ['status' => $campaign['status'] ?? 'draft']),
+            'total_contacts'  => (int) ($campaign['total_contacts'] ?? 0),
+            'sent_count'      => $sent,
+            'delivered_count' => (int) ($campaign['delivered_count'] ?? 0),
+            'read_count'      => (int) ($campaign['read_count'] ?? 0),
+            'failed_count'    => (int) ($campaign['failed_count'] ?? 0),
+            'reply_count'     => (int) ($campaign['reply_count'] ?? 0),
+            'percentage'      => $pct,
+            'started_at'      => ! empty($campaign['started_at']) ? format_app_datetime($campaign['started_at']) : '—',
+            'completed_at'    => ! empty($campaign['completed_at']) ? format_app_datetime($campaign['completed_at']) : '—',
+            'recipients'      => $recipientsData,
         ]);
     }
 
@@ -286,8 +381,18 @@ class Campaigns extends BaseController
         }
 
         try {
-            $audience   = $this->parseAudienceFromRequest();
-            service('campaignService')->saveAudience($id, $audience);
+            $campaign = model(CampaignModel::class)->find($id);
+            if ($campaign === null) {
+                return $this->failOrRedirect('Campaign not found.');
+            }
+
+            $audience = $this->parseAudienceFromRequest();
+            if ($audience['contact_ids'] === [] && $audience['tag_ids'] === [] && ! $audience['all']) {
+                $audience = $this->audienceFromCampaignPayload($campaign);
+            } else {
+                service('campaignService')->saveAudience($id, $audience);
+            }
+
             $contactIds = $audience['contact_ids'] !== [] ? $audience['contact_ids'] : null;
             $tagIds     = $audience['tag_ids'] !== [] ? $audience['tag_ids'] : null;
             $result     = service('campaignService')->start($id, $contactIds, $tagIds, $audience['all']);
@@ -548,6 +653,8 @@ class Campaigns extends BaseController
                 'wa_eligible_count' => $preview['wa_eligible_count'],
                 'wa_excluded'       => $preview['wa_excluded'],
                 'wa_excluded_text'  => $preview['wa_excluded_text'],
+                'wa_eligible_list'  => $preview['wa_eligible_list'] ?? [],
+                'wa_excluded_list'  => $preview['wa_excluded_list'] ?? [],
             ]);
         } catch (Throwable $e) {
             return $this->jsonResponse(false, null, $e->getMessage(), [], 400);
@@ -809,6 +916,9 @@ class Campaigns extends BaseController
                 'all'         => false,
                 'contact_ids' => $preview['contact_ids'],
                 'tag_ids'     => [$tagId],
+                'label_id'    => $tagId,
+                'label_name'  => (string) ($label['name'] ?? ''),
+                'attributes'  => $attributes,
             ]);
 
             return $this->jsonResponse(true, [
@@ -1084,6 +1194,12 @@ class Campaigns extends BaseController
     {
         $rows = [];
 
+        $tagRows = model(TagModel::class)->findAll();
+        $tagsMap = [];
+        foreach ($tagRows as $t) {
+            $tagsMap[(int) $t['id']] = (string) $t['name'];
+        }
+
         if ($channel === '' || $channel === 'whatsapp' || $channel === 'all') {
             $wa = db_connect()->table('campaigns c')
                 ->select('c.id, c.name, c.status, c.template_id, c.total_contacts, c.sent_count, c.delivered_count, c.failed_count, c.scheduled_at, c.created_at, c.payload, t.name AS template_name')
@@ -1099,7 +1215,15 @@ class Campaigns extends BaseController
                     $payload = is_array($decoded) ? $decoded : [];
                 }
                 $audience = is_array($payload['_audience'] ?? null) ? $payload['_audience'] : [];
-                $labelName = (string) ($audience['label_name'] ?? '');
+                $labelName = trim((string) ($audience['label_name'] ?? ''));
+                if ($labelName === '') {
+                    $tagId = (int) ($audience['label_id'] ?? ($audience['tag_ids'][0] ?? 0));
+                    if ($tagId > 0 && isset($tagsMap[$tagId])) {
+                        $labelName = $tagsMap[$tagId];
+                    } elseif (! empty($audience['all'])) {
+                        $labelName = 'All Contacts';
+                    }
+                }
                 $rows[] = [
                     'id'             => (int) $c['id'],
                     'channel'        => 'whatsapp',
@@ -1125,11 +1249,15 @@ class Campaigns extends BaseController
                 if (! is_array($c) || ! isset($c['id'])) {
                     continue;
                 }
+                $emLabel = trim((string) ($c['label_name'] ?? ''));
+                if ($emLabel === '' && ! empty($c['tag_id']) && isset($tagsMap[(int) $c['tag_id']])) {
+                    $emLabel = $tagsMap[(int) $c['tag_id']];
+                }
                 $rows[] = [
                     'id'            => (int) $c['id'],
                     'channel'       => 'email',
                     'name'          => (string) ($c['name'] ?? ''),
-                    'label'         => (string) ($c['label_name'] ?? ''),
+                    'label'         => $emLabel,
                     'campaign_type' => (string) ($c['subject'] ?? 'Email'),
                     'status'        => (string) ($c['status'] ?? 'draft'),
                     'contacts'      => is_array($c['recipients'] ?? null) ? count($c['recipients']) : 0,
@@ -1230,6 +1358,9 @@ class Campaigns extends BaseController
             'all'         => ! empty($audience['all']),
             'contact_ids' => array_values(array_map('intval', $audience['contact_ids'] ?? [])),
             'tag_ids'     => array_values(array_map('intval', $audience['tag_ids'] ?? [])),
+            'label_id'    => isset($audience['label_id']) ? (int) $audience['label_id'] : null,
+            'label_name'  => (string) ($audience['label_name'] ?? ''),
+            'attributes'  => $audience['attributes'] ?? [],
         ];
     }
 

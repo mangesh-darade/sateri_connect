@@ -283,14 +283,46 @@
             attributes: state.attributes
         }).done(function (res) {
             var data = (res && res.data) ? res.data : {};
+            var eligibleList = data.wa_eligible_list || [];
+            var excludedList = data.wa_excluded_list || [];
+
+            var all = [];
+            eligibleList.forEach(function (c) {
+                all.push($.extend({}, c, { is_eligible: true, is_skipped: false }));
+            });
+            excludedList.forEach(function (c) {
+                all.push($.extend({}, c, { is_eligible: false, is_skipped: true }));
+            });
+
             state.audience = {
                 total: data.total || 0,
                 phone_count: data.phone_count || 0,
                 email_count: data.email_count || 0,
                 contact_ids: data.contact_ids || [],
                 wa_eligible_count: data.wa_eligible_count || 0,
-                wa_excluded_text: data.wa_excluded_text || ''
+                wa_excluded_text: data.wa_excluded_text || '',
+                wa_eligible_list: eligibleList,
+                wa_excluded_list: excludedList,
+                all_contacts: all
             };
+
+            // Update interactive count pills
+            $('#cwTotalCount').text(state.audience.total);
+            $('#cwPhoneCount').text(state.audience.phone_count);
+            $('#cwEmailCount').text(state.audience.email_count);
+            $('#cwEligibleCount').text(state.audience.wa_eligible_count);
+            var skippedCount = excludedList.length;
+            $('#cwSkippedCount').text(skippedCount);
+            $('#cwSkippedChip').toggleClass('d-none', skippedCount <= 0);
+
+            if (state.channel === 'whatsapp') {
+                $('#cwEligibleChip').removeClass('d-none');
+                $('#cwAudienceExcludedNote').text(state.audience.wa_excluded_text || '');
+            } else {
+                $('#cwEligibleChip, #cwSkippedChip').addClass('d-none');
+                $('#cwAudienceExcludedNote').empty();
+            }
+
             var countsText = 'Phone Numbers fetched: ' + state.audience.phone_count +
                 ' | Emails fetched: ' + state.audience.email_count;
             if (state.channel === 'whatsapp') {
@@ -302,6 +334,101 @@
         }).fail(function (xhr) {
             showWizardError(apiErrorMessage(xhr, 'Audience preview failed'));
         });
+    }
+
+    function openAudienceModal(initialTab) {
+        initialTab = initialTab || 'all';
+        var list = (state.audience && state.audience.all_contacts) ? state.audience.all_contacts : [];
+        if (!list.length && (!state.audience || !state.audience.total)) {
+            toast('Please verify label and attributes first to fetch audience.', 'warning');
+            return;
+        }
+
+        // Set counts in modal tabs
+        $('.tab-count-all').text(list.length || (state.audience ? state.audience.total : 0));
+        $('.tab-count-eligible').text(state.audience ? state.audience.wa_eligible_count : 0);
+        var skippedCount = (state.audience && state.audience.wa_excluded_list) ? state.audience.wa_excluded_list.length : 0;
+        $('.tab-count-skipped').text(skippedCount);
+        $('.tab-count-phone').text(state.audience ? state.audience.phone_count : 0);
+
+        $('#cwAudienceModalFilterTabs button').removeClass('active');
+        var $activeBtn = $('#cwAudienceModalFilterTabs button[data-tab="' + initialTab + '"]');
+        if ($activeBtn.length) {
+            $activeBtn.addClass('active');
+        } else {
+            $('#cwAudienceModalFilterTabs button[data-tab="all"]').addClass('active');
+        }
+
+        $('#cwAudienceSearchInput').val('');
+        renderAudienceTable(initialTab, '');
+
+        var el = document.getElementById('cwAudienceModal');
+        if (el && window.bootstrap && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(el).show();
+        } else {
+            $('#cwAudienceModal').modal('show');
+        }
+    }
+
+    function renderAudienceTable(tab, search) {
+        search = String(search || '').toLowerCase().trim();
+        var contacts = (state.audience && state.audience.all_contacts) ? state.audience.all_contacts : [];
+
+        var filtered = contacts.filter(function (c) {
+            if (tab === 'eligible' && !c.is_eligible) return false;
+            if (tab === 'skipped' && !c.is_skipped) return false;
+            if (tab === 'phone' && !c.mobile) return false;
+            if (tab === 'email' && !c.email) return false;
+
+            if (search) {
+                var hay = (String(c.name || '') + ' ' + String(c.mobile || '') + ' ' + String(c.email || '') + ' ' + String(c.reason || '')).toLowerCase();
+                if (hay.indexOf(search) === -1) return false;
+            }
+            return true;
+        });
+
+        if (!filtered.length) {
+            $('#cwAudienceTableBody').html(
+                '<tr><td colspan="6" class="text-center text-muted py-4"><i class="fas fa-search me-1"></i> No matching contacts found.</td></tr>'
+            );
+            $('#cwAudienceSummaryText').text('Showing 0 contacts');
+            return;
+        }
+
+        var html = '';
+        filtered.forEach(function (c, idx) {
+            var name = c.name ? esc(c.name) : 'Unnamed Contact';
+            var initial = (name.replace(/^\+/, '').charAt(0) || '#').toUpperCase();
+            var phone = c.mobile ? esc(c.mobile) : '<span class="text-muted">—</span>';
+            var email = c.email ? esc(c.email) : '<span class="text-muted">—</span>';
+            
+            var statusBadge = c.is_eligible
+                ? '<span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1"><i class="fas fa-check-circle me-1"></i>Eligible</span>'
+                : '<span class="badge bg-warning-subtle text-warning border border-warning-subtle px-2 py-1"><i class="fas fa-ban me-1"></i>Skipped</span>';
+
+            var reasonHtml = c.reason
+                ? (c.is_eligible
+                    ? '<span class="small text-success"><i class="fab fa-whatsapp me-1"></i>' + esc(c.reason) + '</span>'
+                    : '<span class="small text-danger fw-medium"><i class="fas fa-circle-exclamation me-1"></i>' + esc(c.reason) + '</span>')
+                : '<span class="text-muted small">—</span>';
+
+            html += '<tr>' +
+                '<td class="text-muted small">' + (idx + 1) + '</td>' +
+                '<td>' +
+                    '<div class="d-flex align-items-center gap-2">' +
+                        '<span class="badge bg-secondary-subtle text-secondary rounded-circle px-2 py-1 small fw-bold">' + esc(initial) + '</span>' +
+                        '<span class="fw-semibold text-dark">' + name + '</span>' +
+                    '</div>' +
+                '</td>' +
+                '<td><span class="font-monospace small">' + phone + '</span></td>' +
+                '<td><span class="small text-muted">' + email + '</span></td>' +
+                '<td>' + statusBadge + '</td>' +
+                '<td>' + reasonHtml + '</td>' +
+            '</tr>';
+        });
+
+        $('#cwAudienceTableBody').html(html);
+        $('#cwAudienceSummaryText').text('Showing ' + filtered.length + ' of ' + contacts.length + ' contacts');
     }
 
     function renderTemplateStep() {
@@ -867,6 +994,9 @@
         $('#cwEmailHtml').val('');
         $('#cwTemplateSearch').val('');
         $('#cwScheduledAt').val('');
+        $('#cwTotalCount, #cwPhoneCount, #cwEmailCount, #cwEligibleCount, #cwSkippedCount').text('0');
+        $('#cwSkippedChip').addClass('d-none');
+        $('#cwAudienceExcludedNote').empty();
         $('#cwAudienceCounts').text('Phone Numbers fetched: 0 | Emails fetched: 0');
 
         loadWizardData(true).done(function () {
@@ -1184,6 +1314,27 @@
             var key = $(this).data('var');
             var $custom = $('#cwVariableMap .cw-var-custom[data-var="' + key + '"]');
             $custom.toggleClass('d-none', $(this).val() !== 'custom');
+        });
+
+        // Audience Breakdown Modal Triggers
+        $(document).on('click', '.cw-filter-chip', function () {
+            var tab = $(this).data('tab') || 'all';
+            openAudienceModal(tab);
+        });
+
+        $(document).on('click', '#cwViewAudienceDetailsBtn', function () {
+            openAudienceModal('all');
+        });
+
+        $(document).on('click', '#cwAudienceModalFilterTabs button', function () {
+            $('#cwAudienceModalFilterTabs button').removeClass('active');
+            $(this).addClass('active');
+            renderAudienceTable($(this).data('tab'), $('#cwAudienceSearchInput').val());
+        });
+
+        $(document).on('input', '#cwAudienceSearchInput', function () {
+            var activeTab = $('#cwAudienceModalFilterTabs button.active').data('tab') || 'all';
+            renderAudienceTable(activeTab, $(this).val());
         });
 
         $('#campaignRefreshBtn').on('click', function () {
