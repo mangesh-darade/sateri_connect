@@ -42,6 +42,53 @@ class Queue extends BaseController
         ]);
     }
 
+    public function process(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('queue.manage')) {
+            return $denied;
+        }
+
+        $service = new \App\Libraries\QueueService();
+        $stats   = $service->processBatch(50);
+
+        (new ActivityLogger())->log('process', 'queue', 'Queue batch processed manually', $stats);
+
+        $msg = sprintf('Processed %d item(s): %d sent, %d failed.', $stats['processed'], $stats['sent'], $stats['failed']);
+
+        return $this->request->isAJAX()
+            ? $this->jsonResponse(true, $stats, $msg)
+            : redirect()->to('/queue')->with('success', $msg);
+    }
+
+    public function retryAll(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('queue.manage')) {
+            return $denied;
+        }
+
+        $model = model(MessageQueueModel::class);
+        $count = $model->where('status', 'failed')
+            ->set([
+                'status'        => 'pending',
+                'scheduled_at'  => date('Y-m-d H:i:s'),
+                'error_message' => null,
+                'processed_at'  => null,
+                'attempts'      => 0,
+            ])
+            ->update();
+
+        $service = new \App\Libraries\QueueService();
+        $stats   = $service->processBatch(50);
+
+        (new ActivityLogger())->log('retry_all', 'queue', 'All failed queue items retried', ['reset' => $count, 'stats' => $stats]);
+
+        $msg = sprintf('Retried %d failed item(s). %d sent, %d failed.', $count, $stats['sent'], $stats['failed']);
+
+        return $this->request->isAJAX()
+            ? $this->jsonResponse(true, ['reset' => $count, 'stats' => $stats], $msg)
+            : redirect()->to('/queue')->with('success', $msg);
+    }
+
     public function retry(int $id): ResponseInterface
     {
         if ($denied = $this->requirePermission('queue.manage')) {
@@ -67,9 +114,20 @@ class Queue extends BaseController
             'attempts'      => 0,
         ]);
 
-        (new ActivityLogger())->log('retry', 'queue', 'Queue item retried', ['queue_id' => $id]);
+        $service = new \App\Libraries\QueueService();
+        $batch   = $service->processBatch(10);
 
-        return $this->ok('Queue item queued for retry.');
+        (new ActivityLogger())->log('retry', 'queue', 'Queue item retried', ['queue_id' => $id, 'batch' => $batch]);
+
+        $updated = $model->find($id);
+        if ($updated && $updated['status'] === 'sent') {
+            return $this->ok('Queue item #' . $id . ' sent successfully!');
+        }
+        if ($updated && $updated['status'] === 'failed') {
+            return $this->fail('Retry failed: ' . ($updated['error_message'] ?? 'Unknown error'));
+        }
+
+        return $this->ok('Queue item #' . $id . ' queued and processed.');
     }
 
     public function cancel(int $id): ResponseInterface

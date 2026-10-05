@@ -370,6 +370,9 @@
             }
             $('body').append($form);
             $form.trigger('submit');
+            if ($form[0] && typeof $form[0].submit === 'function') {
+                $form[0].submit();
+            }
         });
     };
 

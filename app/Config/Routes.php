@@ -282,6 +282,8 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     // Queue
     $routes->get('queue', 'Queue::index');
     $routes->get('queue/stats', 'Queue::stats');
+    $routes->post('queue/process', 'Queue::process', ['filter' => 'csrf']);
+    $routes->post('queue/retry-all', 'Queue::retryAll', ['filter' => 'csrf']);
     $routes->post('queue/(:num)/retry', 'Queue::retry/$1', ['filter' => 'csrf']);
     $routes->post('queue/(:num)/cancel', 'Queue::cancel/$1', ['filter' => 'csrf']);
 

@@ -38,6 +38,10 @@ final class MetaApiErrorMapper
             return 'Template language does not match an approved language for this WhatsApp Business Account.';
         }
 
+        if (str_contains($lower, "text['body']") || str_contains($lower, 'text.body') || str_contains($lower, 'body is required')) {
+            return 'Text message body cannot be empty.';
+        }
+
         if (str_contains($lower, 'parameter') || str_contains($lower, 'required components') || $code === '132000') {
             return 'Required template variables are missing or invalid. Fill every variable before sending.';
         }

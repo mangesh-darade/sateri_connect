@@ -6,6 +6,11 @@
 <?php if (function_exists('can') && can('contacts.edit')): ?>
     <a href="<?= site_url('contacts/' . (int) ($contact['id'] ?? 0) . '/edit') ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-edit me-1"></i> Edit</a>
 <?php endif; ?>
+<?php if (function_exists('can') && can('contacts.delete')): ?>
+    <button type="button" class="btn btn-outline-danger btn-sm" data-confirm-delete data-url="<?= site_url('contacts/' . (int) ($contact['id'] ?? 0) . '/delete') ?>" data-title="Delete Contact?" data-text="Are you sure you want to delete this contact?">
+        <i class="fas fa-trash-alt me-1"></i> Delete
+    </button>
+<?php endif; ?>
 <?php if (function_exists('can') && can('chat.view')): ?>
     <a href="<?= site_url('chat?contact_id=' . (int) ($contact['id'] ?? 0)) ?>" class="btn btn-wa btn-sm"><i class="fab fa-whatsapp me-1"></i> Chat</a>
 <?php endif; ?>

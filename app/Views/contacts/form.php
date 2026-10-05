@@ -366,13 +366,22 @@ $isCreate    = empty($contact['id']);
             </div>
 
             <!-- Footer Action Bar -->
-            <div class="compact-card-footer">
-                <a href="<?= site_url('contacts') ?>" class="btn btn-sm btn-outline-secondary px-3">
-                    Cancel
-                </a>
-                <button type="submit" class="btn btn-wa btn-sm px-4">
-                    <i class="fas fa-save me-1"></i> <?= $isEdit ? 'Update Contact' : 'Save Contact' ?>
-                </button>
+            <div class="compact-card-footer d-flex justify-content-between align-items-center">
+                <div>
+                    <?php if ($isEdit && !empty($contact['id']) && (!function_exists('can') || can('contacts.delete'))): ?>
+                        <button type="button" class="btn btn-sm btn-outline-danger" data-confirm-delete data-url="<?= site_url('contacts/' . (int) $contact['id'] . '/delete') ?>" data-title="Delete Contact?" data-text="Are you sure you want to delete this contact?">
+                            <i class="fas fa-trash-alt me-1"></i> Delete Contact
+                        </button>
+                    <?php endif; ?>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="<?= site_url('contacts') ?>" class="btn btn-sm btn-outline-secondary px-3">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-wa btn-sm px-4">
+                        <i class="fas fa-save me-1"></i> <?= $isEdit ? 'Update Contact' : 'Save Contact' ?>
+                    </button>
+                </div>
             </div>
         </div>
 
