@@ -33,6 +33,32 @@ if (! function_exists('format_phone')) {
     }
 }
 
+if (! function_exists('countries_list')) {
+    /**
+     * Get active countries list for UI dropdowns.
+     *
+     * @return list<array<string, mixed>>
+     */
+    function countries_list(): array
+    {
+        return model(\App\Models\CountryModel::class)->getActiveCountries();
+    }
+}
+
+if (! function_exists('validate_phone_with_country')) {
+    /**
+     * Validate and format a phone number using country database rules.
+     *
+     * @param string $phone
+     * @param string|int|array|null $countryOrCode
+     * @return array{valid: bool, phone: string, dial_code: string, local_number: string, country: array<string, mixed>|null, error: ?string}
+     */
+    function validate_phone_with_country(string $phone, $countryOrCode = null): array
+    {
+        return model(\App\Models\CountryModel::class)->validateAndFormatPhone($phone, $countryOrCode);
+    }
+}
+
 if (! function_exists('is_within_24h_window')) {
     /**
      * Whether a contact is still inside the WhatsApp 24-hour customer care window.

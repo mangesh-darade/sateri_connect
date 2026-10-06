@@ -35,14 +35,17 @@ class ContactsController extends BaseV1Controller
     {
         $input = $this->getJsonPayload();
 
-        $rawPhone = (string) ($input['phone'] ?? $input['mobile'] ?? '');
-        $phone    = preg_replace('/[^\d+]/', '', trim($rawPhone));
+        $rawPhone    = (string) ($input['phone'] ?? $input['mobile'] ?? '');
+        $countryCode = (string) ($input['country_code'] ?? $input['dial_code'] ?? '');
+        $validated   = validate_phone_with_country($rawPhone, $countryCode);
 
-        if ($phone === '' || strlen(preg_replace('/\D/', '', $phone)) < 7) {
+        if (! $validated['valid']) {
             return $this->respondValidationError([
-                'phone' => 'A valid mobile number is required (with country code, e.g. +919876543210).',
+                'phone' => $validated['error'],
             ]);
         }
+
+        $phone = $validated['phone'];
 
         $contactModel = model(ContactModel::class);
         $wasCreated   = false;

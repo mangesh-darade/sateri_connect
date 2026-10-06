@@ -20,6 +20,17 @@
                 <div class="form-text" id="importFileName">Max size: 5 MB · up to 5,000 rows · .csv or .xlsx</div>
             </div>
             <div class="mb-3">
+                <label class="form-label fw-semibold" for="importDefaultCountry">Default Country Code <span class="text-danger">*</span></label>
+                <select name="default_country_code" id="importDefaultCountry" class="form-select" required>
+                    <?php foreach (($countries ?? countries_list()) as $c): ?>
+                        <option value="<?= esc($c['dial_code']) ?>" <?= ((string)$c['dial_code'] === '91') ? 'selected' : '' ?>>
+                            +<?= esc($c['dial_code']) ?> — <?= esc($c['name']) ?> (<?= (int)$c['min_digits'] ?> digits required)
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="form-text">Mandatory country rule: If rows in your file don't contain a country code, this country dial code and length rule will be applied.</div>
+            </div>
+            <div class="mb-3">
                 <label class="form-label" for="importGroupId">Customer group (optional)</label>
                 <select name="group_id" id="importGroupId" class="form-select">
                     <option value="">— No group —</option>

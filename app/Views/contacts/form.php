@@ -37,6 +37,15 @@ if (is_array($oldKeys)) {
 }
 $extraFields = array_filter($cf, static fn ($v, $k) => ! str_starts_with((string) $k, '_') && ! isset($attributeDefs[$k]), ARRAY_FILTER_USE_BOTH);
 $isCreate    = empty($contact['id']);
+
+$countries = $countries ?? countries_list();
+$rawMobile = old('mobile') ?? ($contact['mobile'] ?? '');
+$detected = model(\App\Models\CountryModel::class)->detectFromFullPhone((string) $rawMobile);
+$selectedDialCode = (string) (old('country_code') ?? ($detected['dial_code'] !== '' ? $detected['dial_code'] : '91'));
+$localMobileVal   = $detected['local_number'] !== '' ? $detected['local_number'] : preg_replace('/\D+/', '', (string) $rawMobile);
+if ($selectedDialCode !== '' && str_starts_with($localMobileVal, $selectedDialCode) && strlen($localMobileVal) > strlen($selectedDialCode)) {
+    $localMobileVal = substr($localMobileVal, strlen($selectedDialCode));
+}
 ?>
 
 <style>
@@ -193,13 +202,27 @@ $isCreate    = empty($contact['id']);
                         <input type="text" name="name" class="form-control compact-input" value="<?= $getVal('name') ?>" maxlength="150" placeholder="e.g. Rahul Sharma">
                     </div>
                     <div class="col-md-6">
-                        <label class="compact-label">
-                            WhatsApp Mobile <span class="text-danger">*</span>
+                        <label class="compact-label d-flex justify-content-between align-items-center">
+                            <span>WhatsApp Mobile <span class="text-danger">*</span></span>
+                            <span class="text-muted fw-normal" id="mobileDigitHint" style="font-size:0.75rem;">10 digits for India</span>
                         </label>
                         <div class="input-group input-group-sm">
-                            <span class="input-group-text bg-light text-success"><i class="fab fa-whatsapp"></i></span>
-                            <input type="text" name="mobile" class="form-control compact-input fw-semibold" value="<?= $getVal('mobile') ?>" required maxlength="30" placeholder="9198XXXXXXXX (with country code)" inputmode="tel">
+                            <span class="input-group-text bg-light text-success px-2"><i class="fab fa-whatsapp"></i></span>
+                            <select name="country_code" id="countryCodeSelect" class="form-select compact-input fw-semibold" style="max-width: 155px; border-top-right-radius: 0; border-bottom-right-radius: 0;" required>
+                                <?php foreach ($countries as $c): ?>
+                                    <option value="<?= esc($c['dial_code']) ?>" 
+                                            data-min="<?= (int)$c['min_digits'] ?>" 
+                                            data-max="<?= (int)$c['max_digits'] ?>" 
+                                            data-iso="<?= esc($c['iso2']) ?>"
+                                            data-name="<?= esc($c['name']) ?>"
+                                            <?= ($selectedDialCode === (string)$c['dial_code']) ? 'selected' : '' ?>>
+                                        +<?= esc($c['dial_code']) ?> (<?= esc($c['iso2']) ?>)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <input type="text" name="mobile" id="mobileInput" class="form-control compact-input fw-semibold" value="<?= esc($localMobileVal) ?>" required maxlength="25" placeholder="e.g. 9876543210" inputmode="tel">
                         </div>
+                        <div id="mobileFeedback" class="small mt-1" style="font-size:0.75rem; display:none;"></div>
                     </div>
 
                     <!-- Email & Country -->
@@ -209,7 +232,7 @@ $isCreate    = empty($contact['id']);
                     </div>
                     <div class="col-md-3 col-6">
                         <label class="compact-label">Country</label>
-                        <input type="text" name="country" class="form-control compact-input" value="<?= $getVal('country', 'India') ?>" maxlength="80">
+                        <input type="text" name="country" id="countryNameInput" class="form-control compact-input" value="<?= $getVal('country', ($detected['country']['name'] ?? 'India')) ?>" maxlength="80">
                     </div>
                     <div class="col-md-3 col-6">
                         <label class="compact-label">Status</label>
@@ -453,6 +476,66 @@ $isCreate    = empty($contact['id']);
         $('#customAttributesCollapse').removeClass('show');
         $('.attr-collapse-toggle').attr('aria-expanded', 'false');
     }
+
+    // Dynamic Country Code and digit length validation
+    function updateCountryRule() {
+        var $opt = $('#countryCodeSelect option:selected');
+        var min = parseInt($opt.data('min'), 10) || 10;
+        var max = parseInt($opt.data('max'), 10) || 10;
+        var cName = $opt.data('name') || '';
+        var dial = $opt.val();
+
+        var expectedStr = (min === max) ? (min + ' digits') : (min + '–' + max + ' digits');
+        $('#mobileDigitHint').text(expectedStr + ' (' + cName + ')');
+
+        if (!$('#countryNameInput').val() || $('#countryNameInput').data('auto-synced')) {
+            $('#countryNameInput').val(cName).data('auto-synced', true);
+        }
+
+        validateMobileInput();
+    }
+
+    function validateMobileInput() {
+        var $opt = $('#countryCodeSelect option:selected');
+        var min = parseInt($opt.data('min'), 10) || 10;
+        var max = parseInt($opt.data('max'), 10) || 10;
+        var val = $('#mobileInput').val().replace(/\D/g, '');
+        var $fb = $('#mobileFeedback');
+
+        if (!val) {
+            $fb.hide();
+            $('#mobileInput').removeClass('is-invalid is-valid');
+            return;
+        }
+
+        // If user typed dial code in mobileInput (e.g. 919876543210 or 09876543210), auto clean
+        var dial = String($opt.val());
+        if (val.indexOf(dial) === 0 && val.length > dial.length && (val.length - dial.length) >= min) {
+            val = val.substring(dial.length);
+            $('#mobileInput').val(val);
+        } else if (val.indexOf('0') === 0 && val.length > min) {
+            val = val.replace(/^0+/, '');
+            $('#mobileInput').val(val);
+        }
+
+        var len = val.length;
+        if (len < min || len > max) {
+            var exp = (min === max) ? (min + ' digits required') : (min + ' to ' + max + ' digits required');
+            $fb.removeClass('text-success').addClass('text-danger').text('Invalid length: ' + len + ' entered (' + exp + ')').show();
+            $('#mobileInput').addClass('is-invalid').removeClass('is-valid');
+        } else {
+            $fb.removeClass('text-danger').addClass('text-success').text('Valid: +' + dial + ' ' + val).show();
+            $('#mobileInput').removeClass('is-invalid').addClass('is-valid');
+        }
+    }
+
+    $('#countryCodeSelect').on('change', updateCountryRule);
+    $('#mobileInput').on('input', validateMobileInput);
+    $('#countryNameInput').on('input', function () {
+        $(this).data('auto-synced', false);
+    });
+
+    updateCountryRule();
 })(jQuery);
 </script>
 <?= $this->endSection() ?>

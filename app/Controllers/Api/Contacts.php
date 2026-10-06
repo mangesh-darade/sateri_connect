@@ -56,14 +56,17 @@ class Contacts extends BaseApiController
 
     public function create(): ResponseInterface
     {
-        $input  = $this->getJsonInput();
-        $mobile = normalize_phone((string) ($input['mobile'] ?? ''));
+        $input       = $this->getJsonInput();
+        $rawMobile   = (string) ($input['mobile'] ?? $input['phone'] ?? '');
+        $countryCode = (string) ($input['country_code'] ?? $input['dial_code'] ?? '');
+        $validated   = validate_phone_with_country($rawMobile, $countryCode);
 
-        if ($mobile === '') {
-            return $this->respondValidationError(['mobile' => 'Mobile is required.']);
+        if (! $validated['valid']) {
+            return $this->respondValidationError(['mobile' => $validated['error']]);
         }
 
-        $model = model(ContactModel::class);
+        $mobile = $validated['phone'];
+        $model  = model(ContactModel::class);
         if ($model->findByMobile($mobile) !== null) {
             return $this->respondError('Contact already exists.', ['mobile' => 'Duplicate mobile.'], 409);
         }
@@ -74,7 +77,7 @@ class Contacts extends BaseApiController
             'name'          => $input['name'] ?? null,
             'mobile'        => $mobile,
             'email'         => $input['email'] ?? null,
-            'country'       => $input['country'] ?? null,
+            'country'       => $input['country'] ?? ($validated['country']['name'] ?? null),
             'notes'         => $input['notes'] ?? null,
             'status'        => $input['status'] ?? 'active',
             'birthday'      => $input['birthday'] ?? null,
@@ -182,16 +185,20 @@ class Contacts extends BaseApiController
      */
     private function upsertOne(array $input): array
     {
-        $mobile = normalize_phone((string) ($input['mobile'] ?? ''));
-        if ($mobile === '') {
+        $rawMobile   = (string) ($input['mobile'] ?? $input['phone'] ?? '');
+        $countryCode = (string) ($input['country_code'] ?? $input['dial_code'] ?? '');
+        $validated   = validate_phone_with_country($rawMobile, $countryCode);
+
+        if (! $validated['valid']) {
             return [
                 'ok'      => false,
                 'status'  => 422,
                 'message' => 'Validation failed.',
-                'errors'  => ['mobile' => 'Mobile is required.'],
+                'errors'  => ['mobile' => $validated['error']],
             ];
         }
 
+        $mobile   = $validated['phone'];
         $model    = model(ContactModel::class);
         $existing = $model->findByMobile($mobile, true);
         $created  = false;
@@ -201,13 +208,17 @@ class Contacts extends BaseApiController
             $customFields = array_merge($existing['custom_fields'], $customFields);
         }
 
+        $countryName = array_key_exists('country', $input)
+            ? ($input['country'] ?: null)
+            : ($existing['country'] ?? ($validated['country']['name'] ?? null));
+
         $data = [
             'channel'       => 'whatsapp',
             'external_id'   => $mobile,
             'mobile'        => $mobile,
             'name'          => array_key_exists('name', $input) ? ($input['name'] ?: null) : ($existing['name'] ?? null),
             'email'         => array_key_exists('email', $input) ? ($input['email'] ?: null) : ($existing['email'] ?? null),
-            'country'       => array_key_exists('country', $input) ? ($input['country'] ?: null) : ($existing['country'] ?? null),
+            'country'       => $countryName,
             'notes'         => array_key_exists('notes', $input) ? ($input['notes'] ?: null) : ($existing['notes'] ?? null),
             'status'        => $input['status'] ?? ($existing['status'] ?? 'active'),
             'birthday'      => array_key_exists('birthday', $input) ? ($input['birthday'] ?: null) : ($existing['birthday'] ?? null),
@@ -269,8 +280,18 @@ class Contacts extends BaseApiController
             }
         }
 
-        if (isset($input['mobile'])) {
-            $data['mobile'] = normalize_phone((string) $input['mobile']);
+        if (isset($input['mobile']) || isset($input['phone'])) {
+            $rawMobile   = (string) ($input['mobile'] ?? $input['phone']);
+            $countryCode = (string) ($input['country_code'] ?? $input['dial_code'] ?? '');
+            $validated   = validate_phone_with_country($rawMobile, $countryCode);
+            if (! $validated['valid']) {
+                return $this->respondValidationError(['mobile' => $validated['error']]);
+            }
+            $data['mobile']      = $validated['phone'];
+            $data['external_id'] = $validated['phone'];
+            if (! isset($data['country']) && ! empty($validated['country']['name'])) {
+                $data['country'] = $validated['country']['name'];
+            }
         }
         if (isset($input['custom_fields']) && is_array($input['custom_fields'])) {
             $data['custom_fields'] = $input['custom_fields'];

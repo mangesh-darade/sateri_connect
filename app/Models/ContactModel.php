@@ -263,6 +263,17 @@ class ContactModel extends Model
             'status'      => 'active',
         ], $extra);
 
+        if (empty($row['country']) && ! empty($row['mobile'])) {
+            try {
+                $matchedCountry = model(\App\Models\CountryModel::class)->detectFromFullPhone($row['mobile']);
+                if ($matchedCountry) {
+                    $row['country'] = $matchedCountry['name'];
+                }
+            } catch (\Throwable $e) {
+                // Ignore if countries table or model not loaded
+            }
+        }
+
         $id         = (int) $this->insert($row);
         $wasCreated = true;
         $created    = $this->find($id);

@@ -27,7 +27,7 @@ class ContactImportService
      */
     public static function fixedDestinations(): array
     {
-        return ['name', 'mobile', 'email', 'country', 'notes', 'tags', 'skip'];
+        return ['name', 'mobile', 'country_code', 'email', 'country', 'notes', 'tags', 'skip'];
     }
 
     /**
@@ -39,6 +39,7 @@ class ContactImportService
             ['value' => 'skip', 'label' => '— Skip column —'],
             ['value' => 'name', 'label' => 'Name'],
             ['value' => 'mobile', 'label' => 'Mobile / Phone'],
+            ['value' => 'country_code', 'label' => 'Country Code (e.g. 91, +91)'],
             ['value' => 'email', 'label' => 'Email'],
             ['value' => 'country', 'label' => 'Country'],
             ['value' => 'notes', 'label' => 'Notes'],
@@ -64,22 +65,25 @@ class ContactImportService
         $h = preg_replace('/[\s\-]+/', '_', $h) ?? $h;
 
         $aliases = [
-            'name'     => 'name',
-            'full_name'=> 'name',
-            'fullname' => 'name',
-            'mobile'   => 'mobile',
-            'phone'    => 'mobile',
-            'mobile_no'=> 'mobile',
-            'phone_number' => 'mobile',
-            'email'    => 'email',
-            'email_address' => 'email',
-            'country'  => 'country',
-            'notes'    => 'notes',
-            'note'     => 'notes',
-            'tags'     => 'tags',
-            'tag'      => 'tags',
-            'group'    => 'tags',
-            'groups'   => 'tags',
+            'name'              => 'name',
+            'full_name'         => 'name',
+            'fullname'          => 'name',
+            'mobile'            => 'mobile',
+            'phone'             => 'mobile',
+            'mobile_no'         => 'mobile',
+            'phone_number'      => 'mobile',
+            'country_code'      => 'country_code',
+            'dial_code'         => 'country_code',
+            'country_dial_code' => 'country_code',
+            'email'             => 'email',
+            'email_address'     => 'email',
+            'country'           => 'country',
+            'notes'             => 'notes',
+            'note'              => 'notes',
+            'tags'              => 'tags',
+            'tag'               => 'tags',
+            'group'             => 'tags',
+            'groups'            => 'tags',
         ];
 
         if (isset($aliases[$h])) {
@@ -211,7 +215,7 @@ class ContactImportService
      *
      * @return array{imported:int,skipped:int,updated:int,errors:list<string>,custom_fields_created:list<string>,truncated:bool}
      */
-    public function commit(string $token, array $mapping, ?int $tagId, bool $skipDuplicates, ?string $optInSource = null): array
+    public function commit(string $token, array $mapping, ?int $tagId, bool $skipDuplicates, ?string $optInSource = null, ?string $defaultCountryCode = '91'): array
     {
         $consent = $optInSource !== null && $optInSource !== '' ? service('whatsAppConsent') : null;
         $token = preg_replace('/[^a-f0-9]/', '', strtolower($token)) ?? '';
@@ -270,14 +274,17 @@ class ContactImportService
             }
 
             $values = $this->rowValues($headers, $row, $resolved);
-            $mobile = normalize_phone((string) ($values['mobile'] ?? ''));
-            if ($mobile === '') {
+            $rawMobile = (string) ($values['mobile'] ?? '');
+            $rowCountryCode = (string) ($values['country_code'] ?? $defaultCountryCode ?? '91');
+            $validated = validate_phone_with_country($rawMobile, $rowCountryCode);
+            if (! $validated['valid']) {
                 $skipped++;
-                if (count($errors) < 10) {
-                    $errors[] = 'Row ' . $rowNum . ': missing or invalid mobile.';
+                if (count($errors) < 20) {
+                    $errors[] = 'Row ' . $rowNum . ' (' . ($rawMobile !== '' ? $rawMobile : 'empty') . '): ' . $validated['error'];
                 }
                 continue;
             }
+            $mobile = $validated['phone'];
 
             $name = (string) ($values['name'] ?? '');
             if ($name !== '' && (
@@ -297,8 +304,6 @@ class ContactImportService
 
             $customFields = is_array($values['custom_fields'] ?? null) ? $values['custom_fields'] : [];
             if ($customFields !== []) {
-                // Defined attributes get the same type rules as the UI (12/05/2026 → 2026-05-12, "haan" → Yes…);
-                // an invalid cell is dropped with a note instead of failing the whole row.
                 $attrSvc = service('contactAttributes');
                 foreach ($customFields as $cfKey => $cfValue) {
                     if ($attrSvc->definition((string) $cfKey) === null || trim((string) $cfValue) === '') {
@@ -330,7 +335,7 @@ class ContactImportService
                 'name'          => $name !== '' ? $name : ($existing['name'] ?? null),
                 'mobile'        => $mobile,
                 'email'         => $values['email'] ?? ($existing['email'] ?? null),
-                'country'       => $values['country'] ?? ($existing['country'] ?? null),
+                'country'       => $values['country'] ?? ($validated['country']['name'] ?? ($existing['country'] ?? null)),
                 'notes'         => $values['notes'] ?? ($existing['notes'] ?? null),
                 'status'        => $existing['status'] ?? 'active',
                 'custom_fields' => $customFields !== [] ? $customFields : ($existing['custom_fields'] ?? null),
@@ -587,6 +592,7 @@ class ContactImportService
         $resolved = [
             'mobile'          => null,
             'name'            => null,
+            'country_code'    => null,
             'email'           => null,
             'country'         => null,
             'notes'           => null,
@@ -601,7 +607,7 @@ class ContactImportService
                 continue;
             }
 
-            if (in_array($dest, ['name', 'mobile', 'email', 'country', 'notes', 'tags'], true)) {
+            if (in_array($dest, ['name', 'mobile', 'country_code', 'email', 'country', 'notes', 'tags'], true)) {
                 if ($resolved[$dest] === null) {
                     $resolved[$dest] = $index;
                 }
@@ -669,6 +675,7 @@ class ContactImportService
         return [
             'name'          => $get($resolved['name']),
             'mobile'        => $get($resolved['mobile']),
+            'country_code'  => ($v = $get($resolved['country_code'])) !== '' ? $v : null,
             'email'         => ($v = $get($resolved['email'])) !== '' ? $v : null,
             'country'       => ($v = $get($resolved['country'])) !== '' ? $v : null,
             'notes'         => ($v = $get($resolved['notes'])) !== '' ? $v : null,

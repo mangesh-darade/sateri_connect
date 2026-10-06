@@ -174,9 +174,10 @@ class Contacts extends BaseController
         }
 
         return $this->render('contacts/form', [
-            'pageTitle' => 'Create Contact',
-            'contact'   => null,
-            'tags'      => model(TagModel::class)->orderBy('name', 'ASC')->findAll(),
+            'pageTitle'    => 'Create Contact',
+            'contact'      => null,
+            'countries'    => countries_list(),
+            'tags'         => model(TagModel::class)->orderBy('name', 'ASC')->findAll(),
             'selectedTags' => [],
             'attributeKeys' => ContactAttributes::knownKeys(),
             'attributeDefs' => service('contactAttributes')->definitions(),
@@ -204,7 +205,15 @@ class Contacts extends BaseController
             return redirect()->back()->withInput()->with('error', $consentError);
         }
 
-        $mobile = normalize_phone((string) $this->request->getPost('mobile'));
+        $rawMobile   = (string) $this->request->getPost('mobile');
+        $countryCode = (string) ($this->request->getPost('country_code') ?: $this->request->getPost('dial_code') ?: '');
+        $validated   = validate_phone_with_country($rawMobile, $countryCode);
+
+        if (! $validated['valid']) {
+            return redirect()->back()->withInput()->with('error', $validated['error']);
+        }
+
+        $mobile = $validated['phone'];
         $model  = model(ContactModel::class);
 
         if ($model->findByMobile($mobile) !== null) {
@@ -215,11 +224,13 @@ class Contacts extends BaseController
             return redirect()->back()->withInput()->with('error', $customFields);
         }
 
+        $countryName = $this->request->getPost('country') ?: ($validated['country']['name'] ?? 'India');
+
         $id = $model->insert([
             'name'          => $this->request->getPost('name'),
             'mobile'        => $mobile,
             'email'         => $this->request->getPost('email') ?: null,
-            'country'       => $this->request->getPost('country') ?: null,
+            'country'       => $countryName,
             'notes'         => $this->request->getPost('notes') ?: null,
             'status'        => $this->request->getPost('status') ?: 'active',
             'birthday'      => $this->request->getPost('birthday') ?: null,
@@ -328,6 +339,7 @@ class Contacts extends BaseController
         return $this->render('contacts/form', [
             'pageTitle'    => 'Edit Contact',
             'contact'      => $contact,
+            'countries'    => countries_list(),
             'tags'         => model(TagModel::class)->orderBy('name', 'ASC')->findAll(),
             'selectedTags' => $selectedTags,
             'attributeKeys' => ContactAttributes::knownKeys(),
@@ -363,11 +375,15 @@ class Contacts extends BaseController
             return redirect()->back()->withInput()->with('error', $consentError);
         }
 
-        $mobile = normalize_phone((string) $this->request->getPost('mobile'));
-        if ($mobile === '') {
-            return redirect()->back()->withInput()->with('error', 'Mobile number is required.');
+        $rawMobile   = (string) $this->request->getPost('mobile');
+        $countryCode = (string) ($this->request->getPost('country_code') ?: $this->request->getPost('dial_code') ?: '');
+        $validated   = validate_phone_with_country($rawMobile, $countryCode);
+
+        if (! $validated['valid']) {
+            return redirect()->back()->withInput()->with('error', $validated['error']);
         }
 
+        $mobile = $validated['phone'];
         $dup = $model->where('mobile', $mobile)->where('id !=', $id)->first();
         if ($dup !== null) {
             return redirect()->back()->withInput()->with('error', 'A contact with this mobile number already exists.');
@@ -377,11 +393,35 @@ class Contacts extends BaseController
             return redirect()->back()->withInput()->with('error', $customFields);
         }
 
+        $countryName = $this->request->getPost('country') ?: ($validated['country']['name'] ?? ($contact['country'] ?? 'India'));
+
+        $fieldsToUpdate = [
+            'name'          => (string) ($this->request->getPost('name') ?: ''),
+            'mobile'        => $mobile,
+            'email'         => (string) ($this->request->getPost('email') ?: ''),
+            'country'       => (string) $countryName,
+            'notes'         => (string) ($this->request->getPost('notes') ?: ''),
+            'status'        => (string) ($this->request->getPost('status') ?: 'active'),
+            'birthday'      => (string) ($this->request->getPost('birthday') ?: ''),
+            'assigned_to'   => (string) ($this->request->getPost('assigned_to') ?: ''),
+        ];
+
+        $changes = [];
+        foreach ($fieldsToUpdate as $col => $newVal) {
+            $oldVal = (string) ($contact[$col] ?? '');
+            if ($oldVal !== $newVal) {
+                $changes[$col] = [
+                    'old' => $oldVal !== '' ? $oldVal : '(empty)',
+                    'new' => $newVal !== '' ? $newVal : '(empty)',
+                ];
+            }
+        }
+
         $ok = $model->update($id, [
             'name'          => $this->request->getPost('name'),
             'mobile'        => $mobile,
             'email'         => $this->request->getPost('email') ?: null,
-            'country'       => $this->request->getPost('country') ?: null,
+            'country'       => $countryName,
             'notes'         => $this->request->getPost('notes') ?: null,
             'status'        => $this->request->getPost('status') ?: 'active',
             'birthday'      => $this->request->getPost('birthday') ?: null,
@@ -408,7 +448,10 @@ class Contacts extends BaseController
             service('contactAttributes')->notifyChanges($id, $before, $customFields);
         }
 
-        (new ActivityLogger())->log('update', 'contacts', 'Contact updated', ['contact_id' => $id]);
+        (new ActivityLogger())->log('update', 'contacts', 'Contact updated: ' . ($contact['name'] ?? ('#' . $id)), [
+            'contact_id' => $id,
+            'changes'    => $changes,
+        ]);
 
         return redirect()->to('/contacts/' . $id)->with('success', 'Contact updated.');
     }
@@ -519,6 +562,8 @@ class Contacts extends BaseController
                 }
             }
         }
+
+        (new ActivityLogger())->log('bulk_tags', 'contacts', 'Updated tags for ' . count($ids) . ' contact(s) (mode: ' . $mode . ')', ['ids' => $ids, 'tag_ids' => $tagIds, 'mode' => $mode]);
 
         return $this->jsonResponse(true, null, 'Tags updated for selected contacts.');
     }
@@ -666,6 +711,7 @@ class Contacts extends BaseController
 
         return $this->render('contacts/import', [
             'pageTitle' => 'Import Contacts',
+            'countries' => countries_list(),
             'groups'    => model(TagModel::class)->orderBy('name', 'ASC')->findAll(),
         ]);
     }
@@ -736,13 +782,16 @@ class Contacts extends BaseController
             $optInSource = service('whatsAppConsent')->normalizeSource((string) ($this->request->getPost('wa_opt_in_source') ?: 'import'));
         }
 
+        $defaultCountryCode = (string) ($this->request->getPost('default_country_code') ?: '91');
+
         try {
             $result = (new \App\Libraries\ContactImportService())->commit(
                 $token,
                 $mapping,
                 $tagId > 0 ? $tagId : null,
                 $skipDuplicates,
-                $optInSource
+                $optInSource,
+                $defaultCountryCode
             );
         } catch (\Throwable $e) {
             return $this->jsonResponse(false, null, $e->getMessage(), [], 422);

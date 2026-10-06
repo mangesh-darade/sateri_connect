@@ -89,7 +89,17 @@ class CustomerGroups extends BaseController
 
         $contactName  = trim((string) ($input['name'] ?? ''));
         $email        = trim((string) ($input['email'] ?? ''));
-        $mobile       = normalize_phone((string) ($input['mobile'] ?? ''));
+        $rawMobile    = trim((string) ($input['mobile'] ?? ''));
+        $countryCode  = trim((string) ($input['country_code'] ?? $input['dial_code'] ?? ''));
+        $mobile       = '';
+
+        if ($rawMobile !== '') {
+            $validated = validate_phone_with_country($rawMobile, $countryCode);
+            if (! $validated['valid']) {
+                return $this->jsonResponse(false, null, $validated['error'], ['mobile' => $validated['error']], 422);
+            }
+            $mobile = $validated['phone'];
+        }
 
         if ($mode === 'new' && $mobile === '') {
             (new ActivityLogger())->log('create', 'customer_groups', 'Customer group created', [
@@ -133,6 +143,7 @@ class CustomerGroups extends BaseController
                 'external_id' => $mobile,
                 'channel'     => 'whatsapp',
                 'email'       => $email !== '' ? $email : null,
+                'country'     => $validated['country']['name'] ?? 'India',
                 'status'      => 'active',
             ]);
 

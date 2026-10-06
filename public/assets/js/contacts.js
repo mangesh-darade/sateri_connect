@@ -710,6 +710,7 @@
                 method: 'POST',
                 data: {
                     token: preview.token,
+                    default_country_code: $('#importDefaultCountry').val() || '91',
                     group_id: $('#importGroupId').val() || '',
                     skip_duplicates: $('#skipDup').is(':checked') ? 1 : 0,
                     wa_opt_in: optIn ? 1 : 0,
