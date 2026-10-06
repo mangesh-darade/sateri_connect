@@ -126,8 +126,13 @@
 
 /* Bulk Contact Picker Checkbox UI */
 .bulk-contact-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
     transition: background-color 0.15s ease-in-out;
     user-select: none;
+    cursor: pointer;
 }
 .bulk-contact-row:hover {
     background-color: #f8fafc;
@@ -138,9 +143,33 @@
 .bulk-contact-row:last-child {
     border-bottom: none !important;
 }
+
+/* Force checkboxes to stay inline, never absolute, never leaking */
+.bulk-contact-cb,
+#bulkCheckAll {
+    position: static !important;
+    margin: 0 !important;
+    margin-left: 0 !important;
+    padding: 0 !important;
+    flex-shrink: 0 !important;
+    cursor: pointer;
+    width: 16px !important;
+    height: 16px !important;
+    vertical-align: middle;
+}
+
+#bulkContactList {
+    position: relative;
+    height: 145px;
+    max-height: 145px;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch;
+}
+
 .avatar-circle-sm {
-    width: 28px;
-    height: 28px;
-    font-size: 0.75rem;
+    width: 24px;
+    height: 24px;
+    font-size: 0.65rem;
 }
 

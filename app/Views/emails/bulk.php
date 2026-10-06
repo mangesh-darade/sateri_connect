@@ -139,12 +139,12 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
 
                             <!-- Select All & Action Strip -->
                             <div class="d-flex justify-content-between align-items-center bg-light px-2 py-1 rounded-2 mb-2 border" style="font-size: 0.75rem; border-color: #e2e8f0 !important;">
-                                <div class="form-check mb-0 d-flex align-items-center">
-                                    <input class="form-check-input me-1 mt-0" type="checkbox" id="bulkCheckAll">
-                                    <label class="form-check-label fw-semibold text-dark cursor-pointer mb-0" for="bulkCheckAll">
+                                <label class="d-flex align-items-center mb-0 cursor-pointer gap-1.5" for="bulkCheckAll">
+                                    <input class="bulk-contact-cb" type="checkbox" id="bulkCheckAll">
+                                    <span class="fw-semibold text-dark user-select-none">
                                         Select All (<span id="bulkVisibleCount"><?= count($contactsWithEmail) ?></span>)
-                                    </label>
-                                </div>
+                                    </span>
+                                </label>
                                 <div class="d-flex gap-1">
                                     <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 fw-medium" id="btnSelectFiltered" title="Select visible contacts">
                                         Select Visible
@@ -156,7 +156,7 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
                             </div>
 
                             <!-- Scrollable Contact List -->
-                            <div class="border rounded-2 p-0 overflow-y-auto bg-white flex-grow-1" id="bulkContactList" style="height: 125px; border-color: #e2e8f0 !important;">
+                            <div class="border rounded-2 p-0 bg-white" id="bulkContactList" style="border-color: #e2e8f0 !important;">
                                 <?php if (empty($contactsWithEmail)): ?>
                                     <div class="text-center py-4 text-muted small">
                                         <i class="fas fa-user-slash opacity-25 d-block mb-1 fs-5"></i>
@@ -164,26 +164,24 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
                                     </div>
                                 <?php else: ?>
                                     <?php foreach ($contactsWithEmail as $c): ?>
-                                        <label class="bulk-contact-row d-flex align-items-center justify-content-between px-2 py-1 border-bottom cursor-pointer text-decoration-none m-0"
+                                        <label class="bulk-contact-row px-2 py-1.5 border-bottom text-decoration-none m-0 gap-2"
                                                data-id="<?= (int) $c['id'] ?>"
                                                data-name="<?= esc(strtolower($c['name'] ?? '')) ?>"
                                                data-email="<?= esc(strtolower($c['email'])) ?>"
                                                data-tags='<?= esc(json_encode($c['tag_ids'] ?? []), 'attr') ?>'>
-                                            <div class="d-flex align-items-center gap-2 overflow-hidden w-100">
-                                                <input class="form-check-input bulk-contact-cb flex-shrink-0 mt-0" type="checkbox"
-                                                       value="<?= (int) $c['id'] ?>" data-email="<?= esc($c['email']) ?>">
-                                                <div class="rounded-circle text-primary fw-bold d-flex align-items-center justify-content-center flex-shrink-0"
-                                                     style="width: 22px; height: 22px; font-size: 0.65rem; background: #e0e7ff; color: #4338ca;">
-                                                    <?= esc(strtoupper(substr($c['name'] ?: 'C', 0, 1))) ?>
-                                                </div>
-                                                <div class="text-truncate flex-grow-1" style="min-width: 0;">
-                                                    <span class="fw-semibold text-dark small text-truncate d-inline-block" style="max-width: 280px; line-height: 1.2; font-size: 0.78rem;">
-                                                        <?= esc($c['name'] ?: 'Contact') ?>
-                                                    </span>
-                                                    <span class="text-muted font-monospace ms-1 small text-truncate" style="font-size: 0.72rem;">
-                                                        <?= esc($c['email']) ?>
-                                                    </span>
-                                                </div>
+                                            <input class="bulk-contact-cb" type="checkbox"
+                                                   value="<?= (int) $c['id'] ?>" data-email="<?= esc($c['email']) ?>">
+                                            <div class="avatar-circle-sm rounded-circle text-primary fw-bold d-flex align-items-center justify-content-center flex-shrink-0"
+                                                 style="background: #e0e7ff; color: #4338ca;">
+                                                <?= esc(strtoupper(substr($c['name'] ?: 'C', 0, 1))) ?>
+                                            </div>
+                                            <div class="text-truncate flex-grow-1" style="min-width: 0;">
+                                                <span class="fw-semibold text-dark small text-truncate d-inline-block" style="max-width: 220px; line-height: 1.2; font-size: 0.78rem;">
+                                                    <?= esc($c['name'] ?: 'Contact') ?>
+                                                </span>
+                                                <span class="text-muted font-monospace ms-1 small text-truncate" style="font-size: 0.72rem;">
+                                                    <?= esc($c['email']) ?>
+                                                </span>
                                             </div>
                                         </label>
                                     <?php endforeach; ?>
