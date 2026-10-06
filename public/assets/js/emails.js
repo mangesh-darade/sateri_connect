@@ -107,7 +107,7 @@
 
             var groupId = parseInt($groupFilter.val(), 10) || 0;
             var groupName = $groupFilter.find('option:selected').data('name') || '';
-            var visibleCount = $contactList.find('.bulk-contact-row:visible').length;
+            var visibleCount = $contactList.find('.bulk-contact-row:not(.is-hidden)').length;
 
             // Clear all button in header
             if (count > 0) {
@@ -165,7 +165,7 @@
             $hiddenSelect.val(checkedIds);
 
             // Sync select all checkbox state
-            var $visibleCbs = $contactList.find('.bulk-contact-row:visible .bulk-contact-cb');
+            var $visibleCbs = $contactList.find('.bulk-contact-row:not(.is-hidden) .bulk-contact-cb');
             var visibleCbsCount = $visibleCbs.length;
             var visibleChecked = $visibleCbs.filter(':checked').length;
 
@@ -223,7 +223,7 @@
         // Select All toggle
         $checkAll.on('change', function () {
             var isChecked = $(this).is(':checked');
-            $contactList.find('.bulk-contact-row:visible').each(function () {
+            $contactList.find('.bulk-contact-row:not(.is-hidden)').each(function () {
                 var $row = $(this);
                 var $cb = $row.find('.bulk-contact-cb');
                 $cb.prop('checked', isChecked);
@@ -255,10 +255,10 @@
                 var matchesGroup = !groupId || tags.some(function(t) { return parseInt(t, 10) === groupId; });
 
                 if (matchesQuery && matchesGroup) {
-                    $row.removeClass('d-none');
+                    $row.removeClass('is-hidden').removeClass('d-none').show();
                     visible++;
                 } else {
-                    $row.addClass('d-none');
+                    $row.addClass('is-hidden').addClass('d-none').hide();
                 }
             });
 
@@ -285,7 +285,7 @@
 
         // Select Visible button
         $('#btnSelectFiltered').on('click', function () {
-            $contactList.find('.bulk-contact-row:visible').each(function () {
+            $contactList.find('.bulk-contact-row:not(.is-hidden)').each(function () {
                 var $row = $(this);
                 $row.find('.bulk-contact-cb').prop('checked', true);
                 $row.addClass('is-selected');

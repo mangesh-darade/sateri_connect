@@ -140,6 +140,9 @@
 .bulk-contact-row.is-selected {
     background-color: #eff6ff;
 }
+.bulk-contact-row.is-hidden {
+    display: none !important;
+}
 .bulk-contact-row:last-child {
     border-bottom: none !important;
 }

@@ -186,7 +186,7 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
                                                     </div>
                                                 <?php else: ?>
                                                     <?php foreach ($contactsWithEmail as $c): ?>
-                                                        <label class="bulk-contact-row d-flex align-items-center px-2 py-1.5 border-bottom cursor-pointer text-decoration-none m-0 gap-2"
+                                                        <label class="bulk-contact-row align-items-center px-2 py-1.5 border-bottom cursor-pointer text-decoration-none m-0 gap-2"
                                                                data-id="<?= (int) $c['id'] ?>"
                                                                data-name="<?= esc(strtolower($c['name'] ?? '')) ?>"
                                                                data-email="<?= esc(strtolower($c['email'])) ?>"
