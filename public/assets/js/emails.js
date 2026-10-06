@@ -28,6 +28,17 @@
         });
     }
 
+    function postForm(url, formData) {
+        return $.ajax({
+            url: url,
+            method: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            dataType: 'json'
+        });
+    }
+
     function bindSingle() {
         var $card = $('#emailSingleCard');
         var $form = $('#emailSingleForm');
@@ -43,6 +54,19 @@
             }
         });
 
+        $('#emailAttachment').on('change', function () {
+            if (this.files && this.files[0]) {
+                $('#btnClearSingleAttachment').removeClass('d-none');
+            } else {
+                $('#btnClearSingleAttachment').addClass('d-none');
+            }
+        });
+
+        $('#btnClearSingleAttachment').on('click', function () {
+            $('#emailAttachment').val('');
+            $(this).addClass('d-none');
+        });
+
         $form.on('submit', function (e) {
             e.preventDefault();
             var $btn = $('#btnSendSingle').prop('disabled', true);
@@ -51,15 +75,20 @@
             if (singleCamp === '__custom__') {
                 singleCamp = $.trim($('#emailCampaignCustom').val() || '');
             }
-            var payload = {
-                to: $.trim($('#emailTo').val() || ''),
-                subject: $.trim($('#emailSubject').val() || ''),
-                body: $('#emailBody').val() || '',
-                is_html: $('#emailIsHtml').is(':checked') ? 1 : 0,
-                campaign_name: singleCamp
-            };
 
-            postJson(url, payload)
+            var formData = new FormData();
+            formData.append('to', $.trim($('#emailTo').val() || ''));
+            formData.append('subject', $.trim($('#emailSubject').val() || ''));
+            formData.append('body', $('#emailBody').val() || '');
+            formData.append('is_html', $('#emailIsHtml').is(':checked') ? '1' : '0');
+            formData.append('campaign_name', singleCamp);
+
+            var fileInput = document.getElementById('emailAttachment');
+            if (fileInput && fileInput.files && fileInput.files[0]) {
+                formData.append('attachment', fileInput.files[0]);
+            }
+
+            postForm(url, formData)
                 .done(function (res) {
                     var ok = !!(res && res.success);
                     showResult($('#emailSingleResult'), ok, (res && res.message) || '');
@@ -371,6 +400,19 @@
             }
         });
 
+        $('#bulkAttachment').on('change', function () {
+            if (this.files && this.files[0]) {
+                $('#btnClearBulkAttachment').removeClass('d-none');
+            } else {
+                $('#btnClearBulkAttachment').addClass('d-none');
+            }
+        });
+
+        $('#btnClearBulkAttachment').on('click', function () {
+            $('#bulkAttachment').val('');
+            $(this).addClass('d-none');
+        });
+
         // Toggle between Campaign Name and Email Template dropdown
         $('input[name="step2_type"]').on('change', function () {
             var val = $(this).val();
@@ -442,18 +484,24 @@
                     }
                 }
 
-                var payload = {
-                    mode: mode,
-                    subject: $.trim($('#bulkSubject').val() || ''),
-                    body: $('#bulkBody').val() || '',
-                    is_html: $('#bulkIsHtml').is(':checked') ? 1 : 0,
-                    campaign_name: bulkCamp,
-                    recipients: $('#bulkRecipients').val() || '',
-                    contact_ids: contactIds,
-                    label_name: selectedLabel
-                };
+                var formData = new FormData();
+                formData.append('mode', mode);
+                formData.append('subject', $.trim($('#bulkSubject').val() || ''));
+                formData.append('body', $('#bulkBody').val() || '');
+                formData.append('is_html', $('#bulkIsHtml').is(':checked') ? '1' : '0');
+                formData.append('campaign_name', bulkCamp);
+                formData.append('recipients', $('#bulkRecipients').val() || '');
+                formData.append('label_name', selectedLabel);
+                contactIds.forEach(function (id) {
+                    formData.append('contact_ids[]', id);
+                });
 
-                postJson(url, payload)
+                var bulkFileInput = document.getElementById('bulkAttachment');
+                if (bulkFileInput && bulkFileInput.files && bulkFileInput.files[0]) {
+                    formData.append('attachment', bulkFileInput.files[0]);
+                }
+
+                postForm(url, formData)
                     .done(function (res) {
                         var ok = !!(res && res.success);
                         showResult($('#emailBulkResult'), ok, (res && res.message) || '');

@@ -115,6 +115,21 @@ class Emails extends BaseController
             (new SettingsService())->setCheerioEmailConfig(['default_campaign' => $campaignName]);
         }
 
+        $attFile = $this->request->getFile('attachment');
+        if ($attFile !== null && $attFile->isValid() && ! $attFile->hasMoved()) {
+            $attRes = \App\Libraries\EmailAttachmentHandler::handleUpload($attFile);
+            if (! $attRes['ok']) {
+                return $this->jsonResponse(false, null, $attRes['error'] ?? 'Attachment error', ['attachment' => $attRes['error']], 422);
+            }
+            $options['attachments'] = [
+                [
+                    'path' => $attRes['path'],
+                    'name' => $attRes['name'],
+                    'mime' => $attRes['mime'],
+                ],
+            ];
+        }
+
         try {
             $mailer = service('emailProvider');
             $result = $isHtml
@@ -221,6 +236,21 @@ class Emails extends BaseController
             $campaign['label_name'] = $labelName;
         } else {
             $campaign['recipients'] = $recipients;
+        }
+
+        $attFile = $this->request->getFile('attachment');
+        if ($attFile !== null && $attFile->isValid() && ! $attFile->hasMoved()) {
+            $attRes = \App\Libraries\EmailAttachmentHandler::handleUpload($attFile);
+            if (! $attRes['ok']) {
+                return $this->jsonResponse(false, null, $attRes['error'] ?? 'Attachment error', ['attachment' => $attRes['error']], 422);
+            }
+            $campaign['attachments'] = [
+                [
+                    'path' => $attRes['path'],
+                    'name' => $attRes['name'],
+                    'mime' => $attRes['mime'],
+                ],
+            ];
         }
 
         try {

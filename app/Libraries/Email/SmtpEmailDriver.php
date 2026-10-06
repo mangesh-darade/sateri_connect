@@ -80,6 +80,16 @@ class SmtpEmailDriver extends AbstractEmailDriver
                 $email->setReplyTo($replyTo);
             }
 
+            $attachments = (array) ($options['attachments'] ?? []);
+            foreach ($attachments as $att) {
+                $filePath = (string) ($att['path'] ?? '');
+                if ($filePath !== '' && file_exists($filePath)) {
+                    $fileName = (string) ($att['name'] ?? basename($filePath));
+                    $fileMime = (string) ($att['mime'] ?? '');
+                    $email->attach($filePath, 'attachment', $fileName, $fileMime);
+                }
+            }
+
             if (! $email->send()) {
                 return $this->result(false, 'SMTP send failed: ' . $email->printDebugger(['headers']));
             }
@@ -152,15 +162,16 @@ class SmtpEmailDriver extends AbstractEmailDriver
         }
 
         $options = [
-            'from_email' => $campaign['from_email'] ?? null,
-            'from_name'  => $campaign['from_name'] ?? null,
-            'reply_to'   => $campaign['reply_to'] ?? null,
-            'html'       => $html !== '',
+            'from_email'  => $campaign['from_email'] ?? null,
+            'from_name'   => $campaign['from_name'] ?? null,
+            'reply_to'    => $campaign['reply_to'] ?? null,
+            'html'        => $html !== '',
+            'attachments' => $campaign['attachments'] ?? [],
         ];
 
         return $this->send($recipients, $subject, $body, array_filter(
             $options,
-            static fn ($value) => $value !== null && $value !== ''
+            static fn ($value) => $value !== null && $value !== '' && $value !== []
         ));
     }
 

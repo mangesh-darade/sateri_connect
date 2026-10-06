@@ -39,10 +39,27 @@ class TestEmailSend extends BaseCommand
         $subject = 'Emails personalization test — ' . date('Y-m-d H:i:s');
         $body    = "Hello {{name}},\n\nThis is a functional test from the new Emails screen verifying that {{name}} gets replaced with your actual contact name!\n\nProvider: {$provider}\nTime: " . date('c');
 
-        CLI::write('1) Single send…', 'yellow');
-        $single = $mailer->send($to, $subject, $body, [
+        $options = [
             'campaign_name' => 'Cheerio Test Campaign 1',
-        ]);
+        ];
+
+        if (CLI::getOption('attach') !== null) {
+            $testPdfPath = WRITEPATH . 'test_attachment.pdf';
+            if (! file_exists($testPdfPath)) {
+                file_put_contents($testPdfPath, "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000052 00000 n \n0000000101 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF");
+            }
+            $options['attachments'] = [
+                [
+                    'path' => $testPdfPath,
+                    'name' => 'Sample_Policy_Document.pdf',
+                    'mime' => 'application/pdf',
+                ],
+            ];
+            CLI::write('Attaching: ' . $testPdfPath, 'cyan');
+        }
+
+        CLI::write('1) Single send…', 'yellow');
+        $single = $mailer->send($to, $subject, $body, $options);
         CLI::write(json_encode($single, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), $single['ok'] ? 'green' : 'red');
 
         if (CLI::getOption('bulk') !== null) {

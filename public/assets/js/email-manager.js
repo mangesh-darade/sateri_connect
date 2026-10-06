@@ -26,17 +26,20 @@
   }
 
   function post(url, data) {
+    var isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
     var headers = {
-      'Content-Type': 'application/json',
       'X-Requested-With': 'XMLHttpRequest'
     };
+    if (!isFormData) {
+      headers['Content-Type'] = 'application/json';
+    }
     headers[csrfHeaderName()] = csrfToken();
 
     return fetch(base + '/' + url.replace(/^\//, ''), {
       method: 'POST',
       headers: headers,
       credentials: 'same-origin',
-      body: JSON.stringify(data || {})
+      body: isFormData ? data : JSON.stringify(data || {})
     }).then(function (r) {
       var next = r.headers.get(csrfHeaderName()) || r.headers.get('X-CSRF-TOKEN');
       if (next) {
@@ -61,15 +64,22 @@
   if (builderForm) {
     builderForm.addEventListener('submit', function (e) {
       e.preventDefault();
-      var payload = {
-        id: document.getElementById('builder_id').value,
-        name: document.getElementById('builder_name').value,
-        subject: document.getElementById('builder_subject').value,
-        cheerio_builder_id: document.getElementById('builder_cheerio_id').value,
-        html_content: document.getElementById('builder_html').value,
-        status: document.getElementById('builder_status').value
-      };
-      post('email-manager/builders', payload).then(function (res) {
+      var fd = new FormData();
+      fd.append('id', document.getElementById('builder_id').value);
+      fd.append('name', document.getElementById('builder_name').value);
+      fd.append('subject', document.getElementById('builder_subject').value);
+      var cheerioIdEl = document.getElementById('builder_cheerio_id');
+      if (cheerioIdEl) fd.append('cheerio_builder_id', cheerioIdEl.value);
+      fd.append('html_content', document.getElementById('builder_html').value);
+      fd.append('status', document.getElementById('builder_status').value);
+      fd.append('remove_attachment', document.getElementById('builder_remove_attachment') ? document.getElementById('builder_remove_attachment').value : '0');
+
+      var attInput = document.getElementById('builder_attachment');
+      if (attInput && attInput.files && attInput.files[0]) {
+        fd.append('attachment', attInput.files[0]);
+      }
+
+      post('email-manager/builders', fd).then(function (res) {
         msg(document.getElementById('builderMsg'), res.message || (res.success ? 'Saved' : 'Failed'), !!res.success);
         if (res.success) setTimeout(function () { location.reload(); }, 600);
       }).catch(function (err) {
@@ -77,11 +87,25 @@
       });
     });
 
+    var builderRmAttBtn = document.getElementById('builder_remove_att_btn');
+    if (builderRmAttBtn) {
+      builderRmAttBtn.addEventListener('click', function () {
+        var rm = document.getElementById('builder_remove_attachment');
+        if (rm) rm.value = '1';
+        var cur = document.getElementById('builder_current_attachment');
+        if (cur) cur.classList.add('d-none');
+      });
+    }
+
     var resetBtn = document.getElementById('builderReset');
     if (resetBtn) {
       resetBtn.addEventListener('click', function () {
         builderForm.reset();
         document.getElementById('builder_id').value = '';
+        var cur = document.getElementById('builder_current_attachment');
+        if (cur) cur.classList.add('d-none');
+        var rm = document.getElementById('builder_remove_attachment');
+        if (rm) rm.value = '0';
         msg(document.getElementById('builderMsg'), '', true);
       });
     }
@@ -93,9 +117,22 @@
         document.getElementById('builder_id').value = b.id || '';
         document.getElementById('builder_name').value = b.name || '';
         document.getElementById('builder_subject').value = b.subject || '';
-        document.getElementById('builder_cheerio_id').value = b.cheerio_builder_id || '';
+        var cheerioEl = document.getElementById('builder_cheerio_id');
+        if (cheerioEl) cheerioEl.value = b.cheerio_builder_id || '';
         document.getElementById('builder_html').value = b.html_content || '';
         document.getElementById('builder_status').value = b.status || 'draft';
+
+        var curAtt = document.getElementById('builder_current_attachment');
+        var nameEl = document.getElementById('builder_att_name');
+        var rmInput = document.getElementById('builder_remove_attachment');
+        if (rmInput) rmInput.value = '0';
+        if (b.attachment_name && curAtt && nameEl) {
+          nameEl.textContent = b.attachment_name;
+          curAtt.classList.remove('d-none');
+        } else if (curAtt) {
+          curAtt.classList.add('d-none');
+        }
+
         window.scrollTo({ top: 0, behavior: 'smooth' });
       });
     });
@@ -356,18 +393,24 @@
       var labelEl = document.getElementById('camp_label');
       var builderEl = document.getElementById('camp_builder');
 
-      var payload = {
-        id: document.getElementById('camp_id') ? document.getElementById('camp_id').value : '',
-        name: document.getElementById('camp_name') ? document.getElementById('camp_name').value : '',
-        subject: document.getElementById('camp_subject') ? document.getElementById('camp_subject').value : '',
-        builder_id: builderEl && builderEl.value ? builderEl.value : null,
-        cheerio_builder_id: cheerioIdEl ? cheerioIdEl.value : '',
-        html_content: document.getElementById('camp_html') ? document.getElementById('camp_html').value : '',
-        mode: modeEl ? modeEl.value : 'recipients',
-        recipients: recipEl ? recipEl.value : '',
-        label_name: labelEl ? labelEl.value : ''
-      };
-      post('email-manager/campaigns', payload).then(function (res) {
+      var fd = new FormData();
+      fd.append('id', document.getElementById('camp_id') ? document.getElementById('camp_id').value : '');
+      fd.append('name', document.getElementById('camp_name') ? document.getElementById('camp_name').value : '');
+      fd.append('subject', document.getElementById('camp_subject') ? document.getElementById('camp_subject').value : '');
+      if (builderEl && builderEl.value) fd.append('builder_id', builderEl.value);
+      if (cheerioIdEl) fd.append('cheerio_builder_id', cheerioIdEl.value);
+      fd.append('html_content', document.getElementById('camp_html') ? document.getElementById('camp_html').value : '');
+      fd.append('mode', modeEl ? modeEl.value : 'recipients');
+      fd.append('recipients', recipEl ? recipEl.value : '');
+      fd.append('label_name', labelEl ? labelEl.value : '');
+      fd.append('remove_attachment', document.getElementById('camp_remove_attachment') ? document.getElementById('camp_remove_attachment').value : '0');
+
+      var campAttInput = document.getElementById('camp_attachment');
+      if (campAttInput && campAttInput.files && campAttInput.files[0]) {
+        fd.append('attachment', campAttInput.files[0]);
+      }
+
+      post('email-manager/campaigns', fd).then(function (res) {
         msg(document.getElementById('campMsg'), res.message || '', !!res.success);
         if (res.success) setTimeout(function () { location.reload(); }, 600);
       }).catch(function (err) {
@@ -375,9 +418,23 @@
       });
     });
 
+    var campRmAttBtn = document.getElementById('camp_remove_att_btn');
+    if (campRmAttBtn) {
+      campRmAttBtn.addEventListener('click', function () {
+        var rm = document.getElementById('camp_remove_attachment');
+        if (rm) rm.value = '1';
+        var cur = document.getElementById('camp_current_attachment');
+        if (cur) cur.classList.add('d-none');
+      });
+    }
+
     document.getElementById('campReset') && document.getElementById('campReset').addEventListener('click', function () {
       campaignForm.reset();
       document.getElementById('camp_id').value = '';
+      var cur = document.getElementById('camp_current_attachment');
+      if (cur) cur.classList.add('d-none');
+      var rm = document.getElementById('camp_remove_attachment');
+      if (rm) rm.value = '0';
       syncCampMode();
     });
 

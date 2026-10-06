@@ -108,11 +108,12 @@ class SesEmailDriver extends AbstractEmailDriver
             'reply_to'      => $campaign['reply_to'] ?? null,
             'campaign_name' => $campaign['name'] ?? $campaign['campaign_name'] ?? null,
             'html'          => $html !== '',
+            'attachments'   => $campaign['attachments'] ?? [],
         ];
 
         return $this->send($recipients, $subject, $body, array_filter(
             $options,
-            static fn ($value) => $value !== null && $value !== ''
+            static fn ($value) => $value !== null && $value !== '' && $value !== []
         ));
     }
 
@@ -129,6 +130,30 @@ class SesEmailDriver extends AbstractEmailDriver
         $fromAddress = $from['name'] !== ''
             ? sprintf('%s <%s>', $from['name'], $from['email'])
             : $from['email'];
+
+        $attachments = (array) ($options['attachments'] ?? []);
+        $replyTo     = trim((string) ($options['reply_to'] ?? ''));
+
+        // If physical file attachments exist, Amazon SES requires Raw MIME message
+        if ($attachments !== []) {
+            $rawMime = $this->buildRawMimeMessage($toEmail, $subject, $body, $isHtml, $from, $options);
+            $payload = [
+                'FromEmailAddress' => $fromAddress,
+                'Destination'      => [
+                    'ToAddresses' => [$toEmail],
+                ],
+                'Content' => [
+                    'Raw' => [
+                        'Data' => base64_encode($rawMime),
+                    ],
+                ],
+            ];
+            if ($replyTo !== '' && filter_var($replyTo, FILTER_VALIDATE_EMAIL)) {
+                $payload['ReplyToAddresses'] = [$replyTo];
+            }
+
+            return $this->executeApiV2Request($payload, $toEmail);
+        }
 
         $payload = [
             'FromEmailAddress' => $fromAddress,
@@ -165,12 +190,89 @@ class SesEmailDriver extends AbstractEmailDriver
             ];
         }
 
-        $replyTo = trim((string) ($options['reply_to'] ?? ''));
         if ($replyTo !== '' && filter_var($replyTo, FILTER_VALIDATE_EMAIL)) {
             $payload['ReplyToAddresses'] = [$replyTo];
         }
 
         return $this->executeApiV2Request($payload, $toEmail);
+    }
+
+    /**
+     * Builds RFC 2822 / MIME multipart/mixed message for SES Raw delivery.
+     *
+     * @param array{email: string, name: string} $from
+     * @param array<string, mixed>              $options
+     */
+    protected function buildRawMimeMessage(
+        string $toEmail,
+        string $subject,
+        string $body,
+        bool $isHtml,
+        array $from,
+        array $options
+    ): string {
+        $fromHeader = $from['name'] !== ''
+            ? sprintf('=?UTF-8?B?%s?= <%s>', base64_encode($from['name']), $from['email'])
+            : $from['email'];
+
+        $boundaryMixed = '=_Part_Mixed_' . bin2hex(random_bytes(12));
+        $boundaryAlt   = '=_Part_Alt_' . bin2hex(random_bytes(12));
+
+        $headers   = [];
+        $headers[] = 'From: ' . $fromHeader;
+        $headers[] = 'To: ' . $toEmail;
+        $headers[] = 'Subject: =?UTF-8?B?' . base64_encode($subject) . '?=';
+        $headers[] = 'MIME-Version: 1.0';
+
+        $replyTo = trim((string) ($options['reply_to'] ?? ''));
+        if ($replyTo !== '' && filter_var($replyTo, FILTER_VALIDATE_EMAIL)) {
+            $headers[] = 'Reply-To: ' . $replyTo;
+        }
+
+        $headers[] = 'Content-Type: multipart/mixed; boundary="' . $boundaryMixed . '"';
+
+        $mime = implode("\r\n", $headers) . "\r\n\r\n";
+
+        // Body part
+        $mime .= '--' . $boundaryMixed . "\r\n";
+        $mime .= 'Content-Type: multipart/alternative; boundary="' . $boundaryAlt . '"' . "\r\n\r\n";
+
+        $plain = strip_tags($body);
+        $mime .= '--' . $boundaryAlt . "\r\n";
+        $mime .= "Content-Type: text/plain; charset=UTF-8\r\n";
+        $mime .= "Content-Transfer-Encoding: base64\r\n\r\n";
+        $mime .= chunk_split(base64_encode($plain)) . "\r\n";
+
+        if ($isHtml) {
+            $mime .= '--' . $boundaryAlt . "\r\n";
+            $mime .= "Content-Type: text/html; charset=UTF-8\r\n";
+            $mime .= "Content-Transfer-Encoding: base64\r\n\r\n";
+            $mime .= chunk_split(base64_encode($body)) . "\r\n";
+        }
+
+        $mime .= '--' . $boundaryAlt . "--\r\n\r\n";
+
+        // Physical file attachments
+        $attachments = (array) ($options['attachments'] ?? []);
+        foreach ($attachments as $att) {
+            $filePath = (string) ($att['path'] ?? '');
+            if ($filePath !== '' && file_exists($filePath)) {
+                $fileName = (string) ($att['name'] ?? basename($filePath));
+                $fileMime = (string) ($att['mime'] ?? 'application/octet-stream');
+                $content  = @file_get_contents($filePath);
+                if ($content !== false) {
+                    $mime .= '--' . $boundaryMixed . "\r\n";
+                    $mime .= 'Content-Type: ' . $fileMime . '; name="' . addslashes($fileName) . '"' . "\r\n";
+                    $mime .= 'Content-Disposition: attachment; filename="' . addslashes($fileName) . '"' . "\r\n";
+                    $mime .= "Content-Transfer-Encoding: base64\r\n\r\n";
+                    $mime .= chunk_split(base64_encode($content)) . "\r\n";
+                }
+            }
+        }
+
+        $mime .= '--' . $boundaryMixed . "--\r\n";
+
+        return $mime;
     }
 
     /**

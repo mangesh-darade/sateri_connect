@@ -52,6 +52,23 @@ $canSend = ! empty($canSend);
                         </select>
                     </div>
 
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold mb-1">
+                            <i class="fas fa-paperclip text-primary me-1"></i> Default Attachment / Media
+                            <span class="text-muted fw-normal" style="font-size: 0.72rem;">(PDF, Media — Max 5MB)</span>
+                        </label>
+                        <input type="file" name="attachment" id="builder_attachment" class="form-control form-control-sm"
+                               accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx">
+                        <div id="builder_current_attachment" class="d-none mt-1.5 p-1.5 rounded-2 bg-light border small d-flex align-items-center justify-content-between">
+                            <span class="text-truncate me-2"><i class="fas fa-file-pdf text-danger me-1"></i> <strong id="builder_att_name"></strong></span>
+                            <button type="button" class="btn btn-xs btn-outline-danger" id="builder_remove_att_btn" title="Remove attachment">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <input type="hidden" name="remove_attachment" id="builder_remove_attachment" value="0">
+                        <div class="form-text text-muted" style="font-size: 0.72rem;">Campaigns using this template will automatically inherit this attachment.</div>
+                    </div>
+
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-primary btn-sm px-3"><i class="fas fa-save me-1"></i> Save Template</button>
                         <button type="button" class="btn btn-light border btn-sm px-3" id="builderReset"><i class="fas fa-undo me-1"></i> Reset</button>
@@ -113,6 +130,13 @@ $canSend = ! empty($canSend);
                                     <?php if (! empty($b['subject'])): ?>
                                         <div class="text-muted small text-truncate" style="max-width: 260px;">
                                             <i class="fas fa-tag me-1 text-secondary opacity-75"></i><?= esc($b['subject']) ?>
+                                        </div>
+                                    <?php endif; ?>
+                                    <?php if (! empty($b['attachment_name'])): ?>
+                                        <div class="mt-0.5">
+                                            <span class="badge bg-light text-secondary border" style="font-size: 0.65rem;">
+                                                <i class="fas fa-paperclip text-primary me-1"></i><?= esc($b['attachment_name']) ?>
+                                            </span>
                                         </div>
                                     <?php endif; ?>
                                 </td>

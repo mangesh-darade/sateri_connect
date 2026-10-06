@@ -17,6 +17,8 @@ class EmailBuilderModel extends Model
         'name',
         'subject',
         'html_content',
+        'attachment_path',
+        'attachment_name',
         'cheerio_builder_id',
         'status',
         'created_by',

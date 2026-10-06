@@ -102,6 +102,31 @@ class EmailCampaignService
             $html .= $pixel;
         }
 
+        // Attachments support from campaign or inherited template
+        $attachmentPath = trim((string) ($camp['attachment_path'] ?? ''));
+        $attachmentName = trim((string) ($camp['attachment_name'] ?? ''));
+
+        if ($attachmentPath === '' && ! empty($camp['builder_id'])) {
+            $builderTpl = model(\App\Models\EmailBuilderModel::class)->find((int) $camp['builder_id']);
+            if (! empty($builderTpl['attachment_path'])) {
+                $attachmentPath = (string) $builderTpl['attachment_path'];
+                $attachmentName = (string) ($builderTpl['attachment_name'] ?? basename($attachmentPath));
+            }
+        }
+
+        if ($attachmentPath !== '') {
+            $fullPath = str_starts_with($attachmentPath, FCPATH) ? $attachmentPath : FCPATH . ltrim($attachmentPath, '/\\');
+            if (file_exists($fullPath)) {
+                $options['attachments'] = [
+                    [
+                        'path' => $fullPath,
+                        'name' => $attachmentName !== '' ? $attachmentName : basename($fullPath),
+                        'mime' => mime_content_type($fullPath) ?: 'application/octet-stream',
+                    ],
+                ];
+            }
+        }
+
         if ($provider === SettingsService::EMAIL_PROVIDER_CHEERIO) {
             $campaignPayload = [
                 'name'          => $name,

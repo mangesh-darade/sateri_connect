@@ -18,7 +18,7 @@ $emailCampaigns = $emailCampaigns ?? [];
     <div class="card form-card" id="emailSingleCard"
          data-send-url="<?= site_url('emails/send') ?>"
          data-provider="<?= esc($provider) ?>">
-        <form id="emailSingleForm" method="post" action="<?= site_url('emails/send') ?>">
+        <form id="emailSingleForm" method="post" action="<?= site_url('emails/send') ?>" enctype="multipart/form-data">
             <?= csrf_field() ?>
             <div class="card-body">
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
@@ -80,6 +80,22 @@ $emailCampaigns = $emailCampaigns ?? [];
                         </div>
                         <textarea class="form-control" id="emailBody" name="body" rows="10" required
                                   placeholder="Write your message…"><?= esc(old('body') ?? '') ?></textarea>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label" for="emailAttachment">
+                            <i class="fas fa-paperclip text-muted me-1"></i> Attach Document / Media 
+                            <span class="text-muted fw-normal small">(Optional — PDF, JPG, PNG, WEBP, XLSX, CSV, DOCX — Max 5MB)</span>
+                        </label>
+                        <div class="input-group">
+                            <input type="file" class="form-control" id="emailAttachment" name="attachment" 
+                                   accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx">
+                            <button class="btn btn-outline-secondary d-none" type="button" id="btnClearSingleAttachment" title="Clear file">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="form-text text-muted small" id="singleAttachmentInfo">
+                            Physical attachment will be safely attached and delivered directly with the email.
+                        </div>
                     </div>
                 </div>
             </div>

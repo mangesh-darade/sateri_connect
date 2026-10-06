@@ -148,6 +148,19 @@ class EmailManager extends BaseController
             'status'             => $status,
         ];
 
+        $attFile = $this->request->getFile('attachment');
+        if ($attFile !== null && $attFile->isValid() && ! $attFile->hasMoved()) {
+            $attRes = \App\Libraries\EmailAttachmentHandler::handleUpload($attFile);
+            if (! $attRes['ok']) {
+                return $this->jsonResponse(false, null, $attRes['error'] ?? 'Attachment upload error', ['attachment' => $attRes['error']], 422);
+            }
+            $row['attachment_path'] = $attRes['relative_path'];
+            $row['attachment_name'] = $attRes['name'];
+        } elseif (! empty($input['remove_attachment'])) {
+            $row['attachment_path'] = null;
+            $row['attachment_name'] = null;
+        }
+
         $model = model(EmailBuilderModel::class);
         try {
             if ($id > 0) {
@@ -528,6 +541,19 @@ class EmailManager extends BaseController
             'recipients_json'    => $recipients,
             'status'             => 'draft',
         ];
+
+        $attFile = $this->request->getFile('attachment');
+        if ($attFile !== null && $attFile->isValid() && ! $attFile->hasMoved()) {
+            $attRes = \App\Libraries\EmailAttachmentHandler::handleUpload($attFile);
+            if (! $attRes['ok']) {
+                return $this->jsonResponse(false, null, $attRes['error'] ?? 'Attachment upload error', ['attachment' => $attRes['error']], 422);
+            }
+            $row['attachment_path'] = $attRes['relative_path'];
+            $row['attachment_name'] = $attRes['name'];
+        } elseif (! empty($input['remove_attachment'])) {
+            $row['attachment_path'] = null;
+            $row['attachment_name'] = null;
+        }
 
         $model = model(EmailHtmlCampaignModel::class);
         try {

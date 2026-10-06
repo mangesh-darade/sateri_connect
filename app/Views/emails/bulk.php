@@ -30,7 +30,7 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
          data-max="<?= $maxRecipients ?>"
          style="background: #ffffff; border: 1px solid #e2e8f0 !important;">
 
-        <form id="emailBulkForm" method="post" action="<?= site_url('emails/bulk') ?>">
+        <form id="emailBulkForm" method="post" action="<?= site_url('emails/bulk') ?>" enctype="multipart/form-data">
             <?= csrf_field() ?>
 
             <!-- Top Header Strip: Clean & Modern -->
@@ -394,6 +394,24 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
                     <textarea class="form-control font-monospace border rounded-3 p-3" id="bulkBody" name="body" rows="7" required
                               style="min-height: 190px; font-size: 0.85rem; background: #ffffff; border-color: #cbd5e1; line-height: 1.55;"
                               placeholder="Write your email body or HTML layout here…"><?= esc(old('body') ?? '') ?></textarea>
+                </div>
+
+                <!-- Attachment Field -->
+                <div class="mt-3 p-3 rounded-3 bg-light border" style="border-color: #cbd5e1 !important;">
+                    <label class="form-label small fw-bold text-dark mb-1" for="bulkAttachment">
+                        <i class="fas fa-paperclip text-primary me-1"></i> Attach Document / Media 
+                        <span class="text-muted fw-normal small">(Optional — PDF, JPG, PNG, WEBP, XLSX, CSV, DOCX — Max 5MB)</span>
+                    </label>
+                    <div class="input-group">
+                        <input type="file" class="form-control form-control-sm" id="bulkAttachment" name="attachment" 
+                               accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" style="font-size: 0.85rem;">
+                        <button class="btn btn-outline-secondary btn-sm d-none" type="button" id="btnClearBulkAttachment" title="Clear file">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="form-text text-muted small mt-1" style="font-size: 0.74rem;">
+                        File will be safely uploaded and attached to every email delivered in this bulk send.
+                    </div>
                 </div>
             </div>
 

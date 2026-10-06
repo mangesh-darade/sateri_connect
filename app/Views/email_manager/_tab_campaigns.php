@@ -106,6 +106,23 @@ $isCheerio = ! empty($isCheerio);
                         <input type="text" name="label_name" id="camp_label" class="form-control form-control-sm">
                     </div>
 
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold mb-1">
+                            <i class="fas fa-paperclip text-primary me-1"></i> Attach Document / Media
+                            <span class="text-muted fw-normal" style="font-size: 0.72rem;">(Optional — PDF, Media — Max 5MB)</span>
+                        </label>
+                        <input type="file" name="attachment" id="camp_attachment" class="form-control form-control-sm"
+                               accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx">
+                        <div id="camp_current_attachment" class="d-none mt-1.5 p-1.5 rounded-2 bg-light border small d-flex align-items-center justify-content-between">
+                            <span class="text-truncate me-2"><i class="fas fa-file-pdf text-danger me-1"></i> <strong id="camp_att_name"></strong></span>
+                            <button type="button" class="btn btn-xs btn-outline-danger" id="camp_remove_att_btn" title="Remove attachment">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <input type="hidden" name="remove_attachment" id="camp_remove_attachment" value="0">
+                        <div class="form-text text-muted" style="font-size: 0.72rem;">If template has an attachment, it will be automatically attached if no custom file is uploaded.</div>
+                    </div>
+
                     <div class="d-flex gap-2 mt-3">
                         <button type="submit" class="btn btn-primary btn-sm px-3"><i class="fas fa-save me-1"></i> Save Draft</button>
                         <button type="button" class="btn btn-light border btn-sm px-3" id="campReset"><i class="fas fa-undo me-1"></i> Reset</button>
@@ -175,6 +192,13 @@ $isCheerio = ! empty($isCheerio);
                                     <div class="text-muted small text-truncate" style="max-width: 200px;">
                                         <?= esc($campaignSubject !== '' ? $campaignSubject : 'No subject') ?>
                                     </div>
+                                    <?php if (! empty($c['attachment_name'])): ?>
+                                        <div class="mt-0.5">
+                                            <span class="badge bg-light text-secondary border" style="font-size: 0.65rem;">
+                                                <i class="fas fa-paperclip text-primary me-1"></i><?= esc($c['attachment_name']) ?>
+                                            </span>
+                                        </div>
+                                    <?php endif; ?>
                                 </td>
                                 <td>
                                     <span class="badge <?= $stBadge ?> rounded-pill px-2 py-1">
