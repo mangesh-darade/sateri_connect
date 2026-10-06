@@ -121,4 +121,94 @@ class ActivityLogModel extends Model
             'created_at'  => date('Y-m-d H:i:s'),
         ]);
     }
+
+    /**
+     * Fetch paginated and filtered activity logs.
+     *
+     * @param array<string, mixed> $filters
+     * @return array{data: list<array<string, mixed>>, total: int, per_page: int, page: int, total_pages: int}
+     */
+    public function getFilteredLogs(array $filters = [], int $perPage = 25, int $page = 1): array
+    {
+        $perPage = max(1, min(100, $perPage));
+        $page    = max(1, $page);
+        $offset  = ($page - 1) * $perPage;
+
+        $builder = $this->builder();
+        $this->applyFilters($builder, $filters);
+
+        $countBuilder = clone $builder;
+        $total = (int) $countBuilder->countAllResults();
+
+        $builder->select('activity_logs.*, users.name AS user_name, users.email AS user_email')
+            ->join('users', 'users.id = activity_logs.user_id', 'left')
+            ->orderBy('activity_logs.created_at', 'DESC')
+            ->limit($perPage, $offset);
+
+        $rows = $builder->get()->getResultArray();
+
+        // Run afterFind to decode metadata
+        $rows = $this->trigger('afterFind', ['data' => $rows, 'singleton' => false])['data'] ?? $rows;
+
+        return [
+            'data'        => $rows,
+            'total'       => $total,
+            'per_page'    => $perPage,
+            'page'        => $page,
+            'total_pages' => (int) ceil($total / $perPage),
+        ];
+    }
+
+    /**
+     * Get distinct module names for filtering.
+     *
+     * @return list<string>
+     */
+    public function getDistinctModules(): array
+    {
+        $rows = $this->builder()
+            ->select('DISTINCT(module) AS module')
+            ->where('module IS NOT NULL')
+            ->where('module !=', '')
+            ->orderBy('module', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        return array_values(array_filter(array_column($rows, 'module')));
+    }
+
+    /**
+     * Apply search filters to Query Builder.
+     */
+    protected function applyFilters(\CodeIgniter\Database\BaseBuilder $builder, array $filters): void
+    {
+        if (! empty($filters['module'])) {
+            $builder->where('activity_logs.module', (string) $filters['module']);
+        }
+
+        if (! empty($filters['action'])) {
+            $builder->where('activity_logs.action', (string) $filters['action']);
+        }
+
+        if (! empty($filters['user_id'])) {
+            $builder->where('activity_logs.user_id', (int) $filters['user_id']);
+        }
+
+        if (! empty($filters['date_from'])) {
+            $builder->where('activity_logs.created_at >=', $filters['date_from'] . ' 00:00:00');
+        }
+
+        if (! empty($filters['date_to'])) {
+            $builder->where('activity_logs.created_at <=', $filters['date_to'] . ' 23:59:59');
+        }
+
+        if (! empty($filters['search'])) {
+            $term = trim((string) $filters['search']);
+            $builder->groupStart()
+                ->like('activity_logs.description', $term)
+                ->orLike('activity_logs.action', $term)
+                ->orLike('activity_logs.module', $term)
+                ->groupEnd();
+        }
+    }
 }

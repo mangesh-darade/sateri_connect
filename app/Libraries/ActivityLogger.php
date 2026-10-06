@@ -21,13 +21,15 @@ class ActivityLogger
      *
      * @param array<string, mixed> $metadata
      */
-    public function log(string $action, string $module, string $description, array $metadata = []): bool
+    public function log(string $action, string $module, string $description, array $metadata = [], ?int $userId = null): bool
     {
         $request = service('request');
         $session = session();
 
+        $resolvedUserId = $userId ?? ($session->get('user_id') ?: $session->get('api_user_id') ?: null);
+
         $data = [
-            'user_id'     => $session->get('user_id') ?: null,
+            'user_id'     => $resolvedUserId,
             'action'      => $action,
             'module'      => $module,
             'description' => $description,

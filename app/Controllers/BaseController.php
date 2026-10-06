@@ -196,4 +196,14 @@ abstract class BaseController extends Controller
 
         return $id ? (int) $id : null;
     }
+
+    /**
+     * Helper to log user/system activity from any controller.
+     *
+     * @param array<string, mixed> $metadata
+     */
+    protected function logActivity(string $action, string $module, string $description, array $metadata = []): bool
+    {
+        return log_activity($action, $module, $description, $metadata, $this->userId());
+    }
 }

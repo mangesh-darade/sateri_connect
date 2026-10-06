@@ -289,6 +289,10 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->get('reports/export-pdf', 'Reports::exportPdf');
     $routes->get('reports/export-excel', 'Reports::exportExcel');
 
+    // Activity Logs
+    $routes->get('activity-logs', 'ActivityLogs::index');
+    $routes->get('activity-logs/export', 'ActivityLogs::export');
+
     // Queue
     $routes->get('queue', 'Queue::index');
     $routes->get('queue/stats', 'Queue::stats');

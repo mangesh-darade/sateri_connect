@@ -132,7 +132,8 @@ class Keywords extends BaseController
         }
 
         $model = model(KeywordModel::class);
-        if ($model->find($id) === null) {
+        $keyword = $model->find($id);
+        if ($keyword === null) {
             return redirect()->to('/keywords')->with('error', 'Keyword not found.');
         }
 
@@ -155,22 +156,44 @@ class Keywords extends BaseController
             $payload = is_array($decoded) ? $decoded : null;
         }
 
+        $newValues = [
+            'keyword'          => (string) $this->request->getPost('keyword'),
+            'match_type'       => (string) $this->request->getPost('match_type'),
+            'response_type'    => (string) ($this->request->getPost('response_type') ?: 'text'),
+            'response_content' => (string) ($this->request->getPost('response_content') ?? ''),
+            'is_active'        => (int) ($this->request->getPost('is_active') ?? 0),
+        ];
+
+        $changes = [];
+        foreach ($newValues as $k => $newVal) {
+            $oldVal = $keyword[$k] ?? '';
+            if ((string) $oldVal !== (string) $newVal) {
+                $changes[$k] = [
+                    'old' => (string) $oldVal !== '' ? (string) $oldVal : '(empty)',
+                    'new' => (string) $newVal !== '' ? (string) $newVal : '(empty)',
+                ];
+            }
+        }
+
         $model->update($id, [
-            'keyword'          => $this->request->getPost('keyword'),
-            'match_type'       => $this->request->getPost('match_type'),
-            'response_type'    => $this->request->getPost('response_type') ?: 'text',
-            'response_content' => $this->request->getPost('response_content'),
+            'keyword'          => $newValues['keyword'],
+            'match_type'       => $newValues['match_type'],
+            'response_type'    => $newValues['response_type'],
+            'response_content' => $newValues['response_content'],
             'response_payload' => $this->withKeywordActions($this->normalizeKeywordPayload(
                 is_array($payload) ? $payload : null,
-                (string) ($this->request->getPost('response_type') ?: 'text'),
-                (string) ($this->request->getPost('response_content') ?? '')
+                $newValues['response_type'],
+                $newValues['response_content']
             ), $actions['actions']),
             'parent_id'        => $this->request->getPost('parent_id') ?: null,
             'menu_order'       => (int) ($this->request->getPost('menu_order') ?? 0),
-            'is_active'        => (int) ($this->request->getPost('is_active') ?? 0),
+            'is_active'        => $newValues['is_active'],
         ]);
 
-        (new ActivityLogger())->log('update', 'keywords', 'Keyword updated', ['keyword_id' => $id]);
+        (new ActivityLogger())->log('update', 'keywords', 'Keyword updated: ' . $newValues['keyword'], [
+            'keyword_id' => $id,
+            'changes'    => $changes,
+        ]);
 
         return redirect()->to('/keywords')->with('success', 'Keyword updated.');
     }

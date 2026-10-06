@@ -144,7 +144,8 @@ class Automations extends BaseController
         }
 
         $model = model(AutomationModel::class);
-        if ($model->find($id) === null) {
+        $automation = $model->find($id);
+        if ($automation === null) {
             return redirect()->to('/automations')->with('error', 'Automation not found.');
         }
 
@@ -163,19 +164,40 @@ class Automations extends BaseController
             $triggerConfig = is_array($decoded) ? $decoded : null;
         }
 
+        $newValues = [
+            'name'         => (string) $this->request->getPost('name'),
+            'trigger_type' => (string) $this->request->getPost('trigger_type'),
+            'is_active'    => (int) ($this->request->getPost('is_active') ?? 0),
+            'priority'     => (int) ($this->request->getPost('priority') ?? 10),
+        ];
+
+        $changes = [];
+        foreach ($newValues as $k => $newVal) {
+            $oldVal = $automation[$k] ?? '';
+            if ((string) $oldVal !== (string) $newVal) {
+                $changes[$k] = [
+                    'old' => (string) $oldVal !== '' ? (string) $oldVal : '(empty)',
+                    'new' => (string) $newVal !== '' ? (string) $newVal : '(empty)',
+                ];
+            }
+        }
+
         $model->update($id, [
-            'name'           => $this->request->getPost('name'),
-            'trigger_type'   => $this->request->getPost('trigger_type'),
+            'name'           => $newValues['name'],
+            'trigger_type'   => $newValues['trigger_type'],
             'trigger_config' => is_array($triggerConfig) ? $triggerConfig : null,
-            'is_active'      => (int) ($this->request->getPost('is_active') ?? 0),
-            'priority'       => (int) ($this->request->getPost('priority') ?? 10),
+            'is_active'      => $newValues['is_active'],
+            'priority'       => $newValues['priority'],
         ]);
 
         if ($this->request->getPost('rules') !== null) {
             $this->saveRulesPayload($id, $this->request->getPost('rules'));
         }
 
-        (new ActivityLogger())->log('update', 'automations', 'Automation updated', ['automation_id' => $id]);
+        (new ActivityLogger())->log('update', 'automations', 'Automation updated: ' . $newValues['name'], [
+            'automation_id' => $id,
+            'changes'       => $changes,
+        ]);
 
         return redirect()->to('/automations/' . $id . '/edit')->with('success', 'Automation updated.');
     }
@@ -220,6 +242,8 @@ class Automations extends BaseController
 
         $new = ((int) ($row['is_active'] ?? 0)) === 1 ? 0 : 1;
         $model->update($id, ['is_active' => $new]);
+
+        log_activity('toggle', 'automations', ($new ? 'Enabled' : 'Disabled') . ' automation: ' . ($row['name'] ?? ('#' . $id)), ['automation_id' => $id, 'is_active' => $new]);
 
         if ($this->request->isAJAX()) {
             return $this->jsonResponse(true, ['is_active' => $new], $new ? 'Automation enabled.' : 'Automation disabled.');

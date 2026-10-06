@@ -18,6 +18,7 @@ alwaysApply: true
 - After coding, test the changed functions and the affected flow. Prefer focused verification over assumptions.
 - Keep commits module-wise and reviewable.
 - Never create a git commit unless the user explicitly asks for it, and always ask permission before committing.
+- **Mandatory Activity Logging Standard**: Whenever creating or extending any screen, controller action, or state-changing operation (create, update, delete, send, dispatch, schedule, pause, resume, toggle, export, sync), ALWAYS record the event via `log_activity($action, $module, $description, $metadata)` or `$this->logActivity(...)`. Never leave a state-mutating operation unlogged.
 
 ## Examples
 

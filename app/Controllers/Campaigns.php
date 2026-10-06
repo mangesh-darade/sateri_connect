@@ -527,6 +527,8 @@ class Campaigns extends BaseController
             $tagIds     = $audience['tag_ids'] !== [] ? $audience['tag_ids'] : null;
             $result     = service('campaignService')->start($id, $contactIds, $tagIds, $audience['all']);
 
+            log_activity('run', 'campaigns', 'WhatsApp broadcast launched: ' . ($campaign['name'] ?? ('#' . $id)), ['campaign_id' => $id, 'result' => $result]);
+
             return $this->okOrRedirect('/campaigns/' . $id, 'Campaign started. Sent '
                 . (int) ($result['sent'] ?? 0) . ' / queued ' . (int) ($result['queued'] ?? 0)
                 . (! empty($result['failed']) ? (', failed ' . (int) $result['failed']) : '')
@@ -544,6 +546,7 @@ class Campaigns extends BaseController
 
         try {
             service('campaignService')->pause($id);
+            log_activity('pause', 'campaigns', 'Campaign #' . $id . ' paused', ['campaign_id' => $id]);
 
             return $this->okOrRedirect('/campaigns/' . $id, 'Campaign paused.');
         } catch (Throwable $e) {
@@ -559,6 +562,7 @@ class Campaigns extends BaseController
 
         try {
             service('campaignService')->resume($id);
+            log_activity('resume', 'campaigns', 'Campaign #' . $id . ' resumed', ['campaign_id' => $id]);
 
             return $this->okOrRedirect('/campaigns/' . $id, 'Campaign resumed.');
         } catch (Throwable $e) {
@@ -574,6 +578,7 @@ class Campaigns extends BaseController
 
         try {
             service('campaignService')->cancel($id);
+            log_activity('cancel', 'campaigns', 'Campaign #' . $id . ' cancelled', ['campaign_id' => $id]);
 
             return $this->okOrRedirect('/campaigns/' . $id, 'Campaign cancelled.');
         } catch (Throwable $e) {
@@ -1051,6 +1056,12 @@ class Campaigns extends BaseController
                 'attributes'  => $attributes,
             ]);
 
+            log_activity('create', 'campaigns', 'WhatsApp broadcast draft created: ' . $name, [
+                'campaign_id' => $id,
+                'channel'     => 'whatsapp',
+                'name'        => $name,
+            ]);
+
             return $this->jsonResponse(true, [
                 'id'           => $id,
                 'channel'      => 'whatsapp',
@@ -1159,6 +1170,13 @@ class Campaigns extends BaseController
                 return $this->jsonResponse(false, null, 'Failed to save email campaign.', [], 500);
             }
 
+            log_activity('create', 'campaigns', 'Email campaign draft created: ' . $name, [
+                'campaign_id' => $id,
+                'channel'     => 'email',
+                'name'        => $name,
+                'subject'     => $subject,
+            ]);
+
             return $this->jsonResponse(true, [
                 'id'          => $id,
                 'channel'     => 'email',
@@ -1199,6 +1217,11 @@ class Campaigns extends BaseController
             service('campaignService')->saveAudience($id, $audience);
             service('campaignService')->schedule($id, $scheduledAt);
 
+            log_activity('schedule', 'campaigns', 'WhatsApp broadcast scheduled: ' . ($campaign['name'] ?? ('#' . $id)) . ' for ' . $scheduledAt, [
+                'campaign_id'  => $id,
+                'scheduled_at' => $scheduledAt,
+            ]);
+
             return $this->jsonResponse(true, [
                 'id'           => $id,
                 'channel'      => 'whatsapp',
@@ -1235,6 +1258,11 @@ class Campaigns extends BaseController
             'last_error'   => null,
         ]);
 
+        log_activity('schedule', 'campaigns', 'Email campaign scheduled: ' . ($camp['name'] ?? ('#' . $id)) . ' for ' . $scheduledAt, [
+            'campaign_id'  => $id,
+            'scheduled_at' => $scheduledAt,
+        ]);
+
         return $this->jsonResponse(true, [
             'id'           => $id,
             'channel'      => 'email',
@@ -1261,6 +1289,11 @@ class Campaigns extends BaseController
             $tagIds     = $audience['tag_ids'] !== [] ? $audience['tag_ids'] : null;
             service('campaignService')->saveAudience($id, $audience);
             $result = service('campaignService')->start($id, $contactIds, $tagIds, false);
+
+            log_activity('run', 'campaigns', 'WhatsApp broadcast launched: ' . ($campaign['name'] ?? ('#' . $id)), [
+                'campaign_id' => $id,
+                'result'      => $result,
+            ]);
 
             return $this->jsonResponse(true, [
                 'id'        => $id,
@@ -1299,6 +1332,12 @@ class Campaigns extends BaseController
         try {
             $result = (new \App\Libraries\EmailCampaignService())->dispatch($camp, $this->userId());
             $ok     = (bool) ($result['ok'] ?? false);
+
+            log_activity('run', 'campaigns', 'Email campaign launched: ' . ($camp['name'] ?? ('#' . $id)), [
+                'campaign_id' => $id,
+                'ok'          => $ok,
+                'sent'        => (int) ($result['sent'] ?? 0),
+            ]);
 
             return $this->jsonResponse($ok, [
                 'id'       => $id,

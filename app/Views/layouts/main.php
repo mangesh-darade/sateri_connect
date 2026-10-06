@@ -648,15 +648,25 @@
                 $pbUrl  = 'https://sateritechnologies.com';
             }
             ?>
-            <?php if (function_exists('can') && can('settings.view')): ?>
+            <?php if (function_exists('can') && (can('settings.view') || can('reports.view') || can('users.view'))): ?>
             <div class="sidebar-footer-links">
                 <ul class="nav nav-pills nav-sidebar flex-column mb-0">
+                    <?php if (function_exists('can') && (can('reports.view') || can('settings.view') || can('users.view'))): ?>
+                    <li class="nav-item">
+                        <a href="<?= site_url('activity-logs') ?>" class="nav-link <?= str_starts_with(uri_string(), 'activity-logs') ? 'active' : '' ?>" title="Activity Logs" aria-label="Activity Logs">
+                            <i class="nav-icon" data-lucide="history" aria-hidden="true"></i>
+                            <p>Activity Logs</p>
+                        </a>
+                    </li>
+                    <?php endif; ?>
+                    <?php if (function_exists('can') && can('settings.view')): ?>
                     <li class="nav-item">
                         <a href="<?= site_url('settings') ?>" class="nav-link <?= str_starts_with(uri_string(), 'settings') ? 'active' : '' ?>" title="Settings" aria-label="Settings">
                             <i class="nav-icon" data-lucide="settings" aria-hidden="true"></i>
                             <p>Settings</p>
                         </a>
                     </li>
+                    <?php endif; ?>
                 </ul>
                 <?php if ($pbEnabled && $pbName !== ''): ?>
                 <div style="padding:8px 12px;margin:6px 8px 4px;border-radius:6px;background:rgba(255,255,255,0.04);font-size:0.72rem;color:rgba(255,255,255,0.6);display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap">

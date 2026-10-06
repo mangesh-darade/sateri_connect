@@ -567,6 +567,8 @@ class EmailManager extends BaseController
                 $id = (int) $model->insert($row, true);
             }
 
+            (new ActivityLogger())->log('email_campaign_save', 'emails', 'Saved HTML email campaign: ' . $name, ['id' => $id]);
+
             return $this->jsonResponse(true, $model->find($id), 'Campaign saved.');
         } catch (\Throwable $e) {
             return $this->jsonResponse(false, null, $e->getMessage(), [], 500);
@@ -589,6 +591,8 @@ class EmailManager extends BaseController
             $actorId = (int) ($this->currentUser['id'] ?? 0) ?: null;
             $result  = (new \App\Libraries\EmailCampaignService())->dispatch($camp, $actorId);
             $ok      = (bool) ($result['ok'] ?? false);
+
+            (new ActivityLogger())->log('email_campaign_send', 'emails', 'Dispatched HTML email campaign: ' . ($camp['name'] ?? ('#' . $id)), ['id' => $id, 'ok' => $ok]);
 
             return $this->jsonResponse(
                 $ok,
@@ -613,6 +617,7 @@ class EmailManager extends BaseController
             return $this->jsonResponse(false, null, 'Campaign not found.', [], 404);
         }
         $model->delete($id);
+        (new ActivityLogger())->log('email_campaign_delete', 'emails', 'Deleted HTML email campaign #' . $id, ['id' => $id]);
 
         return $this->jsonResponse(true, null, 'Campaign deleted.');
     }

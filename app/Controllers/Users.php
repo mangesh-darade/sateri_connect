@@ -157,9 +157,27 @@ class Users extends BaseController
             $data['password'] = $password;
         }
 
+        $changes = [];
+        foreach (['name', 'email', 'phone', 'role_id', 'status'] as $field) {
+            $oldVal = (string) ($user[$field] ?? '');
+            $newVal = (string) ($data[$field] ?? '');
+            if ($oldVal !== $newVal) {
+                $changes[$field] = [
+                    'old' => $oldVal !== '' ? $oldVal : '(empty)',
+                    'new' => $newVal !== '' ? $newVal : '(empty)',
+                ];
+            }
+        }
+        if ($password !== '') {
+            $changes['password'] = ['old' => '********', 'new' => '******** (password reset)'];
+        }
+
         $model->update($id, $data);
 
-        (new ActivityLogger())->log('update', 'users', 'User updated', ['user_id' => $id]);
+        (new ActivityLogger())->log('update', 'users', 'User updated: ' . ($user['name'] ?? ('#' . $id)), [
+            'user_id' => $id,
+            'changes' => $changes,
+        ]);
 
         return redirect()->to('/users')->with('success', 'User updated.');
     }
