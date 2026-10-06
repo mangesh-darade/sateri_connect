@@ -19,6 +19,12 @@ class Queue extends BaseController
             return $denied;
         }
 
+        try {
+            (new \App\Libraries\AutomationEngine())->processDelayedJobs();
+        } catch (\Throwable) {
+            // non-blocking
+        }
+
         $status = (string) ($this->request->getGet('status') ?? '');
         $model  = model(MessageQueueModel::class);
 
@@ -30,7 +36,6 @@ class Queue extends BaseController
             ->select('message_queue.*, contacts.name AS contact_name, contacts.mobile, campaigns.name AS campaign_name')
             ->join('contacts', 'contacts.id = message_queue.contact_id', 'left')
             ->join('campaigns', 'campaigns.id = message_queue.campaign_id', 'left')
-            ->orderBy('message_queue.priority', 'ASC')
             ->orderBy('message_queue.id', 'DESC')
             ->findAll(100);
 

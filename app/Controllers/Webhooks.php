@@ -730,8 +730,9 @@ class Webhooks extends Controller
                 ]);
             }
 
-            // Flush automation replies immediately so WhatsApp users get answers without waiting for cron
+            // Flush automation replies and process due delays immediately so WhatsApp users get answers without waiting for cron
             try {
+                service('automationEngine')->processDelayedJobs();
                 service('queueService')->processBatch(30);
             } catch (Throwable $qe) {
                 log_message('error', 'Post-automation queue flush failed: {msg}', ['msg' => $qe->getMessage()]);
@@ -809,6 +810,16 @@ class Webhooks extends Controller
                 ]);
             }
             model(CampaignModel::class)->updateStats((int) $cc['campaign_id']);
+        }
+
+        // Keep message_queue status accurate on delivery failure
+        if ($newStatus === 'failed') {
+            $errText = (string) ($errors[0]['title'] ?? $errors[0]['message'] ?? 'Delivery failed');
+            db_connect()->table('message_queue')->where('wa_message_id', $waId)->update([
+                'status'        => 'failed',
+                'error_message' => $errText,
+                'updated_at'    => date('Y-m-d H:i:s'),
+            ]);
         }
 
         if ($newStatus === 'failed' && is_array($errors) && isset($errors[0]['code'])) {

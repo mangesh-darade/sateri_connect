@@ -17,6 +17,27 @@
 
 <?= $this->section('content') ?>
 <div class="page-list">
+    <!-- Workflow Tabs: Visual Automations & Automated Journeys (Drips) -->
+    <ul class="nav nav-pills mb-3 bg-white p-1 rounded-3 border shadow-sm d-flex flex-nowrap overflow-x-auto" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link py-2 px-3 text-nowrap fw-medium active" href="<?= site_url('automations') ?>">
+                <i class="fab fa-whatsapp me-1 text-success"></i> WhatsApp Workflows
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link py-2 px-3 text-nowrap fw-medium text-secondary" href="<?= site_url('automations?channel=email') ?>">
+                <i class="fas fa-envelope me-1 text-primary"></i> Email Workflows (Auto Drips)
+            </a>
+        </li>
+        <?php if (function_exists('can') && can('sequences.view')): ?>
+        <li class="nav-item">
+            <a class="nav-link py-2 px-3 text-nowrap fw-medium text-secondary" href="<?= site_url('sequences') ?>">
+                <i class="fas fa-list-ol me-1 text-info"></i> Sequences
+            </a>
+        </li>
+        <?php endif; ?>
+    </ul>
+
 <div class="card">
     <div class="card-header d-flex align-items-center justify-content-between gap-2">
         <h2 class="card-title mb-0">Workflows</h2>

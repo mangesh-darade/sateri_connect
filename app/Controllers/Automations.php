@@ -25,6 +25,11 @@ class Automations extends BaseController
             return $denied;
         }
 
+        $channel = strtolower(trim((string) ($this->request->getGet('channel') ?? 'whatsapp')));
+        if ($channel === 'email' || $channel === 'drips') {
+            return $this->emailDrips();
+        }
+
         $automations = model(AutomationModel::class)
             ->orderBy('priority', 'ASC')
             ->orderBy('id', 'DESC')
@@ -33,6 +38,26 @@ class Automations extends BaseController
         return $this->render('automations/index', [
             'pageTitle'   => 'Automations',
             'automations' => $automations,
+            'channel'     => 'whatsapp',
+        ]);
+    }
+
+    public function emailDrips(): string|ResponseInterface
+    {
+        if ($denied = $this->requirePermission('automations.view')) {
+            return $denied;
+        }
+
+        $dripModel = model(\App\Models\EmailDripModel::class);
+        $drips     = $dripModel->withSteps(100);
+        $builders  = model(\App\Models\EmailBuilderModel::class)->orderBy('id', 'DESC')->findAll(100);
+
+        return $this->render('automations/drips_index', [
+            'pageTitle' => 'Email Workflows (Auto Drips)',
+            'drips'     => $drips,
+            'builders'  => $builders,
+            'channel'   => 'email',
+            'canEdit'   => function_exists('can') && can('emails.send'),
         ]);
     }
 

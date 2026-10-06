@@ -19,6 +19,13 @@ class Notifications extends BaseController
             return $this->jsonResponse(false, null, 'Unauthorized.', [], 401);
         }
 
+        // Lightweight background heartbeat: process any due delayed automation jobs
+        try {
+            (new \App\Libraries\AutomationEngine())->processDelayedJobs();
+        } catch (\Throwable) {
+            // non-blocking
+        }
+
         $sinceId = max(0, (int) ($this->request->getGet('since_id') ?? 0));
         $limit   = max(1, min(30, (int) ($this->request->getGet('limit') ?? 12)));
 

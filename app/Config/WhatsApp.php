@@ -135,9 +135,9 @@ class WhatsApp extends BaseConfig
     /**
      * Minutes before a catch-all "any incoming message → reply" automation (no keyword
      * filter, no condition) replies again to the same contact. Stops reply spam and
-     * bot-to-bot loops. 0 disables.
+     * bot-to-bot loops. 0 disables (replies every time).
      */
-    public int $catchAllAutoReplyCooldownMinutes = 60;
+    public int $catchAllAutoReplyCooldownMinutes = 0;
 
     /**
      * Max campaign (broadcast) messages per contact in a rolling 24h. 0 disables the cap.

@@ -84,6 +84,13 @@ class QueueService
         $limit = max(1, min(500, $limit));
         $stats = ['processed' => 0, 'sent' => 0, 'failed' => 0];
 
+        // Check and resume any due delayed automation jobs
+        try {
+            (new AutomationEngine())->processDelayedJobs();
+        } catch (Throwable $de) {
+            // non-blocking
+        }
+
         $items = $this->claimBatch($limit);
 
         // Always use the currently active provider credentials

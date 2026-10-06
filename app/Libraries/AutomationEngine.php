@@ -71,8 +71,11 @@ class AutomationEngine
                 continue;
             }
 
+            // Isolate context per automation so one flow cannot halt or corrupt another
+            $isolatedContext = $context;
+
             try {
-                $this->runAutomation((int) $automation['id'], $context);
+                $this->runAutomation((int) $automation['id'], $isolatedContext);
                 $result['executed']++;
             } catch (Throwable $e) {
                 $msg = sprintf('Automation #%d failed: %s', $automation['id'], $e->getMessage());
@@ -103,6 +106,16 @@ class AutomationEngine
             || ! empty($triggerConfig['conditions'])) {
             return false;
         }
+
+        // If automation has custom flow_graph nodes, it's not a generic unconfigured loop
+        $auto = $this->automations->find($automationId);
+        if ($auto && ! empty($auto['flow_graph'])) {
+            $graph = $this->decodeJson($auto['flow_graph']);
+            if (! empty($graph['nodes']) && count($graph['nodes']) > 1) {
+                return false;
+            }
+        }
+
         $hasCondition = $this->rules
             ->where('automation_id', $automationId)
             ->where('rule_type', 'condition')
@@ -207,7 +220,16 @@ class AutomationEngine
 
             $actionType = $this->normalizeActionType((string) ($current['action_type'] ?? ''));
             unset($context['_action_failed'], $context['_http_status'], $context['_stop_automation'], $context['_await_reply']);
-            $this->executeAction($actionType, $config, $context);
+            try {
+                $this->executeAction($actionType, $config, $context);
+            } catch (Throwable $ae) {
+                $context['_action_failed'] = true;
+                log_message('error', 'Action {action} failed in automation #{id}: {msg}', [
+                    'action' => $actionType,
+                    'id'     => $automationId,
+                    'msg'    => $ae->getMessage(),
+                ]);
+            }
 
             // Delay (and similar) pause the graph; resume via automation_delayed_jobs.
             if (! empty($context['_stop_automation'])) {
@@ -260,22 +282,28 @@ class AutomationEngine
         }
 
         $current = null;
-        if ($resumeRuleId === null) {
+        if ($resumeRuleId === null && empty($context['_resume_step_order'])) {
             // Terminal delay — do not restart the graph from step 1.
             return;
         }
-        if (isset($byId[$resumeRuleId])) {
+        if ($resumeRuleId !== null && isset($byId[$resumeRuleId])) {
             $current = $byId[$resumeRuleId];
-        } elseif (isset($byStep[$resumeRuleId])) {
+        } elseif ($resumeRuleId !== null && isset($byStep[$resumeRuleId])) {
             // Legacy jobs may have stored step_order instead of rule id.
             $current = $byStep[$resumeRuleId];
+        } elseif (! empty($context['_resume_step_order']) && isset($byStep[(int) $context['_resume_step_order']])) {
+            $current = $byStep[(int) $context['_resume_step_order']];
         } else {
-            log_message('error', 'Delay resume rule #{id} missing for automation #{a}', [
-                'id' => $resumeRuleId,
-                'a'  => $automationId,
-            ]);
-
-            return;
+            // Fallback: rule IDs may have been regenerated when canvas was saved
+            foreach ($rules as $candidate) {
+                if (($candidate['action_type'] ?? '') !== 'delay') {
+                    $current = $candidate;
+                    break;
+                }
+            }
+            if ($current === null && ! empty($rules)) {
+                $current = $rules[0];
+            }
         }
 
         $guard = 0;
@@ -296,7 +324,16 @@ class AutomationEngine
 
             $actionType = $this->normalizeActionType((string) ($current['action_type'] ?? ''));
             unset($context['_action_failed'], $context['_http_status'], $context['_stop_automation'], $context['_delay_scheduled'], $context['_await_reply']);
-            $this->executeAction($actionType, $config, $context);
+            try {
+                $this->executeAction($actionType, $config, $context);
+            } catch (Throwable $ae) {
+                $context['_action_failed'] = true;
+                log_message('error', 'Action {action} failed in resumeFromRule #{id}: {msg}', [
+                    'action' => $actionType,
+                    'id'     => $automationId,
+                    'msg'    => $ae->getMessage(),
+                ]);
+            }
 
             if (! empty($context['_stop_automation'])) {
                 if (! empty($context['_await_reply'])) {
@@ -751,6 +788,13 @@ class AutomationEngine
         }
 
         $now  = date('Y-m-d H:i:s');
+
+        // Reclaim jobs stuck in 'processing' status for > 5 minutes (worker crash / timeout)
+        $db->table('automation_delayed_jobs')
+            ->where('status', 'processing')
+            ->where('updated_at <', date('Y-m-d H:i:s', time() - 300))
+            ->update(['status' => 'pending', 'updated_at' => $now]);
+
         $jobs = $db->table('automation_delayed_jobs')
             ->where('status', 'pending')
             ->where('run_at <=', $now)
@@ -793,6 +837,15 @@ class AutomationEngine
                     'id'  => $jobId,
                     'msg' => $e->getMessage(),
                 ]);
+            }
+        }
+
+        // Flush outbound message queue immediately so follow-up messages go out in real-time
+        if ($count > 0) {
+            try {
+                $this->queue->processBatch(30);
+            } catch (Throwable $qe) {
+                log_message('error', 'Post-delay queue flush error: {msg}', ['msg' => $qe->getMessage()]);
             }
         }
 
@@ -870,14 +923,18 @@ class AutomationEngine
             $byId[(int) $rule['id']] = $rule;
             $byStep[(int) $rule['step_order']] = $rule;
         }
-        // next_on_true from WorkflowGraph is 1-based step_order (not always DB id).
+        $resumeStepOrder = null;
         $next = $this->resolveNext($rules, $byId, $byStep, $currentRule, $currentRule['next_on_true'] ?? null);
         if (is_array($next)) {
             $resumeRuleId = (int) $next['id'];
+            $resumeStepOrder = (int) ($next['step_order'] ?? 0);
         }
 
         // Strip non-serializable / control keys
         $ctx = $context;
+        if ($resumeStepOrder !== null) {
+            $ctx['_resume_step_order'] = $resumeStepOrder;
+        }
         unset(
             $ctx['_stop_automation'],
             $ctx['_delayed_until'],
@@ -1074,6 +1131,18 @@ class AutomationEngine
         }
 
         $jobId = (int) $job['id'];
+
+        // If the workflow is disabled or missing, cancel the question lock and allow normal flows
+        $auto = $this->automations->find((int) $job['automation_id']);
+        if (! $auto || empty($auto['is_active'])) {
+            $db->table('automation_delayed_jobs')->where('id', $jobId)->update([
+                'status'     => 'cancelled',
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+
+            return false;
+        }
+
         $db->table('automation_delayed_jobs')->where('id', $jobId)->where('status', 'awaiting_reply')
             ->update(['status' => 'processing', 'updated_at' => date('Y-m-d H:i:s')]);
         if ($db->affectedRows() !== 1) {
