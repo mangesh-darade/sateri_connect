@@ -105,6 +105,37 @@
             var count = $checked.length;
             $selectedBadge.text(count + ' selected');
 
+            // Update Dropdown button text
+            if (count === 0) {
+                $('#bulkDropdownBtnText').html('<i class="fas fa-users text-primary me-1"></i> Choose contacts...');
+                $('#bulkEmptyPillsNotice').removeClass('d-none');
+                $('#bulkSelectedChips').addClass('d-none').empty();
+            } else {
+                $('#bulkDropdownBtnText').html('<i class="fas fa-check-circle text-success me-1"></i> ' + count + (count === 1 ? ' contact selected' : ' contacts selected'));
+                $('#bulkEmptyPillsNotice').addClass('d-none');
+
+                // Render selected contact chips
+                var $chips = $('#bulkSelectedChips').removeClass('d-none').empty();
+                var maxChips = 15;
+                var shown = 0;
+                $checked.each(function () {
+                    if (shown < maxChips) {
+                        var cid = $(this).val();
+                        var cname = $(this).data('name') || $(this).data('email') || 'Contact';
+                        $chips.append(
+                            '<span class="bulk-chip">' +
+                                escapeHtml(cname) +
+                                '<span class="bulk-chip-remove" data-id="' + cid + '" title="Remove">✕</span>' +
+                            '</span>'
+                        );
+                        shown++;
+                    }
+                });
+                if (count > maxChips) {
+                    $chips.append('<span class="badge bg-secondary-subtle text-secondary rounded-pill py-1 px-2" style="font-size: 0.7rem;">+' + (count - maxChips) + ' more</span>');
+                }
+            }
+
             // Sync hidden select
             var checkedIds = [];
             $checked.each(function () {
@@ -125,6 +156,32 @@
                 $checkAll.prop('checked', false).prop('indeterminate', false);
             }
         }
+
+        // Prevent dropdown from closing when clicking inside
+        $('#bulkContactDropdown .dropdown-menu').on('click', function (e) {
+            e.stopPropagation();
+        });
+
+        // Close dropdown on Done button
+        $('#btnDoneDropdown').on('click', function (e) {
+            e.stopPropagation();
+            if (window.bootstrap && bootstrap.Dropdown) {
+                var dd = bootstrap.Dropdown.getOrCreateInstance(document.getElementById('bulkDropdownBtn'));
+                if (dd) dd.hide();
+            } else {
+                $('#bulkContactDropdown .dropdown-menu').removeClass('show');
+            }
+        });
+
+        // Remove chip on click
+        $(document).on('click', '.bulk-chip-remove', function (e) {
+            e.stopPropagation();
+            var id = $(this).data('id');
+            var $cb = $contactList.find('.bulk-contact-cb[value="' + id + '"]');
+            $cb.prop('checked', false);
+            $cb.closest('.bulk-contact-row').removeClass('is-selected');
+            updateSelectedState();
+        });
 
         // Row checkbox toggle
         $contactList.on('change', '.bulk-contact-cb', function () {

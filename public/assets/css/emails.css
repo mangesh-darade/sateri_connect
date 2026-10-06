@@ -124,7 +124,7 @@
     }
 }
 
-/* Bulk Contact Picker Checkbox UI */
+/* Bulk Contact Picker Dropdown & Row UI */
 .bulk-contact-row {
     position: relative;
     display: flex;
@@ -135,7 +135,7 @@
     cursor: pointer;
 }
 .bulk-contact-row:hover {
-    background-color: #f8fafc;
+    background-color: #f1f5f9;
 }
 .bulk-contact-row.is-selected {
     background-color: #eff6ff;
@@ -144,32 +144,36 @@
     border-bottom: none !important;
 }
 
-/* Force checkboxes to stay inline, never absolute, never leaking */
-.bulk-contact-cb,
-#bulkCheckAll {
+.bulk-contact-cb {
     position: static !important;
     margin: 0 !important;
-    margin-left: 0 !important;
-    padding: 0 !important;
     flex-shrink: 0 !important;
     cursor: pointer;
-    width: 16px !important;
-    height: 16px !important;
-    vertical-align: middle;
+    width: 15px !important;
+    height: 15px !important;
 }
 
-#bulkContactList {
-    position: relative;
-    height: 145px;
-    max-height: 145px;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    -webkit-overflow-scrolling: touch;
+.bulk-chip {
+    font-size: 0.72rem;
+    padding: 0.15rem 0.45rem;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 9999px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: #1e293b;
+    line-height: 1.2;
+}
+.bulk-chip-remove {
+    cursor: pointer;
+    color: #94a3b8;
+    margin-left: 2px;
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+.bulk-chip-remove:hover {
+    color: #ef4444;
 }
 
-.avatar-circle-sm {
-    width: 24px;
-    height: 24px;
-    font-size: 0.65rem;
-}
 

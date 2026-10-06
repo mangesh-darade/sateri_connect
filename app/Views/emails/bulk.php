@@ -106,86 +106,115 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
                         </div>
                     </div>
 
-                    <!-- Right: Pick from CRM Contacts -->
+                    <!-- Right: Pick from CRM Contacts (Dropdown UI) -->
                     <div class="col-md-7">
                         <div class="h-100 p-3 rounded-3 border bg-white d-flex flex-column" style="border-color: #e2e8f0 !important;">
                             <div class="d-flex justify-content-between align-items-center mb-2">
-                                <label class="form-label fw-bold small text-dark mb-0 d-flex align-items-center gap-1">
+                                <label class="form-label fw-bold small text-dark mb-0 d-flex align-items-center gap-1.5">
                                     <i class="fas fa-address-book text-success"></i>
                                     <span>Pick from CRM Contacts</span>
                                 </label>
-                                <span class="badge rounded-pill bg-primary text-white px-2 py-1" id="bulkSelectedBadge" style="font-size: 0.72rem; font-weight: 600;">
+                                <span class="badge rounded-pill bg-primary text-white px-2.5 py-1 fw-semibold" id="bulkSelectedBadge" style="font-size: 0.72rem;">
                                     0 selected
                                 </span>
                             </div>
 
-                            <!-- Filter & Search Row -->
+                            <!-- Group Filter & Dropdown Trigger Row -->
                             <div class="row g-2 mb-2">
-                                <div class="col-6">
-                                    <div class="input-group input-group-sm">
-                                        <span class="input-group-text bg-light text-muted border-end-0 py-1 px-2" style="border-color: #cbd5e1;"><i class="fas fa-search" style="font-size: 0.72rem;"></i></span>
-                                        <input type="text" id="bulkContactSearch" class="form-control form-control-sm border-start-0 py-1" style="font-size: 0.78rem; border-color: #cbd5e1;" placeholder="Search name/email...">
-                                    </div>
-                                </div>
-                                <div class="col-6">
-                                    <select id="bulkFilterGroup" class="form-select form-select-sm py-1" style="font-size: 0.78rem; border-color: #cbd5e1;">
+                                <div class="col-sm-5">
+                                    <label class="form-label text-muted small mb-1" style="font-size: 0.72rem;">Filter by Group</label>
+                                    <select id="bulkFilterGroup" class="form-select form-select-sm py-1.5" style="font-size: 0.78rem; border-color: #cbd5e1;">
                                         <option value="">All Groups (<?= count($contactsWithEmail) ?>)</option>
                                         <?php foreach ($customerGroups as $cg): ?>
                                             <option value="<?= (int) $cg['id'] ?>"><?= esc($cg['name']) ?> (<?= (int) ($cg['contact_count'] ?? 0) ?>)</option>
                                         <?php endforeach; ?>
                                     </select>
                                 </div>
-                            </div>
+                                <div class="col-sm-7">
+                                    <label class="form-label text-muted small mb-1" style="font-size: 0.72rem;">Select Contacts</label>
+                                    <!-- Custom Multi-Select Dropdown -->
+                                    <div class="dropdown w-100 position-relative" id="bulkContactDropdown">
+                                        <button class="btn btn-outline-secondary form-select text-start d-flex justify-content-between align-items-center w-100 py-1.5 px-2 bg-white"
+                                                type="button" id="bulkDropdownBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false"
+                                                style="border-color: #cbd5e1; font-size: 0.78rem;">
+                                            <span class="text-truncate fw-medium text-dark" id="bulkDropdownBtnText">
+                                                <i class="fas fa-users text-primary me-1"></i> Choose contacts...
+                                            </span>
+                                            <i class="fas fa-chevron-down text-muted small ms-1"></i>
+                                        </button>
 
-                            <!-- Select All & Action Strip -->
-                            <div class="d-flex justify-content-between align-items-center bg-light px-2 py-1 rounded-2 mb-2 border" style="font-size: 0.75rem; border-color: #e2e8f0 !important;">
-                                <label class="d-flex align-items-center mb-0 cursor-pointer gap-1.5" for="bulkCheckAll">
-                                    <input class="bulk-contact-cb" type="checkbox" id="bulkCheckAll">
-                                    <span class="fw-semibold text-dark user-select-none">
-                                        Select All (<span id="bulkVisibleCount"><?= count($contactsWithEmail) ?></span>)
-                                    </span>
-                                </label>
-                                <div class="d-flex gap-1">
-                                    <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 fw-medium" id="btnSelectFiltered" title="Select visible contacts">
-                                        Select Visible
-                                    </button>
-                                    <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 fw-medium" id="btnClearSelection" title="Clear selection">
-                                        Clear
-                                    </button>
+                                        <!-- Dropdown Menu Window -->
+                                        <div class="dropdown-menu dropdown-menu-end shadow-lg border p-2 w-100" style="min-width: 320px; max-width: 420px; border-color: #cbd5e1; z-index: 1055;">
+                                            <!-- Search Bar -->
+                                            <div class="mb-2">
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text bg-light text-muted border-end-0 py-1 px-2" style="border-color: #cbd5e1;"><i class="fas fa-search" style="font-size: 0.72rem;"></i></span>
+                                                    <input type="text" id="bulkContactSearch" class="form-control form-control-sm border-start-0 py-1" style="font-size: 0.78rem; border-color: #cbd5e1;" placeholder="Search name or email...">
+                                                </div>
+                                            </div>
+
+                                            <!-- Action Strip: Select All & Quick Actions -->
+                                            <div class="d-flex justify-content-between align-items-center bg-light px-2 py-1.5 rounded-2 mb-2 border" style="font-size: 0.74rem; border-color: #e2e8f0 !important;">
+                                                <label class="d-flex align-items-center gap-1.5 mb-0 cursor-pointer" for="bulkCheckAll">
+                                                    <input class="bulk-contact-cb my-0" type="checkbox" id="bulkCheckAll">
+                                                    <span class="fw-semibold text-dark user-select-none">Select All (<span id="bulkVisibleCount"><?= count($contactsWithEmail) ?></span>)</span>
+                                                </label>
+                                                <div class="d-flex gap-1.5">
+                                                    <button type="button" class="btn btn-link btn-xs p-0 text-primary text-decoration-none fw-semibold" id="btnSelectFiltered">Visible</button>
+                                                    <span class="text-muted">·</span>
+                                                    <button type="button" class="btn btn-link btn-xs p-0 text-danger text-decoration-none fw-semibold" id="btnClearSelection">Clear</button>
+                                                </div>
+                                            </div>
+
+                                            <!-- Scrollable Contact Checkbox List -->
+                                            <div class="overflow-y-auto border rounded bg-white" id="bulkContactList" style="max-height: 200px; border-color: #e2e8f0 !important;">
+                                                <?php if (empty($contactsWithEmail)): ?>
+                                                    <div class="text-center py-4 text-muted small">
+                                                        <i class="fas fa-user-slash opacity-25 d-block mb-1 fs-5"></i>
+                                                        No contacts with email found.
+                                                    </div>
+                                                <?php else: ?>
+                                                    <?php foreach ($contactsWithEmail as $c): ?>
+                                                        <label class="bulk-contact-row d-flex align-items-center px-2 py-1.5 border-bottom cursor-pointer text-decoration-none m-0 gap-2"
+                                                               data-id="<?= (int) $c['id'] ?>"
+                                                               data-name="<?= esc(strtolower($c['name'] ?? '')) ?>"
+                                                               data-email="<?= esc(strtolower($c['email'])) ?>"
+                                                               data-tags='<?= esc(json_encode($c['tag_ids'] ?? []), 'attr') ?>'>
+                                                            <input class="bulk-contact-cb flex-shrink-0 my-0" type="checkbox"
+                                                                   value="<?= (int) $c['id'] ?>" data-email="<?= esc($c['email']) ?>" data-name="<?= esc($c['name'] ?: 'Contact') ?>">
+                                                            <div class="rounded-circle text-primary fw-bold d-flex align-items-center justify-content-center flex-shrink-0"
+                                                                 style="width: 22px; height: 22px; font-size: 0.65rem; background: #e0e7ff; color: #4338ca;">
+                                                                <?= esc(strtoupper(substr($c['name'] ?: 'C', 0, 1))) ?>
+                                                            </div>
+                                                            <div class="text-truncate flex-grow-1" style="min-width: 0;">
+                                                                <div class="fw-semibold text-dark text-truncate" style="font-size: 0.77rem; line-height: 1.2;">
+                                                                    <?= esc($c['name'] ?: 'Contact') ?>
+                                                                </div>
+                                                                <div class="text-muted font-monospace text-truncate" style="font-size: 0.71rem;">
+                                                                    <?= esc($c['email']) ?>
+                                                                </div>
+                                                            </div>
+                                                        </label>
+                                                    <?php endforeach; ?>
+                                                <?php endif; ?>
+                                            </div>
+
+                                            <!-- Dropdown Footer -->
+                                            <div class="d-flex justify-content-between align-items-center mt-2 pt-1 border-top" style="font-size: 0.7rem;">
+                                                <span class="text-muted" id="bulkSearchStatus"><?= count($contactsWithEmail) ?> total contacts</span>
+                                                <button type="button" class="btn btn-primary btn-xs px-2.5 py-0.5 fw-semibold" id="btnDoneDropdown" style="font-size: 0.72rem;">Done</button>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <!-- Scrollable Contact List -->
-                            <div class="border rounded-2 p-0 bg-white" id="bulkContactList" style="border-color: #e2e8f0 !important;">
-                                <?php if (empty($contactsWithEmail)): ?>
-                                    <div class="text-center py-4 text-muted small">
-                                        <i class="fas fa-user-slash opacity-25 d-block mb-1 fs-5"></i>
-                                        No contacts with email found.
-                                    </div>
-                                <?php else: ?>
-                                    <?php foreach ($contactsWithEmail as $c): ?>
-                                        <label class="bulk-contact-row px-2 py-1.5 border-bottom text-decoration-none m-0 gap-2"
-                                               data-id="<?= (int) $c['id'] ?>"
-                                               data-name="<?= esc(strtolower($c['name'] ?? '')) ?>"
-                                               data-email="<?= esc(strtolower($c['email'])) ?>"
-                                               data-tags='<?= esc(json_encode($c['tag_ids'] ?? []), 'attr') ?>'>
-                                            <input class="bulk-contact-cb" type="checkbox"
-                                                   value="<?= (int) $c['id'] ?>" data-email="<?= esc($c['email']) ?>">
-                                            <div class="avatar-circle-sm rounded-circle text-primary fw-bold d-flex align-items-center justify-content-center flex-shrink-0"
-                                                 style="background: #e0e7ff; color: #4338ca;">
-                                                <?= esc(strtoupper(substr($c['name'] ?: 'C', 0, 1))) ?>
-                                            </div>
-                                            <div class="text-truncate flex-grow-1" style="min-width: 0;">
-                                                <span class="fw-semibold text-dark small text-truncate d-inline-block" style="max-width: 220px; line-height: 1.2; font-size: 0.78rem;">
-                                                    <?= esc($c['name'] ?: 'Contact') ?>
-                                                </span>
-                                                <span class="text-muted font-monospace ms-1 small text-truncate" style="font-size: 0.72rem;">
-                                                    <?= esc($c['email']) ?>
-                                                </span>
-                                            </div>
-                                        </label>
-                                    <?php endforeach; ?>
-                                <?php endif; ?>
+                            <!-- Selected Contacts Pills Container -->
+                            <div class="mt-1 border rounded-2 p-2 bg-light flex-grow-1" style="min-height: 75px; max-height: 110px; overflow-y: auto; border-color: #e2e8f0 !important;" id="bulkSelectedPillsBox">
+                                <div id="bulkEmptyPillsNotice" class="text-muted small text-center py-3" style="font-size: 0.74rem;">
+                                    <i class="fas fa-hand-pointer opacity-50 me-1"></i> Choose contacts from the dropdown above.
+                                </div>
+                                <div class="d-flex flex-wrap gap-1 d-none" id="bulkSelectedChips"></div>
                             </div>
 
                             <!-- Hidden multi-select kept for form serialization -->
@@ -194,11 +223,6 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
                                     <option value="<?= (int) $c['id'] ?>"><?= esc($c['email']) ?></option>
                                 <?php endforeach; ?>
                             </select>
-
-                            <div class="d-flex justify-content-between align-items-center mt-2 text-muted" style="font-size: 0.7rem;">
-                                <span><i class="fas fa-users text-primary me-1"></i> <?= count($contactsWithEmail) ?> total contacts in CRM</span>
-                                <span id="bulkSearchStatus" class="fw-semibold text-primary"></span>
-                            </div>
                         </div>
                     </div>
                 </div>
