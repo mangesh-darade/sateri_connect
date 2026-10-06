@@ -187,6 +187,9 @@ $isCheerio = ! empty($isCheerio);
                                     <span class="text-danger"><?= (int) ($c['failed_count'] ?? 0) ?></span>
                                 </td>
                                 <td class="text-end text-nowrap">
+                                    <a href="<?= site_url('campaigns/email/' . $campaignId) ?>" class="btn btn-xs btn-outline-secondary me-1" title="View details">
+                                        <i class="fas fa-eye me-1"></i> View
+                                    </a>
                                     <?php if ($canSend && $campaignId > 0 && in_array($campaignStatus, ['draft', 'failed'], true)): ?>
                                         <button type="button" class="btn btn-xs btn-primary em-send-camp" data-id="<?= $campaignId ?>" title="Broadcast campaign now">
                                             <i class="fas fa-paper-plane me-1"></i> Send

@@ -188,6 +188,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('campaigns/wizard/(:segment)/(:num)/run', 'Campaigns::wizardRun/$1/$2', ['filter' => 'csrf']);
     $routes->post('campaigns/wizard/(:segment)/(:num)/schedule', 'Campaigns::wizardSchedule/$1/$2', ['filter' => 'csrf']);
     $routes->post('campaigns', 'Campaigns::store', ['filter' => 'csrf']);
+    $routes->get('campaigns/email/(:num)', 'Campaigns::showEmail/$1');
     $routes->get('campaigns/(:num)', 'Campaigns::show/$1');
     $routes->get('campaigns/(:num)/edit', 'Campaigns::edit/$1');
     $routes->post('campaigns/(:num)', 'Campaigns::update/$1', ['filter' => 'csrf']);
@@ -347,6 +348,7 @@ $routes->group('api', ['namespace' => 'App\Controllers\Api'], static function ($
 
         $routes->get('campaigns', 'Campaigns::index', ['filter' => 'permission:campaigns.view']);
         $routes->post('campaigns', 'Campaigns::create', ['filter' => 'permission:campaigns.create']);
+        $routes->get('campaigns/email/(:num)', 'Campaigns::showEmail/$1', ['filter' => 'permission:campaigns.view']);
         $routes->get('campaigns/(:num)', 'Campaigns::show/$1', ['filter' => 'permission:campaigns.view']);
         $routes->post('campaigns/(:num)/pause', 'Campaigns::pause/$1', ['filter' => 'permission:campaigns.edit']);
         $routes->post('campaigns/(:num)/resume', 'Campaigns::resume/$1', ['filter' => 'permission:campaigns.edit']);

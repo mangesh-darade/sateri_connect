@@ -11,6 +11,7 @@ use App\Models\CampaignModel;
 use App\Models\ContactModel;
 use App\Models\EmailBuilderModel;
 use App\Models\EmailHtmlCampaignModel;
+use App\Models\EmailLogModel;
 use App\Models\MessageQueueModel;
 use App\Models\TagModel;
 use App\Models\TemplateModel;
@@ -126,8 +127,17 @@ class Campaigns extends BaseController
             return $denied;
         }
 
+        if ($this->request->getGet('channel') === 'email') {
+            return $this->showEmail((int) $id);
+        }
+
         $campaign = model(CampaignModel::class)->find($id);
         if ($campaign === null) {
+            $emailCamp = model(EmailHtmlCampaignModel::class)->find($id);
+            if ($emailCamp !== null) {
+                return $this->showEmail((int) $id);
+            }
+
             if ($this->request->isAJAX()) {
                 return $this->jsonResponse(false, null, 'Campaign not found.', [], 404);
             }
@@ -170,6 +180,123 @@ class Campaigns extends BaseController
             'recipients' => $recipients,
             'template'   => $template,
             'tags'       => model(TagModel::class)->orderBy('name', 'ASC')->findAll(),
+        ]);
+    }
+
+    public function showEmail(int $id): string|ResponseInterface
+    {
+        if ($denied = $this->requirePermission('campaigns.view')) {
+            return $denied;
+        }
+
+        $campaign = model(EmailHtmlCampaignModel::class)->find($id);
+        if ($campaign === null) {
+            if ($this->request->isAJAX()) {
+                return $this->jsonResponse(false, null, 'Email campaign not found.', [], 404);
+            }
+
+            return redirect()->to('/campaigns?channel=email')->with('error', 'Email campaign not found.');
+        }
+
+        // Resolve recipients
+        $recipients = is_array($campaign['recipients'] ?? null) ? $campaign['recipients'] : [];
+        if ($recipients === [] && ! empty($campaign['label_name'])) {
+            $tag = model(TagModel::class)->where('name', $campaign['label_name'])->first();
+            if (! $tag && ctype_digit((string) $campaign['label_name'])) {
+                $tag = model(TagModel::class)->find((int) $campaign['label_name']);
+            }
+            if ($tag) {
+                $contacts = model(TagModel::class)->getContacts((int) $tag['id']);
+                foreach ($contacts as $con) {
+                    $em = strtolower(trim((string) ($con['email'] ?? '')));
+                    if ($em !== '' && filter_var($em, FILTER_VALIDATE_EMAIL)) {
+                        $recipients[] = $em;
+                    }
+                }
+            }
+        }
+        $recipients = array_values(array_unique($recipients));
+
+        // Match contact profiles in CRM
+        $contactsMap = [];
+        if ($recipients !== []) {
+            $matched = model(ContactModel::class)
+                ->select('id, name, email, mobile')
+                ->whereIn('email', array_slice($recipients, 0, 500))
+                ->findAll();
+            foreach ($matched as $m) {
+                $contactsMap[strtolower(trim($m['email']))] = $m;
+            }
+        }
+
+        // Email logs
+        $logs = model(EmailLogModel::class)
+            ->where('html_campaign_id', $id)
+            ->orderBy('id', 'DESC')
+            ->findAll(200);
+
+        // Stats calculation
+        $sentCount   = (int) ($campaign['sent_count'] ?? 0);
+        $failedCount = (int) ($campaign['failed_count'] ?? 0);
+        $totalTarget = max(count($recipients), $sentCount);
+
+        $totalOpens   = 0;
+        $totalClicks  = 0;
+        $uniqueOpens  = 0;
+        $uniqueClicks = 0;
+        $logByEmail   = [];
+        foreach ($logs as $log) {
+            $opens  = (int) ($log['open_count'] ?? 0);
+            $clicks = (int) ($log['click_count'] ?? 0);
+            $totalOpens += $opens;
+            $totalClicks += $clicks;
+            if ($opens > 0) $uniqueOpens++;
+            if ($clicks > 0) $uniqueClicks++;
+
+            $logEmail = strtolower(trim((string) ($log['to_email'] ?? '')));
+            if ($logEmail !== '' && ! isset($logByEmail[$logEmail])) {
+                $logByEmail[$logEmail] = $log;
+            }
+        }
+
+        $openRate  = $sentCount > 0 ? round(($uniqueOpens / $sentCount) * 100, 1) : 0;
+        $clickRate = $sentCount > 0 ? round(($uniqueClicks / $sentCount) * 100, 1) : 0;
+
+        $settings      = new SettingsService();
+        $provider      = $settings->getEmailProvider();
+        $providerLabel = match ($provider) {
+            SettingsService::EMAIL_PROVIDER_CHEERIO  => 'Cheerio AI',
+            SettingsService::EMAIL_PROVIDER_SENDGRID => 'SendGrid',
+            SettingsService::EMAIL_PROVIDER_SES      => 'Amazon SES',
+            default                                  => 'SMTP',
+        };
+
+        $builder = null;
+        if (! empty($campaign['builder_id'])) {
+            $builder = model(EmailBuilderModel::class)->find((int) $campaign['builder_id']);
+        }
+
+        return $this->render('campaigns/show_email', [
+            'pageTitle'      => 'Campaign: ' . ($campaign['name'] ?? ('#' . $id)),
+            'campaign'       => $campaign,
+            'id'             => $id,
+            'recipients'     => $recipients,
+            'contactsMap'    => $contactsMap,
+            'logs'           => $logs,
+            'logByEmail'     => $logByEmail,
+            'builder'        => $builder,
+            'provider'       => $provider,
+            'providerLabel'  => $providerLabel,
+            'totalTarget'    => $totalTarget,
+            'sentCount'      => $sentCount,
+            'failedCount'    => $failedCount,
+            'totalOpens'     => $totalOpens,
+            'uniqueOpens'    => $uniqueOpens,
+            'openRate'       => $openRate,
+            'totalClicks'    => $totalClicks,
+            'uniqueClicks'   => $uniqueClicks,
+            'clickRate'      => $clickRate,
+            'canSend'        => function_exists('can') && can('emails.send'),
         ]);
     }
 
@@ -1269,8 +1396,8 @@ class Campaigns extends BaseController
                     'failed'        => (int) ($c['failed_count'] ?? 0),
                     'scheduled_at'  => $c['scheduled_at'] ?? null,
                     'created_at'    => $c['created_at'] ?? null,
-                    'view_url'      => site_url('email-manager?tab=campaigns'),
-                    'edit_url'      => site_url('email-manager?tab=campaigns'),
+                    'view_url'      => site_url('campaigns/email/' . (int) $c['id']),
+                    'edit_url'      => site_url('campaigns/email/' . (int) $c['id']),
                 ];
             }
         }
