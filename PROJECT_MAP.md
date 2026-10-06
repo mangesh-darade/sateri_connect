@@ -30,7 +30,8 @@
 | **System** | **Users** | — | `/users` | `users.view` |
 | | **Roles & Permissions**| — | `/roles` | `roles.view` |
 | | **Setup Workspace** | • Local Guide<br>• Production Guide<br>• Meta Publish Guide<br>• Meta Screenshot Guide<br>• Automations Guide | `/guide/local`<br>`/guide/production`<br>`/guide/meta-official`<br>`/guide/meta-screenshots`<br>`/guide/automations` | `guide.view` |
-| **Footer / Config**| **Settings** | General, WhatsApp, Email Provider, Meta, AI Copilot, API Tokens | `/settings` | `settings.view` |
+| **Footer / Config**| **Activity Logs** | Audit Trail, Event History & Old vs New Diff | `/activity-logs` | `reports.view` / `settings.view` |
+| | **Settings** | General, WhatsApp, Email Provider, Meta, AI Copilot, API Tokens | `/settings` | `settings.view` |
 | | **API Docs** | REST API v1 Specification | `/api/docs` | Public / Developer |
 
 ---
@@ -226,6 +227,42 @@
   - `POST /settings/test-meta` — Test Meta WhatsApp Cloud API credentials
   - `POST /settings/api-tokens/generate` & `delete` — Manage REST API tokens
 
+### 18. Activity & Audit Logs (`activity-logs`)
+- **Route:** `GET /activity-logs` | `ActivityLogs::index`
+- **Export Route:** `GET /activity-logs/export` | `ActivityLogs::export`
+- **View:** `app/Views/activity_logs/index.php`
+- **Actions:**
+  - View paginated event history across all system modules
+  - Filter by Module (contacts, campaigns, emails, templates, customer_groups, attributes, keywords, automations, settings, users, roles, auth)
+  - Filter by Action (create, update, delete, send, run, schedule, pause, resume, toggle, etc.)
+  - Filter by User and Date Range (from/to)
+  - Keyword search in description, module, and action
+  - JSON metadata modal inspector
+  - CSV export of filtered logs
+
+---
+
+## [Activity Logging Standard & Mandatory Rule]
+- **Mandatory Rule for All Developers & Agents**: Whenever creating or extending any screen, controller action, or state-changing operation (create, update, delete, send, dispatch, schedule, pause, resume, toggle, export, sync), ALWAYS record the event in audit logs. Never leave a state-mutating operation unlogged.
+- **Global Procedural Helper**:
+  ```php
+  log_activity(string $action, string $module, string $description, array $metadata = [], ?int $userId = null): bool
+  ```
+- **Controller Method**:
+  ```php
+  $this->logActivity(string $action, string $module, string $description, array $metadata = []): bool
+  ```
+- **Standard Action Verbs**:
+  - `create` / `store`: Record creation
+  - `update` / `edit`: Record modification
+  - `delete` / `erase`: Record removal
+  - `run` / `dispatch` / `send`: Manual or automated message broadcast
+  - `schedule`: Future execution scheduled
+  - `pause` / `resume` / `cancel`: Queue/Campaign state changes
+  - `toggle`: Enable/disable feature or workflow
+  - `import` / `export`: Data ingestion or extraction
+  - `login` / `logout`: Authentication sessions
+
 ---
 
 ## [DB Tables]
@@ -239,6 +276,7 @@
 - `contact_tags`: Many-to-many relationship linking contacts to tags/groups
 - `contacts`: Customer contact master (name, email, mobile, consent, opt-in)
 - `conversations`: Live chat conversation threads (WhatsApp, Messenger, Instagram)
+- `countries`: Country master list with ISO2, dial_code, min_digits, max_digits, and phone validation rules
 - `email_builders`: Reusable HTML email templates with attachments
 - `email_drips` & `email_drip_steps`: Multi-step email nurture sequences
 - `email_html_campaigns`: HTML email marketing broadcasts with attachments & audience
@@ -260,6 +298,7 @@
 ## [DB Changes Log]
 | Table | Change | Reason | Date |
 |---|---|---|---|
+| `countries` | Created table `(id, name, iso2, dial_code, min_digits, max_digits, phone_digits, sort_order, is_active, is_deleted, created_at, updated_at)` | Country master table for mandatory country code and per-country phone digit validation | 2026-10-06 |
 | `email_builders` | Added `attachment_path VARCHAR(255)`, `attachment_name VARCHAR(191)` | Reusable template physical file attachment support | 2026-10-06 |
 | `email_html_campaigns` | Added `attachment_path VARCHAR(255)`, `attachment_name VARCHAR(191)` | Campaign broadcast physical file attachment support | 2026-10-06 |
 | `email_logs` | Added `open_count`, `click_count`, `first_opened_at`, `campaign_id` | Email tracking & analytics | 2026-10-06 |
