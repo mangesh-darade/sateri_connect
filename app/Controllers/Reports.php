@@ -104,6 +104,11 @@ class Reports extends BaseController
             return $denied;
         }
 
+        $channel = strtolower((string) ($this->request->getGet('channel') ?: 'whatsapp'));
+        if (! in_array($channel, ['whatsapp', 'email'], true)) {
+            $channel = 'whatsapp';
+        }
+
         $from = (string) ($this->request->getGet('from') ?: '');
         $to   = (string) ($this->request->getGet('to') ?: '');
         if ($from === '') {
@@ -117,19 +122,71 @@ class Reports extends BaseController
         $campaignId = ($campaignId !== null && $campaignId !== '') ? (int) $campaignId : null;
         [$fromUtc, $toUtc] = app_range_bounds_utc($from, $to);
 
+        // WhatsApp delivery metrics & daily stats
         $stats = $this->deliveryStats($fromUtc, $toUtc, $campaignId);
         $daily = $this->dailyDelivery($from, $to, $campaignId);
 
-        if ($this->request->isAJAX()) {
-            return $this->jsonResponse(true, ['stats' => $stats, 'daily' => $daily]);
+        // Email delivery metrics & daily stats
+        $emailLogModel = model(\App\Models\EmailLogModel::class);
+        $emailStats    = $emailLogModel->summary($fromUtc, $toUtc);
+        $emailDaily    = $emailLogModel->daily($from, $to);
+
+        $unsubscribes = 0;
+        try {
+            if (db_connect()->tableExists('email_unsubscribes')) {
+                $unsubBuilder = db_connect()->table('email_unsubscribes')->where('is_deleted', 0);
+                if ($fromUtc) {
+                    $unsubBuilder->where('created_at >=', $fromUtc);
+                }
+                if ($toUtc) {
+                    $unsubBuilder->where('created_at <=', $toUtc);
+                }
+                $unsubscribes = (int) $unsubBuilder->countAllResults();
+            }
+        } catch (\Throwable) {
+            $unsubscribes = 0;
+        }
+        $emailStats['unsubscribes'] = $unsubscribes;
+
+        // Recent email delivery logs
+        $emailLogs = [];
+        try {
+            $emailLogs = $emailLogModel
+                ->where('created_at >=', $fromUtc)
+                ->where('created_at <=', $toUtc)
+                ->orderBy('created_at', 'DESC')
+                ->findAll(30);
+        } catch (\Throwable) {
+            $emailLogs = [];
         }
 
+        $campaigns = model(CampaignModel::class)->orderBy('name', 'ASC')->findAll();
+
+        if ($this->request->isAJAX()) {
+            return $this->jsonResponse(true, [
+                'channel'    => $channel,
+                'stats'      => $stats,
+                'daily'      => $daily,
+                'emailStats' => $emailStats,
+                'emailDaily' => $emailDaily,
+            ]);
+        }
+
+        $breakdown = $this->campaignBreakdown($fromUtc, $toUtc, $campaignId, $campaigns);
+
         return $this->render('reports/delivery', [
-            'pageTitle' => 'Delivery Report',
-            'from'      => $from,
-            'to'        => $to,
-            'stats'     => $stats,
-            'daily'     => $daily,
+            'pageTitle'  => 'Delivery Report',
+            'channel'    => $channel,
+            'from'       => $from,
+            'to'         => $to,
+            'campaignId' => $campaignId,
+            'campaigns'  => $campaigns,
+            'stats'      => $stats,
+            'daily'      => $daily,
+            'breakdown'  => $breakdown,
+            'emailStats' => $emailStats,
+            'emailDaily' => $emailDaily,
+            'emailLogs'  => $emailLogs,
         ]);
     }
 
