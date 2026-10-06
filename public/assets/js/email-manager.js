@@ -291,66 +291,81 @@
   var btnLoadGroup = document.getElementById('btnLoadGroupEmails');
   var groupSelect = document.getElementById('campGroupSelect');
   var groupStatus = document.getElementById('groupSelectStatus');
-  if (btnLoadGroup && groupSelect) {
-    btnLoadGroup.addEventListener('click', function () {
-      var groupId = groupSelect.value;
-      if (!groupId) {
-        if (groupStatus) groupStatus.textContent = 'Please choose a customer group first.';
-        return;
-      }
-      btnLoadGroup.disabled = true;
-      if (groupStatus) groupStatus.textContent = 'Fetching and verifying active contacts...';
 
-      fetch(base + '/email-manager/group-emails/' + encodeURIComponent(groupId), {
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  function loadSelectedGroupEmails() {
+    if (!groupSelect) return;
+    var groupId = groupSelect.value;
+    if (!groupId) {
+      if (groupStatus) groupStatus.textContent = 'Please choose a customer group first.';
+      return;
+    }
+    var groupName = groupSelect.options[groupSelect.selectedIndex] ? groupSelect.options[groupSelect.selectedIndex].text : '';
+    if (document.getElementById('camp_label')) {
+      var cleanLabel = groupName.replace(/\s*\(\d+\s*contacts\)\s*/i, '').trim();
+      document.getElementById('camp_label').value = cleanLabel;
+    }
+    if (btnLoadGroup) btnLoadGroup.disabled = true;
+    if (groupStatus) groupStatus.textContent = 'Fetching and verifying active contacts...';
+
+    fetch(base + '/email-manager/group-emails/' + encodeURIComponent(groupId), {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (btnLoadGroup) btnLoadGroup.disabled = false;
+        if (!res.success) {
+          if (groupStatus) groupStatus.textContent = res.message || 'Error loading group contacts.';
+          return;
+        }
+        var data = res.data || {};
+        var emails = data.emails || [];
+        if (emails.length === 0) {
+          if (groupStatus) groupStatus.innerHTML = '<span class="text-warning"><i class="fas fa-exclamation-triangle me-1"></i>No contacts with valid email found in this group.</span>';
+          return;
+        }
+        var recipArea = document.getElementById('camp_recipients');
+        if (recipArea) {
+          recipArea.value = emails.join(', ');
+        }
+        var msgText = '<span class="text-success"><i class="fas fa-check-circle me-1"></i>Loaded ' + emails.length + ' contacts</span>';
+        if (data.unsub_count > 0) {
+          msgText += ' <span class="text-muted">(' + data.unsub_count + ' unsubscribed excluded)</span>';
+        }
+        if (groupStatus) groupStatus.innerHTML = msgText;
       })
-        .then(function (r) { return r.json(); })
-        .then(function (res) {
-          btnLoadGroup.disabled = false;
-          if (!res.success) {
-            if (groupStatus) groupStatus.textContent = res.message || 'Error loading group contacts.';
-            return;
-          }
-          var data = res.data || {};
-          var emails = data.emails || [];
-          if (emails.length === 0) {
-            if (groupStatus) groupStatus.textContent = 'No valid email addresses found in this group.';
-            return;
-          }
-          var recipArea = document.getElementById('camp_recipients');
-          if (recipArea) {
-            var current = recipArea.value.trim();
-            var existingList = current ? current.split(/[\s,;]+/).map(function (s) { return s.trim().toLowerCase(); }) : [];
-            var merged = Array.from(new Set(existingList.concat(emails))).filter(Boolean);
-            recipArea.value = merged.join(', ');
-          }
-          var msgText = 'Added ' + emails.length + ' contacts.';
-          if (data.unsub_count > 0) {
-            msgText += ' (' + data.unsub_count + ' unsubscribed excluded)';
-          }
-          if (groupStatus) groupStatus.textContent = msgText;
-        })
-        .catch(function (err) {
-          btnLoadGroup.disabled = false;
-          if (groupStatus) groupStatus.textContent = err.message || 'Network error.';
-        });
-    });
+      .catch(function (err) {
+        if (btnLoadGroup) btnLoadGroup.disabled = false;
+        if (groupStatus) groupStatus.textContent = err.message || 'Network error.';
+      });
+  }
+
+  if (groupSelect) {
+    groupSelect.addEventListener('change', loadSelectedGroupEmails);
+  }
+  if (btnLoadGroup) {
+    btnLoadGroup.addEventListener('click', loadSelectedGroupEmails);
   }
 
   var campaignForm = document.getElementById('campaignForm');
   if (campaignForm) {
     campaignForm.addEventListener('submit', function (e) {
       e.preventDefault();
+      var cheerioIdEl = document.getElementById('camp_cheerio_id');
+      var modeEl = document.getElementById('camp_mode');
+      var recipEl = document.getElementById('camp_recipients');
+      var labelEl = document.getElementById('camp_label');
+      var builderEl = document.getElementById('camp_builder');
+
       var payload = {
-        id: document.getElementById('camp_id').value,
-        name: document.getElementById('camp_name').value,
-        subject: document.getElementById('camp_subject').value,
-        builder_id: document.getElementById('camp_builder').value || null,
-        cheerio_builder_id: document.getElementById('camp_cheerio_id').value,
-        html_content: document.getElementById('camp_html').value,
-        mode: document.getElementById('camp_mode').value,
-        recipients: document.getElementById('camp_recipients').value,
-        label_name: document.getElementById('camp_label').value
+        id: document.getElementById('camp_id') ? document.getElementById('camp_id').value : '',
+        name: document.getElementById('camp_name') ? document.getElementById('camp_name').value : '',
+        subject: document.getElementById('camp_subject') ? document.getElementById('camp_subject').value : '',
+        builder_id: builderEl && builderEl.value ? builderEl.value : null,
+        cheerio_builder_id: cheerioIdEl ? cheerioIdEl.value : '',
+        html_content: document.getElementById('camp_html') ? document.getElementById('camp_html').value : '',
+        mode: modeEl ? modeEl.value : 'recipients',
+        recipients: recipEl ? recipEl.value : '',
+        label_name: labelEl ? labelEl.value : ''
       };
       post('email-manager/campaigns', payload).then(function (res) {
         msg(document.getElementById('campMsg'), res.message || '', !!res.success);

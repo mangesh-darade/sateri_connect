@@ -437,20 +437,11 @@ class EmailManager extends BaseController
         $name    = trim((string) ($input['name'] ?? ''));
         $subject = trim((string) ($input['subject'] ?? ''));
         $html    = (string) ($input['html_content'] ?? '');
-        $mode    = strtolower(trim((string) ($input['mode'] ?? 'recipients')));
+        $mode      = strtolower(trim((string) ($input['mode'] ?? 'recipients')));
         if (! in_array($mode, ['recipients', 'label'], true)) {
             $mode = 'recipients';
         }
-        $provider = (new SettingsService())->getEmailProvider();
-        if ($mode === 'label' && $provider !== SettingsService::EMAIL_PROVIDER_CHEERIO) {
-            return $this->jsonResponse(
-                false,
-                null,
-                'Label mode is only available when Cheerio Email API is active.',
-                ['mode' => 'Use recipients mode for SMTP/SendGrid.'],
-                422
-            );
-        }
+        $labelName = trim((string) ($input['label_name'] ?? ''));
 
         if ($name === '' || $subject === '') {
             return $this->jsonResponse(false, null, 'Name and subject are required.', [], 422);
@@ -476,6 +467,35 @@ class EmailManager extends BaseController
                 }
             }
             $recipients = array_values(array_unique($recipients));
+        }
+
+        // Auto-resolve contacts from customer group if recipients list is empty
+        if ($recipients === [] && $labelName !== '') {
+            $tagModel = model(\App\Models\TagModel::class);
+            $tagRow   = $tagModel->where('name', $labelName)->first();
+            if (! $tagRow && ctype_digit($labelName)) {
+                $tagRow = $tagModel->find((int) $labelName);
+            }
+            if ($tagRow) {
+                $groupContacts = model(\App\Models\ContactModel::class)
+                    ->select('contacts.email')
+                    ->join('contact_tags', 'contact_tags.contact_id = contacts.id')
+                    ->where('contact_tags.tag_id', (int) $tagRow['id'])
+                    ->where('contacts.email !=', '')
+                    ->where('contacts.email IS NOT NULL', null, false)
+                    ->findAll();
+                foreach ($groupContacts as $row) {
+                    $em = strtolower(trim((string) ($row['email'] ?? '')));
+                    if ($em !== '' && filter_var($em, FILTER_VALIDATE_EMAIL)) {
+                        $recipients[] = $em;
+                    }
+                }
+                $recipients = array_values(array_unique($recipients));
+            }
+        }
+
+        if ($recipients === [] && $mode !== 'label') {
+            return $this->jsonResponse(false, null, 'Please add at least one recipient email address or import a customer group.', [], 422);
         }
 
         if (count($recipients) > self::MAX_CAMPAIGN_RECIPIENTS) {

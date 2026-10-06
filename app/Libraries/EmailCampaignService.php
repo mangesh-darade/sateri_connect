@@ -37,11 +37,37 @@ class EmailCampaignService
 
         $mailer = service('emailProvider');
 
+        // Resolve contacts from customer group / label if mode is label or if recipients list is empty
+        $rawRecipients = is_array($camp['recipients'] ?? null) ? $camp['recipients'] : [];
+        if ($mode === 'label' || ($rawRecipients === [] && ! empty($camp['label_name']))) {
+            $labelName = trim((string) ($camp['label_name'] ?? ''));
+            if ($labelName !== '') {
+                $tagModel = model(\App\Models\TagModel::class);
+                $tagRow   = $tagModel->where('name', $labelName)->first();
+                if (! $tagRow && ctype_digit($labelName)) {
+                    $tagRow = $tagModel->find((int) $labelName);
+                }
+                if ($tagRow) {
+                    $groupContacts = model(\App\Models\ContactModel::class)
+                        ->select('contacts.email')
+                        ->join('contact_tags', 'contact_tags.contact_id = contacts.id')
+                        ->where('contact_tags.tag_id', (int) $tagRow['id'])
+                        ->where('contacts.email !=', '')
+                        ->where('contacts.email IS NOT NULL', null, false)
+                        ->findAll();
+                    foreach ($groupContacts as $row) {
+                        $em = strtolower(trim((string) ($row['email'] ?? '')));
+                        if ($em !== '' && filter_var($em, FILTER_VALIDATE_EMAIL)) {
+                            $rawRecipients[] = $em;
+                        }
+                    }
+                    $rawRecipients = array_values(array_unique($rawRecipients));
+                }
+            }
+        }
+
         // Filter out unsubscribed contacts
-        $rawRecipients = $camp['recipients'] ?? [];
-        $recipients = is_array($rawRecipients)
-            ? model(\App\Models\EmailUnsubscribeModel::class)->filterActiveRecipients($rawRecipients)
-            : [];
+        $recipients = model(\App\Models\EmailUnsubscribeModel::class)->filterActiveRecipients($rawRecipients);
 
         // Prepare unsubscribe link and merge tags
         $unsubUrl = site_url('emails/unsubscribe?cid=' . $id);
@@ -100,11 +126,13 @@ class EmailCampaignService
             }
             $result = $mailer->sendCampaign($campaignPayload);
         } else {
-            if ($mode === 'label') {
-                throw new RuntimeException('Label mode is only available for Cheerio provider.');
-            }
+            // For SMTP, Amazon SES, SendGrid:
             if ($recipients === []) {
-                throw new RuntimeException('No active recipients on this campaign (or all unsubscribed).');
+                $lbl = trim((string) ($camp['label_name'] ?? ''));
+                $msg = $lbl !== ''
+                    ? 'No contacts with valid email found in customer group / label "' . $lbl . '" (or all contacts unsubscribed).'
+                    : 'No active recipients on this campaign (or all unsubscribed).';
+                throw new RuntimeException($msg);
             }
             $result = $mailer->sendHtml($recipients, $subject, $html !== '' ? $html : '<p></p>', $options);
         }
