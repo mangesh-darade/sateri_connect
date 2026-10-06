@@ -237,8 +237,16 @@
 
     $('#btnChatContact').on('click', function () {
         if (!Chat.contactId) return;
-        Panel.load();
-        bootstrap.Offcanvas.getOrCreateInstance($canvas[0]).show();
+        var inst = bootstrap.Offcanvas.getOrCreateInstance($canvas[0], {
+            backdrop: false,
+            scroll: true
+        });
+        if ($canvas.hasClass('show')) {
+            inst.hide();
+        } else {
+            Panel.load();
+            inst.show();
+        }
     });
     $canvas.on('change', '[data-key]', function () { Panel.saveAttr($(this)); });
     $canvas.on('keydown', 'input[data-key]', function (e) {

@@ -2701,14 +2701,35 @@ body.layout-fixed .main-sidebar > .sidebar {
 .quick-reply-item:last-child { border-bottom: 0; }
 .quick-reply-item.active, .quick-reply-item:hover { background: #f4effe; }
 .quick-reply-item .qr-shortcut { font-family: var(--bs-font-monospace); font-size: .8rem; color: #8e53f7; }
-.quick-reply-item .qr-preview { display: block; font-size: .8rem; color: #6c757d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chat-contact-canvas { width: 340px; }
+.chat-contact-canvas {
+    width: 360px;
+    max-width: 90vw;
+    background-color: #fff;
+    box-shadow: -4px 0 25px rgba(0, 0, 0, 0.12);
+    border-left: 1px solid var(--border);
+    z-index: 1050;
+}
 .chat-contact-canvas .cc-section { margin-bottom: 1.25rem; }
 .chat-contact-canvas .cc-section-title { font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: #6c757d; margin-bottom: .5rem; }
 .chat-contact-canvas .cc-tag { display: inline-flex; align-items: center; gap: .25rem; padding: .15rem .5rem; border-radius: 999px; font-size: .78rem; margin: 0 .25rem .25rem 0; color: #fff; }
 .chat-contact-canvas .cc-tag button { border: 0; background: transparent; color: inherit; padding: 0; line-height: 1; opacity: .8; }
 .chat-contact-canvas .cc-attr { margin-bottom: .5rem; }
 .chat-contact-canvas .cc-attr label { font-size: .78rem; color: #6c757d; margin-bottom: .1rem; }
+
+/* Bootstrap 5 backdrop opacity fix (prevents black screen caused by AdminLTE/BS4 CSS variable clash) */
+.offcanvas-backdrop {
+    --bs-backdrop-opacity: 0.45;
+    background-color: #000 !important;
+}
+.offcanvas-backdrop.fade {
+    opacity: 0;
+}
+.offcanvas-backdrop.show {
+    opacity: 0.45 !important;
+}
+.modal-backdrop.show {
+    opacity: 0.5 !important;
+}
 .emoji-picker button {
     border: 0;
     background: transparent;

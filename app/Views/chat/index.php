@@ -352,6 +352,7 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
 </div>
 
 <div class="offcanvas offcanvas-end chat-contact-canvas" tabindex="-1" id="chatContactCanvas" aria-labelledby="chatContactCanvasTitle"
+     data-bs-backdrop="false" data-bs-scroll="true"
      data-can-edit="<?= $canSend ? '1' : '0' ?>">
     <div class="offcanvas-header border-bottom">
         <div class="min-w-0">
