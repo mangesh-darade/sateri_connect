@@ -12,6 +12,7 @@ $providerDetail = $providerDetail ?? '';
 $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
 $defaultCampaign = $defaultCampaign ?? 'app-direct';
 $campaigns = $campaigns ?? [];
+$emailCampaigns = $emailCampaigns ?? [];
 ?>
 <div class="form-shell form-shell-lg page-stack">
     <div class="card form-card" id="emailSingleCard"
@@ -30,10 +31,38 @@ $campaigns = $campaigns ?? [];
                                value="<?= esc(old('to') ?? $defaultTo) ?>" placeholder="name@example.com">
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label" for="emailCampaign">Campaign name</label>
-                        <input type="text" class="form-control" id="emailCampaign" name="campaign_name"
-                               value="<?= esc(old('campaign_name') ?? $defaultCampaign) ?>"
-                               placeholder="app-direct">
+                        <label class="form-label" for="emailCampaign">Campaign name <span class="text-muted fw-normal small">(Optional)</span></label>
+                        <?php 
+                            $selectedSingleCampaign = (string) (old('campaign_name') ?? $defaultCampaign ?? '');
+                            $isKnownSingle = $selectedSingleCampaign === '' || $selectedSingleCampaign === 'app-direct' 
+                                || in_array($selectedSingleCampaign, array_column($emailCampaigns ?? [], 'name'), true);
+                        ?>
+                        <select class="form-select" id="emailCampaign" name="campaign_name">
+                            <option value="">— Select Campaign (Optional) —</option>
+                            <option value="app-direct" <?= ($selectedSingleCampaign === 'app-direct') ? 'selected' : '' ?>>
+                                app-direct (Default)
+                            </option>
+                            <?php if (!empty($emailCampaigns)): ?>
+                                <optgroup label="Email Campaigns">
+                                    <?php foreach ($emailCampaigns as $ec): ?>
+                                        <?php 
+                                            $ecName = (string) ($ec['name'] ?? '');
+                                            if ($ecName === '' || $ecName === 'app-direct') continue;
+                                        ?>
+                                        <option value="<?= esc($ecName) ?>" <?= ($selectedSingleCampaign === $ecName) ? 'selected' : '' ?>>
+                                            <?= esc($ecName) ?><?= !empty($ec['status']) ? ' (' . esc(ucfirst($ec['status'])) . ')' : '' ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </optgroup>
+                            <?php endif; ?>
+                            <option value="__custom__" <?= (! $isKnownSingle && $selectedSingleCampaign !== '') ? 'selected' : '' ?>>
+                                + Enter Custom Campaign...
+                            </option>
+                        </select>
+                        <input type="text" class="form-control mt-1.5 <?= (! $isKnownSingle && $selectedSingleCampaign !== '') ? '' : 'd-none' ?>" 
+                               id="emailCampaignCustom" 
+                               placeholder="Type custom campaign name..."
+                               value="<?= (! $isKnownSingle) ? esc($selectedSingleCampaign) : '' ?>">
                         <div class="form-text">Used as analytics label (Cheerio / SendGrid).</div>
                     </div>
                     <div class="col-12">

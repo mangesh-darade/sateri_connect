@@ -15,6 +15,7 @@ $providerDetail = $providerDetail ?? '';
 $isCheerio = ! empty($isCheerio);
 $defaultCampaign = $defaultCampaign ?? 'app-direct';
 $campaigns = $campaigns ?? [];
+$emailCampaigns = $emailCampaigns ?? [];
 $customerGroups = $customerGroups ?? [];
 $contactsWithEmail = $contactsWithEmail ?? [];
 $maxRecipients = (int) ($maxRecipients ?? 100);
@@ -287,10 +288,39 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
                             <label class="form-label small fw-bold text-dark mb-1" for="bulkCampaign">
                                 Campaign Name <span class="text-muted fw-normal" style="font-size: 0.75rem;">(Optional)</span>
                             </label>
-                            <input type="text" class="form-control form-control-sm" id="bulkCampaign" name="campaign_name"
-                                   style="height: 38px; border-color: #cbd5e1; font-size: 0.85rem;"
-                                   value="<?= esc(old('campaign_name') ?? $defaultCampaign) ?>"
-                                   placeholder="e.g. newsletter-<?= date('M-Y') ?>">
+                            <?php 
+                                $selectedCampaign = (string) (old('campaign_name') ?? $defaultCampaign ?? '');
+                                $isKnownCampaign = $selectedCampaign === '' || $selectedCampaign === 'app-direct' 
+                                    || in_array($selectedCampaign, array_column($emailCampaigns ?? [], 'name'), true);
+                            ?>
+                            <select class="form-select form-select-sm" id="bulkCampaign" name="campaign_name"
+                                    style="height: 38px; border-color: #cbd5e1; font-size: 0.85rem;">
+                                <option value="">— Select Campaign (Optional) —</option>
+                                <option value="app-direct" <?= ($selectedCampaign === 'app-direct') ? 'selected' : '' ?>>
+                                    app-direct (Default)
+                                </option>
+                                <?php if (!empty($emailCampaigns)): ?>
+                                    <optgroup label="Email Campaigns">
+                                        <?php foreach ($emailCampaigns as $ec): ?>
+                                            <?php 
+                                                $ecName = (string) ($ec['name'] ?? '');
+                                                if ($ecName === '' || $ecName === 'app-direct') continue;
+                                            ?>
+                                            <option value="<?= esc($ecName) ?>" <?= ($selectedCampaign === $ecName) ? 'selected' : '' ?>>
+                                                <?= esc($ecName) ?><?= !empty($ec['status']) ? ' (' . esc(ucfirst($ec['status'])) . ')' : '' ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </optgroup>
+                                <?php endif; ?>
+                                <option value="__custom__" <?= (! $isKnownCampaign && $selectedCampaign !== '') ? 'selected' : '' ?>>
+                                    + Enter Custom Campaign...
+                                </option>
+                            </select>
+                            <input type="text" class="form-control form-control-sm mt-1.5 <?= (! $isKnownCampaign && $selectedCampaign !== '') ? '' : 'd-none' ?>" 
+                                   id="bulkCampaignCustom" 
+                                   placeholder="Type custom campaign name..."
+                                   value="<?= (! $isKnownCampaign) ? esc($selectedCampaign) : '' ?>"
+                                   style="height: 34px; border-color: #cbd5e1; font-size: 0.85rem;">
                         </div>
                         <div class="col-md-8">
                             <label class="form-label small fw-bold text-dark mb-1" for="bulkSubject">

@@ -260,6 +260,10 @@ class Emails extends BaseController
                 ->select('id, name, status')
                 ->orderBy('name', 'ASC')
                 ->findAll(200),
+            'emailCampaigns'  => model(\App\Models\EmailHtmlCampaignModel::class)
+                ->select('id, name, status')
+                ->orderBy('id', 'DESC')
+                ->findAll(100),
             'isCheerio'       => $provider === SettingsService::EMAIL_PROVIDER_CHEERIO,
             'isSendGrid'      => $provider === SettingsService::EMAIL_PROVIDER_SENDGRID,
             'isSmtp'          => $provider === SettingsService::EMAIL_PROVIDER_SMTP,

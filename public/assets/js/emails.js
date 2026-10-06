@@ -35,16 +35,28 @@
             return;
         }
 
+        $('#emailCampaign').on('change', function () {
+            if ($(this).val() === '__custom__') {
+                $('#emailCampaignCustom').removeClass('d-none').focus();
+            } else {
+                $('#emailCampaignCustom').addClass('d-none');
+            }
+        });
+
         $form.on('submit', function (e) {
             e.preventDefault();
             var $btn = $('#btnSendSingle').prop('disabled', true);
             var url = $card.data('send-url') || $form.attr('action');
+            var singleCamp = $('#emailCampaign').val() || '';
+            if (singleCamp === '__custom__') {
+                singleCamp = $.trim($('#emailCampaignCustom').val() || '');
+            }
             var payload = {
                 to: $.trim($('#emailTo').val() || ''),
                 subject: $.trim($('#emailSubject').val() || ''),
                 body: $('#emailBody').val() || '',
                 is_html: $('#emailIsHtml').is(':checked') ? 1 : 0,
-                campaign_name: $('#emailCampaign').val() || ''
+                campaign_name: singleCamp
             };
 
             postJson(url, payload)
@@ -351,6 +363,14 @@
             });
         });
 
+        $('#bulkCampaign').on('change', function () {
+            if ($(this).val() === '__custom__') {
+                $('#bulkCampaignCustom').removeClass('d-none').focus();
+            } else {
+                $('#bulkCampaignCustom').addClass('d-none');
+            }
+        });
+
         // ── Submit Form Handler ──────────────────────────────────
         $form.on('submit', function (e) {
             e.preventDefault();
@@ -372,12 +392,17 @@
                     if (id > 0) contactIds.push(id);
                 });
 
+                var bulkCamp = $('#bulkCampaign').val() || '';
+                if (bulkCamp === '__custom__') {
+                    bulkCamp = $.trim($('#bulkCampaignCustom').val() || '');
+                }
+
                 var payload = {
                     mode: mode,
                     subject: $.trim($('#bulkSubject').val() || ''),
                     body: $('#bulkBody').val() || '',
                     is_html: $('#bulkIsHtml').is(':checked') ? 1 : 0,
-                    campaign_name: $('#bulkCampaign').val() || '',
+                    campaign_name: bulkCamp,
                     recipients: $('#bulkRecipients').val() || '',
                     contact_ids: contactIds,
                     label_name: selectedLabel
