@@ -17,14 +17,6 @@ $defaultTo = $defaultTo ?? '';
 $isCheerio = ! empty($isCheerio);
 ?>
 <div class="page-list">
-    <?= view('emails/_provider_banner', [
-        'provider'       => $provider,
-        'providerLabel'  => $providerLabel,
-        'providerDetail' => $providerDetail,
-        'defaultTo'      => $defaultTo,
-        'mode'           => null,
-    ]) ?>
-
     <div class="launch-grid">
         <?php if (function_exists('can') && can('emails.send')): ?>
             <div class="card launch-card">

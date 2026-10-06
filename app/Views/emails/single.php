@@ -14,14 +14,6 @@ $defaultCampaign = $defaultCampaign ?? 'app-direct';
 $campaigns = $campaigns ?? [];
 ?>
 <div class="form-shell form-shell-lg page-stack">
-    <?= view('emails/_provider_banner', [
-        'provider'       => $provider,
-        'providerLabel'  => $providerLabel,
-        'providerDetail' => $providerDetail,
-        'defaultTo'      => $defaultTo,
-        'mode'           => 'single',
-    ]) ?>
-
     <div class="card form-card" id="emailSingleCard"
          data-send-url="<?= site_url('emails/send') ?>"
          data-provider="<?= esc($provider) ?>">

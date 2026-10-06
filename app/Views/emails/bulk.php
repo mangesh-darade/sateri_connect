@@ -1,7 +1,10 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('header_actions') ?>
-<a href="<?= site_url('emails') ?>" class="btn btn-sm btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i> Back</a>
+<a href="<?= site_url('emails') ?>" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm">
+    <i class="fas fa-arrow-left"></i>
+    <span>Back to Emails</span>
+</a>
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
@@ -12,118 +15,368 @@ $providerDetail = $providerDetail ?? '';
 $isCheerio = ! empty($isCheerio);
 $defaultCampaign = $defaultCampaign ?? 'app-direct';
 $campaigns = $campaigns ?? [];
-$tags = $tags ?? [];
+$customerGroups = $customerGroups ?? [];
 $contactsWithEmail = $contactsWithEmail ?? [];
 $maxRecipients = (int) ($maxRecipients ?? 100);
 $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
 ?>
-<div class="form-shell form-shell-lg page-stack">
-    <?= view('emails/_provider_banner', [
-        'provider'       => $provider,
-        'providerLabel'  => $providerLabel,
-        'providerDetail' => $providerDetail,
-        'defaultTo'      => $defaultTo,
-        'mode'           => 'bulk',
-    ]) ?>
 
-    <div class="card form-card" id="emailBulkCard"
+<div class="composer-container w-100">
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden" id="emailBulkCard"
          data-send-url="<?= site_url('emails/bulk') ?>"
          data-provider="<?= esc($provider) ?>"
-         data-max="<?= $maxRecipients ?>">
+         data-max="<?= $maxRecipients ?>"
+         style="background: #ffffff; border: 1px solid #e2e8f0 !important;">
+
         <form id="emailBulkForm" method="post" action="<?= site_url('emails/bulk') ?>">
             <?= csrf_field() ?>
-            <div class="card-body">
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                    <span class="badge text-bg-dark">Send via <?= esc($providerLabel) ?></span>
-                </div>
 
-                <div class="mb-3">
-                    <label class="form-label d-block">Audience mode</label>
-                    <div class="btn-group" role="group">
-                        <input type="radio" class="btn-check" name="mode" id="modeRecipients" value="recipients" checked autocomplete="off">
-                        <label class="btn btn-outline-secondary" for="modeRecipients">Recipients list</label>
-                        <?php if ($isCheerio): ?>
-                        <input type="radio" class="btn-check" name="mode" id="modeLabel" value="label" autocomplete="off">
-                        <label class="btn btn-outline-secondary" for="modeLabel">Cheerio label</label>
-                        <?php endif; ?>
+            <!-- Top Header Strip: Clean & Modern -->
+            <div class="px-4 py-3 bg-white border-bottom d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-3 d-flex align-items-center justify-content-center text-white shadow-sm"
+                         style="width: 38px; height: 38px; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);">
+                        <i class="fas fa-paper-plane" style="font-size: 0.95rem;"></i>
                     </div>
-                </div>
-
-                <div id="bulkRecipientsPanel" class="row g-3 mb-1">
-                    <div class="col-md-6">
-                        <label class="form-label" for="bulkRecipients">Paste emails</label>
-                        <textarea class="form-control font-monospace" id="bulkRecipients" name="recipients" rows="6"
-                                  placeholder="name@example.com&#10;another@example.com"><?= esc(old('recipients') ?? '') ?></textarea>
-                        <div class="form-text">Comma, space, or new-line separated. Max <?= $maxRecipients ?>.</div>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label" for="bulkContacts">Or pick contacts with email</label>
-                        <select class="form-select" id="bulkContacts" name="contact_ids[]" multiple size="8">
-                            <?php foreach ($contactsWithEmail as $c): ?>
-                                <option value="<?= (int) $c['id'] ?>"><?= esc($c['name'] ?: 'Contact') ?> — <?= esc($c['email']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <div class="form-text"><?= count($contactsWithEmail) ?> contact(s) with email shown (first 300).</div>
-                    </div>
-                </div>
-
-                <?php if ($isCheerio): ?>
-                <div id="bulkLabelPanel" class="row g-3 mb-1 d-none">
-                    <div class="col-md-6">
-                        <label class="form-label" for="bulkLabelName">Cheerio label name <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="bulkLabelName" name="label_name" list="tagNameList"
-                               placeholder="Exact label name in Cheerio" value="<?= esc(old('label_name') ?? '') ?>">
-                        <datalist id="tagNameList">
-                            <?php foreach ($tags as $tag): ?>
-                                <option value="<?= esc($tag['name']) ?>"></option>
-                            <?php endforeach; ?>
-                        </datalist>
-                        <div class="form-text">Sends to everyone in that Cheerio label (contact group) in one request.</div>
-                    </div>
-                </div>
-                <?php endif; ?>
-
-                <div class="row g-3 mt-1">
-                    <div class="col-md-6">
-                        <label class="form-label" for="bulkCampaign">Campaign name</label>
-                        <input type="text" class="form-control" id="bulkCampaign" name="campaign_name"
-                               value="<?= esc(old('campaign_name') ?? $defaultCampaign) ?>"
-                               placeholder="bulk-<?= esc(date('Ymd-His')) ?>">
-                        <div class="form-text">Leave blank to automatically generate a campaign name.</div>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label" for="bulkSubject">Subject <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="bulkSubject" name="subject" required maxlength="250"
-                               value="<?= esc(old('subject') ?? '') ?>">
-                    </div>
-                    <div class="col-12">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <label class="form-label mb-0" for="bulkBody">Message <span class="text-danger">*</span></label>
-                            <div class="form-check form-switch mb-0">
-                                <input class="form-check-input" type="checkbox" role="switch" id="bulkIsHtml" name="is_html" value="1">
-                                <label class="form-check-label" for="bulkIsHtml">HTML</label>
-                            </div>
+                    <div>
+                        <div class="d-flex align-items-center gap-2">
+                            <h5 class="mb-0 fw-bold text-dark" style="font-size: 1.05rem; letter-spacing: -0.2px;">Bulk Email Dispatcher</h5>
+                            <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle px-2 py-1" style="font-size: 0.7rem; font-weight: 600;">
+                                <i class="fas fa-circle me-1" style="font-size: 0.45rem;"></i> <?= esc($providerLabel) ?>
+                            </span>
                         </div>
-                        <textarea class="form-control" id="bulkBody" name="body" rows="10" required><?= esc(old('body') ?? '') ?></textarea>
+                        <p class="text-muted small mb-0" style="font-size: 0.78rem;">Broadcast custom email campaigns to multiple contacts or customer groups.</p>
                     </div>
+                </div>
+
+                <div class="d-flex align-items-center">
+                    <span class="badge bg-slate-50 text-secondary border px-3 py-2 rounded-pill d-inline-flex align-items-center gap-1" style="font-size: 0.75rem; background: #f8fafc;">
+                        <i class="fas fa-layer-group text-primary"></i>
+                        <span>Max <strong><?= $maxRecipients ?></strong> / batch</span>
+                    </span>
                 </div>
             </div>
-            <div class="card-footer d-flex flex-wrap gap-2">
-                <a href="<?= site_url('emails') ?>" class="btn btn-outline-secondary">Cancel</a>
-                <button type="submit" class="btn btn-wa" id="btnSendBulk">
-                    <i class="fas fa-mail-bulk me-1"></i> Send bulk via <?= esc($providerLabel) ?>
+
+            <div class="p-4">
+                <!-- Target Audience Mode Selector (Segmented Pill Switch) -->
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label text-uppercase fw-bold text-muted mb-0" style="font-size: 0.72rem; letter-spacing: 0.6px;">
+                            Step 1 · Target Audience
+                        </label>
+                        <span class="text-muted small" style="font-size: 0.74rem;">Choose how to select recipients</span>
+                    </div>
+
+                    <div class="audience-pill-bar d-inline-flex p-1 rounded-3 border" style="background: #f1f5f9; border-color: #e2e8f0 !important;">
+                        <input type="radio" class="btn-check" name="mode" id="modeRecipients" value="recipients" checked autocomplete="off">
+                        <label class="btn btn-sm rounded-3 px-3 py-1 fw-semibold d-inline-flex align-items-center gap-2 audience-pill-btn" for="modeRecipients">
+                            <i class="fas fa-users"></i>
+                            <span>Pick Contacts / Paste Emails</span>
+                        </label>
+
+                        <input type="radio" class="btn-check" name="mode" id="modeLabel" value="label" autocomplete="off">
+                        <label class="btn btn-sm rounded-3 px-3 py-1 fw-semibold d-inline-flex align-items-center gap-2 audience-pill-btn" for="modeLabel">
+                            <i class="fas fa-tags"></i>
+                            <span>Customer Group / Label</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Custom List / Pick Contacts Panel (Balanced 2-Column Split) -->
+                <div id="bulkRecipientsPanel" class="row g-3 mb-4">
+                    <!-- Left: Paste Emails -->
+                    <div class="col-md-5">
+                        <div class="h-100 p-3 rounded-3 border bg-white d-flex flex-column" style="border-color: #e2e8f0 !important; background: #fdfdfd;">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label fw-bold small text-dark mb-0 d-flex align-items-center gap-1" for="bulkRecipients">
+                                    <i class="fas fa-keyboard text-primary"></i>
+                                    <span>Paste Email List</span>
+                                </label>
+                                <span class="badge rounded-pill bg-light text-muted border px-2" style="font-size: 0.68rem;">Max <?= $maxRecipients ?></span>
+                            </div>
+
+                            <textarea class="form-control font-monospace border flex-grow-1" id="bulkRecipients" name="recipients" rows="7"
+                                      style="min-height: 180px; font-size: 0.8rem; background: #fafbfc; border-color: #cbd5e1; resize: vertical; line-height: 1.5;"
+                                      placeholder="name@company.com&#10;client@domain.in&#10;user@domain.org"><?= esc(old('recipients') ?? '') ?></textarea>
+
+                            <div class="mt-2 d-flex justify-content-between align-items-center text-muted" style="font-size: 0.72rem;">
+                                <span><i class="fas fa-info-circle me-1"></i> Comma or line separated</span>
+                                <span id="pastedCount" class="fw-semibold text-primary"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Pick from CRM Contacts -->
+                    <div class="col-md-7">
+                        <div class="h-100 p-3 rounded-3 border bg-white d-flex flex-column" style="border-color: #e2e8f0 !important;">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label fw-bold small text-dark mb-0 d-flex align-items-center gap-1">
+                                    <i class="fas fa-address-book text-success"></i>
+                                    <span>Pick from CRM Contacts</span>
+                                </label>
+                                <span class="badge rounded-pill bg-primary text-white px-2 py-1" id="bulkSelectedBadge" style="font-size: 0.72rem; font-weight: 600;">
+                                    0 selected
+                                </span>
+                            </div>
+
+                            <!-- Filter & Search Row -->
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-light text-muted border-end-0 py-1 px-2" style="border-color: #cbd5e1;"><i class="fas fa-search" style="font-size: 0.72rem;"></i></span>
+                                        <input type="text" id="bulkContactSearch" class="form-control form-control-sm border-start-0 py-1" style="font-size: 0.78rem; border-color: #cbd5e1;" placeholder="Search name/email...">
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <select id="bulkFilterGroup" class="form-select form-select-sm py-1" style="font-size: 0.78rem; border-color: #cbd5e1;">
+                                        <option value="">All Groups (<?= count($contactsWithEmail) ?>)</option>
+                                        <?php foreach ($customerGroups as $cg): ?>
+                                            <option value="<?= (int) $cg['id'] ?>"><?= esc($cg['name']) ?> (<?= (int) ($cg['contact_count'] ?? 0) ?>)</option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Select All & Action Strip -->
+                            <div class="d-flex justify-content-between align-items-center bg-light px-2 py-1 rounded-2 mb-2 border" style="font-size: 0.75rem; border-color: #e2e8f0 !important;">
+                                <div class="form-check mb-0 d-flex align-items-center">
+                                    <input class="form-check-input me-1 mt-0" type="checkbox" id="bulkCheckAll">
+                                    <label class="form-check-label fw-semibold text-dark cursor-pointer mb-0" for="bulkCheckAll">
+                                        Select All (<span id="bulkVisibleCount"><?= count($contactsWithEmail) ?></span>)
+                                    </label>
+                                </div>
+                                <div class="d-flex gap-1">
+                                    <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 fw-medium" id="btnSelectFiltered" title="Select visible contacts">
+                                        Select Visible
+                                    </button>
+                                    <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 fw-medium" id="btnClearSelection" title="Clear selection">
+                                        Clear
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Scrollable Contact List -->
+                            <div class="border rounded-2 p-0 overflow-y-auto bg-white flex-grow-1" id="bulkContactList" style="height: 125px; border-color: #e2e8f0 !important;">
+                                <?php if (empty($contactsWithEmail)): ?>
+                                    <div class="text-center py-4 text-muted small">
+                                        <i class="fas fa-user-slash opacity-25 d-block mb-1 fs-5"></i>
+                                        No contacts with email found.
+                                    </div>
+                                <?php else: ?>
+                                    <?php foreach ($contactsWithEmail as $c): ?>
+                                        <label class="bulk-contact-row d-flex align-items-center justify-content-between px-2 py-1 border-bottom cursor-pointer text-decoration-none m-0"
+                                               data-id="<?= (int) $c['id'] ?>"
+                                               data-name="<?= esc(strtolower($c['name'] ?? '')) ?>"
+                                               data-email="<?= esc(strtolower($c['email'])) ?>"
+                                               data-tags='<?= esc(json_encode($c['tag_ids'] ?? []), 'attr') ?>'>
+                                            <div class="d-flex align-items-center gap-2 overflow-hidden w-100">
+                                                <input class="form-check-input bulk-contact-cb flex-shrink-0 mt-0" type="checkbox"
+                                                       value="<?= (int) $c['id'] ?>" data-email="<?= esc($c['email']) ?>">
+                                                <div class="rounded-circle text-primary fw-bold d-flex align-items-center justify-content-center flex-shrink-0"
+                                                     style="width: 22px; height: 22px; font-size: 0.65rem; background: #e0e7ff; color: #4338ca;">
+                                                    <?= esc(strtoupper(substr($c['name'] ?: 'C', 0, 1))) ?>
+                                                </div>
+                                                <div class="text-truncate flex-grow-1" style="min-width: 0;">
+                                                    <span class="fw-semibold text-dark small text-truncate d-inline-block" style="max-width: 280px; line-height: 1.2; font-size: 0.78rem;">
+                                                        <?= esc($c['name'] ?: 'Contact') ?>
+                                                    </span>
+                                                    <span class="text-muted font-monospace ms-1 small text-truncate" style="font-size: 0.72rem;">
+                                                        <?= esc($c['email']) ?>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </label>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </div>
+
+                            <!-- Hidden multi-select kept for form serialization -->
+                            <select class="d-none" id="bulkContacts" name="contact_ids[]" multiple>
+                                <?php foreach ($contactsWithEmail as $c): ?>
+                                    <option value="<?= (int) $c['id'] ?>"><?= esc($c['email']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+
+                            <div class="d-flex justify-content-between align-items-center mt-2 text-muted" style="font-size: 0.7rem;">
+                                <span><i class="fas fa-users text-primary me-1"></i> <?= count($contactsWithEmail) ?> total contacts in CRM</span>
+                                <span id="bulkSearchStatus" class="fw-semibold text-primary"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Customer Group / Label Panel (Sleek Card & Perfect Alignment) -->
+                <div id="bulkLabelPanel" class="rounded-3 p-3 mb-4 d-none border" style="background: #f8fafc; border-color: #cbd5e1 !important;">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <div class="rounded-circle bg-success-subtle text-success d-flex align-items-center justify-content-center" style="width: 26px; height: 26px;">
+                            <i class="fas fa-tags" style="font-size: 0.75rem;"></i>
+                        </div>
+                        <div>
+                            <span class="fw-bold text-dark small">Broadcast by Customer Group / Label</span>
+                            <span class="text-muted small ms-1" style="font-size: 0.74rem;">— sends automatically to all contacts assigned this group.</span>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 align-items-end pt-1">
+                        <div class="col-md-7">
+                            <label class="form-label small fw-bold text-dark mb-1" for="bulkLabelSelect">
+                                Select Target Customer Group <span class="text-danger">*</span>
+                            </label>
+                            <select class="form-select form-select-sm" id="bulkLabelSelect" name="label_name" style="height: 36px; border-color: #cbd5e1; font-size: 0.85rem;">
+                                <option value="">— Choose a Customer Group —</option>
+                                <?php foreach ($customerGroups as $cg): ?>
+                                    <option value="<?= esc($cg['name']) ?>" data-id="<?= (int) $cg['id'] ?>" data-count="<?= (int) ($cg['contact_count'] ?? 0) ?>">
+                                        <?= esc($cg['name']) ?> (<?= (int) ($cg['contact_count'] ?? 0) ?> contacts)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-5">
+                            <button type="button" class="btn btn-outline-primary btn-sm w-100 d-inline-flex align-items-center justify-content-center gap-1 fw-semibold"
+                                    id="btnLoadGroupIntoRecipients" style="height: 36px; font-size: 0.82rem;">
+                                <i class="fas fa-cloud-arrow-down"></i>
+                                <span>Load Contacts into Custom List</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Campaign & Subject Fields (Compact 2-Column Row) -->
+                <div class="pt-3 border-top mb-3" style="border-color: #e2e8f0 !important;">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label text-uppercase fw-bold text-muted mb-0" style="font-size: 0.72rem; letter-spacing: 0.6px;">
+                            Step 2 · Message Details
+                        </label>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold text-dark mb-1" for="bulkCampaign">
+                                Campaign Name <span class="text-muted fw-normal" style="font-size: 0.75rem;">(Optional)</span>
+                            </label>
+                            <input type="text" class="form-control form-control-sm" id="bulkCampaign" name="campaign_name"
+                                   style="height: 38px; border-color: #cbd5e1; font-size: 0.85rem;"
+                                   value="<?= esc(old('campaign_name') ?? $defaultCampaign) ?>"
+                                   placeholder="e.g. newsletter-<?= date('M-Y') ?>">
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small fw-bold text-dark mb-1" for="bulkSubject">
+                                Subject Line <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" class="form-control form-control-sm" id="bulkSubject" name="subject" required maxlength="250"
+                                   style="height: 38px; border-color: #cbd5e1; font-size: 0.88rem;"
+                                   value="<?= esc(old('subject') ?? '') ?>" placeholder="e.g. Special Announcement for Our Valued Clients">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Message Body with Clean Tag Inserts & Switch -->
+                <div class="mb-2">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <label class="form-label small fw-bold text-dark mb-0" for="bulkBody">
+                                Message Body <span class="text-danger">*</span>
+                            </label>
+                            <span class="text-muted small ms-1" style="font-size: 0.75rem;">Insert tags:</span>
+                            <button type="button" class="btn btn-xs btn-outline-secondary js-insert-bulk-tag fw-mono" data-tag="{{name}}" style="font-size: 0.72rem; font-family: monospace;">{{name}}</button>
+                            <button type="button" class="btn btn-xs btn-outline-secondary js-insert-bulk-tag fw-mono" data-tag="{{email}}" style="font-size: 0.72rem; font-family: monospace;">{{email}}</button>
+                        </div>
+                        <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
+                            <input class="form-check-input mt-0 cursor-pointer" type="checkbox" role="switch" id="bulkIsHtml" name="is_html" value="1">
+                            <label class="form-check-label small fw-semibold text-secondary cursor-pointer" for="bulkIsHtml" style="font-size: 0.78rem;">HTML Format</label>
+                        </div>
+                    </div>
+
+                    <textarea class="form-control font-monospace border rounded-3 p-3" id="bulkBody" name="body" rows="7" required
+                              style="min-height: 190px; font-size: 0.85rem; background: #ffffff; border-color: #cbd5e1; line-height: 1.55;"
+                              placeholder="Write your email body or HTML layout here…"><?= esc(old('body') ?? '') ?></textarea>
+                </div>
+            </div>
+
+            <!-- Card Footer: Clean Action Bar with Aligned Buttons -->
+            <div class="px-4 py-3 bg-light border-top d-flex flex-wrap justify-content-between align-items-center gap-2" style="border-color: #e2e8f0 !important; background: #f8fafc !important;">
+                <div class="d-flex align-items-center gap-2">
+                    <a href="<?= site_url('emails') ?>" class="btn btn-sm btn-outline-secondary px-3" style="font-size: 0.82rem;">Cancel</a>
+                    <button type="reset" class="btn btn-sm btn-link text-muted px-2 text-decoration-none" style="font-size: 0.82rem;">Reset Form</button>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm px-4 py-2 fw-semibold shadow-sm d-inline-flex align-items-center gap-2" id="btnSendBulk" style="font-size: 0.85rem; border-radius: 6px;">
+                    <i class="fas fa-paper-plane"></i>
+                    <span>Send Bulk Email via <?= esc($providerLabel) ?></span>
                 </button>
             </div>
         </form>
-        <div id="emailBulkResult" class="px-3 pb-3"></div>
+
+        <div id="emailBulkResult" class="px-4 pb-3"></div>
     </div>
 </div>
 <?= $this->endSection() ?>
 
 <?= $this->section('styles') ?>
 <link rel="stylesheet" href="<?= asset_url('assets/css/emails.css') ?>">
+<style>
+.audience-pill-bar {
+    gap: 4px;
+}
+.audience-pill-btn {
+    color: #64748b;
+    border: 1px solid transparent;
+    transition: all 0.15s ease-in-out;
+    font-size: 0.82rem;
+}
+.audience-pill-btn:hover {
+    color: #1e293b;
+    background-color: rgba(255, 255, 255, 0.6);
+}
+.audience-pill-bar .btn-check:checked + .audience-pill-btn {
+    background-color: #ffffff !important;
+    color: #2563eb !important;
+    border: 1px solid #cbd5e1 !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+}
+.bulk-contact-row {
+    transition: background-color 0.12s ease;
+}
+.bulk-contact-row:hover {
+    background-color: #f8fafc;
+}
+.bulk-contact-row.is-selected {
+    background-color: #eff6ff;
+}
+.btn-xs {
+    padding: 0.15rem 0.4rem;
+    font-size: 0.72rem;
+    line-height: 1.2;
+    border-radius: 0.25rem;
+}
+.cursor-pointer {
+    cursor: pointer;
+}
+</style>
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
 <script src="<?= asset_url('assets/js/emails.js') ?>"></script>
+<script>
+$(function () {
+    // Quick tag insertion for bulk email body
+    $(document).on('click', '.js-insert-bulk-tag', function () {
+        var tag = $(this).data('tag');
+        var textarea = document.getElementById('bulkBody');
+        if (!textarea) return;
+        var start = textarea.selectionStart;
+        var end = textarea.selectionEnd;
+        var text = textarea.value;
+        textarea.value = text.substring(0, start) + tag + text.substring(end);
+        textarea.focus();
+        textarea.selectionStart = textarea.selectionEnd = start + tag.length;
+    });
+
+    // Update pasted email count in real time
+    $('#bulkRecipients').on('input', function () {
+        var text = $.trim($(this).val() || '');
+        var count = text ? text.split(/[\s,;]+/).filter(Boolean).length : 0;
+        $('#pastedCount').text(count > 0 ? count + ' email(s) detected' : '');
+    }).trigger('input');
+});
+</script>
 <?= $this->endSection() ?>

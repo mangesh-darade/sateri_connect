@@ -123,3 +123,24 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* Bulk Contact Picker Checkbox UI */
+.bulk-contact-row {
+    transition: background-color 0.15s ease-in-out;
+    user-select: none;
+}
+.bulk-contact-row:hover {
+    background-color: #f8fafc;
+}
+.bulk-contact-row.is-selected {
+    background-color: #eff6ff;
+}
+.bulk-contact-row:last-child {
+    border-bottom: none !important;
+}
+.avatar-circle-sm {
+    width: 28px;
+    height: 28px;
+    font-size: 0.75rem;
+}
+

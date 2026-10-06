@@ -76,6 +76,8 @@
             return;
         }
 
+        var base = (window.APP && window.APP.baseUrl) ? window.APP.baseUrl.replace(/\/$/, '') : '';
+
         function syncMode() {
             var mode = $('input[name="mode"]:checked').val() || 'recipients';
             if (mode === 'label') {
@@ -90,20 +92,178 @@
         $form.on('change', 'input[name="mode"]', syncMode);
         syncMode();
 
+        // ── Checkbox Multi-Select Picker ────────────────────────
+        var $contactList = $('#bulkContactList');
+        var $checkAll = $('#bulkCheckAll');
+        var $selectedBadge = $('#bulkSelectedBadge');
+        var $hiddenSelect = $('#bulkContacts');
+        var $searchInput = $('#bulkContactSearch');
+        var $groupFilter = $('#bulkFilterGroup');
+
+        function updateSelectedState() {
+            var $checked = $contactList.find('.bulk-contact-cb:checked');
+            var count = $checked.length;
+            $selectedBadge.text(count + ' selected');
+
+            // Sync hidden select
+            var checkedIds = [];
+            $checked.each(function () {
+                checkedIds.push($(this).val());
+            });
+            $hiddenSelect.val(checkedIds);
+
+            // Sync select all checkbox state
+            var $visibleCbs = $contactList.find('.bulk-contact-row:visible .bulk-contact-cb');
+            var visibleCount = $visibleCbs.length;
+            var visibleChecked = $visibleCbs.filter(':checked').length;
+
+            if (visibleCount > 0 && visibleChecked === visibleCount) {
+                $checkAll.prop('checked', true).prop('indeterminate', false);
+            } else if (visibleChecked > 0) {
+                $checkAll.prop('checked', false).prop('indeterminate', true);
+            } else {
+                $checkAll.prop('checked', false).prop('indeterminate', false);
+            }
+        }
+
+        // Row checkbox toggle
+        $contactList.on('change', '.bulk-contact-cb', function () {
+            var $cb = $(this);
+            $cb.closest('.bulk-contact-row').toggleClass('is-selected', $cb.is(':checked'));
+            updateSelectedState();
+        });
+
+        // Select All toggle
+        $checkAll.on('change', function () {
+            var isChecked = $(this).is(':checked');
+            $contactList.find('.bulk-contact-row:visible').each(function () {
+                var $row = $(this);
+                var $cb = $row.find('.bulk-contact-cb');
+                $cb.prop('checked', isChecked);
+                $row.toggleClass('is-selected', isChecked);
+            });
+            updateSelectedState();
+        });
+
+        // Filter contacts by Search & Group
+        function applyFilters() {
+            var q = $.trim($searchInput.val() || '').toLowerCase();
+            var groupId = parseInt($groupFilter.val(), 10) || 0;
+            var visible = 0;
+
+            $contactList.find('.bulk-contact-row').each(function () {
+                var $row = $(this);
+                var name = $row.data('name') || '';
+                var email = $row.data('email') || '';
+                var tags = $row.data('tags') || [];
+
+                var matchesQuery = !q || name.indexOf(q) !== -1 || email.indexOf(q) !== -1;
+                var matchesGroup = !groupId || (Array.isArray(tags) && tags.indexOf(groupId) !== -1);
+
+                if (matchesQuery && matchesGroup) {
+                    $row.removeClass('d-none');
+                    visible++;
+                } else {
+                    $row.addClass('d-none');
+                }
+            });
+
+            $('#bulkVisibleCount').text(visible);
+            $('#bulkSearchStatus').text(q || groupId ? visible + ' matching' : '');
+            updateSelectedState();
+        }
+
+        $searchInput.on('input', applyFilters);
+        $groupFilter.on('change', applyFilters);
+
+        // Select Visible button
+        $('#btnSelectFiltered').on('click', function () {
+            $contactList.find('.bulk-contact-row:visible').each(function () {
+                var $row = $(this);
+                $row.find('.bulk-contact-cb').prop('checked', true);
+                $row.addClass('is-selected');
+            });
+            updateSelectedState();
+        });
+
+        // Clear Selection button
+        $('#btnClearSelection').on('click', function () {
+            $contactList.find('.bulk-contact-cb').prop('checked', false);
+            $contactList.find('.bulk-contact-row').removeClass('is-selected');
+            $checkAll.prop('checked', false).prop('indeterminate', false);
+            updateSelectedState();
+        });
+
+        // Load Group Into Custom List & Review button
+        $('#btnLoadGroupIntoRecipients').on('click', function () {
+            var $opt = $('#bulkLabelSelect option:selected');
+            var groupId = $opt.data('id');
+            var groupName = $opt.val();
+            if (!groupId || !groupName) {
+                alert('Please select a customer group first.');
+                return;
+            }
+
+            var $btn = $(this).prop('disabled', true);
+            fetch(base + '/email-manager/group-emails/' + encodeURIComponent(groupId), {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                $btn.prop('disabled', false);
+                if (!res.success) {
+                    alert(res.message || 'Error loading group contacts.');
+                    return;
+                }
+                var emails = (res.data && res.data.emails) || [];
+                if (!emails.length) {
+                    alert('No active contacts with valid email in this group.');
+                    return;
+                }
+
+                // Switch back to custom recipients mode
+                $('#modeRecipients').prop('checked', true).trigger('change');
+
+                // Merge into recipients textarea
+                var current = $.trim($('#bulkRecipients').val() || '');
+                var existing = current ? current.split(/[\s,;]+/).filter(Boolean) : [];
+                var merged = Array.from(new Set(existing.concat(emails)));
+                $('#bulkRecipients').val(merged.join('\n'));
+
+                // Also select them in the group filter dropdown and check them in list
+                $groupFilter.val(groupId).trigger('change');
+                $('#btnSelectFiltered').trigger('click');
+
+                if (window.APP && APP.toast) {
+                    APP.toast('Loaded ' + emails.length + ' contacts from ' + groupName, 'success');
+                }
+            })
+            .catch(function (err) {
+                $btn.prop('disabled', false);
+                alert(err.message || 'Network error.');
+            });
+        });
+
+        // ── Submit Form Handler ──────────────────────────────────
         $form.on('submit', function (e) {
             e.preventDefault();
 
             var mode = $('input[name="mode"]:checked').val() || 'recipients';
+            var selectedLabel = $.trim($('#bulkLabelSelect').val() || $('#bulkLabelName').val() || '');
             var confirmText = mode === 'label'
-                ? 'Send this Cheerio label campaign now?'
+                ? 'Send this email to all contacts in group "' + selectedLabel + '" now?'
                 : 'Send this bulk email now?';
 
             var proceed = function () {
                 var $btn = $('#btnSendBulk').prop('disabled', true);
                 var url = $card.data('send-url') || $form.attr('action');
-                var contactIds = ($('#bulkContacts').val() || []).map(function (v) {
-                    return parseInt(v, 10);
-                }).filter(Boolean);
+
+                // Collect contact IDs from checked checkboxes
+                var contactIds = [];
+                $contactList.find('.bulk-contact-cb:checked').each(function () {
+                    var id = parseInt($(this).val(), 10);
+                    if (id > 0) contactIds.push(id);
+                });
 
                 var payload = {
                     mode: mode,
@@ -113,7 +273,7 @@
                     campaign_name: $('#bulkCampaign').val() || '',
                     recipients: $('#bulkRecipients').val() || '',
                     contact_ids: contactIds,
-                    label_name: $.trim($('#bulkLabelName').val() || '')
+                    label_name: selectedLabel
                 };
 
                 postJson(url, payload)
