@@ -389,6 +389,7 @@ $routes->options('api/v1/(:any)', static function () {
 $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1', 'filter' => 'apiAuth'], static function ($routes) {
     // Customer Contacts
     $routes->post('contacts/upsert', 'ContactsController::upsert');
+    $routes->post('contacts/(:segment)/consent', 'ContactsController::consent/$1');
     $routes->get('contacts/search', 'ContactsController::search');
     $routes->get('contacts/(:segment)', 'ContactsController::show/$1');
 

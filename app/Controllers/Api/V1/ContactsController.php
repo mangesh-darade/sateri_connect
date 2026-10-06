@@ -181,6 +181,29 @@ class ContactsController extends BaseV1Controller
                 log_message('error', 'Automation trigger failed on contact upsert: ' . $e->getMessage());
             }
 
+            // Handle WhatsApp Consent (Opt-in / Opt-out)
+            $consentService = service('whatsAppConsent');
+            if (array_key_exists('opt_in', $input) || array_key_exists('wa_opt_in', $input)) {
+                $rawOptIn = $input['opt_in'] ?? $input['wa_opt_in'];
+                $shouldOptIn = filter_var($rawOptIn, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+                if ($shouldOptIn === null && is_numeric($rawOptIn)) {
+                    $shouldOptIn = ((int) $rawOptIn) === 1;
+                }
+
+                $source = (string) ($input['opt_in_source'] ?? $input['source'] ?? 'api');
+
+                if ($shouldOptIn === true) {
+                    $consentService->optIn($contactId, $source);
+                } elseif ($shouldOptIn === false) {
+                    $consentService->optOut($contactId, $source);
+                }
+            } elseif ($wasCreated && ! empty($input['opt_in_source'])) {
+                $consentService->optIn($contactId, (string) $input['opt_in_source']);
+            }
+
+            // Reload fresh contact state after consent changes
+            $contact = $contactModel->find($contactId) ?? $contact;
+
             $currentTags = model(TagModel::class)->getForContact($contactId);
 
             $responseData = [
@@ -189,6 +212,10 @@ class ContactsController extends BaseV1Controller
                 'name'          => $contact['name'] ?? '',
                 'email'         => $contact['email'] ?? '',
                 'status'        => $contact['status'] ?? 'active',
+                'opt_in'        => (int) ($contact['wa_opt_in'] ?? 0) === 1,
+                'opt_in_source' => $contact['wa_opt_in_source'] ?? null,
+                'opt_in_at'     => $contact['wa_opt_in_at'] ?? null,
+                'is_opted_out'  => ! empty($contact['wa_opted_out_at']),
                 'tags'          => array_column($currentTags, 'name'),
                 'custom_fields' => ! empty($contact['custom_fields']) ? (is_string($contact['custom_fields']) ? json_decode($contact['custom_fields'], true) : $contact['custom_fields']) : (object) [],
                 'created_at'    => $contact['created_at'] ?? date('Y-m-d H:i:s'),
@@ -242,6 +269,11 @@ class ContactsController extends BaseV1Controller
             'name'          => $contact['name'] ?? '',
             'email'         => $contact['email'] ?? '',
             'status'        => $contact['status'] ?? 'active',
+            'opt_in'        => (int) ($contact['wa_opt_in'] ?? 0) === 1,
+            'opt_in_source' => $contact['wa_opt_in_source'] ?? null,
+            'opt_in_at'     => $contact['wa_opt_in_at'] ?? null,
+            'is_opted_out'  => ! empty($contact['wa_opted_out_at']),
+            'opted_out_at'  => $contact['wa_opted_out_at'] ?? null,
             'tags'          => array_column($tags, 'name'),
             'custom_fields' => ! empty($contact['custom_fields']) ? (is_string($contact['custom_fields']) ? json_decode($contact['custom_fields'], true) : $contact['custom_fields']) : (object) [],
             'last_reply_at' => $contact['last_reply_at'] ?? null,
@@ -249,6 +281,77 @@ class ContactsController extends BaseV1Controller
         ];
 
         return $this->respondSuccess($data, 'Contact details loaded.');
+    }
+
+    /**
+     * Update WhatsApp Opt-in / Opt-out consent for a contact.
+     * POST /api/v1/contacts/{idOrPhone}/consent
+     *
+     * Body payload (JSON):
+     * {
+     *   "opt_in": true,
+     *   "source": "website_form"
+     * }
+     */
+    public function consent(string $idOrPhone): ResponseInterface
+    {
+        $idOrPhone = trim($idOrPhone);
+        if ($idOrPhone === '' || mb_strlen($idOrPhone) > 50) {
+            return $this->respondError('Invalid contact identifier.', 400);
+        }
+
+        $contactModel = model(ContactModel::class);
+        $contact = null;
+        if (ctype_digit($idOrPhone)) {
+            $contact = $contactModel->find((int) $idOrPhone);
+        }
+        if (! $contact) {
+            $cleanPhone = preg_replace('/[^\d+]/', '', $idOrPhone);
+            $contact = $contactModel->findByMobile($cleanPhone);
+        }
+        if (! $contact) {
+            return $this->respondError('Contact not found.', 404);
+        }
+
+        $input = $this->getJsonPayload();
+        if (! array_key_exists('opt_in', $input) && ! array_key_exists('wa_opt_in', $input)) {
+            return $this->respondValidationError(['opt_in' => 'Field opt_in (boolean true/false) is required.']);
+        }
+
+        $rawOptIn = $input['opt_in'] ?? $input['wa_opt_in'];
+        $shouldOptIn = filter_var($rawOptIn, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        if ($shouldOptIn === null && is_numeric($rawOptIn)) {
+            $shouldOptIn = ((int) $rawOptIn) === 1;
+        }
+
+        if ($shouldOptIn === null) {
+            return $this->respondValidationError(['opt_in' => 'Invalid opt_in value. Must be true or false.']);
+        }
+
+        $source = (string) ($input['source'] ?? $input['opt_in_source'] ?? 'api');
+        $contactId = (int) $contact['id'];
+        $consentService = service('whatsAppConsent');
+
+        if ($shouldOptIn) {
+            $consentService->optIn($contactId, $source);
+            $msg = 'WhatsApp opt-in consent recorded successfully.';
+        } else {
+            $consentService->optOut($contactId, $source);
+            $msg = 'WhatsApp opt-out recorded successfully.';
+        }
+
+        $updated = $contactModel->find($contactId);
+
+        return $this->respondSuccess([
+            'id'            => $contactId,
+            'phone'         => $updated['mobile'] ?? '',
+            'name'          => $updated['name'] ?? '',
+            'opt_in'        => (int) ($updated['wa_opt_in'] ?? 0) === 1,
+            'opt_in_source' => $updated['wa_opt_in_source'] ?? null,
+            'opt_in_at'     => $updated['wa_opt_in_at'] ?? null,
+            'is_opted_out'  => ! empty($updated['wa_opted_out_at']),
+            'opted_out_at'  => $updated['wa_opted_out_at'] ?? null,
+        ], $msg);
     }
 
     /**
