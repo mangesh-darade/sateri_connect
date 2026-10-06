@@ -539,117 +539,16 @@ class EmailManager extends BaseController
             return $this->jsonResponse(false, null, 'Campaign not found.', [], 404);
         }
 
-        $settings = new SettingsService();
-        $provider = $settings->getEmailProvider();
-        $mode     = (string) ($camp['mode'] ?? 'recipients');
-        $html     = (string) ($camp['html_content'] ?? '');
-        $subject  = (string) ($camp['subject'] ?? '');
-        $name     = (string) ($camp['name'] ?? 'html-campaign');
-
-        $options = [
-            'campaign_name' => $name,
-        ];
-        if ($provider === SettingsService::EMAIL_PROVIDER_CHEERIO && ! empty($camp['cheerio_builder_id'])) {
-            $options['email_builder_id'] = (string) $camp['cheerio_builder_id'];
-        }
-
-        $model->update($id, ['status' => 'sending', 'last_error' => null]);
-
         try {
-            $mailer = service('emailProvider');
+            $actorId = (int) ($this->currentUser['id'] ?? 0) ?: null;
+            $result  = (new \App\Libraries\EmailCampaignService())->dispatch($camp, $actorId);
+            $ok      = (bool) ($result['ok'] ?? false);
 
-            // Provider-specific send strategy:
-            // - Cheerio: supports label mode + emailBuilderId.
-            // - SMTP/SendGrid: send HTML directly to recipients list.
-            if ($provider === SettingsService::EMAIL_PROVIDER_CHEERIO) {
-                $campaignPayload = [
-                    'name'          => $name,
-                    'subject'       => $subject,
-                    'html'          => $html !== '' ? $html : '<p></p>',
-                    'campaign_name' => $name,
-                ];
-
-                if ($mode === 'label') {
-                    $label = trim((string) ($camp['label_name'] ?? ''));
-                    if ($label === '') {
-                        return $this->jsonResponse(false, null, 'Label name required for label mode.', [], 422);
-                    }
-                    $campaignPayload['label_name'] = $label;
-                } else {
-                    $recipients = $camp['recipients'] ?? [];
-                    if (! is_array($recipients) || $recipients === []) {
-                        return $this->jsonResponse(false, null, 'No recipients on this campaign.', [], 422);
-                    }
-                    $campaignPayload['recipients'] = $recipients;
-                }
-
-                if (! empty($options['email_builder_id'])) {
-                    $campaignPayload['email_builder_id'] = $options['email_builder_id'];
-                }
-
-                $result = $mailer->sendCampaign($campaignPayload);
-            } else {
-                if ($mode === 'label') {
-                    return $this->jsonResponse(
-                        false,
-                        null,
-                        'Label mode is only available for Cheerio provider. Use recipients mode for SMTP/SendGrid.',
-                        [],
-                        422
-                    );
-                }
-
-                $recipients = $camp['recipients'] ?? [];
-                if (! is_array($recipients) || $recipients === []) {
-                    return $this->jsonResponse(false, null, 'No recipients on this campaign.', [], 422);
-                }
-
-                $body = $html !== '' ? $html : '<p></p>';
-                $result = $mailer->sendHtml($recipients, $subject, $body, $options);
-            }
-
-            $ok     = (bool) ($result['ok'] ?? false);
-
-            $rdata = is_array($result['data'] ?? null) ? $result['data'] : [];
-            $sentCount = (int) ($rdata['sent'] ?? $rdata['emailCount'] ?? ($rdata['data']['emailCount'] ?? 0));
-            if ($ok && $sentCount === 0 && $mode === 'recipients') {
-                $sentCount = count($camp['recipients'] ?? []);
-            }
-            $failedCount = is_array($rdata['failed'] ?? null) ? count($rdata['failed']) : ($ok ? 0 : 1);
-
-            $model->update($id, [
-                'status'       => $ok ? 'sent' : 'failed',
-                'sent_count'   => $sentCount,
-                'failed_count' => $failedCount,
-                'last_error'   => $ok ? null : (string) ($result['message'] ?? 'Send failed'),
-                'sent_at'      => $ok ? date('Y-m-d H:i:s') : null,
-            ]);
-
-            $target = $mode === 'label'
-                ? ('label:' . ($camp['label_name'] ?? ''))
-                : implode(', ', array_slice($camp['recipients'] ?? [], 0, 3));
-
-            model(EmailLogModel::class)->record(
-                'campaign',
-                $ok ? 'sent' : 'failed',
-                (string) $camp['subject'],
-                $target,
-                (string) ($result['provider'] ?? ''),
-                (string) ($result['message'] ?? ''),
-                ['result' => $result['data'] ?? null],
-                (int) ($this->currentUser['id'] ?? 0) ?: null,
-                ! empty($camp['builder_id']) ? (int) $camp['builder_id'] : null,
-                $id
+            return $this->jsonResponse(
+                $ok,
+                $model->find($id),
+                $ok ? 'Campaign sent.' : (string) ($result['message'] ?? 'Failed')
             );
-
-            (new ActivityLogger())->log(
-                $ok ? 'email_campaign_sent' : 'email_campaign_failed',
-                'emails',
-                ($ok ? 'Sent' : 'Failed') . ' HTML email campaign: ' . $camp['name'],
-                ['id' => $id]
-            );
-
-            return $this->jsonResponse($ok, $model->find($id), $ok ? 'Campaign sent.' : (string) ($result['message'] ?? 'Failed'));
         } catch (\Throwable $e) {
             $model->update($id, ['status' => 'failed', 'last_error' => $e->getMessage()]);
 
