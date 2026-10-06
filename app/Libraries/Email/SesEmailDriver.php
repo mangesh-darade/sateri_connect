@@ -122,6 +122,10 @@ class SesEmailDriver extends AbstractEmailDriver
      */
     protected function sendSingle(string $toEmail, string $subject, string $body, bool $isHtml, array $from, array $options): array
     {
+        $contact = $options['contact'] ?? null;
+        $subject = $this->personalizeText($subject, $toEmail, $contact);
+        $body    = $this->personalizeText($body, $toEmail, $contact);
+
         $fromAddress = $from['name'] !== ''
             ? sprintf('%s <%s>', $from['name'], $from['email'])
             : $from['email'];
@@ -178,9 +182,12 @@ class SesEmailDriver extends AbstractEmailDriver
     {
         $sent   = 0;
         $failed = [];
+        $contactsMap = $this->preloadContacts($recipients);
 
         foreach ($recipients as $email) {
-            $result = $this->sendSingle($email, $subject, $body, $isHtml, $from, $options);
+            $opt = $options;
+            $opt['contact'] = $contactsMap[strtolower(trim($email))] ?? null;
+            $result = $this->sendSingle($email, $subject, $body, $isHtml, $from, $opt);
             if ($result['ok']) {
                 $sent++;
             } else {

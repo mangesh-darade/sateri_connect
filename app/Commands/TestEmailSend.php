@@ -36,8 +36,8 @@ class TestEmailSend extends BaseCommand
         CLI::write('Recipient: ' . $to, 'white');
         CLI::newLine();
 
-        $subject = 'Emails screen test — ' . date('Y-m-d H:i:s');
-        $body    = "Hello,\n\nThis is a functional test from the new Emails (single send) screen.\n\nProvider: {$provider}\nTime: " . date('c');
+        $subject = 'Emails personalization test — ' . date('Y-m-d H:i:s');
+        $body    = "Hello {{name}},\n\nThis is a functional test from the new Emails screen verifying that {{name}} gets replaced with your actual contact name!\n\nProvider: {$provider}\nTime: " . date('c');
 
         CLI::write('1) Single send…', 'yellow');
         $single = $mailer->send($to, $subject, $body, [

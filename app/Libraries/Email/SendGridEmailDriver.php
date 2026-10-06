@@ -50,18 +50,32 @@ class SendGridEmailDriver extends AbstractEmailDriver
             return $this->result(false, 'No valid recipient email addresses.');
         }
 
+        if (count($recipients) === 1) {
+            return $this->sendSingleRecipient($recipients[0], $subject, $body, $options);
+        }
+
+        return $this->sendManySingles($recipients, $subject, $body, $options);
+    }
+
+    /**
+     * @param array<string, mixed> $options
+     */
+    protected function sendSingleRecipient(string $toEmail, string $subject, string $body, array $options): array
+    {
+        $contact = $options['contact'] ?? null;
+        $subject = $this->personalizeText($subject, $toEmail, $contact);
+        $body    = $this->personalizeText($body, $toEmail, $contact);
+
         $from   = $this->resolveFrom($options, 'sendgrid_from_email', 'sendgrid_from_name');
         $isHtml = (bool) ($options['html'] ?? false);
 
-        $personalizations = [
-            [
-                'to' => array_map(static fn (string $email) => ['email' => $email], $recipients),
-            ],
-        ];
-
         $payload = [
-            'personalizations' => $personalizations,
-            'from'             => [
+            'personalizations' => [
+                [
+                    'to' => [['email' => $toEmail]],
+                ],
+            ],
+            'from'    => [
                 'email' => $from['email'],
                 'name'  => $from['name'],
             ],
@@ -84,7 +98,7 @@ class SendGridEmailDriver extends AbstractEmailDriver
             $status   = (int) ($response['status'] ?? 0);
 
             if ($status === ResponseInterface::HTTP_ACCEPTED || ($status >= 200 && $status < 300)) {
-                return $this->result(true, 'Email sent via SendGrid to ' . implode(', ', $recipients), [
+                return $this->result(true, 'Email sent via SendGrid to ' . $toEmail, [
                     'status' => $status,
                 ]);
             }
@@ -93,10 +107,48 @@ class SendGridEmailDriver extends AbstractEmailDriver
 
             return $this->result(false, 'SendGrid error (HTTP ' . $status . '): ' . $detail, $response['body'] ?? null);
         } catch (\Throwable $e) {
-            log_message('error', 'SendGridEmailDriver send failed: {msg}', ['msg' => $e->getMessage()]);
+            log_message('error', 'SendGridEmailDriver sendSingle failed: {msg}', ['msg' => $e->getMessage()]);
 
             return $this->result(false, $e->getMessage());
         }
+    }
+
+    /**
+     * @param list<string>         $recipients
+     * @param array<string, mixed> $options
+     */
+    protected function sendManySingles(array $recipients, string $subject, string $body, array $options): array
+    {
+        $sent        = 0;
+        $failed      = [];
+        $contactsMap = $this->preloadContacts($recipients);
+
+        foreach ($recipients as $toEmail) {
+            $opt = $options;
+            $opt['contact'] = $contactsMap[strtolower(trim($toEmail))] ?? null;
+            $res = $this->sendSingleRecipient($toEmail, $subject, $body, $opt);
+
+            if ($res['ok']) {
+                $sent++;
+            } else {
+                $failed[] = ['email' => $toEmail, 'message' => $res['message']];
+            }
+        }
+
+        if ($failed === []) {
+            return $this->result(true, sprintf('Sent %d email(s) via SendGrid.', $sent), [
+                'sent' => $sent,
+            ]);
+        }
+
+        if ($sent > 0) {
+            return $this->result(false, sprintf('Sent %d of %d. %d failed.', $sent, count($recipients), count($failed)), [
+                'sent'   => $sent,
+                'failed' => $failed,
+            ]);
+        }
+
+        return $this->result(false, 'All SendGrid email sends failed.', ['failed' => $failed]);
     }
 
     public function sendCampaign(array $campaign): array

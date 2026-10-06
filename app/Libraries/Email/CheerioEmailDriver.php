@@ -131,6 +131,10 @@ class CheerioEmailDriver extends AbstractEmailDriver
      */
     protected function sendSingle(string $email, string $subject, string $html, array $options): array
     {
+        $contact = $options['contact'] ?? null;
+        $subject = $this->personalizeText($subject, $email, $contact);
+        $html    = $this->personalizeText($html, $email, $contact);
+
         $campaign = trim((string) ($options['campaign_name'] ?? $this->settings->get('cheerio_email_campaign_name', $this->config->defaultCampaignName)));
 
         $payload = [
@@ -178,11 +182,14 @@ class CheerioEmailDriver extends AbstractEmailDriver
      */
     protected function sendManySingles(array $recipients, string $subject, string $html, array $options): array
     {
-        $sent   = 0;
-        $failed = [];
+        $sent        = 0;
+        $failed      = [];
+        $contactsMap = $this->preloadContacts($recipients);
 
         foreach ($recipients as $email) {
-            $result = $this->sendSingle($email, $subject, $html, $options);
+            $opt = $options;
+            $opt['contact'] = $contactsMap[strtolower(trim($email))] ?? null;
+            $result = $this->sendSingle($email, $subject, $html, $opt);
             if ($result['ok']) {
                 $sent++;
             } else {

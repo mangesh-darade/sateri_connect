@@ -39,14 +39,32 @@ class SmtpEmailDriver extends AbstractEmailDriver
             return $this->result(false, 'SMTP host is not configured. Open Settings → Email Provider → SMTP.');
         }
 
+        if (count($recipients) === 1) {
+            return $this->sendSingleRecipient($recipients[0], $subject, $body, $options);
+        }
+
+        return $this->sendManySingles($recipients, $subject, $body, $options);
+    }
+
+    /**
+     * @param array<string, mixed> $options
+     */
+    protected function sendSingleRecipient(string $toEmail, string $subject, string $body, array $options): array
+    {
+        $contact = $options['contact'] ?? null;
+        $subject = $this->personalizeText($subject, $toEmail, $contact);
+        $body    = $this->personalizeText($body, $toEmail, $contact);
+
         try {
             $this->applySmtpConfig();
-            $from    = $this->resolveFrom($options, 'smtp_from_email', 'smtp_from_name');
-            $email   = Services::email();
-            $isHtml  = (bool) ($options['html'] ?? false);
+            $from   = $this->resolveFrom($options, 'smtp_from_email', 'smtp_from_name');
+            $email  = Services::email();
+            $email->clear();
+
+            $isHtml = (bool) ($options['html'] ?? false);
 
             $email->setFrom($from['email'], $from['name']);
-            $email->setTo($recipients);
+            $email->setTo($toEmail);
             $email->setSubject($subject);
 
             if ($isHtml) {
@@ -66,12 +84,50 @@ class SmtpEmailDriver extends AbstractEmailDriver
                 return $this->result(false, 'SMTP send failed: ' . $email->printDebugger(['headers']));
             }
 
-            return $this->result(true, 'Email sent via SMTP to ' . implode(', ', $recipients));
+            return $this->result(true, 'Email sent via SMTP to ' . $toEmail);
         } catch (\Throwable $e) {
-            log_message('error', 'SmtpEmailDriver send failed: {msg}', ['msg' => $e->getMessage()]);
+            log_message('error', 'SmtpEmailDriver sendSingle failed: {msg}', ['msg' => $e->getMessage()]);
 
             return $this->result(false, $e->getMessage());
         }
+    }
+
+    /**
+     * @param list<string>         $recipients
+     * @param array<string, mixed> $options
+     */
+    protected function sendManySingles(array $recipients, string $subject, string $body, array $options): array
+    {
+        $sent        = 0;
+        $failed      = [];
+        $contactsMap = $this->preloadContacts($recipients);
+
+        foreach ($recipients as $toEmail) {
+            $opt = $options;
+            $opt['contact'] = $contactsMap[strtolower(trim($toEmail))] ?? null;
+            $res = $this->sendSingleRecipient($toEmail, $subject, $body, $opt);
+
+            if ($res['ok']) {
+                $sent++;
+            } else {
+                $failed[] = ['email' => $toEmail, 'message' => $res['message']];
+            }
+        }
+
+        if ($failed === []) {
+            return $this->result(true, sprintf('Sent %d email(s) via SMTP.', $sent), [
+                'sent' => $sent,
+            ]);
+        }
+
+        if ($sent > 0) {
+            return $this->result(false, sprintf('Sent %d of %d. %d failed.', $sent, count($recipients), count($failed)), [
+                'sent'   => $sent,
+                'failed' => $failed,
+            ]);
+        }
+
+        return $this->result(false, 'All SMTP email sends failed.', ['failed' => $failed]);
     }
 
     public function sendCampaign(array $campaign): array
