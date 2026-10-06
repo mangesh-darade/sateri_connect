@@ -105,29 +105,50 @@
             var count = $checked.length;
             $selectedBadge.text(count + ' selected');
 
+            var groupId = parseInt($groupFilter.val(), 10) || 0;
+            var groupName = $groupFilter.find('option:selected').data('name') || '';
+            var visibleCount = $contactList.find('.bulk-contact-row:visible').length;
+
+            // Clear all button in header
+            if (count > 0) {
+                $('#btnClearAllSelectedBtn').removeClass('d-none');
+            } else {
+                $('#btnClearAllSelectedBtn').addClass('d-none');
+            }
+
             // Update Dropdown button text
             if (count === 0) {
-                $('#bulkDropdownBtnText').html('<i class="fas fa-users text-primary me-1"></i> Choose contacts...');
+                if (groupId && groupName) {
+                    if (visibleCount === 0) {
+                        $('#bulkDropdownBtnText').html('<i class="fas fa-exclamation-circle text-warning me-1"></i> 0 contacts in ' + $('<div>').text(groupName).html());
+                    } else {
+                        $('#bulkDropdownBtnText').html('<i class="fas fa-users text-primary me-1"></i> Choose from ' + visibleCount + ' in ' + $('<div>').text(groupName).html() + '...');
+                    }
+                } else {
+                    $('#bulkDropdownBtnText').html('<i class="fas fa-users text-primary me-1"></i> Choose contacts (' + visibleCount + ')...');
+                }
                 $('#bulkEmptyPillsNotice').removeClass('d-none');
                 $('#bulkSelectedChips').addClass('d-none').empty();
             } else {
                 $('#bulkDropdownBtnText').html('<i class="fas fa-check-circle text-success me-1"></i> ' + count + (count === 1 ? ' contact selected' : ' contacts selected'));
                 $('#bulkEmptyPillsNotice').addClass('d-none');
 
-                // Render selected contact chips
+                // Render selected contact chips cleanly
                 var $chips = $('#bulkSelectedChips').removeClass('d-none').empty();
-                var maxChips = 15;
+                var maxChips = 20;
                 var shown = 0;
                 $checked.each(function () {
                     if (shown < maxChips) {
                         var cid = $(this).val();
                         var cname = $(this).data('name') || $(this).data('email') || 'Contact';
-                        $chips.append(
-                            '<span class="bulk-chip">' +
-                                escapeHtml(cname) +
-                                '<span class="bulk-chip-remove" data-id="' + cid + '" title="Remove">✕</span>' +
-                            '</span>'
-                        );
+                        var cemail = $(this).data('email') || '';
+
+                        var $chip = $('<span class="bulk-chip"></span>');
+                        $chip.text(cname + (cemail && cname !== cemail ? ' (' + cemail + ') ' : ' '));
+
+                        var $remove = $('<span class="bulk-chip-remove" title="Remove">✕</span>').data('id', cid);
+                        $chip.append($remove);
+                        $chips.append($chip);
                         shown++;
                     }
                 });
@@ -145,10 +166,10 @@
 
             // Sync select all checkbox state
             var $visibleCbs = $contactList.find('.bulk-contact-row:visible .bulk-contact-cb');
-            var visibleCount = $visibleCbs.length;
+            var visibleCbsCount = $visibleCbs.length;
             var visibleChecked = $visibleCbs.filter(':checked').length;
 
-            if (visibleCount > 0 && visibleChecked === visibleCount) {
+            if (visibleCbsCount > 0 && visibleChecked === visibleCbsCount) {
                 $checkAll.prop('checked', true).prop('indeterminate', false);
             } else if (visibleChecked > 0) {
                 $checkAll.prop('checked', false).prop('indeterminate', true);
@@ -183,6 +204,15 @@
             updateSelectedState();
         });
 
+        // Header Clear all button
+        $('#btnClearAllSelectedBtn').on('click', function (e) {
+            e.preventDefault();
+            $contactList.find('.bulk-contact-cb').prop('checked', false);
+            $contactList.find('.bulk-contact-row').removeClass('is-selected');
+            $checkAll.prop('checked', false).prop('indeterminate', false);
+            updateSelectedState();
+        });
+
         // Row checkbox toggle
         $contactList.on('change', '.bulk-contact-cb', function () {
             var $cb = $(this);
@@ -203,19 +233,26 @@
         });
 
         // Filter contacts by Search & Group
-        function applyFilters() {
+        function applyFilters(shouldOpenDropdown) {
             var q = $.trim($searchInput.val() || '').toLowerCase();
             var groupId = parseInt($groupFilter.val(), 10) || 0;
             var visible = 0;
 
             $contactList.find('.bulk-contact-row').each(function () {
                 var $row = $(this);
-                var name = $row.data('name') || '';
-                var email = $row.data('email') || '';
-                var tags = $row.data('tags') || [];
+                var name = String($row.data('name') || '');
+                var email = String($row.data('email') || '');
+                var tags = $row.data('tags');
+
+                if (typeof tags === 'string') {
+                    try { tags = JSON.parse(tags); } catch(e) { tags = []; }
+                }
+                if (!Array.isArray(tags)) {
+                    tags = [];
+                }
 
                 var matchesQuery = !q || name.indexOf(q) !== -1 || email.indexOf(q) !== -1;
-                var matchesGroup = !groupId || (Array.isArray(tags) && tags.indexOf(groupId) !== -1);
+                var matchesGroup = !groupId || tags.some(function(t) { return parseInt(t, 10) === groupId; });
 
                 if (matchesQuery && matchesGroup) {
                     $row.removeClass('d-none');
@@ -226,12 +263,25 @@
             });
 
             $('#bulkVisibleCount').text(visible);
-            $('#bulkSearchStatus').text(q || groupId ? visible + ' matching' : '');
+            if (visible === 0) {
+                $('#bulkNoVisibleNotice').removeClass('d-none');
+            } else {
+                $('#bulkNoVisibleNotice').addClass('d-none');
+            }
+            $('#bulkSearchStatus').text(q || groupId ? visible + ' matching' : visible + ' contacts');
             updateSelectedState();
+
+            if (shouldOpenDropdown && groupId > 0) {
+                var ddBtn = document.getElementById('bulkDropdownBtn');
+                if (ddBtn && window.bootstrap && bootstrap.Dropdown) {
+                    var dd = bootstrap.Dropdown.getOrCreateInstance(ddBtn);
+                    dd.show();
+                }
+            }
         }
 
-        $searchInput.on('input', applyFilters);
-        $groupFilter.on('change', applyFilters);
+        $searchInput.on('input', function () { applyFilters(false); });
+        $groupFilter.on('change', function () { applyFilters(true); });
 
         // Select Visible button
         $('#btnSelectFiltered').on('click', function () {

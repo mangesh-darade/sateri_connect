@@ -114,24 +114,31 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
                                     <i class="fas fa-address-book text-success"></i>
                                     <span>Pick from CRM Contacts</span>
                                 </label>
-                                <span class="badge rounded-pill bg-primary text-white px-2.5 py-1 fw-semibold" id="bulkSelectedBadge" style="font-size: 0.72rem;">
-                                    0 selected
-                                </span>
+                                <div class="d-flex align-items-center gap-2">
+                                    <button type="button" class="btn btn-link btn-xs text-danger text-decoration-none p-0 fw-semibold d-none" id="btnClearAllSelectedBtn" style="font-size: 0.72rem;">
+                                        Clear all
+                                    </button>
+                                    <span class="badge rounded-pill bg-primary text-white px-2.5 py-1 fw-semibold" id="bulkSelectedBadge" style="font-size: 0.72rem;">
+                                        0 selected
+                                    </span>
+                                </div>
                             </div>
 
                             <!-- Group Filter & Dropdown Trigger Row -->
                             <div class="row g-2 mb-2">
                                 <div class="col-sm-5">
-                                    <label class="form-label text-muted small mb-1" style="font-size: 0.72rem;">Filter by Group</label>
+                                    <label class="form-label text-muted small mb-1" style="font-size: 0.72rem;">1. Filter by Group</label>
                                     <select id="bulkFilterGroup" class="form-select form-select-sm py-1.5" style="font-size: 0.78rem; border-color: #cbd5e1;">
                                         <option value="">All Groups (<?= count($contactsWithEmail) ?>)</option>
                                         <?php foreach ($customerGroups as $cg): ?>
-                                            <option value="<?= (int) $cg['id'] ?>"><?= esc($cg['name']) ?> (<?= (int) ($cg['contact_count'] ?? 0) ?>)</option>
+                                            <option value="<?= (int) $cg['id'] ?>" data-name="<?= esc($cg['name']) ?>" data-count="<?= (int) ($cg['contact_count'] ?? 0) ?>">
+                                                <?= esc($cg['name']) ?> (<?= (int) ($cg['contact_count'] ?? 0) ?>)
+                                            </option>
                                         <?php endforeach; ?>
                                     </select>
                                 </div>
                                 <div class="col-sm-7">
-                                    <label class="form-label text-muted small mb-1" style="font-size: 0.72rem;">Select Contacts</label>
+                                    <label class="form-label text-muted small mb-1" style="font-size: 0.72rem;">2. Select Contacts</label>
                                     <!-- Custom Multi-Select Dropdown -->
                                     <div class="dropdown w-100 position-relative" id="bulkContactDropdown">
                                         <button class="btn btn-outline-secondary form-select text-start d-flex justify-content-between align-items-center w-100 py-1.5 px-2 bg-white"
@@ -168,6 +175,10 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
 
                                             <!-- Scrollable Contact Checkbox List -->
                                             <div class="overflow-y-auto border rounded bg-white" id="bulkContactList" style="max-height: 200px; border-color: #e2e8f0 !important;">
+                                                <div id="bulkNoVisibleNotice" class="text-center py-4 text-muted small d-none">
+                                                    <i class="fas fa-user-slash opacity-25 d-block mb-1 fs-5"></i>
+                                                    No contacts with email in this group.
+                                                </div>
                                                 <?php if (empty($contactsWithEmail)): ?>
                                                     <div class="text-center py-4 text-muted small">
                                                         <i class="fas fa-user-slash opacity-25 d-block mb-1 fs-5"></i>
@@ -210,11 +221,11 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
                             </div>
 
                             <!-- Selected Contacts Pills Container -->
-                            <div class="mt-1 border rounded-2 p-2 bg-light flex-grow-1" style="min-height: 75px; max-height: 110px; overflow-y: auto; border-color: #e2e8f0 !important;" id="bulkSelectedPillsBox">
+                            <div class="mt-1 border rounded-2 p-2 bg-light flex-grow-1" style="min-height: 80px; max-height: 120px; overflow-y: auto; border-color: #e2e8f0 !important;" id="bulkSelectedPillsBox">
                                 <div id="bulkEmptyPillsNotice" class="text-muted small text-center py-3" style="font-size: 0.74rem;">
-                                    <i class="fas fa-hand-pointer opacity-50 me-1"></i> Choose contacts from the dropdown above.
+                                    <i class="fas fa-hand-pointer opacity-50 me-1"></i> No contacts selected. Choose contacts from the dropdown above.
                                 </div>
-                                <div class="d-flex flex-wrap gap-1 d-none" id="bulkSelectedChips"></div>
+                                <div class="d-flex flex-wrap gap-1.5 d-none" id="bulkSelectedChips"></div>
                             </div>
 
                             <!-- Hidden multi-select kept for form serialization -->
