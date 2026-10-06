@@ -11,14 +11,16 @@
 $provider = $provider ?? 'cheerio';
 $isMeta   = $provider === 'meta';
 $emailProvider = $emailProvider ?? 'smtp';
+$isSesEmail      = $emailProvider === 'ses';
 $isSendGridEmail = $emailProvider === 'sendgrid';
 $isCheerioEmail  = $emailProvider === 'cheerio';
-$isSmtpEmail     = ! $isSendGridEmail && ! $isCheerioEmail;
+$isSmtpEmail     = ! $isSendGridEmail && ! $isCheerioEmail && ! $isSesEmail;
 $cheerio  = $cheerio ?? [];
 $meta     = $meta ?? [];
 $app      = $app ?? [];
 $smtp     = $smtp ?? [];
 $sendgrid = $sendgrid ?? [];
+$ses      = $ses ?? [];
 $cheerioEmail = $cheerioEmail ?? [];
 $webhook  = $webhook ?? [];
 $timezoneOptions = $timezoneOptions ?? [];
@@ -26,7 +28,7 @@ $val = static function (array $source, string $key, string $default = '') {
     return esc(old($key) ?? ($source[$key] ?? $default));
 };
 $providerLabel = $isMeta ? 'Meta Cloud API' : 'Cheerio Direct API';
-$emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheerio Email API' : 'SMTP');
+$emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheerio Email API' : 'SMTP'));
 ?>
 <div class="settings-shell page-stack">
     <div class="settings-intro">
@@ -720,7 +722,7 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                 <div class="wp-stage-copy">
                                     <p class="wp-kicker">Outbound email</p>
                                     <h2 class="wp-title">One pipe. Many providers.</h2>
-                                    <p class="wp-lead">Password resets, automation alerts, and future email campaigns all use <code>service('emailProvider')</code>. Switch SMTP, SendGrid, or Cheerio without changing app code.</p>
+                                    <p class="wp-lead">Password resets, automation alerts, and future email campaigns all use <code>service('emailProvider')</code>. Switch SMTP, Cheerio, or Amazon SES without changing app code.</p>
                                 </div>
                                 <div class="wp-live" aria-live="polite">
                                     <span class="wp-live-dot"></span>
@@ -745,21 +747,6 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                         </span>
                                     </span>
                                 </label>
-                                <label class="wp-option <?= $isSendGridEmail ? 'is-active' : '' ?>" data-tone="sendgrid">
-                                    <input type="radio" class="visually-hidden" name="email_provider" value="sendgrid" <?= $isSendGridEmail ? 'checked' : '' ?> data-email-provider-toggle>
-                                    <span class="wp-option-rail"></span>
-                                    <span class="wp-option-body">
-                                        <span class="wp-option-icon"><i class="fas fa-paper-plane"></i></span>
-                                        <span class="wp-option-text">
-                                            <span class="wp-option-name">SendGrid</span>
-                                            <span class="wp-option-desc">API v3 · high deliverability at scale</span>
-                                        </span>
-                                        <span class="wp-option-meta">
-                                            <span class="wp-chip">Marketing</span>
-                                            <span class="wp-option-tick"><i class="fas fa-check"></i></span>
-                                        </span>
-                                    </span>
-                                </label>
                                 <label class="wp-option <?= $isCheerioEmail ? 'is-active' : '' ?>" data-tone="cheerio">
                                     <input type="radio" class="visually-hidden" name="email_provider" value="cheerio" <?= $isCheerioEmail ? 'checked' : '' ?> data-email-provider-toggle>
                                     <span class="wp-option-rail"></span>
@@ -771,6 +758,21 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                         </span>
                                         <span class="wp-option-meta">
                                             <span class="wp-chip">Direct</span>
+                                            <span class="wp-option-tick"><i class="fas fa-check"></i></span>
+                                        </span>
+                                    </span>
+                                </label>
+                                <label class="wp-option <?= $isSesEmail ? 'is-active' : '' ?>" data-tone="ses">
+                                    <input type="radio" class="visually-hidden" name="email_provider" value="ses" <?= $isSesEmail ? 'checked' : '' ?> data-email-provider-toggle>
+                                    <span class="wp-option-rail"></span>
+                                    <span class="wp-option-body">
+                                        <span class="wp-option-icon"><i class="fab fa-aws"></i></span>
+                                        <span class="wp-option-text">
+                                            <span class="wp-option-name">Amazon SES</span>
+                                            <span class="wp-option-desc">API v2 · AWS cloud email delivery</span>
+                                        </span>
+                                        <span class="wp-option-meta">
+                                            <span class="wp-chip">Cloud API</span>
                                             <span class="wp-option-tick"><i class="fas fa-check"></i></span>
                                         </span>
                                     </span>
@@ -820,50 +822,6 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                 </div>
                             </div>
 
-                            <div id="panelEmailSendGrid" class="wp-creds mt-3 <?= ! $isSendGridEmail ? 'd-none' : '' ?>">
-                                <h6 class="text-muted text-uppercase small mb-3">SendGrid credentials</h6>
-                                <div class="alert alert-info border-0 py-2 px-3 small">
-                                    Create an API key at <a href="https://app.sendgrid.com/settings/api_keys" target="_blank" rel="noopener">SendGrid Dashboard</a> with <strong>Mail Send</strong> and <strong>Marketing / Single Sends</strong> access.
-                                    Promotional campaigns use SendGrid <strong>Single Sends</strong>, which require a verified sender and unsubscribe handling.
-                                </div>
-                                <div class="row">
-                                    <div class="col-md-12 mb-3">
-                                        <label class="form-label">API Key</label>
-                                        <div class="input-group input-secret">
-                                            <input type="password" name="sendgrid_api_key" class="form-control" value="<?= $val($sendgrid, 'api_key') ?>" autocomplete="off" placeholder="SG.xxxxx">
-                                            <button class="btn btn-outline-secondary toggle-secret" type="button"><i class="fas fa-eye"></i></button>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6 mb-3">
-                                        <label class="form-label">From Email</label>
-                                        <input type="email" name="sendgrid_from_email" class="form-control" value="<?= $val($sendgrid, 'from_email') ?>">
-                                    </div>
-                                    <div class="col-md-6 mb-3">
-                                        <label class="form-label">From Name</label>
-                                        <input type="text" name="sendgrid_from_name" class="form-control" value="<?= $val($sendgrid, 'from_name') ?>">
-                                    </div>
-                                    <div class="col-md-4 mb-3">
-                                        <label class="form-label">Verified Sender ID</label>
-                                        <input type="number" name="sendgrid_sender_id" class="form-control" value="<?= $val($sendgrid, 'sender_id') ?>" placeholder="123456">
-                                        <div class="form-text">Needed for marketing campaigns / Single Sends.</div>
-                                    </div>
-                                    <div class="col-md-4 mb-3">
-                                        <label class="form-label">Suppression Group ID</label>
-                                        <input type="number" name="sendgrid_suppression_group_id" class="form-control" value="<?= $val($sendgrid, 'suppression_group_id') ?>" placeholder="7890">
-                                        <div class="form-text">Preferred unsubscribe group for promotions/newsletters.</div>
-                                    </div>
-                                    <div class="col-md-4 mb-3">
-                                        <label class="form-label">IP Pool</label>
-                                        <input type="text" name="sendgrid_ip_pool" class="form-control" value="<?= $val($sendgrid, 'ip_pool') ?>" placeholder="marketing-pool">
-                                    </div>
-                                    <div class="col-md-12 mb-3">
-                                        <label class="form-label">Custom Unsubscribe URL</label>
-                                        <input type="url" name="sendgrid_custom_unsubscribe_url" class="form-control" value="<?= $val($sendgrid, 'custom_unsubscribe_url') ?>" placeholder="https://example.com/unsubscribe">
-                                        <div class="form-text">Use this only if you do not want to use a SendGrid suppression group.</div>
-                                    </div>
-                                </div>
-                            </div>
-
                             <div id="panelEmailCheerio" class="wp-creds mt-3 <?= ! $isCheerioEmail ? 'd-none' : '' ?>">
                                 <h6 class="text-muted text-uppercase small mb-3">Cheerio Email API</h6>
                                 <div class="alert alert-warning border-0 py-2 px-3 small">
@@ -890,6 +848,37 @@ $emailProviderLabel = $isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheeri
                                             <?php endif; ?>
                                         </select>
                                         <div class="form-text">Cheerio API send sathi campaign name analytics label mhanun vaparla jato.</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="panelEmailSes" class="wp-creds mt-3 <?= ! $isSesEmail ? 'd-none' : '' ?>">
+                                <h6 class="text-muted text-uppercase small mb-3">Amazon SES Credentials (API v2)</h6>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">AWS Access Key ID</label>
+                                        <input type="text" name="ses_access_key" class="form-control" value="<?= $val($ses, 'access_key') ?>" placeholder="AKIAIOSFODNN7EXAMPLE">
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">AWS Secret Access Key</label>
+                                        <div class="input-group input-secret">
+                                            <input type="password" name="ses_secret_key" class="form-control" value="<?= $val($ses, 'secret_key') ?>" autocomplete="off" placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY">
+                                            <button class="btn btn-outline-secondary toggle-secret" type="button"><i class="fas fa-eye"></i></button>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label class="form-label">AWS Region</label>
+                                        <input type="text" name="ses_region" class="form-control" value="<?= $val($ses, 'region', 'ap-south-1') ?>" placeholder="ap-south-1">
+                                        <div class="form-text">e.g. ap-south-1 (Mumbai), us-east-1, eu-west-1</div>
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label class="form-label">From Email (Verified Identity)</label>
+                                        <input type="email" name="ses_from_email" class="form-control" value="<?= $val($ses, 'from_email') ?>" placeholder="noreply@yourdomain.com">
+                                        <div class="form-text">Must be verified in AWS SES console</div>
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label class="form-label">From Name</label>
+                                        <input type="text" name="ses_from_name" class="form-control" value="<?= $val($ses, 'from_name') ?>" placeholder="Sateri Connect">
                                     </div>
                                 </div>
                             </div>
@@ -1552,12 +1541,12 @@ $(function () {
     function syncEmailProviderPanels() {
         var provider = $('input[name="email_provider"]:checked').val() || 'smtp';
         $('#panelEmailSmtp').toggleClass('d-none', provider !== 'smtp');
-        $('#panelEmailSendGrid').toggleClass('d-none', provider !== 'sendgrid');
         $('#panelEmailCheerio').toggleClass('d-none', provider !== 'cheerio');
+        $('#panelEmailSes').toggleClass('d-none', provider !== 'ses');
         $('#emailStage .wp-option').removeClass('is-active');
         $('input[name="email_provider"]:checked').closest('.wp-option').addClass('is-active');
         $('#emailStage').attr('data-email-provider', provider);
-        var label = provider === 'sendgrid' ? 'SendGrid' : (provider === 'cheerio' ? 'Cheerio Email API' : 'SMTP');
+        var label = provider === 'ses' ? 'Amazon SES' : (provider === 'cheerio' ? 'Cheerio Email API' : 'SMTP');
         $('#emailLiveName').text(label);
     }
 

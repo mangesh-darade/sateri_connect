@@ -29,7 +29,10 @@ class Campaigns extends BaseController
         }
 
         $status  = strtolower(trim((string) ($this->request->getGet('status') ?? '')));
-        $channel = strtolower(trim((string) ($this->request->getGet('channel') ?? '')));
+        $channel = strtolower(trim((string) ($this->request->getGet('channel') ?? 'whatsapp')));
+        if ($channel === '') {
+            $channel = 'whatsapp';
+        }
         $search  = trim((string) ($this->request->getGet('q') ?? ''));
         $sort    = strtolower(trim((string) ($this->request->getGet('sort') ?? 'latest')));
 

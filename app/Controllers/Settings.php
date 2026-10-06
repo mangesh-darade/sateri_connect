@@ -70,6 +70,10 @@ class Settings extends BaseController
         $sendGridDisplay = $sendGrid;
         $sendGridDisplay['api_key'] = $this->maskSecret($sendGrid['api_key']);
 
+        $ses = $settings->getSesConfig();
+        $sesDisplay = $ses;
+        $sesDisplay['secret_key'] = $this->maskSecret($ses['secret_key']);
+
         $data = [
             'pageTitle' => 'Settings',
             'provider'  => $provider,
@@ -78,6 +82,7 @@ class Settings extends BaseController
             'meta'      => $metaDisplay,
             'embeddedSignup' => $embeddedSignup,
             'sendgrid'  => $sendGridDisplay,
+            'ses'       => $sesDisplay,
             'cheerioEmail' => $settings->getCheerioEmailConfig(),
             'campaigns' => model(\App\Models\CampaignModel::class)
                 ->select('id, name, status')
@@ -160,10 +165,10 @@ class Settings extends BaseController
                         $emailProviderPost = strtolower(trim((string) ($json['email_provider'] ?? '')));
                     }
                 }
-                if (in_array($emailProviderPost, ['smtp', 'sendgrid', 'cheerio'], true)) {
+                if (in_array($emailProviderPost, ['smtp', 'sendgrid', 'cheerio', 'ses'], true)) {
                     $settings->setEmailProvider($emailProviderPost);
                 } elseif ($section === 'email' && $emailProviderPost !== '') {
-                    return $this->jsonResponse(false, null, 'Choose SMTP, SendGrid, or Cheerio.', [], 422);
+                    return $this->jsonResponse(false, null, 'Choose SMTP, SendGrid, Cheerio, or Amazon SES.', [], 422);
                 }
             }
 
@@ -184,6 +189,25 @@ class Settings extends BaseController
 
                 $settings->setSendGridConfig(array_filter(
                     $sendGrid,
+                    static fn ($v) => $v !== null && $v !== ''
+                ));
+            }
+
+            if (in_array($section, ['all', 'ses', 'email'], true)) {
+                $ses = [
+                    'access_key' => trim((string) $this->request->getPost('ses_access_key')),
+                    'region'     => trim((string) $this->request->getPost('ses_region')),
+                    'from_email' => trim((string) $this->request->getPost('ses_from_email')),
+                    'from_name'  => trim((string) $this->request->getPost('ses_from_name')),
+                ];
+
+                $secretKey = trim((string) $this->request->getPost('ses_secret_key'));
+                if ($secretKey !== '' && ! str_contains($secretKey, '•')) {
+                    $ses['secret_key'] = $secretKey;
+                }
+
+                $settings->setSesConfig(array_filter(
+                    $ses,
                     static fn ($v) => $v !== null && $v !== ''
                 ));
             }
@@ -548,6 +572,7 @@ class Settings extends BaseController
         return match ($provider) {
             'sendgrid' => 'SendGrid',
             'cheerio'  => 'Cheerio Email API',
+            'ses'      => 'Amazon SES',
             default    => 'SMTP',
         };
     }

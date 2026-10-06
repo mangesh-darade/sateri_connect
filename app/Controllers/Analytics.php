@@ -105,22 +105,32 @@ class Analytics extends BaseController
 
         $recentEmailLogRows = model(EmailLogModel::class)
             ->orderBy('id', 'DESC')
-            ->findAll(25);
+            ->findAll(30);
         $recentEmailLogs = [];
         foreach ($recentEmailLogRows as $row) {
             if (! is_array($row)) {
                 continue;
             }
             $recentEmailLogs[] = [
-                'created_at' => (string) ($row['created_at'] ?? ''),
-                'kind'       => (string) ($row['kind'] ?? ''),
-                'to_email'   => (string) ($row['to_email'] ?? ''),
-                'status'     => (string) ($row['status'] ?? 'unknown'),
+                'created_at'  => (string) ($row['created_at'] ?? ''),
+                'kind'        => (string) ($row['kind'] ?? ''),
+                'to_email'    => (string) ($row['to_email'] ?? ''),
+                'subject'     => (string) ($row['subject'] ?? ''),
+                'provider'    => (string) ($row['provider'] ?? 'ses'),
+                'status'      => (string) ($row['status'] ?? 'unknown'),
+                'open_count'  => (int) ($row['open_count'] ?? 0),
+                'opened_at'   => (string) ($row['opened_at'] ?? ''),
+                'click_count' => (int) ($row['click_count'] ?? 0),
+                'clicked_at'  => (string) ($row['clicked_at'] ?? ''),
             ];
         }
 
+        $unsubModel = model(\App\Models\EmailUnsubscribeModel::class);
+        $unsubCount = $unsubModel->countAllResults();
+        $recentUnsubscribes = $unsubModel->orderBy('id', 'DESC')->findAll(20);
+
         return $this->render('analytics/index', [
-            'pageTitle'  => 'Global Analytics',
+            'pageTitle'  => 'Global Analytics & Reports',
             'activeTab'  => $tab,
             'from'       => $from,
             'to'         => $to,
@@ -135,10 +145,12 @@ class Analytics extends BaseController
                 ],
             ],
             'email' => [
-                'summary'   => $emailSummary,
-                'campaigns' => $emailCampaigns,
-                'logs'      => $recentEmailLogs,
-                'charts'    => [
+                'summary'      => $emailSummary,
+                'campaigns'    => $emailCampaigns,
+                'logs'         => $recentEmailLogs,
+                'unsubscribes' => $recentUnsubscribes,
+                'unsub_count'  => $unsubCount,
+                'charts'       => [
                     'labels' => $emailTrendLabels,
                     'sent'   => $emailTrendSent,
                     'failed' => $emailTrendFailed,

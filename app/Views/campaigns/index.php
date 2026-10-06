@@ -82,15 +82,27 @@ $campaigns = $campaigns ?? [];
         </div>
     <?php endif; ?>
 
+    <!-- Channel Tabs: WhatsApp & Email Campaigns -->
+    <ul class="nav nav-pills mb-3 bg-white p-1 rounded-3 border shadow-sm d-flex flex-nowrap overflow-x-auto" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link py-2 px-3 text-nowrap fw-medium <?= ($filterChannel !== 'email') ? 'active' : 'text-secondary' ?>" 
+               href="<?= site_url('campaigns?channel=whatsapp') . ($filterStatus ? '&status=' . urlencode($filterStatus) : '') ?>">
+                <i class="fab fa-whatsapp me-1 text-success"></i> WhatsApp Campaigns
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link py-2 px-3 text-nowrap fw-medium <?= $filterChannel === 'email' ? 'active' : 'text-secondary' ?>" 
+               href="<?= site_url('campaigns?channel=email') . ($filterStatus ? '&status=' . urlencode($filterStatus) : '') ?>">
+                <i class="fas fa-envelope me-1 text-primary"></i> Email Campaigns
+            </a>
+        </li>
+    </ul>
+
     <div class="card">
         <div class="card-body py-3">
             <form method="get" action="<?= site_url('campaigns') ?>" class="filter-bar mb-0" id="campaignFilterForm">
+                <input type="hidden" name="channel" value="<?= esc($filterChannel !== 'email' ? 'whatsapp' : 'email') ?>">
                 <input type="search" name="q" value="<?= esc($filterSearch) ?>" class="form-control form-control-sm" placeholder="Search campaign" title="Search">
-                <select name="channel" class="form-select form-select-sm" title="Channel">
-                    <option value="">All channels</option>
-                    <option value="whatsapp" <?= $filterChannel === 'whatsapp' ? 'selected' : '' ?>>WhatsApp</option>
-                    <option value="email" <?= $filterChannel === 'email' ? 'selected' : '' ?>>Email</option>
-                </select>
                 <select name="status" class="form-select form-select-sm" title="Status">
                     <option value="">All status</option>
                     <?php foreach (['draft', 'scheduled', 'queued', 'running', 'sending', 'completed', 'sent', 'paused', 'failed', 'cancelled'] as $st): ?>
@@ -108,11 +120,6 @@ $campaigns = $campaigns ?? [];
                 </div>
             </form>
         </div>
-    </div>
-
-    <div class="page-hint">
-        <i class="fas fa-info-circle" aria-hidden="true"></i>
-        <span>Before sending, sync templates from the template library — categories sometimes change on the provider side.</span>
     </div>
 
     <div class="card">

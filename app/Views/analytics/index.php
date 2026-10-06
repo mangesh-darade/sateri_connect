@@ -137,27 +137,66 @@ $emailSum = $email['summary'] ?? [];
         </div>
 
     <?php else: ?>
+        <?php
+        $sent = (int) ($emailSum['sent'] ?? 0);
+        $total = (int) ($emailSum['total'] ?? 0);
+        $opened = (int) ($emailSum['opened'] ?? 0);
+        $clicked = (int) ($emailSum['clicked'] ?? 0);
+        $failed = (int) ($emailSum['failed'] ?? 0);
+        $openRate = (float) ($emailSum['open_rate'] ?? 0.0);
+        $clickRate = (float) ($emailSum['click_rate'] ?? 0.0);
+        $unsubCount = (int) ($email['unsub_count'] ?? 0);
+        $unsubscribes = $email['unsubscribes'] ?? [];
+        $deliveryRate = $total > 0 ? round(($sent / $total) * 100, 1) : 0.0;
+        $ctor = $opened > 0 ? round(($clicked / $opened) * 100, 1) : 0.0;
+        ?>
         <div class="page-section">
             <div class="page-section-head">
-                <h2 class="page-section-title">Email snapshot</h2>
+                <h2 class="page-section-title">Email Delivery &amp; Engagement Snapshot</h2>
             </div>
             <div class="row g-2">
-            <?php
-            $cards = [
-                ['Total logs', $emailSum['total'] ?? 0, 'kpi-accent-teal'],
-                ['Sent', $emailSum['sent'] ?? 0, 'kpi-accent-green'],
-                ['Failed', $emailSum['failed'] ?? 0, 'kpi-accent-danger'],
-                ['Queued', $emailSum['queued'] ?? 0, 'kpi-accent-amber'],
-            ];
-            foreach ($cards as [$label, $num, $accent]):
-            ?>
-            <div class="col-6 col-md-3">
-                <div class="kpi-card <?= $accent ?>">
-                    <span class="kpi-label"><?= esc($label) ?></span>
-                    <span class="kpi-value"><?= esc(number_format((int) $num)) ?></span>
+                <div class="col-6 col-md-2">
+                    <div class="kpi-card kpi-accent-teal">
+                        <span class="kpi-label">Total Sent</span>
+                        <span class="kpi-value"><?= number_format($sent) ?></span>
+                        <span class="small text-muted" style="font-size:0.72rem;"><?= $deliveryRate ?>% delivered</span>
+                    </div>
                 </div>
-            </div>
-            <?php endforeach; ?>
+                <div class="col-6 col-md-2">
+                    <div class="kpi-card kpi-accent-green">
+                        <span class="kpi-label">Unique Opens</span>
+                        <span class="kpi-value"><?= number_format($opened) ?></span>
+                        <span class="small text-success fw-semibold" style="font-size:0.72rem;"><?= $openRate ?>% open rate</span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <div class="kpi-card kpi-accent-amber">
+                        <span class="kpi-label">Unique Clicks</span>
+                        <span class="kpi-value"><?= number_format($clicked) ?></span>
+                        <span class="small text-warning fw-semibold" style="font-size:0.72rem;"><?= $clickRate ?>% click rate</span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <div class="kpi-card kpi-accent-sky">
+                        <span class="kpi-label">CTOR</span>
+                        <span class="kpi-value"><?= $ctor ?>%</span>
+                        <span class="small text-muted" style="font-size:0.72rem;">Click-to-Open</span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <div class="kpi-card kpi-accent-danger">
+                        <span class="kpi-label">Unsubscribed</span>
+                        <span class="kpi-value"><?= number_format($unsubCount) ?></span>
+                        <span class="small text-muted" style="font-size:0.72rem;">Suppressed list</span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <div class="kpi-card kpi-accent-danger">
+                        <span class="kpi-label">Failed / Bounce</span>
+                        <span class="kpi-value"><?= number_format($failed) ?></span>
+                        <span class="small text-muted" style="font-size:0.72rem;">Undelivered</span>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -186,33 +225,76 @@ $emailSum = $email['summary'] ?? [];
             </div>
         </div>
 
-        <div class="row g-2">
-            <div class="col-lg-6">
+        <!-- Recent Outbound Engagement Activity -->
+        <div class="row g-2 mt-1">
+            <div class="col-lg-8">
                 <div class="dash-panel">
-                    <div class="panel-head d-flex justify-content-between">
-                        <h3>HTML campaigns</h3>
-                        <a href="<?= site_url('email-manager?tab=campaigns') ?>" class="btn btn-xs btn-outline-secondary">Manage</a>
+                    <div class="panel-head d-flex justify-content-between align-items-center">
+                        <h3 class="mb-0">Recent Outbound Activity &amp; Engagement</h3>
+                        <span class="text-muted small">Real-time open &amp; click tracking</span>
                     </div>
                     <div class="panel-body p-0">
                         <div class="table-responsive">
-                            <table class="table table-sm mb-0">
-                                <thead><tr><th>Name</th><th>Status</th><th>Sent</th></tr></thead>
+                            <table class="table table-sm table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Recipient</th>
+                                        <th>Subject</th>
+                                        <th>Status</th>
+                                        <th>Opens</th>
+                                        <th>Clicks</th>
+                                        <th>When</th>
+                                    </tr>
+                                </thead>
                                 <tbody>
-                                <?php if (empty($email['campaigns'])): ?>
-                                    <tr><td colspan="3" class="text-muted text-center py-3">No email campaigns.</td></tr>
+                                <?php if (empty($email['logs'])): ?>
+                                    <tr><td colspan="6" class="text-muted text-center py-4">No email logs yet. Sends will appear here.</td></tr>
                                 <?php else: ?>
-                                    <?php foreach ($email['campaigns'] as $c): ?>
+                                    <?php foreach ($email['logs'] as $log): ?>
                                     <?php
-                                    if (! is_array($c)) {
+                                    if (! is_array($log)) {
                                         continue;
                                     }
-                                    $emailCampaignName = (string) ($c['name'] ?? ('Email Campaign #' . (int) ($c['id'] ?? 0)));
-                                    $emailCampaignStatus = (string) ($c['status'] ?? 'draft');
+                                    $logStatus = (string) ($log['status'] ?? 'unknown');
+                                    $openCount = (int) ($log['open_count'] ?? 0);
+                                    $clickCount = (int) ($log['click_count'] ?? 0);
                                     ?>
                                     <tr>
-                                        <td><?= esc($emailCampaignName) ?></td>
-                                        <td><?= esc($emailCampaignStatus) ?></td>
-                                        <td><?= (int) ($c['sent_count'] ?? 0) ?></td>
+                                        <td>
+                                            <span class="fw-semibold text-dark"><?= esc($log['to_email'] ?? '—') ?></span>
+                                            <?php if (! empty($log['kind'])): ?>
+                                                <div class="text-muted" style="font-size:0.7rem;"><?= esc(ucfirst((string) $log['kind'])) ?></div>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="text-truncate small" style="max-width: 180px;" title="<?= esc($log['subject'] ?? '') ?>">
+                                            <?= esc($log['subject'] ?? '—') ?>
+                                        </td>
+                                        <td>
+                                            <span class="badge text-bg-<?= $logStatus === 'sent' ? 'success' : ($logStatus === 'queued' ? 'warning' : 'danger') ?> rounded-pill px-2">
+                                                <?= esc(ucfirst($logStatus)) ?>
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <?php if ($openCount > 0): ?>
+                                                <span class="badge bg-info-subtle text-info border border-info-subtle" title="Last opened: <?= esc($log['opened_at'] ?? '') ?>">
+                                                    <i class="fas fa-eye me-1"></i><?= $openCount ?>
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="text-muted opacity-50">—</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php if ($clickCount > 0): ?>
+                                                <span class="badge bg-warning-subtle text-warning border border-warning-subtle" title="Last clicked: <?= esc($log['clicked_at'] ?? '') ?>">
+                                                    <i class="fas fa-mouse-pointer me-1"></i><?= $clickCount ?>
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="text-muted opacity-50">—</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="text-muted small text-nowrap">
+                                            <?= esc(format_app_datetime($log['created_at'] ?? null)) ?>
+                                        </td>
                                     </tr>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
@@ -222,35 +304,35 @@ $emailSum = $email['summary'] ?? [];
                     </div>
                 </div>
             </div>
-            <div class="col-lg-6">
+
+            <!-- Unsubscribe Suppression List -->
+            <div class="col-lg-4">
                 <div class="dash-panel">
-                    <div class="panel-head"><h3>Recent email logs</h3></div>
+                    <div class="panel-head d-flex justify-content-between align-items-center">
+                        <h3 class="mb-0">Suppression List</h3>
+                        <span class="badge bg-danger rounded-pill"><?= number_format($unsubCount) ?></span>
+                    </div>
                     <div class="panel-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-sm mb-0">
-                                <thead><tr><th>When</th><th>Kind</th><th>To</th><th>Status</th></tr></thead>
-                                <tbody>
-                                <?php if (empty($email['logs'])): ?>
-                                    <tr><td colspan="4" class="text-muted text-center py-3">No email logs yet. Sends will appear here.</td></tr>
-                                <?php else: ?>
-                                    <?php foreach ($email['logs'] as $log): ?>
-                                    <?php
-                                    if (! is_array($log)) {
-                                        continue;
-                                    }
-                                    $logStatus = (string) ($log['status'] ?? 'unknown');
-                                    ?>
-                                    <tr>
-                                        <td class="text-muted small text-nowrap"><?= esc(format_app_datetime($log['created_at'] ?? null)) ?></td>
-                                        <td><?= esc($log['kind'] ?? '') ?></td>
-                                        <td class="small"><?= esc(mb_strimwidth((string) ($log['to_email'] ?? ''), 0, 40, '…')) ?></td>
-                                        <td><span class="badge text-bg-<?= $logStatus === 'sent' ? 'success' : ($logStatus === 'queued' ? 'warning' : 'danger') ?>"><?= esc($logStatus) ?></span></td>
-                                    </tr>
-                                    <?php endforeach; ?>
-                                <?php endif; ?>
-                                </tbody>
-                            </table>
-                        </div>
+                        <?php if (empty($unsubscribes)): ?>
+                            <div class="text-center py-4 text-muted small">
+                                <i class="fas fa-shield-alt fa-2x mb-2 text-success opacity-75"></i>
+                                <p class="mb-0">No unsubscribes recorded.</p>
+                            </div>
+                        <?php else: ?>
+                            <ul class="list-group list-group-flush small">
+                                <?php foreach ($unsubscribes as $u): ?>
+                                    <li class="list-group-item d-flex justify-content-between align-items-center py-2 px-3">
+                                        <div class="text-truncate me-2">
+                                            <div class="fw-semibold text-dark text-truncate"><?= esc($u['email']) ?></div>
+                                            <div class="text-muted" style="font-size: 0.7rem;"><?= esc($u['reason'] ?? 'User requested') ?></div>
+                                        </div>
+                                        <span class="badge bg-secondary-subtle text-secondary" style="font-size: 0.68rem;">
+                                            <?= \App\Libraries\AppDateTime::format($u['created_at'] ?? null, 'd M') ?>
+                                        </span>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>

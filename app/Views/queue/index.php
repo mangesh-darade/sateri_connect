@@ -95,7 +95,18 @@
                             <?php endif; ?>
                         </td>
                         <td><span class="badge bg-light text-dark border"><?= esc($item['message_type'] ?? 'text') ?></span></td>
-                        <td><?= view('partials/status_badge', ['status' => $item['status'] ?? '']) ?></td>
+                        <td data-search="<?= esc(strtolower((string)($item['status'] ?? ''))) ?>" data-order="<?= esc(strtolower((string)($item['status'] ?? ''))) ?>">
+                            <?= view('partials/status_badge', [
+                                'status' => $item['status'] ?? '',
+                                'map'    => [
+                                    'sent'       => 'success',
+                                    'pending'    => 'warning',
+                                    'processing' => 'info',
+                                    'failed'     => 'danger',
+                                    'cancelled'  => 'secondary',
+                                ],
+                            ]) ?>
+                        </td>
                         <td>
                             <?php if ($item['status'] === 'failed' && $attempts >= $maxAttempts): ?>
                                 <span class="badge bg-danger-subtle text-danger border border-danger-subtle"><?= esc($displayAttempts) ?></span>
@@ -182,14 +193,23 @@ $(function () {
         });
 
         $('#queueStatusFilter').on('change', function () {
-            var val = this.value;
-            table.column(3).search(val ? '^' + val + '$' : '', true, false).draw();
+            var val = (this.value || '').trim().toLowerCase();
+            if (!val) {
+                table.column(3).search('').draw();
+            } else {
+                table.column(3).search('^' + val + '$', true, false, true).draw();
+            }
         });
 
-        // Click on KPI card to quickly filter table
+        // Click on KPI card to quickly filter table or toggle
         $('.js-kpi-filter').on('click', function () {
-            var status = $(this).data('filter');
-            $('#queueStatusFilter').val(status).trigger('change');
+            var status = ($(this).data('filter') || '').toString().toLowerCase();
+            var current = ($('#queueStatusFilter').val() || '').toString().toLowerCase();
+            if (current === status) {
+                $('#queueStatusFilter').val('').trigger('change');
+            } else {
+                $('#queueStatusFilter').val(status).trigger('change');
+            }
         });
     }
 

@@ -44,6 +44,11 @@ $routes->get('privacy-policy', 'Home::privacyPolicy');
 $routes->get('terms', 'Home::terms');
 $routes->match(['get', 'post'], 'data-deletion', 'Home::dataDeletion');
 
+// Public Email Tracking & Unsubscribe
+$routes->get('emails/track/open/(:num)', 'Emails::trackOpen/$1');
+$routes->get('emails/track/click/(:num)', 'Emails::trackClick/$1');
+$routes->match(['get', 'post'], 'emails/unsubscribe', 'Emails::unsubscribe');
+
 /*
  * --------------------------------------------------------------------
  * Platform super admin (all clients)
@@ -145,6 +150,8 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
 
     // Email Manager (builder, drips, verifier, HTML campaigns, sender/domain)
     $routes->get('email-manager', 'EmailManager::index');
+    $routes->get('email-verifier', static fn () => redirect()->to(site_url('email-manager?tab=verifier')));
+    $routes->get('email-manager/group-emails/(:num)', 'EmailManager::getGroupEmails/$1');
     $routes->post('email-manager/builders', 'EmailManager::saveBuilder', ['filter' => 'csrf']);
     $routes->post('email-manager/builders/(:num)/delete', 'EmailManager::deleteBuilder/$1', ['filter' => 'csrf']);
     $routes->post('email-manager/drips', 'EmailManager::saveDrip', ['filter' => 'csrf']);
@@ -160,7 +167,9 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     // Emails (single + bulk via active email provider)
     $routes->get('emails', 'Emails::index');
     $routes->get('emails/send', 'Emails::single');
+    $routes->get('emails/single', 'Emails::single');
     $routes->post('emails/send', 'Emails::sendSingle', ['filter' => 'csrf']);
+    $routes->post('emails/single', 'Emails::sendSingle', ['filter' => 'csrf']);
     $routes->get('emails/bulk', 'Emails::bulk');
     $routes->post('emails/bulk', 'Emails::sendBulk', ['filter' => 'csrf']);
 

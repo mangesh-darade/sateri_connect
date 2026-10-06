@@ -17,6 +17,7 @@ class SettingsService
     public const EMAIL_PROVIDER_SMTP     = 'smtp';
     public const EMAIL_PROVIDER_SENDGRID = 'sendgrid';
     public const EMAIL_PROVIDER_CHEERIO  = 'cheerio';
+    public const EMAIL_PROVIDER_SES      = 'ses';
 
     protected SettingModel $settings;
     protected EncryptionService $encryption;
@@ -39,6 +40,7 @@ class SettingsService
         'meta_two_step_pin',
         'smtp_password',
         'sendgrid_api_key',
+        'ses_secret_key',
         'elintom_api_private_key',
         'ai_api_key',
     ];
@@ -543,6 +545,7 @@ class SettingsService
             self::EMAIL_PROVIDER_SMTP,
             self::EMAIL_PROVIDER_SENDGRID,
             self::EMAIL_PROVIDER_CHEERIO,
+            self::EMAIL_PROVIDER_SES,
         ], true) ? $provider : self::EMAIL_PROVIDER_SMTP;
     }
 
@@ -553,8 +556,9 @@ class SettingsService
             self::EMAIL_PROVIDER_SMTP,
             self::EMAIL_PROVIDER_SENDGRID,
             self::EMAIL_PROVIDER_CHEERIO,
+            self::EMAIL_PROVIDER_SES,
         ], true)) {
-            throw new RuntimeException('Invalid email provider. Use smtp, sendgrid, or cheerio.');
+            throw new RuntimeException('Invalid email provider. Use smtp, sendgrid, cheerio, or ses.');
         }
 
         $this->set('email_provider', $provider, 'email', false);
@@ -573,6 +577,11 @@ class SettingsService
     public function isCheerioEmailProvider(): bool
     {
         return $this->getEmailProvider() === self::EMAIL_PROVIDER_CHEERIO;
+    }
+
+    public function isSesEmailProvider(): bool
+    {
+        return $this->getEmailProvider() === self::EMAIL_PROVIDER_SES;
     }
 
     /**
@@ -694,6 +703,44 @@ class SettingsService
     {
         if (array_key_exists('default_campaign', $config)) {
             $this->set('cheerio_email_campaign_name', $config['default_campaign'], 'email', false);
+        }
+    }
+
+    /**
+     * Amazon SES API v2 credentials and configuration.
+     *
+     * @return array{access_key: string, secret_key: string, region: string, from_email: string, from_name: string}
+     */
+    public function getSesConfig(): array
+    {
+        return [
+            'access_key' => (string) $this->get('ses_access_key', ''),
+            'secret_key' => (string) $this->get('ses_secret_key', ''),
+            'region'     => (string) $this->get('ses_region', 'ap-south-1'),
+            'from_email' => (string) $this->get('ses_from_email', ''),
+            'from_name'  => (string) $this->get('ses_from_name', ''),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     */
+    public function setSesConfig(array $config): void
+    {
+        $map = [
+            'access_key' => ['ses_access_key', 'email', false],
+            'secret_key' => ['ses_secret_key', 'email', true],
+            'region'     => ['ses_region', 'email', false],
+            'from_email' => ['ses_from_email', 'email', false],
+            'from_name'  => ['ses_from_name', 'email', false],
+        ];
+
+        foreach ($map as $inputKey => [$settingKey, $group, $encrypt]) {
+            if (! array_key_exists($inputKey, $config)) {
+                continue;
+            }
+
+            $this->set($settingKey, $config[$inputKey], $group, $encrypt);
         }
     }
 

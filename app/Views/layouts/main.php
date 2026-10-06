@@ -240,15 +240,27 @@
                 return $uri === $pattern || str_starts_with($uri . '/', $pattern . '/');
             };
 
-            $navBestChildIndex = static function (array $children, string $uri, string $channel) use ($navUriMatches): ?int {
+            $navBestChildIndex = static function (array $children, string $uri, string $channel) use ($navUriMatches, $req): ?int {
                 $bestIdx = null;
                 $bestLen = -1;
+                $tab = strtolower(trim((string) ($req->getGet('tab') ?? '')));
                 foreach ($children as $i => $child) {
                     $childChannel = strtolower(trim((string) ($child['channel'] ?? '')));
                     if ($childChannel !== '') {
                         if (str_starts_with($uri, 'chat') && $channel === $childChannel) {
                             return $i;
                         }
+                        continue;
+                    }
+                    $childTab = strtolower(trim((string) ($child['tab'] ?? '')));
+                    if ($childTab !== '') {
+                        if (str_starts_with($uri, 'email-manager') && $tab === $childTab) {
+                            return $i;
+                        }
+                        if ($tab !== '') {
+                            continue;
+                        }
+                    } elseif (str_starts_with($uri, 'email-manager') && $tab !== '') {
                         continue;
                     }
                     foreach (($child['match'] ?? []) as $pattern) {
@@ -360,10 +372,6 @@
                     'icon' => 'megaphone',
                     'url' => site_url('campaigns'),
                     'match' => ['campaigns'],
-                    'children' => [
-                        ['label' => 'Campaigns', 'icon' => 'megaphone', 'url' => site_url('campaigns'), 'match' => ['campaigns']],
-                        ['label' => 'Create Broadcast', 'icon' => 'plus', 'url' => site_url('campaigns/create'), 'match' => ['campaigns/create']],
-                    ],
                 ];
             }
             if (function_exists('can') && can('emails.view')) {
@@ -374,6 +382,7 @@
                     'match' => ['email-manager', 'emails'],
                     'children' => [
                         ['label' => 'Email Manager', 'icon' => 'mail-open', 'url' => site_url('email-manager'), 'match' => ['email-manager']],
+                        ['label' => 'Email List Verifier', 'icon' => 'shield', 'url' => site_url('email-manager?tab=verifier'), 'match' => ['email-manager'], 'tab' => 'verifier'],
                         ['label' => 'Send Single Email', 'icon' => 'send', 'url' => site_url('emails/send'), 'match' => ['emails/send']],
                         ['label' => 'Bulk Email', 'icon' => 'mails', 'url' => site_url('emails/bulk'), 'match' => ['emails/bulk']],
                     ],
@@ -386,7 +395,8 @@
                     'url' => site_url('templates'),
                     'match' => ['templates'],
                     'children' => [
-                        ['label' => 'WhatsApp Templates', 'icon' => 'file-text', 'url' => site_url('templates'), 'match' => ['templates']],
+                        ['label' => 'WhatsApp Templates', 'icon' => 'message-square', 'url' => site_url('templates'), 'match' => ['templates']],
+                        ['label' => 'Email Templates', 'icon' => 'mail', 'url' => site_url('templates?channel=email'), 'match' => ['templates?channel=email']],
                         ['label' => 'Create Template', 'icon' => 'plus', 'url' => site_url('templates/create'), 'match' => ['templates/create']],
                     ],
                 ];
@@ -403,7 +413,8 @@
                     'url' => site_url('automations'),
                     'match' => ['automations'],
                     'children' => [
-                        ['label' => 'Automations', 'icon' => 'bot', 'url' => site_url('automations'), 'match' => ['automations']],
+                        ['label' => 'WhatsApp Workflows', 'icon' => 'bot', 'url' => site_url('automations'), 'match' => ['automations']],
+                        ['label' => 'Email Workflows (Auto Drips)', 'icon' => 'workflow', 'url' => site_url('automations?channel=email'), 'match' => ['automations?channel=email']],
                     ],
                 ];
             }
@@ -690,7 +701,9 @@
                         <div class="min-w-0 page-header-title">
                             <div class="page-intro-title-row">
                                 <h1 class="mb-0"><?= esc($title ?? 'Dashboard') ?></h1>
-                                <?php if (function_exists('whatsapp_provider_short')): ?>
+                                <?php
+                                $isEmailRoute = str_starts_with($currentUri, 'email') || str_starts_with($currentUri, 'emails') || ($req->getGet('channel') === 'email');
+                                if (! $isEmailRoute && function_exists('whatsapp_provider_short')): ?>
                                     <span class="provider-chip <?= function_exists('is_meta_provider') && is_meta_provider() ? 'is-meta' : 'is-cheerio' ?>" title="<?= esc(function_exists('whatsapp_provider_label') ? whatsapp_provider_label() : '') ?>">
                                         <i class="<?= function_exists('is_meta_provider') && is_meta_provider() ? 'fab fa-meta' : 'fas fa-bolt' ?>"></i>
                                         <?= esc(whatsapp_provider_short()) ?>

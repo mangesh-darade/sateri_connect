@@ -29,6 +29,22 @@ $campaignFilter = $filters['campaign_id'] ?? '';
 $summary = $summary ?? $stats ?? $overview ?? [];
 ?>
 <div class="page-list">
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <ul class="nav nav-pills em-nav-pills bg-white p-1 rounded-3 border shadow-sm">
+        <li class="nav-item">
+            <a class="nav-link active py-1.5 px-3 btn-sm fw-semibold" href="<?= site_url('reports') ?>">
+                <i class="fab fa-whatsapp me-1 text-success"></i> WhatsApp Reports
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link py-1.5 px-3 btn-sm text-secondary" href="<?= site_url('analytics?tab=email') ?>">
+                <i class="fas fa-envelope me-1 text-primary"></i> Email Reports &amp; Tracking
+            </a>
+        </li>
+    </ul>
+</div>
+
 <div class="card">
     <div class="card-body py-3">
         <form method="get" action="<?= site_url('reports') ?>" class="filter-bar mb-0">
