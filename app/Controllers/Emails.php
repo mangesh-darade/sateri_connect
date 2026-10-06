@@ -45,13 +45,35 @@ class Emails extends BaseController
         }
 
         $data = $this->composeCommonData('Bulk email');
-        $data['tags'] = model(TagModel::class)->orderBy('name', 'ASC')->findAll(200);
-        $data['contactsWithEmail'] = model(ContactModel::class)
+        $tagModel = model(TagModel::class);
+        $data['tags'] = $tagModel->orderBy('name', 'ASC')->findAll(200);
+        $data['customerGroups'] = $tagModel->listWithContactCounts();
+
+        $contacts = model(ContactModel::class)
             ->select('id, name, email')
             ->where('email !=', '')
             ->where('email IS NOT NULL', null, false)
             ->orderBy('name', 'ASC')
-            ->findAll(300);
+            ->findAll(500);
+
+        try {
+            $contactTags = db_connect()->table('contact_tags')
+                ->select('contact_id, tag_id')
+                ->get()
+                ->getResultArray();
+            $tagMap = [];
+            foreach ($contactTags as $ct) {
+                $tagMap[(int) $ct['contact_id']][] = (int) $ct['tag_id'];
+            }
+            foreach ($contacts as &$c) {
+                $c['tag_ids'] = $tagMap[(int) $c['id']] ?? [];
+            }
+            unset($c);
+        } catch (\Throwable) {
+            // ignore
+        }
+
+        $data['contactsWithEmail'] = $contacts;
         $data['maxRecipients'] = self::MAX_BULK_RECIPIENTS;
 
         return $this->render('emails/bulk', $data);
@@ -138,16 +160,38 @@ class Emails extends BaseController
         $recipients = [];
         if ($mode === 'label') {
             if ($labelName === '') {
-                $errors['label_name'] = 'Cheerio label name is required for label mode.';
+                $errors['label_name'] = 'Label or Customer Group name is required.';
             }
             $provider = (new SettingsService())->getEmailProvider();
             if ($provider !== SettingsService::EMAIL_PROVIDER_CHEERIO) {
-                $errors['mode'] = 'Label bulk send is only available when Cheerio Email is the active provider.';
+                // For non-Cheerio providers (Amazon SES, SMTP, SendGrid), resolve group contacts directly
+                $tagRow = model(TagModel::class)->where('name', $labelName)->first();
+                if ($tagRow) {
+                    $groupContacts = model(ContactModel::class)
+                        ->select('contacts.email')
+                        ->join('contact_tags', 'contact_tags.contact_id = contacts.id')
+                        ->where('contact_tags.tag_id', (int) $tagRow['id'])
+                        ->where('contacts.email !=', '')
+                        ->where('contacts.email IS NOT NULL', null, false)
+                        ->findAll();
+                    foreach ($groupContacts as $row) {
+                        $email = strtolower(trim((string) ($row['email'] ?? '')));
+                        if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                            $recipients[] = $email;
+                        }
+                    }
+                    $recipients = array_values(array_unique($recipients));
+                }
+                if ($recipients === []) {
+                    $errors['label_name'] = 'No contacts with valid email found in group/label "' . $labelName . '".';
+                } elseif (count($recipients) > self::MAX_BULK_RECIPIENTS) {
+                    $errors['label_name'] = 'Maximum ' . self::MAX_BULK_RECIPIENTS . ' recipients allowed (found ' . count($recipients) . ').';
+                }
             }
         } else {
             $recipients = $this->resolveBulkRecipients($input);
             if ($recipients === []) {
-                $errors['recipients'] = 'Add at least one valid recipient email (paste list and/or select contacts).';
+                $errors['recipients'] = 'Add at least one valid recipient email (paste list, select contacts, or load a group).';
             } elseif (count($recipients) > self::MAX_BULK_RECIPIENTS) {
                 $errors['recipients'] = 'Maximum ' . self::MAX_BULK_RECIPIENTS . ' recipients per bulk send.';
             }
@@ -219,6 +263,7 @@ class Emails extends BaseController
             'isCheerio'       => $provider === SettingsService::EMAIL_PROVIDER_CHEERIO,
             'isSendGrid'      => $provider === SettingsService::EMAIL_PROVIDER_SENDGRID,
             'isSmtp'          => $provider === SettingsService::EMAIL_PROVIDER_SMTP,
+            'isSes'           => $provider === SettingsService::EMAIL_PROVIDER_SES,
         ];
     }
 
@@ -228,6 +273,9 @@ class Emails extends BaseController
             SettingsService::EMAIL_PROVIDER_CHEERIO => 'Uses your Cheerio API key. Sender ID must be verified in Cheerio.',
             SettingsService::EMAIL_PROVIDER_SENDGRID => trim(
                 'From: ' . ((string) $settings->get('sendgrid_from_email', '') ?: 'not set')
+            ),
+            SettingsService::EMAIL_PROVIDER_SES => trim(
+                sprintf('AWS Region: %s · From: %s', (string) $settings->get('ses_region', 'ap-south-1'), (string) $settings->get('ses_from_email', '') ?: 'not set')
             ),
             default => trim(sprintf(
                 '%s · From: %s',
@@ -240,6 +288,7 @@ class Emails extends BaseController
     protected function defaultTestEmail(SettingsService $settings): string
     {
         $candidates = [
+            (string) $settings->get('ses_from_email', ''),
             (string) $settings->get('smtp_from_email', ''),
             (string) $settings->get('smtp_user', ''),
             (string) $settings->get('app_email', ''),
@@ -262,6 +311,7 @@ class Emails extends BaseController
         return match ($provider) {
             SettingsService::EMAIL_PROVIDER_SENDGRID => 'SendGrid',
             SettingsService::EMAIL_PROVIDER_CHEERIO  => 'Cheerio Email API',
+            SettingsService::EMAIL_PROVIDER_SES      => 'Amazon SES',
             default                                  => 'SMTP',
         };
     }
@@ -308,6 +358,27 @@ class Emails extends BaseController
             }
         }
 
+        $groupId = (int) ($input['group_id'] ?? 0);
+        if ($groupId > 0) {
+            try {
+                $groupRows = model(ContactModel::class)
+                    ->select('contacts.email')
+                    ->join('contact_tags', 'contact_tags.contact_id = contacts.id')
+                    ->where('contact_tags.tag_id', $groupId)
+                    ->where('contacts.email !=', '')
+                    ->where('contacts.email IS NOT NULL', null, false)
+                    ->findAll();
+                foreach ($groupRows as $row) {
+                    $email = strtolower(trim((string) ($row['email'] ?? '')));
+                    if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                        $emails[] = $email;
+                    }
+                }
+            } catch (\Throwable) {
+                // ignore
+            }
+        }
+
         return array_values(array_unique($emails));
     }
 
@@ -346,5 +417,87 @@ class Emails extends BaseController
         } catch (\Throwable) {
             // non-fatal — table may not exist until migrate
         }
+    }
+
+    /**
+     * Public tracking pixel: serves 1x1 transparent GIF and records open.
+     */
+    public function trackOpen(int $id): ResponseInterface
+    {
+        if ($id > 0) {
+            try {
+                model(EmailLogModel::class)->recordOpen($id);
+            } catch (\Throwable) {
+                // non-fatal
+            }
+        }
+
+        // 1x1 43-byte transparent GIF
+        $gif = base64_decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
+
+        return $this->response
+            ->setContentType('image/gif')
+            ->setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0')
+            ->setHeader('Pragma', 'no-cache')
+            ->setHeader('Expires', 'Thu, 01 Jan 1970 00:00:00 GMT')
+            ->setBody($gif);
+    }
+
+    /**
+     * Link click redirector: records click and 302 redirects to target.
+     */
+    public function trackClick(int $id): ResponseInterface
+    {
+        $url = trim((string) $this->request->getGet('url'));
+
+        if ($id > 0) {
+            try {
+                model(EmailLogModel::class)->recordClick($id);
+            } catch (\Throwable) {
+                // non-fatal
+            }
+        }
+
+        if ($url === '' || ! filter_var($url, FILTER_VALIDATE_URL)) {
+            $url = site_url();
+        }
+
+        return redirect()->to($url);
+    }
+
+    /**
+     * Public 1-Click Unsubscribe endpoint.
+     */
+    public function unsubscribe(): ResponseInterface|string
+    {
+        $email      = strtolower(trim((string) ($this->request->getGet('email') ?: $this->request->getPost('email'))));
+        $campaignId = (int) ($this->request->getGet('cid') ?: $this->request->getPost('cid') ?: 0);
+        $reason     = trim((string) ($this->request->getPost('reason') ?: 'Direct unsubscribe request'));
+
+        $success = false;
+        if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $ip      = (string) $this->request->getIPAddress();
+            $success = model(\App\Models\EmailUnsubscribeModel::class)->recordUnsubscribe($email, $campaignId ?: null, $reason, $ip);
+        }
+
+        if ($this->request->isAJAX() || $this->request->getHeaderLine('Accept') === 'application/json') {
+            return $this->response->setJSON([
+                'status'  => $success ? 'success' : 'error',
+                'message' => $success ? 'You have been successfully unsubscribed.' : 'Please provide a valid email.',
+            ]);
+        }
+
+        // Standalone clean HTML page
+        return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Unsubscribed</title>' .
+            '<meta name="viewport" content="width=device-width, initial-scale=1">' .
+            '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">' .
+            '</head><body class="bg-light d-flex align-items-center min-vh-100">' .
+            '<div class="container" style="max-width: 520px;">' .
+            '<div class="card shadow-sm border-0 rounded-4 text-center p-4 p-md-5 bg-white">' .
+            '<div class="mb-3 text-success"><svg width="64" height="64" fill="currentColor" class="bi bi-check-circle-fill" viewBox="0 0 16 16"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/></svg></div>' .
+            '<h3 class="fw-bold mb-2">Unsubscribed Successfully</h3>' .
+            '<p class="text-muted mb-4">' . ($email !== '' ? '<strong>' . htmlspecialchars($email, ENT_QUOTES, 'UTF-8') . '</strong> will no longer receive marketing emails from this sender.' : 'Your email has been removed from future marketing lists.') . '</p>' .
+            '<p class="small text-muted mb-0">You can close this tab safely.</p>' .
+            '</div></div></body></html>';
     }
 }

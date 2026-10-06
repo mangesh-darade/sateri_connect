@@ -1,35 +1,43 @@
 <?php
 /** @var list<array<string,mixed>> $campaigns */
 /** @var list<array<string,mixed>> $builders */
+/** @var list<array<string,mixed>> $customerGroups */
 /** @var bool $canSend */
 /** @var bool $isCheerio */
 $campaigns = $campaigns ?? [];
 $builders = $builders ?? [];
+$customerGroups = $customerGroups ?? [];
 $canSend = ! empty($canSend);
 $isCheerio = ! empty($isCheerio);
 ?>
 <div class="row g-3">
     <div class="col-lg-5">
-        <div class="dash-panel">
-            <div class="panel-head"><h3>HTML email campaign</h3></div>
-            <div class="panel-body">
+        <div class="card border-0 shadow-sm rounded-3">
+            <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+                <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-paper-plane text-primary me-2"></i>Create Campaign Draft</h6>
+                <span class="badge bg-primary-subtle text-primary" style="font-size: 0.7rem;">Broadcaster</span>
+            </div>
+            <div class="card-body p-3">
                 <?php if (! $canSend): ?>
-                    <p class="text-muted small mb-0">Need <code>emails.send</code> to create campaigns.</p>
+                    <div class="alert alert-warning py-2 small mb-0">Permission <code>emails.send</code> is required to create campaigns.</div>
                 <?php else: ?>
                 <form id="campaignForm" class="em-form">
                     <input type="hidden" name="id" id="camp_id" value="">
+                    
                     <div class="mb-2">
-                        <label class="form-label">Campaign name</label>
-                        <input type="text" name="name" id="camp_name" class="form-control form-control-sm" required>
+                        <label class="form-label small fw-semibold mb-1">Campaign Name</label>
+                        <input type="text" name="name" id="camp_name" class="form-control form-control-sm" placeholder="e.g. Diwali Offer 2026" required>
                     </div>
+
                     <div class="mb-2">
-                        <label class="form-label">Subject</label>
-                        <input type="text" name="subject" id="camp_subject" class="form-control form-control-sm" required>
+                        <label class="form-label small fw-semibold mb-1">Email Subject</label>
+                        <input type="text" name="subject" id="camp_subject" class="form-control form-control-sm" placeholder="e.g. Special 30% Off on All Services" required>
                     </div>
+
                     <div class="mb-2">
-                        <label class="form-label">Use builder (optional)</label>
+                        <label class="form-label small fw-semibold mb-1">Select Template (Optional)</label>
                         <select name="builder_id" id="camp_builder" class="form-select form-select-sm">
-                            <option value="">— Custom HTML —</option>
+                            <option value="">— Write Custom HTML —</option>
                             <?php foreach ($builders as $b): ?>
                                 <option value="<?= (int) $b['id'] ?>"
                                     data-cheerio="<?= esc($b['cheerio_builder_id'] ?? '', 'attr') ?>">
@@ -38,34 +46,69 @@ $isCheerio = ! empty($isCheerio);
                             <?php endforeach; ?>
                         </select>
                     </div>
+
+                    <?php if ($isCheerio): ?>
                     <div class="mb-2">
-                        <label class="form-label">Cheerio Builder ID</label>
+                        <label class="form-label small fw-semibold mb-1">Cheerio Builder ID</label>
                         <input type="text" name="cheerio_builder_id" id="camp_cheerio_id" class="form-control form-control-sm">
                     </div>
+                    <?php endif; ?>
+
                     <div class="mb-2">
-                        <label class="form-label">HTML body</label>
-                        <textarea name="html_content" id="camp_html" class="form-control form-control-sm font-monospace" rows="7"></textarea>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label small fw-semibold mb-0">HTML Content</label>
+                            <span class="text-muted" style="font-size: 0.7rem;">Tags: <code>{{name}}</code> <code>{{unsubscribe_url}}</code></span>
+                        </div>
+                        <textarea name="html_content" id="camp_html" class="form-control form-control-sm font-monospace" rows="6" placeholder="<p>Hello {{name}}, welcome to our newsletter!</p>"></textarea>
                     </div>
+
                     <div class="mb-2">
-                        <label class="form-label">Mode</label>
+                        <label class="form-label small fw-semibold mb-1">Send Mode</label>
                         <select name="mode" id="camp_mode" class="form-select form-select-sm">
-                            <option value="recipients">Recipients list</option>
+                            <option value="recipients">Direct Email Recipients List</option>
                             <?php if ($isCheerio): ?>
-                            <option value="label">Cheerio label</option>
+                            <option value="label">Cheerio Target Label</option>
                             <?php endif; ?>
                         </select>
                     </div>
-                    <div class="mb-2" id="campRecipientsWrap">
-                        <label class="form-label">Recipients (comma / line)</label>
-                        <textarea name="recipients" id="camp_recipients" class="form-control form-control-sm" rows="3"></textarea>
+
+                    <!-- Audience / Customer Groups Selector -->
+                    <div class="mb-2 p-2 rounded-2 bg-light border" id="campAudienceGroupWrap">
+                        <label class="form-label small fw-semibold mb-1 d-flex align-items-center justify-content-between">
+                            <span><i class="fas fa-users text-primary me-1"></i> Import Customer Group</span>
+                            <span class="badge bg-secondary-subtle text-secondary" style="font-size: 0.65rem;">Opt-in Verified</span>
+                        </label>
+                        <div class="input-group input-group-sm mb-1">
+                            <select id="campGroupSelect" class="form-select form-select-sm">
+                                <option value="">— Select Customer Group / Tag —</option>
+                                <?php foreach ($customerGroups as $cg): ?>
+                                    <option value="<?= (int) $cg['id'] ?>">
+                                        <?= esc($cg['name']) ?> (<?= (int) ($cg['contact_count'] ?? 0) ?> contacts)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <button type="button" class="btn btn-primary btn-sm px-3" id="btnLoadGroupEmails">
+                                <i class="fas fa-user-plus me-1"></i> Add
+                            </button>
+                        </div>
+                        <div class="text-muted" id="groupSelectStatus" style="font-size: 0.72rem;">
+                            Auto-loads active emails and filters unsubscribed recipients.
+                        </div>
                     </div>
+
+                    <div class="mb-2" id="campRecipientsWrap">
+                        <label class="form-label small fw-semibold mb-1">Recipients (comma or line separated)</label>
+                        <textarea name="recipients" id="camp_recipients" class="form-control form-control-sm" rows="3" placeholder="alex@example.com, john@example.com"></textarea>
+                    </div>
+
                     <div class="mb-3 d-none" id="campLabelWrap">
-                        <label class="form-label">Cheerio label name</label>
+                        <label class="form-label small fw-semibold mb-1">Cheerio Label Name</label>
                         <input type="text" name="label_name" id="camp_label" class="form-control form-control-sm">
                     </div>
-                    <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-wa btn-sm">Save draft</button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm" id="campReset">Reset</button>
+
+                    <div class="d-flex gap-2 mt-3">
+                        <button type="submit" class="btn btn-primary btn-sm px-3"><i class="fas fa-save me-1"></i> Save Draft</button>
+                        <button type="button" class="btn btn-light border btn-sm px-3" id="campReset"><i class="fas fa-undo me-1"></i> Reset</button>
                     </div>
                     <div class="em-msg mt-2 small" id="campMsg"></div>
                 </form>
@@ -73,24 +116,42 @@ $isCheerio = ! empty($isCheerio);
             </div>
         </div>
     </div>
+
+    <!-- Campaigns List -->
     <div class="col-lg-7">
-        <div class="dash-panel">
-            <div class="panel-head d-flex justify-content-between">
-                <h3>Campaigns</h3>
-                <?php if ($canSend): ?>
+        <div class="card border-0 shadow-sm rounded-3">
+            <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
                 <div>
-                    <a href="<?= site_url('emails/send') ?>" class="btn btn-xs btn-outline-secondary">Single</a>
-                    <a href="<?= site_url('emails/bulk') ?>" class="btn btn-xs btn-outline-secondary">Bulk</a>
+                    <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-history text-primary me-2"></i>Campaign Broadcasts</h6>
+                    <small class="text-muted">Broadcast logs and delivery status</small>
                 </div>
-                <?php endif; ?>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-secondary-subtle text-secondary"><?= count($campaigns) ?> campaigns</span>
+                    <a href="<?= site_url('campaigns?channel=email') ?>" class="btn btn-outline-secondary btn-xs">
+                        <i class="fas fa-external-link-alt me-1"></i> Broadcast Hub
+                    </a>
+                </div>
             </div>
-            <div class="panel-body p-0">
+            <div class="card-body p-0">
                 <?php if ($campaigns === []): ?>
-                    <div class="activity-empty py-4">No HTML campaigns yet.</div>
+                    <div class="text-center py-5 text-muted">
+                        <div class="mb-3 text-secondary opacity-50">
+                            <i class="fas fa-bullhorn fa-3x"></i>
+                        </div>
+                        <h6 class="fw-semibold text-dark mb-1">No campaigns created yet</h6>
+                        <p class="small text-muted mb-0">Compose and save your first campaign draft on the left.</p>
+                    </div>
                 <?php else: ?>
                 <div class="table-responsive">
-                    <table class="table table-sm table-hover mb-0 em-table">
-                        <thead><tr><th>Name</th><th>Status</th><th>Sent</th><th></th></tr></thead>
+                    <table class="table table-sm table-hover align-middle mb-0 em-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Campaign</th>
+                                <th>Status</th>
+                                <th>Sent / Failed</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
                         <tbody>
                         <?php foreach ($campaigns as $c): ?>
                             <?php
@@ -101,20 +162,40 @@ $isCheerio = ! empty($isCheerio);
                             $campaignName = (string) ($c['name'] ?? ('Campaign #' . $campaignId));
                             $campaignSubject = (string) ($c['subject'] ?? '');
                             $campaignStatus = (string) ($c['status'] ?? 'draft');
+                            $stBadge = match ($campaignStatus) {
+                                'sent', 'completed' => 'bg-success-subtle text-success border border-success-subtle',
+                                'failed'            => 'bg-danger-subtle text-danger border border-danger-subtle',
+                                'sending'           => 'bg-info-subtle text-info border border-info-subtle',
+                                default             => 'bg-secondary-subtle text-secondary border border-secondary-subtle',
+                            };
                             ?>
                             <tr>
                                 <td>
-                                    <strong><?= esc($campaignName) ?></strong>
-                                    <div class="text-muted small"><?= esc($campaignSubject !== '' ? $campaignSubject : 'No subject') ?></div>
+                                    <span class="fw-semibold text-dark"><?= esc($campaignName) ?></span>
+                                    <div class="text-muted small text-truncate" style="max-width: 200px;">
+                                        <?= esc($campaignSubject !== '' ? $campaignSubject : 'No subject') ?>
+                                    </div>
                                 </td>
-                                <td><span class="badge text-bg-secondary"><?= esc($campaignStatus) ?></span></td>
-                                <td><?= (int) ($c['sent_count'] ?? 0) ?> / fail <?= (int) ($c['failed_count'] ?? 0) ?></td>
+                                <td>
+                                    <span class="badge <?= $stBadge ?> rounded-pill px-2 py-1">
+                                        <?= esc(ucfirst($campaignStatus)) ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="text-success fw-semibold"><?= (int) ($c['sent_count'] ?? 0) ?></span>
+                                    <span class="text-muted">/</span>
+                                    <span class="text-danger"><?= (int) ($c['failed_count'] ?? 0) ?></span>
+                                </td>
                                 <td class="text-end text-nowrap">
                                     <?php if ($canSend && $campaignId > 0 && in_array($campaignStatus, ['draft', 'failed'], true)): ?>
-                                        <button type="button" class="btn btn-xs btn-wa em-send-camp" data-id="<?= $campaignId ?>">Send</button>
+                                        <button type="button" class="btn btn-xs btn-primary em-send-camp" data-id="<?= $campaignId ?>" title="Broadcast campaign now">
+                                            <i class="fas fa-paper-plane me-1"></i> Send
+                                        </button>
                                     <?php endif; ?>
                                     <?php if ($canSend && $campaignId > 0): ?>
-                                        <button type="button" class="btn btn-xs btn-outline-danger em-del-camp" data-id="<?= $campaignId ?>">Del</button>
+                                        <button type="button" class="btn btn-xs btn-outline-danger em-del-camp ms-1" data-id="<?= $campaignId ?>" title="Delete">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </button>
                                     <?php endif; ?>
                                 </td>
                             </tr>

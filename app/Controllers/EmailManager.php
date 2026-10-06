@@ -30,10 +30,13 @@ class EmailManager extends BaseController
             return $denied;
         }
 
-        $tab = strtolower(trim((string) ($this->request->getGet('tab') ?: 'builder')));
-        $allowed = ['builder', 'drips', 'verifier', 'campaigns', 'senders'];
+        $tab = strtolower(trim((string) ($this->request->getGet('tab') ?: 'campaigns')));
+        if ($tab === 'analytics') {
+            return redirect()->to(site_url('analytics?tab=email'));
+        }
+        $allowed = ['campaigns', 'builder', 'drips', 'verifier', 'senders'];
         if (! in_array($tab, $allowed, true)) {
-            $tab = 'builder';
+            $tab = 'campaigns';
         }
 
         $settings = new SettingsService();
@@ -63,19 +66,55 @@ class EmailManager extends BaseController
             ];
         }
 
+        $tagModel = model(\App\Models\TagModel::class);
+        $customerGroups = $tagModel->listWithContactCounts();
+
         return $this->render('email_manager/index', [
-            'pageTitle'     => 'Email Manager',
-            'activeTab'     => $tab,
-            'provider'      => $provider,
-            'providerLabel' => $this->providerLabel($provider),
-            'isCheerio'     => $provider === SettingsService::EMAIL_PROVIDER_CHEERIO,
-            'builders'      => model(EmailBuilderModel::class)->orderBy('id', 'DESC')->findAll(100),
-            'drips'         => model(EmailDripModel::class)->withSteps(50),
-            'campaigns'     => $campaigns,
-            'senders'       => model(EmailSenderModel::class)->orderBy('type', 'ASC')->orderBy('id', 'DESC')->findAll(100),
-            'verifications' => model(EmailVerificationModel::class)->orderBy('id', 'DESC')->findAll(50),
-            'defaultCampaign' => (string) $settings->get('cheerio_email_campaign_name', 'app-direct'),
+            'pageTitle'          => 'Email Manager',
+            'activeTab'          => $tab,
+            'provider'           => $provider,
+            'providerLabel'      => $this->providerLabel($provider),
+            'isCheerio'          => $provider === SettingsService::EMAIL_PROVIDER_CHEERIO,
+            'builders'           => model(EmailBuilderModel::class)->orderBy('id', 'DESC')->findAll(100),
+            'drips'              => model(EmailDripModel::class)->withSteps(50),
+            'campaigns'          => $campaigns,
+            'customerGroups'     => $customerGroups,
+            'senders'            => model(EmailSenderModel::class)->orderBy('type', 'ASC')->orderBy('id', 'DESC')->findAll(100),
+            'verifications'      => model(EmailVerificationModel::class)->orderBy('id', 'DESC')->findAll(50),
+            'defaultCampaign'    => (string) $settings->get('cheerio_email_campaign_name', 'app-direct'),
         ]);
+    }
+
+    public function getGroupEmails(int $tagId): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('emails.view')) {
+            return $denied;
+        }
+
+        /** @var \App\Models\TagModel $tagModel */
+        $tagModel = model(\App\Models\TagModel::class);
+        $contacts = $tagModel->getContacts($tagId);
+
+        $emails = [];
+        foreach ($contacts as $c) {
+            $em = strtolower(trim((string) ($c['email'] ?? '')));
+            if ($em !== '' && filter_var($em, FILTER_VALIDATE_EMAIL)) {
+                $emails[] = $em;
+            }
+        }
+        $emails = array_values(array_unique($emails));
+
+        /** @var \App\Models\EmailUnsubscribeModel $unsubModel */
+        $unsubModel = model(\App\Models\EmailUnsubscribeModel::class);
+        $activeEmails = $unsubModel->filterActiveRecipients($emails);
+        $unsubCount = count($emails) - count($activeEmails);
+
+        return $this->jsonResponse(true, [
+            'emails'       => $activeEmails,
+            'total'        => count($emails),
+            'active_count' => count($activeEmails),
+            'unsub_count'  => $unsubCount,
+        ], 'Group contacts retrieved.');
     }
 
     // ─── Builders ───────────────────────────────────────────────
@@ -723,6 +762,7 @@ class EmailManager extends BaseController
         return match ($provider) {
             SettingsService::EMAIL_PROVIDER_SENDGRID => 'SendGrid',
             SettingsService::EMAIL_PROVIDER_CHEERIO  => 'Cheerio Email API',
+            SettingsService::EMAIL_PROVIDER_SES      => 'Amazon SES',
             default                                  => 'SMTP',
         };
     }

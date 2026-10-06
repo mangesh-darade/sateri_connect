@@ -7,6 +7,7 @@ namespace App\Libraries;
 use App\Libraries\Email\CheerioEmailDriver;
 use App\Libraries\Email\EmailDriverInterface;
 use App\Libraries\Email\SendGridEmailDriver;
+use App\Libraries\Email\SesEmailDriver;
 use App\Libraries\Email\SmtpEmailDriver;
 use Config\EmailProviders;
 
@@ -116,6 +117,7 @@ class EmailProvider
         return match ($this->settings->getEmailProvider()) {
             SettingsService::EMAIL_PROVIDER_SENDGRID => new SendGridEmailDriver($this->settings, $this->config),
             SettingsService::EMAIL_PROVIDER_CHEERIO  => new CheerioEmailDriver($this->settings, $this->config),
+            SettingsService::EMAIL_PROVIDER_SES      => new SesEmailDriver($this->settings, $this->config),
             default                                  => new SmtpEmailDriver($this->settings),
         };
     }

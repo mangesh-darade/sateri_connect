@@ -37,6 +37,45 @@ class EmailCampaignService
 
         $mailer = service('emailProvider');
 
+        // Filter out unsubscribed contacts
+        $rawRecipients = $camp['recipients'] ?? [];
+        $recipients = is_array($rawRecipients)
+            ? model(\App\Models\EmailUnsubscribeModel::class)->filterActiveRecipients($rawRecipients)
+            : [];
+
+        // Prepare unsubscribe link and merge tags
+        $unsubUrl = site_url('emails/unsubscribe?cid=' . $id);
+        if (str_contains($html, '{{unsubscribe_url}}')) {
+            $html = str_replace('{{unsubscribe_url}}', $unsubUrl, $html);
+        } else {
+            $html .= '<div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; text-align: center;">' .
+                     'To stop receiving these emails, <a href="' . esc($unsubUrl, 'attr') . '" style="color: #64748b; text-decoration: underline;">unsubscribe here</a>.' .
+                     '</div>';
+        }
+
+        // Pre-create log to get ID for open tracking pixel
+        $target = $mode === 'label'
+            ? ('label:' . ($camp['label_name'] ?? ''))
+            : implode(', ', array_slice($recipients, 0, 3));
+
+        $logId = model(EmailLogModel::class)->record(
+            'campaign',
+            'queued',
+            $subject,
+            $target,
+            $provider,
+            'Sending in progress',
+            [],
+            $actorUserId,
+            ! empty($camp['builder_id']) ? (int) $camp['builder_id'] : null,
+            $id
+        );
+
+        if ($logId > 0) {
+            $pixel = '<img src="' . site_url('emails/track/open/' . $logId) . '" width="1" height="1" alt="" style="display:none !important;" />';
+            $html .= $pixel;
+        }
+
         if ($provider === SettingsService::EMAIL_PROVIDER_CHEERIO) {
             $campaignPayload = [
                 'name'          => $name,
@@ -51,9 +90,8 @@ class EmailCampaignService
                 }
                 $campaignPayload['label_name'] = $label;
             } else {
-                $recipients = $camp['recipients'] ?? [];
-                if (! is_array($recipients) || $recipients === []) {
-                    throw new RuntimeException('No recipients on this campaign.');
+                if ($recipients === []) {
+                    throw new RuntimeException('No active recipients on this campaign (or all unsubscribed).');
                 }
                 $campaignPayload['recipients'] = $recipients;
             }
@@ -65,9 +103,8 @@ class EmailCampaignService
             if ($mode === 'label') {
                 throw new RuntimeException('Label mode is only available for Cheerio provider.');
             }
-            $recipients = $camp['recipients'] ?? [];
-            if (! is_array($recipients) || $recipients === []) {
-                throw new RuntimeException('No recipients on this campaign.');
+            if ($recipients === []) {
+                throw new RuntimeException('No active recipients on this campaign (or all unsubscribed).');
             }
             $result = $mailer->sendHtml($recipients, $subject, $html !== '' ? $html : '<p></p>', $options);
         }
@@ -76,7 +113,7 @@ class EmailCampaignService
         $rdata = is_array($result['data'] ?? null) ? $result['data'] : [];
         $sentCount = (int) ($rdata['sent'] ?? $rdata['emailCount'] ?? ($rdata['data']['emailCount'] ?? 0));
         if ($ok && $sentCount === 0 && $mode === 'recipients') {
-            $sentCount = count($camp['recipients'] ?? []);
+            $sentCount = count($recipients);
         }
         $failedCount = is_array($rdata['failed'] ?? null) ? count($rdata['failed']) : ($ok ? 0 : 1);
 
@@ -92,22 +129,13 @@ class EmailCampaignService
         }
         $model->update($id, $update);
 
-        $target = $mode === 'label'
-            ? ('label:' . ($camp['label_name'] ?? ''))
-            : implode(', ', array_slice($camp['recipients'] ?? [], 0, 3));
-
-        model(EmailLogModel::class)->record(
-            'campaign',
-            $ok ? 'sent' : 'failed',
-            $subject,
-            $target,
-            (string) ($result['provider'] ?? ''),
-            (string) ($result['message'] ?? ''),
-            ['result' => $result['data'] ?? null],
-            $actorUserId,
-            ! empty($camp['builder_id']) ? (int) $camp['builder_id'] : null,
-            $id
-        );
+        if ($logId > 0) {
+            model(EmailLogModel::class)->update($logId, [
+                'status'    => $ok ? 'sent' : 'failed',
+                'message'   => (string) ($result['message'] ?? ($ok ? 'Sent' : 'Failed')),
+                'meta_json' => json_encode(['result' => $result['data'] ?? null]),
+            ]);
+        }
 
         (new ActivityLogger())->log(
             $ok ? 'email_campaign_sent' : 'email_campaign_failed',
