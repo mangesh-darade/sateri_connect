@@ -71,34 +71,58 @@ sort($templateLanguages);
      data-auto-sync="<?= (function_exists('can') && can('templates.sync')) ? '1' : '0' ?>"
      data-last-synced="<?= esc((string) ($lastSyncedAt ?? ''), 'attr') ?>">
 
-<div class="card mb-2">
-    <div class="card-body py-3">
-        <div class="d-flex flex-wrap gap-3 align-items-center justify-content-between">
-            <div>
-                <div class="fw-semibold">WhatsApp Template Management</div>
-                <div class="small text-muted">
-                    WABA <?= esc($wabaId ?: 'not configured') ?>
-                    <?php if (! empty($phoneNumberId)): ?>
-                        · Phone ID <?= esc($phoneNumberId) ?>
-                    <?php endif; ?>
-                    <?php if (! empty($lastSyncedAt)): ?>
-                        · Last synced <?= esc(format_app_datetime($lastSyncedAt)) ?>
-                    <?php endif; ?>
-                </div>
-            </div>
-            <div class="d-flex flex-wrap gap-2">
-                <span class="badge text-bg-success">Approved <?= (int) ($statusCounts['APPROVED'] ?? 0) ?></span>
-                <span class="badge text-bg-warning text-dark">Pending <?= (int) ($statusCounts['PENDING'] ?? 0) ?></span>
-                <span class="badge text-bg-danger">Rejected <?= (int) ($statusCounts['REJECTED'] ?? 0) ?></span>
-                <span class="badge text-bg-secondary">Disabled <?= (int) ($statusCounts['DISABLED'] ?? 0) ?></span>
+    <!-- Channel Tabs: WhatsApp & Email Templates -->
+    <ul class="nav nav-pills mb-3 bg-white p-1 rounded-3 border shadow-sm d-flex flex-nowrap overflow-x-auto" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link py-2 px-3 text-nowrap fw-medium active" href="<?= site_url('templates') ?>">
+                <i class="fab fa-whatsapp me-1 text-success"></i> WhatsApp Templates
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link py-2 px-3 text-nowrap fw-medium text-secondary" href="<?= site_url('templates?channel=email') ?>">
+                <i class="fas fa-envelope me-1 text-primary"></i> Email Templates
+            </a>
+        </li>
+    </ul>
+
+    <!-- Status Count Tabs / Cards -->
+    <div class="row g-2 mb-3" id="templateStatusTabs">
+        <div class="col-6 col-md-4 col-xl">
+            <div class="kpi-card kpi-accent-sky js-tpl-status-filter is-active" role="button" data-status="" style="cursor:pointer;" title="All Templates">
+                <span class="kpi-icon"><i class="fas fa-layer-group"></i></span>
+                <span class="kpi-label">All Templates</span>
+                <span class="kpi-value"><?= count($templates ?? []) ?></span>
             </div>
         </div>
-        <div class="small text-muted mt-2">
-            Only <strong>APPROVED</strong> templates can be selected for sending.
-            Meta API Setup may show <code>hello_world</code> as a sample — that does not guarantee it exists on this WABA.
+        <div class="col-6 col-md-4 col-xl">
+            <div class="kpi-card kpi-accent-green js-tpl-status-filter" role="button" data-status="approved" style="cursor:pointer;" title="Filter Approved Templates">
+                <span class="kpi-icon"><i class="fas fa-check-circle"></i></span>
+                <span class="kpi-label">Approved</span>
+                <span class="kpi-value"><?= (int) ($statusCounts['APPROVED'] ?? 0) ?></span>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl">
+            <div class="kpi-card kpi-accent-amber js-tpl-status-filter" role="button" data-status="pending" style="cursor:pointer;" title="Filter Pending Templates">
+                <span class="kpi-icon"><i class="fas fa-clock"></i></span>
+                <span class="kpi-label">Pending</span>
+                <span class="kpi-value"><?= (int) ($statusCounts['PENDING'] ?? 0) ?></span>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl">
+            <div class="kpi-card kpi-accent-danger js-tpl-status-filter" role="button" data-status="rejected" style="cursor:pointer;" title="Filter Rejected Templates">
+                <span class="kpi-icon"><i class="fas fa-times-circle"></i></span>
+                <span class="kpi-label">Rejected</span>
+                <span class="kpi-value"><?= (int) ($statusCounts['REJECTED'] ?? 0) ?></span>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl">
+            <div class="kpi-card kpi-accent-ink js-tpl-status-filter" role="button" data-status="disabled" style="cursor:pointer;" title="Filter Disabled Templates">
+                <span class="kpi-icon"><i class="fas fa-ban"></i></span>
+                <span class="kpi-label">Disabled</span>
+                <span class="kpi-value"><?= (int) ($statusCounts['DISABLED'] ?? 0) ?></span>
+            </div>
         </div>
     </div>
-</div>
 
 <?php if (! empty($templates)): ?>
 <div class="card">
@@ -536,8 +560,31 @@ $(function () {
     $('#templateStatusFilter, #templateCategoryFilter, #templateLanguageFilter').on('change', applyFilters);
     $('#templateResetFilters, #templateResetEmptyState').on('click', resetFilters);
 
+    // Click on KPI status count cards to filter templates
+    $(document).on('click', '.js-tpl-status-filter', function () {
+        var status = ($(this).data('status') || '').toString().toLowerCase();
+        var current = ($('#templateStatusFilter').val() || '').toString().toLowerCase();
+        if (current === status && status !== '') {
+            $('#templateStatusFilter').val('').trigger('change');
+        } else {
+            $('#templateStatusFilter').val(status).trigger('change');
+        }
+    });
+
+    function syncStatusCardActive() {
+        var current = ($('#templateStatusFilter').val() || '').toString().toLowerCase();
+        $('.js-tpl-status-filter').each(function () {
+            var st = ($(this).data('status') || '').toString().toLowerCase();
+            var isActive = (current === st) || (current === '' && st === '');
+            $(this).toggleClass('is-active', isActive);
+        });
+    }
+
+    $('#templateStatusFilter').on('change', syncStatusCardActive);
+
     setView(activeView);
     applyFilters();
+    syncStatusCardActive();
 
     // Auto-sync from Meta/Cheerio every time this screen opens.
     (function autoSyncOnOpen() {
@@ -721,4 +768,18 @@ $(function () {
     });
 });
 </script>
+<?= $this->endSection() ?>
+
+<?= $this->section('styles') ?>
+<style>
+.js-tpl-status-filter {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.js-tpl-status-filter:hover {
+    transform: translateY(-2px);
+}
+.js-tpl-status-filter.is-active {
+    box-shadow: 0 0 0 2px var(--bs-primary, #0284c7) !important;
+}
+</style>
 <?= $this->endSection() ?>

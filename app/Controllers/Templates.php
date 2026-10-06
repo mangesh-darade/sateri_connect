@@ -23,6 +23,11 @@ class Templates extends BaseController
             return $denied;
         }
 
+        $channel = strtolower(trim((string) ($this->request->getGet('channel') ?? 'whatsapp')));
+        if ($channel === 'email') {
+            return $this->emailTemplates();
+        }
+
         $status = (string) ($this->request->getGet('status') ?? '');
         $model  = model(TemplateModel::class);
         $wabaId = trim((string) (service('settingsService')->getMetaConfig()['waba_id'] ?? ''));
@@ -46,6 +51,47 @@ class Templates extends BaseController
             'wabaId'        => $wabaId,
             'phoneNumberId' => (string) (service('settingsService')->getMetaConfig()['phone_number_id'] ?? ''),
             'lastSyncedAt'  => $this->latestSyncedAt($templates),
+            'channel'       => 'whatsapp',
+        ]);
+    }
+
+    public function emailTemplates(): string|ResponseInterface
+    {
+        if ($denied = $this->requirePermission('templates.view')) {
+            return $denied;
+        }
+
+        $search = trim((string) ($this->request->getGet('q') ?? ''));
+        $status = strtolower(trim((string) ($this->request->getGet('status') ?? '')));
+
+        $model = model(\App\Models\EmailBuilderModel::class);
+        if ($search !== '') {
+            $model->groupStart()
+                ->like('name', $search)
+                ->orLike('subject', $search)
+            ->groupEnd();
+        }
+        if ($status !== '' && in_array($status, ['active', 'draft', 'archived'], true)) {
+            $model->where('status', $status);
+        }
+
+        $templates = $model->orderBy('id', 'DESC')->findAll(100);
+
+        $counts = [
+            'total'    => model(\App\Models\EmailBuilderModel::class)->countAllResults(),
+            'active'   => model(\App\Models\EmailBuilderModel::class)->where('status', 'active')->countAllResults(),
+            'draft'    => model(\App\Models\EmailBuilderModel::class)->where('status', 'draft')->countAllResults(),
+            'archived' => model(\App\Models\EmailBuilderModel::class)->where('status', 'archived')->countAllResults(),
+        ];
+
+        return $this->render('templates/email_index', [
+            'pageTitle'    => 'Email Templates',
+            'templates'    => $templates,
+            'filterSearch' => $search,
+            'filterStatus' => $status,
+            'statusCounts' => $counts,
+            'canCreate'    => function_exists('can') && can('emails.send'),
+            'channel'      => 'email',
         ]);
     }
 
