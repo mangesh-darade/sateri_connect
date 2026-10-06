@@ -371,6 +371,44 @@
             }
         });
 
+        // Toggle between Campaign Name and Email Template dropdown
+        $('input[name="step2_type"]').on('change', function () {
+            var val = $(this).val();
+            if (val === 'template') {
+                $('#bulkCampaignWrapper').addClass('d-none');
+                $('#bulkTemplateWrapper').removeClass('d-none');
+            } else {
+                $('#bulkTemplateWrapper').addClass('d-none');
+                $('#bulkCampaignWrapper').removeClass('d-none');
+            }
+        });
+
+        // When a template is picked from dropdown, load its subject & HTML content
+        $('#bulkTemplateSelect').on('change', function () {
+            var $opt = $(this).find(':selected');
+            var tplId = $(this).val();
+            if (tplId) {
+                var tplSubject = $opt.data('subject') || '';
+                var tplContent = $opt.data('content') || '';
+                var tplName = $opt.data('name') || '';
+
+                if (tplSubject) {
+                    $('#bulkSubject').val(tplSubject);
+                } else if (tplName && !$('#bulkSubject').val()) {
+                    $('#bulkSubject').val(tplName);
+                }
+
+                if (tplContent) {
+                    $('#bulkBody').val(tplContent);
+                    $('#bulkIsHtml').prop('checked', true);
+                }
+
+                if (window.APP && APP.toast) {
+                    APP.toast('Loaded template "' + tplName + '"', 'success');
+                }
+            }
+        });
+
         // ── Submit Form Handler ──────────────────────────────────
         $form.on('submit', function (e) {
             e.preventDefault();
@@ -392,9 +430,16 @@
                     if (id > 0) contactIds.push(id);
                 });
 
-                var bulkCamp = $('#bulkCampaign').val() || '';
-                if (bulkCamp === '__custom__') {
-                    bulkCamp = $.trim($('#bulkCampaignCustom').val() || '');
+                var bulkCamp = '';
+                var isTemplateMode = $('input[name="step2_type"]:checked').val() === 'template';
+                if (isTemplateMode) {
+                    var tplName = $('#bulkTemplateSelect').find(':selected').data('name') || '';
+                    bulkCamp = tplName ? ('template-' + tplName) : 'app-direct';
+                } else {
+                    bulkCamp = $('#bulkCampaign').val() || '';
+                    if (bulkCamp === '__custom__') {
+                        bulkCamp = $.trim($('#bulkCampaignCustom').val() || '');
+                    }
                 }
 
                 var payload = {

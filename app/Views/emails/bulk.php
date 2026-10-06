@@ -16,6 +16,7 @@ $isCheerio = ! empty($isCheerio);
 $defaultCampaign = $defaultCampaign ?? 'app-direct';
 $campaigns = $campaigns ?? [];
 $emailCampaigns = $emailCampaigns ?? [];
+$emailTemplates = $emailTemplates ?? [];
 $customerGroups = $customerGroups ?? [];
 $contactsWithEmail = $contactsWithEmail ?? [];
 $maxRecipients = (int) ($maxRecipients ?? 100);
@@ -281,46 +282,86 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
                         <label class="form-label text-uppercase fw-bold text-muted mb-0" style="font-size: 0.72rem; letter-spacing: 0.6px;">
                             Step 2 · Message Details
                         </label>
+                        <!-- Mode Toggle: Campaign vs Template -->
+                        <div class="btn-group btn-group-sm p-0.5 rounded-pill border" role="group" id="bulkModeToggleGroup" style="background: #f1f5f9; border-color: #e2e8f0 !important;">
+                            <input type="radio" class="btn-check" name="step2_type" id="typeCampaign" value="campaign" checked autocomplete="off">
+                            <label class="btn btn-xs rounded-pill px-3 py-1 fw-semibold text-secondary" for="typeCampaign" style="cursor: pointer; font-size: 0.74rem;">
+                                <i class="fas fa-bullhorn me-1 text-primary"></i> Campaign
+                            </label>
+                            <input type="radio" class="btn-check" name="step2_type" id="typeTemplate" value="template" autocomplete="off">
+                            <label class="btn btn-xs rounded-pill px-3 py-1 fw-semibold text-secondary" for="typeTemplate" style="cursor: pointer; font-size: 0.74rem;">
+                                <i class="fas fa-file-code me-1 text-info"></i> Template
+                            </label>
+                        </div>
                     </div>
 
                     <div class="row g-3">
                         <div class="col-md-4">
-                            <label class="form-label small fw-bold text-dark mb-1" for="bulkCampaign">
-                                Campaign Name <span class="text-muted fw-normal" style="font-size: 0.75rem;">(Optional)</span>
-                            </label>
-                            <?php 
-                                $selectedCampaign = (string) (old('campaign_name') ?? $defaultCampaign ?? '');
-                                $isKnownCampaign = $selectedCampaign === '' || $selectedCampaign === 'app-direct' 
-                                    || in_array($selectedCampaign, array_column($emailCampaigns ?? [], 'name'), true);
-                            ?>
-                            <select class="form-select form-select-sm" id="bulkCampaign" name="campaign_name"
-                                    style="height: 38px; border-color: #cbd5e1; font-size: 0.85rem;">
-                                <option value="">— Select Campaign (Optional) —</option>
-                                <option value="app-direct" <?= ($selectedCampaign === 'app-direct') ? 'selected' : '' ?>>
-                                    app-direct (Default)
-                                </option>
-                                <?php if (!empty($emailCampaigns)): ?>
-                                    <optgroup label="Email Campaigns">
-                                        <?php foreach ($emailCampaigns as $ec): ?>
-                                            <?php 
-                                                $ecName = (string) ($ec['name'] ?? '');
-                                                if ($ecName === '' || $ecName === 'app-direct') continue;
-                                            ?>
-                                            <option value="<?= esc($ecName) ?>" <?= ($selectedCampaign === $ecName) ? 'selected' : '' ?>>
-                                                <?= esc($ecName) ?><?= !empty($ec['status']) ? ' (' . esc(ucfirst($ec['status'])) . ')' : '' ?>
+                            <!-- Campaign Dropdown Wrapper -->
+                            <div id="bulkCampaignWrapper">
+                                <label class="form-label small fw-bold text-dark mb-1" for="bulkCampaign">
+                                    Campaign Name <span class="text-muted fw-normal" style="font-size: 0.75rem;">(Optional)</span>
+                                </label>
+                                <?php 
+                                    $selectedCampaign = (string) (old('campaign_name') ?? $defaultCampaign ?? '');
+                                    $isKnownCampaign = $selectedCampaign === '' || $selectedCampaign === 'app-direct' 
+                                        || in_array($selectedCampaign, array_column($emailCampaigns ?? [], 'name'), true);
+                                ?>
+                                <select class="form-select form-select-sm" id="bulkCampaign" name="campaign_name"
+                                        style="height: 38px; border-color: #cbd5e1; font-size: 0.85rem;">
+                                    <option value="">— Select Campaign (Optional) —</option>
+                                    <option value="app-direct" <?= ($selectedCampaign === 'app-direct') ? 'selected' : '' ?>>
+                                        app-direct (Default)
+                                    </option>
+                                    <?php if (!empty($emailCampaigns)): ?>
+                                        <optgroup label="Email Campaigns">
+                                            <?php foreach ($emailCampaigns as $ec): ?>
+                                                <?php 
+                                                    $ecName = (string) ($ec['name'] ?? '');
+                                                    if ($ecName === '' || $ecName === 'app-direct') continue;
+                                                ?>
+                                                <option value="<?= esc($ecName) ?>" <?= ($selectedCampaign === $ecName) ? 'selected' : '' ?>>
+                                                    <?= esc($ecName) ?><?= !empty($ec['status']) ? ' (' . esc(ucfirst($ec['status'])) . ')' : '' ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </optgroup>
+                                    <?php endif; ?>
+                                    <option value="__custom__" <?= (! $isKnownCampaign && $selectedCampaign !== '') ? 'selected' : '' ?>>
+                                        + Enter Custom Campaign...
+                                    </option>
+                                </select>
+                                <input type="text" class="form-control form-control-sm mt-1.5 <?= (! $isKnownCampaign && $selectedCampaign !== '') ? '' : 'd-none' ?>" 
+                                       id="bulkCampaignCustom" 
+                                       placeholder="Type custom campaign name..."
+                                       value="<?= (! $isKnownCampaign) ? esc($selectedCampaign) : '' ?>"
+                                       style="height: 34px; border-color: #cbd5e1; font-size: 0.85rem;">
+                            </div>
+
+                            <!-- Template Dropdown Wrapper -->
+                            <div id="bulkTemplateWrapper" class="d-none">
+                                <label class="form-label small fw-bold text-dark mb-1" for="bulkTemplateSelect">
+                                    Email Template <span class="text-muted fw-normal" style="font-size: 0.75rem;">(Select to Load)</span>
+                                </label>
+                                <select class="form-select form-select-sm" id="bulkTemplateSelect"
+                                        style="height: 38px; border-color: #cbd5e1; font-size: 0.85rem;">
+                                    <option value="">— Select Template (Optional) —</option>
+                                    <?php if (!empty($emailTemplates)): ?>
+                                        <?php foreach ($emailTemplates as $tpl): ?>
+                                            <option value="<?= (int) $tpl['id'] ?>"
+                                                    data-name="<?= esc($tpl['name']) ?>"
+                                                    data-subject="<?= esc($tpl['subject'] ?? '') ?>"
+                                                    data-content="<?= esc($tpl['html_content'] ?? '', 'attr') ?>">
+                                                <?= esc($tpl['name']) ?><?= !empty($tpl['subject']) ? ' (' . esc($tpl['subject']) . ')' : '' ?>
                                             </option>
                                         <?php endforeach; ?>
-                                    </optgroup>
-                                <?php endif; ?>
-                                <option value="__custom__" <?= (! $isKnownCampaign && $selectedCampaign !== '') ? 'selected' : '' ?>>
-                                    + Enter Custom Campaign...
-                                </option>
-                            </select>
-                            <input type="text" class="form-control form-control-sm mt-1.5 <?= (! $isKnownCampaign && $selectedCampaign !== '') ? '' : 'd-none' ?>" 
-                                   id="bulkCampaignCustom" 
-                                   placeholder="Type custom campaign name..."
-                                   value="<?= (! $isKnownCampaign) ? esc($selectedCampaign) : '' ?>"
-                                   style="height: 34px; border-color: #cbd5e1; font-size: 0.85rem;">
+                                    <?php else: ?>
+                                        <option value="" disabled>No templates created yet</option>
+                                    <?php endif; ?>
+                                </select>
+                                <div class="form-text text-muted" style="font-size: 0.72rem;">
+                                    Selecting loads template subject &amp; body below.
+                                </div>
+                            </div>
                         </div>
                         <div class="col-md-8">
                             <label class="form-label small fw-bold text-dark mb-1" for="bulkSubject">
@@ -390,7 +431,8 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
     color: #1e293b;
     background-color: rgba(255, 255, 255, 0.6);
 }
-.audience-pill-bar .btn-check:checked + .audience-pill-btn {
+.audience-pill-bar .btn-check:checked + .audience-pill-btn,
+#bulkModeToggleGroup .btn-check:checked + label {
     background-color: #ffffff !important;
     color: #2563eb !important;
     border: 1px solid #cbd5e1 !important;

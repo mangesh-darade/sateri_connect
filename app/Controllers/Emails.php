@@ -8,6 +8,7 @@ use App\Libraries\ActivityLogger;
 use App\Libraries\SettingsService;
 use App\Models\CampaignModel;
 use App\Models\ContactModel;
+use App\Models\EmailBuilderModel;
 use App\Models\EmailLogModel;
 use App\Models\TagModel;
 use CodeIgniter\HTTP\ResponseInterface;
@@ -262,6 +263,10 @@ class Emails extends BaseController
                 ->findAll(200),
             'emailCampaigns'  => model(\App\Models\EmailHtmlCampaignModel::class)
                 ->select('id, name, status')
+                ->orderBy('id', 'DESC')
+                ->findAll(100),
+            'emailTemplates'  => model(EmailBuilderModel::class)
+                ->select('id, name, subject, html_content')
                 ->orderBy('id', 'DESC')
                 ->findAll(100),
             'isCheerio'       => $provider === SettingsService::EMAIL_PROVIDER_CHEERIO,
