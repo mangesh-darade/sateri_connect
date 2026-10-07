@@ -6,7 +6,11 @@
     # Never expose secrets / app internals when DocumentRoot is project root.
     RewriteRule ^(app|writable|vendor|tests|docs|tools|builds)(/|$) - [F,L,NC]
     RewriteRule ^(\.env|\.git|composer\.(json|lock)|spark|preload\.php)(/|$) - [F,L,NC]
-    RewriteRule \.(sql|bak|md)$ - [F,L,NC]
+    RewriteRule \.(sql|bak|md|log|ini|env|lock|dist|yml|yaml|sh|ps1)$ - [F,L,NC]
+    RewriteRule ^(env|phpunit\.xml(\.dist)?)$ - [F,L,NC]
+    # Any dotfile / dot-directory (.env.*, .cursor, .github …) except ACME challenges.
+    RewriteCond %{REQUEST_URI} !^/?\.well-known/ [NC]
+    RewriteRule (^|/)\. - [F,L]
 
     # Keep real files/dirs at project root (e.g. published assets/, uploads/)
     RewriteCond %{REQUEST_FILENAME} -f [OR]
