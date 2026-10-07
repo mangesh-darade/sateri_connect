@@ -625,21 +625,23 @@ class Chat extends BaseController
                         if ($tpl === null) {
                             return $this->jsonResponse(false, null, 'Template not found.', [], 404);
                         }
-                        $status = strtoupper((string) ($tpl['status'] ?? ''));
-                        if ($status !== '' && $status !== 'APPROVED') {
-                            return $this->jsonResponse(
-                                false,
-                                null,
-                                'Only APPROVED templates can be sent. Current status: ' . $status,
-                                [],
-                                422
-                            );
+                        try {
+                            (new \App\Libraries\WhatsAppTemplateSendGuard())->assertApproved($tpl);
+                        } catch (\RuntimeException $e) {
+                            return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
                         }
                         $templateName = (string) $tpl['name'];
                         $language     = (string) ($tpl['language'] ?? $language);
                     }
                     if ($templateName === '') {
                         return $this->jsonResponse(false, null, 'Template name is required.', [], 422);
+                    }
+                    if ($tpl === null) {
+                        try {
+                            (new \App\Libraries\WhatsAppTemplateSendGuard())->assertSendableByName($templateName, $language);
+                        } catch (\RuntimeException $e) {
+                            return $this->jsonResponse(false, null, $e->getMessage(), [], $e->getCode() === 404 ? 404 : 422);
+                        }
                     }
                     if ($components === [] && is_array($input['variables'] ?? null)) {
                         $components = $this->variablesToComponents((array) $input['variables'], $contact);
@@ -648,7 +650,11 @@ class Chat extends BaseController
                     // IMAGE/VIDEO/DOCUMENT templates need real header media (Cheerio/Meta).
                     // Meta approval CDN samples are not reusable at send time.
                     if (is_array($tpl)) {
-                        $headerComponents = $this->buildTemplateHeaderComponents($tpl, $input);
+                        try {
+                            $headerComponents = $this->buildTemplateHeaderComponents($tpl, $input);
+                        } catch (\InvalidArgumentException $e) {
+                            return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
+                        }
                         if ($headerComponents !== []) {
                             $components = array_merge($headerComponents, $components);
                         }
@@ -1020,6 +1026,10 @@ class Chat extends BaseController
             ?? $this->request->getFile('header_file');
         if (($mediaId === '' && $mediaUrl === '') && $file !== null && $file->isValid()) {
             $mime = (string) ($file->getMimeType() ?: 'application/octet-stream');
+            $allowedHeaderMimes = ['image/jpeg', 'image/png', 'video/mp4', 'video/3gpp', 'application/pdf'];
+            if (! in_array($mime, $allowedHeaderMimes, true)) {
+                throw new \InvalidArgumentException('Header file type not supported. Upload a JPG/PNG image, MP4 video or PDF document.');
+            }
             $dir  = WRITEPATH . 'uploads/media/';
             if (! is_dir($dir)) {
                 mkdir($dir, 0755, true);
