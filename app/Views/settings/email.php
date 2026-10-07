@@ -83,6 +83,11 @@ $steps = [
     </div>
     <?php endif; ?>
 
+    <?= view('partials/email_compliance_banner', [
+        'reputation'     => $reputation ?? null,
+        'companyAddress' => $companyAddress ?? '',
+    ]) ?>
+
     <!-- Overview -->
     <div class="row g-3 mb-3">
         <div class="col-sm-6 col-xl-3">
@@ -187,6 +192,31 @@ $steps = [
         </div>
     </div>
     <?php endif; ?>
+
+    <!-- Marketing footer / compliance -->
+    <?php $canEditSettings = function_exists('can') && can('settings.edit'); ?>
+    <div class="card border-0 shadow-sm mb-3" id="emailComplianceCard">
+        <div class="card-header bg-white py-3">
+            <h6 class="mb-0 fw-bold"><i class="fas fa-map-marker-alt text-primary me-2"></i>Marketing Email Footer</h6>
+            <div class="small text-muted">Shown at the bottom of every bulk, campaign, drip and automation email, next to the unsubscribe link.</div>
+        </div>
+        <div class="card-body">
+            <form id="emailComplianceForm" novalidate>
+                <input type="hidden" name="section" value="email_compliance">
+                <label class="form-label small fw-semibold" for="emailCompanyAddress">Business postal address</label>
+                <textarea class="form-control" id="emailCompanyAddress" name="email_company_address" rows="3" maxlength="500"
+                          placeholder="Your Company Pvt Ltd, 12 Market Road, Pune, Maharashtra 411001, India"
+                          <?= $canEditSettings ? '' : 'readonly' ?>><?= esc((string) ($companyAddress ?? '')) ?></textarea>
+                <div class="form-text">Required by anti-spam laws (CAN-SPAM). Use your registered office or a valid postal / PO box address.</div>
+                <?php if ($canEditSettings): ?>
+                <div class="d-flex align-items-center gap-2 mt-3">
+                    <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-save me-1"></i> Save Address</button>
+                    <span class="small js-compliance-msg" data-base-class="small js-compliance-msg"></span>
+                </div>
+                <?php endif; ?>
+            </form>
+        </div>
+    </div>
 
     <!-- Domains -->
     <div class="card border-0 shadow-sm mb-3">
