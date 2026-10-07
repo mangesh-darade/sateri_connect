@@ -308,8 +308,7 @@ class WhatsAppIdentityService
         $verify = $this->resolveCaBundle();
         $opts   = [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS      => 3,
+            CURLOPT_FOLLOWLOCATION => false,
             CURLOPT_CONNECTTIMEOUT => 8,
             CURLOPT_TIMEOUT        => 15,
             CURLOPT_PROTOCOLS      => CURLPROTO_HTTPS,
