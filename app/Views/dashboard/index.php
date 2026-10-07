@@ -118,12 +118,12 @@ $failedCount = (int) $get($stats, 'failed');
                     <div class="chart-frame">
                         <?php $trends = $charts['trends'] ?? []; ?>
                         <canvas id="chartTrends"
-                            data-labels='<?= json_encode($trends['labels'] ?? []) ?>'
-                            data-sent='<?= json_encode($trends['sent'] ?? []) ?>'
-                            data-delivered='<?= json_encode($trends['delivered'] ?? []) ?>'
-                            data-read='<?= json_encode($trends['read'] ?? []) ?>'
-                            data-failed='<?= json_encode($trends['failed'] ?? []) ?>'
-                            data-replies='<?= json_encode($trends['replies'] ?? []) ?>'></canvas>
+                            data-labels='<?= json_encode($trends['labels'] ?? [], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>'
+                            data-sent='<?= json_encode($trends['sent'] ?? [], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>'
+                            data-delivered='<?= json_encode($trends['delivered'] ?? [], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>'
+                            data-read='<?= json_encode($trends['read'] ?? [], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>'
+                            data-failed='<?= json_encode($trends['failed'] ?? [], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>'
+                            data-replies='<?= json_encode($trends['replies'] ?? [], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>'></canvas>
                     </div>
                 </div>
             </div>
@@ -137,8 +137,8 @@ $failedCount = (int) $get($stats, 'failed');
                     <div class="chart-frame" id="chartCampaignsFrame">
                         <?php $camp = $charts['campaigns'] ?? []; ?>
                         <canvas id="chartCampaigns"
-                            data-labels='<?= json_encode($camp['labels'] ?? []) ?>'
-                            data-values='<?= json_encode($camp['values'] ?? []) ?>'></canvas>
+                            data-labels='<?= json_encode($camp['labels'] ?? [], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>'
+                            data-values='<?= json_encode($camp['values'] ?? [], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>'></canvas>
                         <div class="chart-empty d-none" id="chartCampaignsEmpty" aria-hidden="true">
                             <i class="fas fa-chart-pie"></i>
                             <div class="chart-empty-title">No campaigns yet</div>
