@@ -93,7 +93,7 @@ class Webhooks extends Controller
 
         $signature = $this->request->getHeaderLine('X-Hub-Signature-256');
         $validator = new WebhookValidator();
-        $matchedProvider = $validator->matchSignatureProvider($rawBody, $signature !== '' ? $signature : null);
+        $matchedProvider = $validator->matchSignatureProvider($rawBody, $signature !== '' ? $signature : null, $phoneNumberId);
         $valid           = $matchedProvider !== null;
 
         // Local / non-production: still accept payload so Live Chat testing works
@@ -398,22 +398,33 @@ class Webhooks extends Controller
             $pageId !== '' ? $pageId : null
         );
 
-        $messageId = $messages->insert([
-            'contact_id'          => $contactId,
-            'conversation_id'     => (int) $conversation['id'],
-            'channel'             => $channel,
-            'direction'           => 'inbound',
-            'message_type'        => $type,
-            'external_message_id' => $mid !== '' ? $mid : null,
-            'wa_message_id'       => $mid !== '' ? $mid : null,
-            'wamid'               => $mid !== '' ? $mid : null,
-            'content'             => $text !== '' ? $text : null,
-            'media_url'           => $mediaUrl !== '' ? $mediaUrl : null,
-            'media_id'            => $mediaId,
-            'payload'             => $event,
-            'status'              => 'received',
-            'is_read'             => 0,
-        ]);
+        try {
+            $messageId = $messages->insert([
+                'contact_id'          => $contactId,
+                'conversation_id'     => (int) $conversation['id'],
+                'channel'             => $channel,
+                'direction'           => 'inbound',
+                'message_type'        => $type,
+                'external_message_id' => $mid !== '' ? $mid : null,
+                'wa_message_id'       => $mid !== '' ? $mid : null,
+                'wamid'               => $mid !== '' ? $mid : null,
+                'content'             => $text !== '' ? $text : null,
+                'media_url'           => $mediaUrl !== '' ? $mediaUrl : null,
+                'media_id'            => $mediaId,
+                'payload'             => $event,
+                'status'              => 'received',
+                'is_read'             => 0,
+            ]);
+        } catch (Throwable $e) {
+            if ($mid !== '' && $messages->findByExternalMessageId($mid) !== null) {
+                return;
+            }
+
+            throw $e;
+        }
+        if (! $messageId) {
+            return;
+        }
 
         model(ConversationModel::class)->update((int) $conversation['id'], [
             'last_message_id' => $messageId,
@@ -552,31 +563,45 @@ class Webhooks extends Controller
 
         $mediaUrl = null;
         if (! empty($parsed['media_id'])) {
-            $mediaUrl = $this->storeInboundMedia((string) $parsed['media_id']);
+            $mediaUrl = $this->storeInboundMedia((string) $parsed['media_id'], $sourceProvider);
         }
 
         $conversation = model(ConversationModel::class)->findOrCreateForContact($contactId, 'whatsapp');
 
-        $messageId = $messages->insert([
-            'contact_id'          => $contactId,
-            'conversation_id'     => (int) $conversation['id'],
-            'channel'             => 'whatsapp',
-            'direction'           => 'inbound',
-            'message_type'        => $parsed['type'],
-            'wa_message_id'       => $waMessageId !== '' ? $waMessageId : null,
-            'wamid'               => $waMessageId !== '' ? $waMessageId : null,
-            'external_message_id' => $waMessageId !== '' ? $waMessageId : null,
-            'content'             => $parsed['content'],
-            'media_url'           => $mediaUrl,
-            'media_id'            => $parsed['media_id'],
-            'payload'             => [
-                'message'  => $message,
-                'metadata' => $metadata,
-                'provider' => $sourceProvider,
-            ],
-            'status'              => 'received',
-            'is_read'             => 0,
-        ]);
+        try {
+            $messageId = $messages->insert([
+                'contact_id'          => $contactId,
+                'conversation_id'     => (int) $conversation['id'],
+                'channel'             => 'whatsapp',
+                'direction'           => 'inbound',
+                'message_type'        => $parsed['type'],
+                'wa_message_id'       => $waMessageId !== '' ? $waMessageId : null,
+                'wamid'               => $waMessageId !== '' ? $waMessageId : null,
+                'external_message_id' => $waMessageId !== '' ? $waMessageId : null,
+                'content'             => $parsed['content'],
+                'media_url'           => $mediaUrl,
+                'media_id'            => $parsed['media_id'],
+                'payload'             => [
+                    'message'  => $message,
+                    'metadata' => $metadata,
+                    'provider' => $sourceProvider,
+                ],
+                'status'              => 'received',
+                'is_read'             => 0,
+            ]);
+        } catch (Throwable $e) {
+            // A parallel Meta retry stored the same wa_message_id first (unique index): skip automations.
+            if ($waMessageId !== '' && $messages->findByWaMessageId($waMessageId) !== null) {
+                log_message('notice', 'Duplicate inbound WhatsApp message {id} skipped.', ['id' => $waMessageId]);
+
+                return;
+            }
+
+            throw $e;
+        }
+        if (! $messageId) {
+            return;
+        }
 
         model(ConversationModel::class)->update((int) $conversation['id'], [
             'last_message_id' => $messageId,
@@ -646,7 +671,7 @@ class Webhooks extends Controller
             }
         }
 
-        // First message from a customer who has not answered consent yet: ask with Agree / Stop.
+        // Only when the tenant enabled automatic opt-in requests; at most once per contact.
         if ($autoReplyAllowed) {
             $consent->requestConsentIfPending($contactModel->find($contactId) ?? $contact, $activeProvider);
         }
@@ -903,22 +928,44 @@ class Webhooks extends Controller
     }
 
     /**
-     * Download media via Cheerio and store locally; return serve URL or null on failure.
+     * Download inbound media (Meta or Cheerio) and store locally; return serve URL or null on failure.
+     * Media ids belong to the receiving number's provider, so download through that provider.
      */
-    protected function storeInboundMedia(string $mediaId): ?string
+    protected function storeInboundMedia(string $mediaId, ?string $provider = null): ?string
     {
+        $api = null;
         try {
-            $downloaded = service('whatsApp')->downloadMedia($mediaId);
-            $mime       = (string) ($downloaded['mime_type'] ?? 'application/octet-stream');
-            $ext        = match (true) {
+            $api = service('whatsApp');
+            if ($provider !== null && $provider !== '' && method_exists($api, 'forceProvider')) {
+                $api->forceProvider($provider);
+            }
+            $downloaded = $api->downloadMedia($mediaId);
+            $body       = (string) ($downloaded['content'] ?? $downloaded['contents'] ?? '');
+            if ($body === '') {
+                log_message('warning', 'Inbound media {id} downloaded empty.', ['id' => $mediaId]);
+
+                return null;
+            }
+            $mime = strtolower((string) ($downloaded['mime_type'] ?? 'application/octet-stream'));
+            $ext  = match (true) {
                 str_contains($mime, 'jpeg'), str_contains($mime, 'jpg') => 'jpg',
                 str_contains($mime, 'png') => 'png',
                 str_contains($mime, 'webp') => 'webp',
                 str_contains($mime, 'gif') => 'gif',
                 str_contains($mime, 'pdf') => 'pdf',
                 str_contains($mime, 'mp4') => 'mp4',
+                str_contains($mime, '3gpp') => '3gp',
                 str_contains($mime, 'ogg') => 'ogg',
+                str_contains($mime, 'aac') => 'aac',
+                str_contains($mime, 'amr') => 'amr',
                 str_contains($mime, 'mpeg'), str_contains($mime, 'mp3') => 'mp3',
+                str_contains($mime, 'spreadsheetml') => 'xlsx',
+                str_contains($mime, 'wordprocessingml') => 'docx',
+                str_contains($mime, 'presentationml') => 'pptx',
+                str_contains($mime, 'ms-excel') => 'xls',
+                str_contains($mime, 'msword') => 'doc',
+                str_contains($mime, 'text/csv') => 'csv',
+                str_contains($mime, 'text/plain') => 'txt',
                 default => 'bin',
             };
 
@@ -928,7 +975,7 @@ class Webhooks extends Controller
             }
 
             $filename = 'in_' . bin2hex(random_bytes(8)) . '.' . $ext;
-            if (file_put_contents($dir . $filename, $downloaded['content']) === false) {
+            if (file_put_contents($dir . $filename, $body) === false) {
                 return null;
             }
 
@@ -937,6 +984,13 @@ class Webhooks extends Controller
             log_message('warning', 'Inbound media download failed: {msg}', ['msg' => $e->getMessage()]);
 
             return null;
+        } finally {
+            if ($api !== null && $provider !== null && $provider !== '' && method_exists($api, 'clearForcedProvider')) {
+                try {
+                    $api->clearForcedProvider();
+                } catch (Throwable) {
+                }
+            }
         }
     }
 
