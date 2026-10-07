@@ -953,10 +953,11 @@ class Contacts extends BaseController
         try {
             $stats = (new \App\Libraries\ElintOmCustomerSyncService())->sync();
             $msg   = sprintf(
-                'ElintOm customers: %d created, %d updated%s%s.',
+                'ElintOm customers: %d created, %d updated%s%s%s.',
                 $stats['created'],
                 $stats['updated'],
                 $stats['skipped'] ? ', ' . $stats['skipped'] . ' skipped' : '',
+                $stats['deleted'] ? ', ' . $stats['deleted'] . ' deleted in app (not restored)' : '',
                 $stats['failed'] ? ', ' . $stats['failed'] . ' failed' : ''
             );
 

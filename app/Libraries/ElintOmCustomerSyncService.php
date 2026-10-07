@@ -75,7 +75,7 @@ class ElintOmCustomerSyncService
     }
 
     /**
-     * @return array{created: int, updated: int, skipped: int, failed: int, unchanged: int, total: int, errors: list<string>}
+     * @return array{created: int, updated: int, skipped: int, failed: int, unchanged: int, deleted: int, total: int, errors: list<string>}
      */
     public function sync(): array
     {
@@ -86,6 +86,7 @@ class ElintOmCustomerSyncService
         $skipped = 0;
         $failed  = 0;
         $unchanged = 0;
+        $deleted   = 0;
         $errors  = [];
 
         foreach ($rows as $row) {
@@ -98,8 +99,11 @@ class ElintOmCustomerSyncService
             try {
                 $wasCreated = false;
                 $wasSame    = false;
-                $this->upsertContact($row, $mobile, $wasCreated, $wasSame);
-                if ($wasCreated) {
+                $wasDeleted = false;
+                $this->upsertContact($row, $mobile, $wasCreated, $wasSame, $wasDeleted);
+                if ($wasDeleted) {
+                    $deleted++;
+                } elseif ($wasCreated) {
                     $created++;
                 } elseif ($wasSame) {
                     $unchanged++;
@@ -114,12 +118,24 @@ class ElintOmCustomerSyncService
             }
         }
 
+        if ($created + $updated > 0) {
+            log_activity('sync', 'contacts', sprintf('ElintOm customers sync: %d created, %d updated, %d deleted-in-app skipped', $created, $updated, $deleted), [
+                'source'    => 'elintom',
+                'created'   => $created,
+                'updated'   => $updated,
+                'unchanged' => $unchanged,
+                'deleted'   => $deleted,
+                'failed'    => $failed,
+            ]);
+        }
+
         return [
             'created' => $created,
             'updated' => $updated,
             'skipped' => $skipped,
             'failed'  => $failed,
             'unchanged' => $unchanged,
+            'deleted' => $deleted,
             'total'   => count($rows),
             'errors'  => $errors,
         ];
@@ -243,11 +259,19 @@ class ElintOmCustomerSyncService
     /**
      * @param array<string, mixed> $row
      */
-    protected function upsertContact(array $row, string $mobile, bool &$wasCreated, bool &$unchanged = false): void
+    protected function upsertContact(array $row, string $mobile, bool &$wasCreated, bool &$unchanged = false, bool &$wasDeleted = false): void
     {
         $wasCreated = false;
         $unchanged  = false;
-        $existing   = $this->contacts->findByMobile($mobile, true);
+        $wasDeleted = false;
+        $existing   = $this->contacts->findByMobile($mobile) ?? $this->contacts->findByMobile($mobile, true);
+
+        // A contact the user deleted in the app stays deleted; sync must not bring it back.
+        if ($existing !== null && ! empty($existing['deleted_at'])) {
+            $wasDeleted = true;
+
+            return;
+        }
 
         $custom = [
             'elintom_company_id' => isset($row['id']) ? (int) $row['id'] : null,
@@ -287,14 +311,10 @@ class ElintOmCustomerSyncService
         }
 
         $id = (int) $existing['id'];
-        if (empty($existing['deleted_at']) && ! $this->hasChanges($existing, $data)) {
+        if (! $this->hasChanges($existing, $data)) {
             $unchanged = true;
 
             return;
-        }
-        if (! empty($existing['deleted_at'])) {
-            $this->contacts->restoreContact($id);
-            $data['status'] = 'active';
         }
 
         if (! $this->contacts->update($id, $data)) {

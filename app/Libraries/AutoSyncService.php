@@ -99,7 +99,7 @@ class AutoSyncService
 
             case 'elintom':
                 $s = (new ElintOmCustomerSyncService())->sync();
-                $msg = sprintf('%d created, %d updated, %d unchanged.', $s['created'], $s['updated'], $s['unchanged'] ?? 0);
+                $msg = sprintf('%d created, %d updated, %d unchanged, %d deleted in app (skipped).', $s['created'], $s['updated'], $s['unchanged'] ?? 0, $s['deleted'] ?? 0);
                 if (! empty($s['failed'])) {
                     $msg .= ' ' . $s['failed'] . ' failed: ' . implode('; ', array_slice($s['errors'] ?? [], 0, 3));
                 }

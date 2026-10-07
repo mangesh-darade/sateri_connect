@@ -81,6 +81,10 @@ class CheerioSyncService
                     $model->skipValidation(false);
                     $contactId = (int) $existing['id'];
                     $updated++;
+                } elseif ($model->findByMobile($mobile, true) !== null) {
+                    // Deleted in the app — keep it deleted.
+                    $skipped++;
+                    continue;
                 } else {
                     $model->skipValidation(true);
                     $contactId = (int) $model->insert($payload);
