@@ -25,7 +25,7 @@ class App extends BaseConfig
     {
         parent::__construct();
 
-        if (! empty($_SERVER['HTTP_HOST']) && ! empty($_SERVER['SCRIPT_NAME'])) {
+        if (! empty($_SERVER['HTTP_HOST']) && ! empty($_SERVER['SCRIPT_NAME']) && $this->isTrustedRequestHost((string) $_SERVER['HTTP_HOST'])) {
             $https = (! empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
                 || (isset($_SERVER['SERVER_PORT']) && (string) $_SERVER['SERVER_PORT'] === '443')
                 || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
@@ -35,6 +35,36 @@ class App extends BaseConfig
 
             $this->baseURL = rtrim($root, '/') . '/';
         }
+    }
+
+    /**
+     * Host-header poisoning guard: when a baseURL is configured, only derive URLs (reset links,
+     * verification emails) from hosts on the same domain, allowedHostnames or tenancy portal hosts.
+     */
+    private function isTrustedRequestHost(string $httpHost): bool
+    {
+        $configuredHost = strtolower((string) parse_url($this->baseURL, PHP_URL_HOST));
+        if ($configuredHost === '') {
+            return true;
+        }
+
+        $host = strtolower(explode(':', trim($httpHost), 2)[0]);
+        if ($host === '' || preg_match('/^[a-z0-9.-]+$/', $host) !== 1) {
+            return false;
+        }
+
+        $labels     = explode('.', $configuredHost);
+        $rootDomain = count($labels) > 2 ? implode('.', array_slice($labels, 1)) : $configuredHost;
+        if ($host === $configuredHost || $host === $rootDomain || str_ends_with($host, '.' . $rootDomain)) {
+            return true;
+        }
+
+        $extra = array_merge(
+            $this->allowedHostnames,
+            explode(',', (string) env('tenancy.portalHosts', '')),
+        );
+
+        return in_array($host, array_map(static fn ($h) => strtolower(trim((string) $h)), $extra), true);
     }
 
     /**
