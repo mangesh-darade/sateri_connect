@@ -152,7 +152,16 @@ class Auth extends BaseController
         }
 
         $users = model(UserModel::class);
-        $user  = $users->findByEmail($email);
+        try {
+            $user = $users->findByEmail($email);
+        } catch (\CodeIgniter\Database\Exceptions\DatabaseException $e) {
+            // Stale login index / unregistered tenant leaves us on a DB without `users`.
+            log_message('warning', 'Login lookup failed for tenant {tenant}: {msg}', [
+                'tenant' => (string) ($tenantKey ?? \App\Libraries\TenantContext::get() ?? ''),
+                'msg'    => $e->getMessage(),
+            ]);
+            $user = null;
+        }
 
         if ($user === null || ! password_verify($password, (string) ($user['password'] ?? ''))) {
             $this->incrementAttempts($key);
