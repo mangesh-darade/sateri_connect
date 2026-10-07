@@ -287,8 +287,8 @@
         tbody.innerHTML = '';
         res.data.results.forEach(function (v) {
           var tr = document.createElement('tr');
-          tr.innerHTML = '<td>' + (v.email || '') + '</td>' +
-            '<td><span class="badge em-status-' + (v.status || '') + '">' + (v.status || '') + '</span></td>' +
+          tr.innerHTML = '<td>' + APP.escapeHtml(v.email || '') + '</td>' +
+            '<td><span class="badge em-status-' + APP.escapeHtml(v.status || '') + '">' + APP.escapeHtml(v.status || '') + '</span></td>' +
             '<td>' + (v.syntax_ok ? '✓' : '✗') + '</td>' +
             '<td>' + (v.mx_ok ? '✓' : '✗') + '</td>' +
             '<td>' + (v.disposable ? 'yes' : 'no') + '</td>';
