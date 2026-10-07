@@ -41,7 +41,13 @@ class InstallStatus
         }
 
         try {
-            return self::$installed = service('settingsService')->isInstalled();
+            self::$installed = service('settingsService')->isInstalled();
+            // Persist the lock so a later DB outage can never reopen the public installer.
+            if (self::$installed) {
+                @file_put_contents(self::lockPath(), 'installed_at=' . date('c') . "\nsource=settings\n", LOCK_EX);
+            }
+
+            return self::$installed;
         } catch (Throwable) {
             return self::$installed = false;
         }
