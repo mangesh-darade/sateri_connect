@@ -28,11 +28,11 @@ $routes->group('install', static function ($routes) {
  * --------------------------------------------------------------------
  */
 $routes->match(['get', 'post'], 'login', 'Auth::login', ['filter' => 'csrf']);
-$routes->match(['get', 'post'], 'signup', 'Auth::signup', ['filter' => 'csrf']);
+$routes->match(['get', 'post'], 'signup', 'Auth::signup', ['filter' => ['csrf', 'rateLimit:20,600']]);
 $routes->get('verify-email/(:segment)', 'Auth::verifyEmail/$1');
-$routes->match(['get', 'post'], 'resend-verification', 'Auth::resendVerification', ['filter' => 'csrf']);
-$routes->get('logout', 'Auth::logout');
-$routes->match(['get', 'post'], 'forgot-password', 'Auth::forgotPassword', ['filter' => 'csrf']);
+$routes->match(['get', 'post'], 'resend-verification', 'Auth::resendVerification', ['filter' => ['csrf', 'rateLimit:20,600']]);
+$routes->match(['get', 'post'], 'logout', 'Auth::logout');
+$routes->match(['get', 'post'], 'forgot-password', 'Auth::forgotPassword', ['filter' => ['csrf', 'rateLimit:20,600']]);
 $routes->match(['get', 'post'], 'reset-password/(:segment)', 'Auth::resetPassword/$1', ['filter' => 'csrf']);
 
 /*
