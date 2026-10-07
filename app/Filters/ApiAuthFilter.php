@@ -79,6 +79,19 @@ class ApiAuthFilter implements FilterInterface
 
         // If not found in currently active DB and master multi-tenant routing is active, scan active tenants
         if ($apiTokenRow === null && str_starts_with($rawToken, 'sc_live_') && \App\Libraries\MasterTenantRepository::masterConfigured()) {
+            // Cross-tenant key scan is expensive: cap failed scans per IP so random keys cannot hammer every tenant DB.
+            $scanFailKey = 'api_scan_fail_' . md5($request->getIPAddress());
+            if ((int) cache($scanFailKey) >= 20) {
+                return service('response')
+                    ->setStatusCode(429)
+                    ->setHeader('Retry-After', '60')
+                    ->setJSON([
+                        'status'  => 'error',
+                        'success' => false,
+                        'message' => 'Too many API key lookups. Try again in a minute.',
+                    ]);
+            }
+
             $master     = new \App\Libraries\MasterTenantRepository();
             $connection = new \App\Libraries\TenantConnection($master);
             foreach ($master->listActiveTenants() as $tenant) {
@@ -90,6 +103,10 @@ class ApiAuthFilter implements FilterInterface
                         break;
                     }
                 }
+            }
+
+            if ($apiTokenRow === null) {
+                cache()->save($scanFailKey, (int) cache($scanFailKey) + 1, MINUTE);
             }
         }
 
@@ -176,7 +193,18 @@ class ApiAuthFilter implements FilterInterface
                 ]);
         }
 
-        $tenantClaim = isset($payload->tenant) ? (string) $payload->tenant : '';
+        $tenantClaim = isset($payload->tenant) ? trim((string) $payload->tenant) : '';
+        // A JWT without a tenant claim must never be replayed into a workspace chosen by header/host/session
+        // (same numeric user id would resolve to a different user in another tenant DB).
+        if ($tenantClaim === '' && \App\Libraries\TenantContext::has()) {
+            return service('response')
+                ->setStatusCode(401)
+                ->setJSON([
+                    'status'  => 'error',
+                    'success' => false,
+                    'message' => 'Token is not valid for this workspace. Log in again.',
+                ]);
+        }
         if ($tenantClaim !== '') {
             if (! \App\Libraries\TenantResolver::ensureFromJwtClaim($tenantClaim)) {
                 return service('response')
