@@ -31,6 +31,9 @@ class PermissionSeeder extends Seeder
             // Emails
             ['name' => 'View Emails', 'slug' => 'emails.view', 'module' => 'emails', 'description' => 'Access Email Manager (builder, drips, verifier, campaigns, senders)'],
             ['name' => 'Send Emails', 'slug' => 'emails.send', 'module' => 'emails', 'description' => 'Manage and send email builder/drips/HTML campaigns'],
+            ['name' => 'Delete Emails', 'slug' => 'emails.delete', 'module' => 'emails', 'description' => 'Delete email templates, drips, campaigns and senders'],
+            // AI
+            ['name' => 'Use AI Copilot', 'slug' => 'ai.use', 'module' => 'ai', 'description' => 'Use the AI Copilot assistant'],
             // Templates
             ['name' => 'View Templates', 'slug' => 'templates.view', 'module' => 'templates', 'description' => 'View message templates'],
             ['name' => 'Create Templates', 'slug' => 'templates.create', 'module' => 'templates', 'description' => 'Create templates'],
@@ -106,7 +109,8 @@ class PermissionSeeder extends Seeder
             'dashboard.view',
             'contacts.view', 'contacts.create', 'contacts.edit', 'contacts.delete', 'contacts.import', 'contacts.export',
             'campaigns.view', 'campaigns.create', 'campaigns.edit', 'campaigns.delete', 'campaigns.start',
-            'emails.view', 'emails.send',
+            'emails.view', 'emails.send', 'emails.delete',
+            'ai.use',
             'templates.view', 'templates.create', 'templates.edit', 'templates.delete', 'templates.sync',
             'chat.view', 'chat.send', 'chat.assign', 'chat.close',
             'automations.view', 'automations.create', 'automations.edit', 'automations.delete',
