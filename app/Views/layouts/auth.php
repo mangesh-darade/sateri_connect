@@ -10,16 +10,9 @@
     $appTagline  = function_exists('setting') ? (string) setting('app_tagline', 'Automation console') : 'Automation console';
     $siteLogo    = function_exists('setting_asset_url') ? setting_asset_url('site_logo') : '';
     $siteFavicon = function_exists('setting_asset_url') ? setting_asset_url('site_favicon') : '';
-    if ($siteFavicon === '' && $siteLogo !== '') {
-        $siteFavicon = $siteLogo;
-    }
     ?>
     <title><?= esc($title ?? 'Login') ?> | <?= esc($appName) ?></title>
-    <?php if ($siteFavicon !== ''): ?>
-        <link rel="icon" href="<?= esc($siteFavicon) ?>">
-        <link rel="shortcut icon" href="<?= esc($siteFavicon) ?>">
-        <link rel="apple-touch-icon" href="<?= esc($siteFavicon) ?>">
-    <?php endif; ?>
+    <?= favicon_link_tags($siteFavicon, (string) ($title ?? $pageTitle ?? 'Login')) ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
