@@ -1355,7 +1355,18 @@ class AutomationEngine
             return;
         }
 
-        $result = service('emailProvider')->send($to, $subject, $body);
+        $suppressed = (new EmailSuppressionService())->reasonFor($to, true);
+        if ($suppressed !== null) {
+            log_message('info', 'Automation send_email skipped: {to} is {reason}', ['to' => $to, 'reason' => $suppressed]);
+
+            return;
+        }
+
+        $unsubUrl = EmailTracking::unsubscribeUrl(0);
+        $isHtml   = $body !== strip_tags($body);
+        $body     = EmailTracking::applyMarketingFooter($body, $unsubUrl, $isHtml);
+
+        $result = service('emailProvider')->send($to, $subject, $body, ['unsubscribe_url' => $unsubUrl, 'html' => $isHtml]);
         if (! ($result['ok'] ?? false)) {
             $context['_action_failed'] = true;
             log_message('error', 'Automation send_email failed: {debug}', ['debug' => $result['message'] ?? 'unknown']);
@@ -1934,6 +1945,12 @@ class AutomationEngine
                     'is_read' => 0,
                 ]);
             }
+
+            return;
+        }
+
+        if (($suppressed = (new EmailSuppressionService())->reasonFor($to)) !== null) {
+            log_message('info', 'Automation email notification skipped: {to} is {reason}', ['to' => $to, 'reason' => $suppressed]);
 
             return;
         }
