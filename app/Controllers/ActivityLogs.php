@@ -103,7 +103,7 @@ class ActivityLogs extends BaseController
                 $metaString = is_array($row['metadata']) ? json_encode($row['metadata'], JSON_UNESCAPED_SLASHES) : (string) $row['metadata'];
             }
 
-            fputcsv($output, [
+            fputcsv($output, array_map([\App\Libraries\ContactExportService::class, 'safeCell'], [
                 $row['id'] ?? '',
                 $row['created_at'] ?? '',
                 $row['user_name'] ?? 'System',
@@ -113,7 +113,7 @@ class ActivityLogs extends BaseController
                 $row['description'] ?? '',
                 $row['ip_address'] ?? '',
                 $metaString,
-            ]);
+            ]));
         }
 
         rewind($output);
