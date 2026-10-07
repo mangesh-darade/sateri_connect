@@ -245,6 +245,51 @@ class MasterTenantRepository
     }
 
     /**
+     * Secrets allowed to sign a webhook for one phone number: that route's own secret plus
+     * platform-level Meta secrets — never another tenant's secret.
+     *
+     * @return list<string>
+     */
+    public function appSecretsForPhoneNumber(string $phoneNumberId): array
+    {
+        $secrets = [];
+
+        try {
+            if ($phoneNumberId !== '') {
+                $row = $this->db()->table('tenant_phone_routes')
+                    ->select('app_secret')
+                    ->where('phone_number_id', $phoneNumberId)
+                    ->get()
+                    ->getRowArray();
+                $s = $this->decryptSecret((string) ($row['app_secret'] ?? ''));
+                if ($s !== '') {
+                    $secrets[] = $s;
+                }
+            }
+
+            $platformRows = $this->db()->table('platform_settings')
+                ->whereIn('key', ['meta_tech_app_secret', 'webhook_app_secret'])
+                ->get()
+                ->getResultArray();
+            foreach ($platformRows as $pRow) {
+                $s = $this->decryptSecret((string) ($pRow['value'] ?? ''));
+                if ($s !== '') {
+                    $secrets[] = $s;
+                }
+            }
+
+            $envSecret = trim((string) env('meta.techAppSecret', env('META_TECH_APP_SECRET', '')));
+            if ($envSecret !== '') {
+                $secrets[] = $envSecret;
+            }
+        } catch (Throwable $e) {
+            log_message('debug', 'MasterTenantRepository::appSecretsForPhoneNumber: {msg}', ['msg' => $e->getMessage()]);
+        }
+
+        return array_values(array_unique($secrets));
+    }
+
+    /**
      * @return list<string>
      */
     public function allAppSecrets(): array
