@@ -69,6 +69,7 @@ class WhatsAppConsentService
         'no_opt_in'     => 'No WhatsApp opt-in recorded',
         'suppressed'    => 'Paused after delivery failure',
         'frequency_cap' => 'Already got a campaign in last 24h',
+        'marketing_cap' => 'Marketing frequency cap (got a marketing message recently)',
         'duplicate'     => 'Duplicate mobile',
         'schema'        => 'Consent columns missing (run migrations)',
     ];
@@ -80,7 +81,7 @@ class WhatsAppConsentService
     private const NON_RETRYABLE_CODES = [
         '10', '100', '190', '200', '368',
         '131008', '131009', '131021', '131026', '131031', '131047', '131048', '131049',
-        '131050', '131051', '131052', '131053',
+        '131050', '131051', '131052', '131053', '130472',
         '132000', '132001', '132005', '132007', '132012', '132015', '132016', '132068', '132069',
         '133010',
     ];
@@ -287,6 +288,32 @@ class WhatsAppConsentService
             $eligible = $kept;
         }
 
+        $capDays = $this->marketingFrequencyCapDays();
+        if ($capDays > 0 && $eligible !== [] && $this->isMarketingTemplate($this->campaignTemplate($campaignId))) {
+            $recent = $this->recentMarketingContactIds(
+                array_map(static fn (array $c): int => (int) ($c['id'] ?? 0), $eligible),
+                $capDays,
+                $campaignId
+            );
+            $kept = [];
+            foreach ($eligible as $contact) {
+                if (isset($recent[(int) ($contact['id'] ?? 0)])) {
+                    $excluded['marketing_cap'] = ($excluded['marketing_cap'] ?? 0) + 1;
+                    $excludedContacts[] = [
+                        'id'          => (int) ($contact['id'] ?? 0),
+                        'name'        => (string) ($contact['name'] ?? ''),
+                        'mobile'      => (string) ($contact['mobile'] ?? ''),
+                        'email'       => (string) ($contact['email'] ?? ''),
+                        'reason_code' => 'marketing_cap',
+                        'reason'      => self::EXCLUSION_LABELS['marketing_cap'],
+                    ];
+                    continue;
+                }
+                $kept[] = $contact;
+            }
+            $eligible = $kept;
+        }
+
         return [
             'eligible'          => $eligible,
             'excluded'          => $excluded,
@@ -364,6 +391,192 @@ class WhatsAppConsentService
         }
 
         return $out;
+    }
+
+    /**
+     * Days between MARKETING template messages to the same contact (settings
+     * `wa_marketing_frequency_cap_days`). 0 disables the cap.
+     */
+    public function marketingFrequencyCapDays(): int
+    {
+        $value = null;
+        try {
+            $value = service('settingsService')->get('wa_marketing_frequency_cap_days');
+        } catch (Throwable) {
+            // settings unavailable (CLI tests)
+        }
+
+        return is_numeric($value) ? max(0, (int) $value) : max(0, $this->config->marketingFrequencyCapDays);
+    }
+
+    /**
+     * @param array<string, mixed>|null $template
+     */
+    public function isMarketingTemplate(?array $template): bool
+    {
+        return is_array($template) && strtoupper(trim((string) ($template['category'] ?? ''))) === 'MARKETING';
+    }
+
+    /**
+     * Template row of a WhatsApp template campaign (null for text campaigns / unknown).
+     *
+     * @return array<string, mixed>|null
+     */
+    public function campaignTemplate(?int $campaignId): ?array
+    {
+        if ($campaignId === null || $campaignId <= 0) {
+            return null;
+        }
+        try {
+            $campaign = model(CampaignModel::class)->find($campaignId);
+            if (! is_array($campaign) || (string) ($campaign['message_type'] ?? 'template') !== 'template' || empty($campaign['template_id'])) {
+                return null;
+            }
+            $template = model(TemplateModel::class)->find((int) $campaign['template_id']);
+        } catch (Throwable) {
+            return null;
+        }
+
+        return is_array($template) ? $template : null;
+    }
+
+    /**
+     * Contacts that got a MARKETING template in the last $days days (campaign recipients and
+     * stored outbound template messages).
+     *
+     * @param list<int> $contactIds
+     *
+     * @return array<int, true>
+     */
+    public function recentMarketingContactIds(array $contactIds, int $days, ?int $excludeCampaignId = null): array
+    {
+        $contactIds = array_values(array_filter(array_unique(array_map('intval', $contactIds))));
+        if ($contactIds === [] || $days <= 0) {
+            return [];
+        }
+
+        $since = date('Y-m-d H:i:s', time() - $days * 86400);
+        $out   = [];
+        try {
+            $db    = db_connect();
+            $names = array_column(
+                $db->table('templates')->distinct()->select('name')->where('category', 'MARKETING')->get()->getResultArray(),
+                'name'
+            );
+
+            foreach (array_chunk($contactIds, 500) as $chunk) {
+                $cc = $db->table('campaign_contacts cc')->distinct()->select('cc.contact_id')
+                    ->join('campaigns c', 'c.id = cc.campaign_id')
+                    ->join('templates t', 't.id = c.template_id')
+                    ->whereIn('cc.contact_id', $chunk)
+                    ->whereIn('cc.status', ['sent', 'delivered', 'read'])
+                    ->where('cc.sent_at >=', $since)
+                    ->where('t.category', 'MARKETING');
+                if ($excludeCampaignId !== null && $excludeCampaignId > 0) {
+                    $cc->where('cc.campaign_id !=', $excludeCampaignId);
+                }
+                foreach ($cc->get()->getResultArray() as $row) {
+                    $out[(int) $row['contact_id']] = true;
+                }
+
+                if ($names === []) {
+                    continue;
+                }
+                $m = $db->table('messages')->distinct()->select('contact_id')
+                    ->whereIn('contact_id', $chunk)
+                    ->where('direction', 'outbound')
+                    ->where('message_type', 'template')
+                    ->whereIn('status', ['sent', 'delivered', 'read'])
+                    ->where('created_at >=', $since)
+                    ->whereIn('content', array_merge($names, array_map(static fn ($n): string => 'Template: ' . $n, $names)));
+                if ($excludeCampaignId !== null && $excludeCampaignId > 0) {
+                    $m->groupStart()->where('campaign_id IS NULL')->orWhere('campaign_id !=', $excludeCampaignId)->groupEnd();
+                }
+                foreach ($m->get()->getResultArray() as $row) {
+                    $out[(int) $row['contact_id']] = true;
+                }
+            }
+        } catch (Throwable $e) {
+            log_message('warning', 'recentMarketingContactIds failed: {msg}', ['msg' => $e->getMessage()]);
+        }
+
+        return $out;
+    }
+
+    /**
+     * One policy gate for a business-initiated template to one contact (queue, API):
+     * blocked / opt-out / delivery suppression, opt-in (always for MARKETING), template
+     * approval, marketing frequency cap and optionally Meta's daily messaging limit.
+     *
+     * @param array<string, mixed> $contact
+     * @param array<string, mixed> $template
+     *
+     * @return array{ok: bool, reason: string, message: string}
+     */
+    public function templateSendCheck(
+        array $contact,
+        array $template,
+        ?bool $withinWindow = null,
+        ?int $campaignId = null,
+        bool $checkMessagingLimit = false
+    ): array {
+        $marketing = $this->isMarketingTemplate($template);
+        $kind      = ($marketing || ($campaignId ?? 0) > 0) ? self::KIND_CAMPAIGN : self::KIND_TEMPLATE;
+        $check     = $this->eligibility($contact, $kind, $withinWindow);
+        if (! $check['ok']) {
+            if ($check['reason'] === 'no_opt_in' && $marketing) {
+                $check['message'] = 'Marketing templates need a recorded WhatsApp opt-in for this contact. Record consent (or send opt_in: true with the source) before sending.';
+            }
+
+            return $check;
+        }
+
+        try {
+            (new WhatsAppTemplateSendGuard())->assertApproved($template);
+        } catch (RuntimeException $e) {
+            return ['ok' => false, 'reason' => 'template_not_approved', 'message' => $e->getMessage()];
+        }
+
+        $days = $marketing ? $this->marketingFrequencyCapDays() : 0;
+        if ($days > 0 && $this->recentMarketingContactIds([(int) ($contact['id'] ?? 0)], $days, $campaignId) !== []) {
+            return ['ok' => false, 'reason' => 'marketing_cap', 'message' => $this->marketingCapMessage($days)];
+        }
+
+        if ($checkMessagingLimit) {
+            try {
+                $this->assertWithinMessagingLimit(1, null);
+            } catch (RuntimeException $e) {
+                return ['ok' => false, 'reason' => 'messaging_limit', 'message' => trim(str_replace(self::POLICY_PREFIX, '', $e->getMessage()))];
+            }
+        }
+
+        return $this->allow();
+    }
+
+    /**
+     * @param array<string, mixed> $contact
+     * @param array<string, mixed> $template
+     *
+     * @throws RuntimeException (422, POLICY_PREFIX — never retried) when templateSendCheck() denies.
+     */
+    public function assertTemplateSendAllowed(
+        array $contact,
+        array $template,
+        ?bool $withinWindow = null,
+        ?int $campaignId = null,
+        bool $checkMessagingLimit = false
+    ): void {
+        $check = $this->templateSendCheck($contact, $template, $withinWindow, $campaignId, $checkMessagingLimit);
+        if (! $check['ok']) {
+            throw new RuntimeException(self::POLICY_PREFIX . ' ' . $check['message'], 422);
+        }
+    }
+
+    public function marketingCapMessage(int $days): string
+    {
+        return 'This contact already received a marketing message in the last '
+            . ($days === 1 ? '24 hours' : $days . ' days')
+            . ' (marketing frequency cap). Try again later or change the cap in Settings.';
     }
 
     /**
@@ -789,38 +1002,94 @@ class WhatsAppConsentService
     }
 
     /**
-     * Contact has neither agreed nor stopped, and was not asked within the resend cooldown.
+     * Tenant switch for automatic consent asks (settings `wa_auto_consent_request`, default off).
+     */
+    public function autoConsentRequestEnabled(): bool
+    {
+        $value = null;
+        try {
+            $value = service('settingsService')->get('wa_auto_consent_request');
+        } catch (Throwable) {
+            // settings unavailable (CLI tests)
+        }
+        if ($value === null || $value === '') {
+            return $this->config->autoConsentRequest;
+        }
+
+        return in_array(strtolower((string) $value), ['1', 'true', 'yes', 'on'], true);
+    }
+
+    /**
+     * Why this contact cannot be asked for consent ('' when it can).
+     * Automatic asks need the tenant setting and go to each contact at most once;
+     * a manual ask may repeat, but not within the resend cooldown.
      *
      * @param array<string, mixed> $contact
      */
-    public function needsConsentRequest(array $contact): bool
+    public function consentRequestBlocker(array $contact, bool $manual = false): string
     {
-        if (! $this->config->autoConsentRequest || ! $this->hasConsentColumns() || (int) ($contact['id'] ?? 0) <= 0
-            || ! array_key_exists('wa_consent_requested_at', $contact)) {
-            return false;
+        if (! $manual && ! $this->autoConsentRequestEnabled()) {
+            return 'automatic opt-in requests are turned off';
+        }
+        if (! $this->hasConsentColumns() || ! array_key_exists('wa_consent_requested_at', $contact)) {
+            return 'consent columns missing (run migrations)';
+        }
+        if ((int) ($contact['id'] ?? 0) <= 0) {
+            return 'contact not found';
         }
         if (in_array(strtolower((string) ($contact['status'] ?? 'active')), ['blocked', 'inactive'], true)) {
-            return false;
+            return 'contact is blocked or inactive';
         }
-        if ($this->hasOptIn($contact) || $this->isOptedOut($contact) || $this->isSuppressed($contact)) {
-            return false;
+        if ($this->isOptedOut($contact)) {
+            return 'contact opted out (STOP) — only they can opt back in by sending START';
+        }
+        if ($this->hasOptIn($contact)) {
+            return 'contact already opted in';
+        }
+        if ($this->isSuppressed($contact)) {
+            return 'sending to this number is paused until ' . (string) ($contact['wa_suppressed_until'] ?? '');
         }
 
         $last = strtotime((string) ($contact['wa_consent_requested_at'] ?? '')) ?: 0;
+        if ($last === 0) {
+            return '';
+        }
+        if (! $manual) {
+            return 'already asked on ' . (string) $contact['wa_consent_requested_at'];
+        }
+        $next = $last + max(1, $this->config->consentRequestResendDays) * 86400;
 
-        return $last === 0 || $last < time() - max(1, $this->config->consentRequestResendDays) * 86400;
+        return $next > time()
+            ? 'already asked on ' . (string) $contact['wa_consent_requested_at'] . '; you can ask again after ' . date('Y-m-d H:i', $next)
+            : '';
+    }
+
+    /**
+     * Contact may be asked for consent now (see consentRequestBlocker()).
+     *
+     * @param array<string, mixed> $contact
+     */
+    public function needsConsentRequest(array $contact, bool $manual = false): bool
+    {
+        return $this->consentRequestBlocker($contact, $manual) === '';
     }
 
     /**
      * Ask a pending contact for consent: Agree / Stop buttons inside the 24h window, otherwise the
      * approved consent template. Never throws; returns how it was asked, or null when skipped/failed.
+     * Automatic callers pass $manual = false (tenant setting + once per contact).
      *
      * @param array<string, mixed> $contact
      */
-    public function requestConsentIfPending(array $contact, ?string $provider = null): ?string
+    public function requestConsentIfPending(array $contact, ?string $provider = null, bool $manual = false): ?string
     {
         $this->lastConsentError = '';
-        if (! $this->needsConsentRequest($contact)) {
+        $blocker = $this->consentRequestBlocker($contact, $manual);
+        if ($blocker !== '') {
+            if ($manual) {
+                $this->lastConsentError = ucfirst($blocker) . '.';
+            }
+
             return null;
         }
 
@@ -848,6 +1117,26 @@ class WhatsAppConsentService
     public function lastConsentError(): string
     {
         return $this->lastConsentError;
+    }
+
+    /**
+     * Operator clicked "Request opt-in" for one contact.
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public function requestConsentManually(int $contactId, ?string $provider = null): array
+    {
+        $contact = $contactId > 0 ? model(ContactModel::class)->find($contactId) : null;
+        if (! is_array($contact)) {
+            return ['ok' => false, 'message' => 'Contact not found.'];
+        }
+
+        $how = $this->requestConsentIfPending($contact, $provider, true);
+        if ($how === null) {
+            return ['ok' => false, 'message' => 'Opt-in request not sent: ' . ($this->lastConsentError !== '' ? $this->lastConsentError : 'not allowed for this contact.')];
+        }
+
+        return ['ok' => true, 'message' => $this->describeConsentRequest($how)];
     }
 
     /**
@@ -928,7 +1217,7 @@ class WhatsAppConsentService
             $status = $template !== null ? strtoupper((string) ($template['status'] ?? '')) : ($this->ensureConsentTemplate()['status'] ?? '');
             throw new RuntimeException(
                 'consent template "' . $this->config->consentTemplateName . '" is '
-                . ($status !== '' && $status !== null ? $status : 'not created') . ' on Meta — it goes out automatically once approved.'
+                . ($status !== '' && $status !== null ? $status : 'not created') . ' on Meta — opt-in requests outside the 24-hour chat window work once Meta approves it.'
             );
         }
 
@@ -1119,6 +1408,48 @@ class WhatsAppConsentService
         $code = self::extractErrorCode($message);
 
         return $code === null || ! in_array($code, self::NON_RETRYABLE_CODES, true);
+    }
+
+    /** Throughput limits: 130429 / 80007 / 4 throttle the whole number, 131056 one recipient pair. */
+    private const ACCOUNT_RATE_LIMIT_CODES = ['4', '80007', '130429'];
+
+    private const PAIR_RATE_LIMIT_CODES = ['131056'];
+
+    public static function isRateLimitError(string $message, int $httpStatus = 0): bool
+    {
+        $code = self::extractErrorCode($message);
+
+        return $httpStatus === 429
+            || in_array($code, self::ACCOUNT_RATE_LIMIT_CODES, true)
+            || in_array($code, self::PAIR_RATE_LIMIT_CODES, true)
+            || preg_match('/\bHTTP 429\b|Too Many Requests|rate limit/i', $message) === 1;
+    }
+
+    /** True when the whole sending number is throttled, so the rest of a batch should wait too. */
+    public static function isAccountRateLimit(string $message, int $httpStatus = 0): bool
+    {
+        return self::isRateLimitError($message, $httpStatus)
+            && ! in_array(self::extractErrorCode($message), self::PAIR_RATE_LIMIT_CODES, true);
+    }
+
+    /**
+     * Seconds to wait before the next attempt (exponential, capped).
+     */
+    public static function retryDelaySeconds(string $message, int $attempts, int $httpStatus = 0): int
+    {
+        $cfg     = config('WhatsApp');
+        $attempt = max(1, $attempts);
+
+        if (self::isRateLimitError($message, $httpStatus)) {
+            $base = max(1, (int) ($cfg->rateLimitBackoffSeconds ?? 60));
+            $max  = max($base, (int) ($cfg->rateLimitBackoffMaxSeconds ?? 1800));
+
+            return (int) min($max, $base * (2 ** min(10, $attempt - 1)));
+        }
+
+        $base = max(1, (int) ($cfg->retryBackoffSeconds ?? 30));
+
+        return (int) min(1800, $base * (2 ** min(10, $attempt - 1)));
     }
 
     /**
@@ -1425,7 +1756,7 @@ class WhatsAppConsentService
             $this->notifyTemplate(
                 $event === 'APPROVED' ? 'WhatsApp consent template approved' : 'WhatsApp consent template rejected',
                 $event === 'APPROVED'
-                    ? 'Customers without an answer now get the Agree / Stop consent request automatically.'
+                    ? 'You can now send the Agree / Stop opt-in request from a contact\'s page ("Request opt-in").'
                     : 'Meta rejected "' . $name . '"' . (! empty($update['rejected_reason']) ? ' (' . $update['rejected_reason'] . ')' : '')
                         . '. Change consentTemplateBody and consentTemplateName in Config/WhatsApp.php; the new template is submitted automatically.'
             );
