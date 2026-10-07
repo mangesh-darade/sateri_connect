@@ -21,16 +21,9 @@
     }
     $siteLogo    = function_exists('setting_asset_url') ? setting_asset_url('site_logo') : '';
     $siteFavicon = function_exists('setting_asset_url') ? setting_asset_url('site_favicon') : '';
-    if ($siteFavicon === '' && $siteLogo !== '') {
-        $siteFavicon = $siteLogo;
-    }
     ?>
     <title><?= esc($title ?? 'Dashboard') ?> | <?= esc($appName) ?></title>
-    <?php if ($siteFavicon !== ''): ?>
-        <link rel="icon" href="<?= esc($siteFavicon) ?>">
-        <link rel="shortcut icon" href="<?= esc($siteFavicon) ?>">
-        <link rel="apple-touch-icon" href="<?= esc($siteFavicon) ?>">
-    <?php endif; ?>
+    <?= favicon_link_tags($siteFavicon, (string) ($title ?? $appName)) ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Onest:wght@500;600;700&display=swap" rel="stylesheet">
@@ -130,7 +123,7 @@
                     </div>
                 </div>
             </li>
-            <?php if (function_exists('is_ai_enabled') && is_ai_enabled()): ?>
+            <?php if (function_exists('is_ai_enabled') && is_ai_enabled() && can('ai.use')): ?>
             <li class="nav-item d-flex align-items-center me-2">
                 <button type="button" class="btn btn-sm ai-copilot-trigger-btn d-flex align-items-center gap-1 shadow-sm px-2 py-1" id="btnOpenAiCopilot" title="AI Copilot">
                     <i class="fas fa-wand-magic-sparkles text-success"></i>
@@ -192,7 +185,10 @@
                         <?php if (function_exists('can') && can('settings.view')): ?>
                             <a href="<?= site_url('settings') ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-gear me-1"></i> Settings</a>
                         <?php endif; ?>
-                        <a href="<?= site_url('logout') ?>" class="btn btn-wa btn-sm"><i class="fas fa-right-from-bracket me-1"></i> Sign out</a>
+                        <form action="<?= site_url('logout') ?>" method="post" class="d-inline">
+                            <?= csrf_field() ?>
+                            <button type="submit" class="btn btn-wa btn-sm"><i class="fas fa-right-from-bracket me-1"></i> Sign out</button>
+                        </form>
                     </li>
                 </ul>
             </li>
@@ -240,7 +236,36 @@
                 return $uri === $pattern || str_starts_with($uri . '/', $pattern . '/');
             };
 
-            $navBestChildIndex = static function (array $children, string $uri, string $channel) use ($navUriMatches, $req): ?int {
+            // 'query' => [param => [values]] must match; 'not_query' => [param => [values]] must not.
+            $navQueryOk = static function (array $node) use ($req): bool {
+                foreach (($node['query'] ?? []) as $param => $values) {
+                    if (! in_array(strtolower(trim((string) ($req->getGet($param) ?? ''))), (array) $values, true)) {
+                        return false;
+                    }
+                }
+                foreach (($node['not_query'] ?? []) as $param => $values) {
+                    if (in_array(strtolower(trim((string) ($req->getGet($param) ?? ''))), (array) $values, true)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            };
+
+            $navCan = static function (array $node): bool {
+                if (! isset($node['perm'])) {
+                    return true;
+                }
+                foreach ((array) $node['perm'] as $perm) {
+                    if (function_exists('can') && can((string) $perm)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            };
+
+            $navBestChildIndex = static function (array $children, string $uri, string $channel) use ($navUriMatches, $navQueryOk, $req): ?int {
                 $bestIdx = null;
                 $bestLen = -1;
                 $tab = strtolower(trim((string) ($req->getGet('tab') ?? '')));
@@ -261,6 +286,9 @@
                             continue;
                         }
                     } elseif (str_starts_with($uri, 'email-manager') && $tab !== '') {
+                        continue;
+                    }
+                    if (! $navQueryOk($child)) {
                         continue;
                     }
                     foreach (($child['match'] ?? []) as $pattern) {
@@ -356,7 +384,7 @@
                         ['label' => 'All Contacts', 'icon' => 'users', 'url' => site_url('contacts'), 'match' => ['contacts']],
                         ['label' => 'Customer Groups', 'icon' => 'tags', 'url' => site_url('customer-groups'), 'match' => ['customer-groups']],
                         ['label' => 'Attributes', 'icon' => 'list-plus', 'url' => site_url('attributes'), 'match' => ['attributes']],
-                        ['label' => 'Import Contacts', 'icon' => 'file-up', 'url' => site_url('contacts/import'), 'match' => ['contacts/import']],
+                        ['label' => 'Import Contacts', 'icon' => 'file-up', 'url' => site_url('contacts/import'), 'match' => ['contacts/import'], 'perm' => 'contacts.import'],
                         ['label' => 'Duplicate Check', 'icon' => 'copy', 'url' => site_url('contacts/duplicates'), 'match' => ['contacts/duplicates']],
                     ],
                 ];
@@ -374,33 +402,33 @@
                     'match' => ['campaigns'],
                 ];
             }
-            if (function_exists('can') && can('emails.view')) {
-                $marketingItems[] = [
-                    'label' => 'Email Manager',
-                    'icon' => 'mail',
-                    'url' => site_url('email-manager'),
-                    'match' => ['email-manager', 'emails'],
-                    'children' => [
-                        ['label' => 'Email Manager', 'icon' => 'mail-open', 'url' => site_url('email-manager'), 'match' => ['email-manager']],
-                        ['label' => 'Email List Verifier', 'icon' => 'shield', 'url' => site_url('email-manager?tab=verifier'), 'match' => ['email-manager'], 'tab' => 'verifier'],
-                        ['label' => 'Send Single Email', 'icon' => 'send', 'url' => site_url('emails/send'), 'match' => ['emails/send']],
-                        ['label' => 'Bulk Email', 'icon' => 'mails', 'url' => site_url('emails/bulk'), 'match' => ['emails/bulk']],
-                    ],
-                ];
-            }
-            if (function_exists('can') && can('templates.view')) {
-                $marketingItems[] = [
-                    'label' => 'Template Library',
-                    'icon' => 'sparkles',
-                    'url' => site_url('templates'),
-                    'match' => ['templates'],
-                    'children' => [
-                        ['label' => 'WhatsApp Templates', 'icon' => 'message-square', 'url' => site_url('templates'), 'match' => ['templates']],
-                        ['label' => 'Email Templates', 'icon' => 'mail', 'url' => site_url('templates?channel=email'), 'match' => ['templates?channel=email']],
-                        ['label' => 'Create Template', 'icon' => 'plus', 'url' => site_url('templates/create'), 'match' => ['templates/create']],
-                    ],
-                ];
-            }
+            $emailQuery = ['channel' => ['email']];
+            $marketingItems[] = [
+                'label' => 'Email Manager',
+                'icon' => 'mail',
+                'url' => site_url('email-manager'),
+                'match' => ['email-manager', 'emails'],
+                'children' => [
+                    ['label' => 'Email Manager', 'icon' => 'mail-open', 'url' => site_url('email-manager'), 'match' => ['email-manager'], 'perm' => 'emails.view'],
+                    ['label' => 'Email Templates', 'icon' => 'mail', 'url' => site_url('templates?channel=email'), 'match' => ['templates'], 'query' => $emailQuery, 'perm' => 'templates.view'],
+                    ['label' => 'Email Workflows (Auto Drips)', 'icon' => 'workflow', 'url' => site_url('automations?channel=email'), 'match' => ['automations'], 'query' => ['channel' => ['email', 'drips']], 'perm' => 'automations.view'],
+                    ['label' => 'Email List Verifier', 'icon' => 'shield', 'url' => site_url('email-manager?tab=verifier'), 'match' => ['email-manager'], 'tab' => 'verifier', 'perm' => 'emails.view'],
+                    ['label' => 'Send Single Email', 'icon' => 'send', 'url' => site_url('emails/send'), 'match' => ['emails/send', 'emails/single'], 'perm' => 'emails.send'],
+                    ['label' => 'Bulk Email', 'icon' => 'mails', 'url' => site_url('emails/bulk'), 'match' => ['emails/bulk'], 'perm' => 'emails.send'],
+                ],
+            ];
+            $marketingItems[] = [
+                'label' => 'Template Library',
+                'icon' => 'sparkles',
+                'url' => site_url('templates'),
+                'match' => ['templates'],
+                'not_query' => $emailQuery,
+                'perm' => 'templates.view',
+                'children' => [
+                    ['label' => 'WhatsApp Templates', 'icon' => 'message-square', 'url' => site_url('templates'), 'match' => ['templates'], 'not_query' => $emailQuery],
+                    ['label' => 'Create Template', 'icon' => 'plus', 'url' => site_url('templates/create'), 'match' => ['templates/create'], 'perm' => 'templates.create'],
+                ],
+            ];
             if ($marketingItems !== []) {
                 $navGroups[] = ['title' => 'Marketing', 'items' => $marketingItems];
             }
@@ -412,10 +440,7 @@
                     'icon' => 'bot',
                     'url' => site_url('automations'),
                     'match' => ['automations'],
-                    'children' => [
-                        ['label' => 'WhatsApp Workflows', 'icon' => 'bot', 'url' => site_url('automations'), 'match' => ['automations']],
-                        ['label' => 'Email Workflows (Auto Drips)', 'icon' => 'workflow', 'url' => site_url('automations?channel=email'), 'match' => ['automations?channel=email']],
-                    ],
+                    'not_query' => ['channel' => ['email', 'drips']],
                 ];
             }
             if (function_exists('can') && can('sequences.view')) {
@@ -434,11 +459,11 @@
                     'match' => ['keywords'],
                     'children' => [
                         ['label' => 'All Keywords', 'icon' => 'key-round', 'url' => site_url('keywords'), 'match' => ['keywords']],
-                        ['label' => 'Create Keyword', 'icon' => 'plus', 'url' => site_url('keywords/create'), 'match' => ['keywords/create']],
+                        ['label' => 'Create Keyword', 'icon' => 'plus', 'url' => site_url('keywords/create'), 'match' => ['keywords/create'], 'perm' => 'keywords.create'],
                     ],
                 ];
             }
-            if (function_exists('can') && (can('queue.view') || can('automations.view'))) {
+            if (function_exists('can') && can('queue.view')) {
                 $automationItems[] = [
                     'label' => 'Queue',
                     'icon' => 'clock-3',
@@ -492,6 +517,31 @@
             }
             if ($systemItems !== []) {
                 $navGroups[] = ['title' => 'System', 'items' => $systemItems];
+            }
+
+            // Hide items/children the user cannot open (must match each controller's requirePermission); drop empty parents/groups.
+            foreach ($navGroups as $gi => $group) {
+                $visibleItems = [];
+                foreach ($group['items'] as $item) {
+                    if (! $navCan($item)) {
+                        continue;
+                    }
+                    if (isset($item['children'])) {
+                        $item['children'] = array_values(array_filter($item['children'], $navCan));
+                        if ($item['children'] === []) {
+                            continue;
+                        }
+                        if (! isset($item['perm'])) {
+                            $item['url'] = $item['children'][0]['url'];
+                        }
+                    }
+                    $visibleItems[] = $item;
+                }
+                if ($visibleItems === []) {
+                    unset($navGroups[$gi]);
+                    continue;
+                }
+                $navGroups[$gi]['items'] = $visibleItems;
             }
 
             $renderIcon = static function (string $name): string {
@@ -566,7 +616,7 @@
                                 : null;
 
                             $isActive = $bestChildIdx !== null;
-                            if (! $isActive) {
+                            if (! $isActive && $navQueryOk($item)) {
                                 foreach ($patterns as $pattern) {
                                     if (! is_string($pattern)) {
                                         continue;
@@ -867,7 +917,7 @@
     };
 </script>
 <script src="<?= asset_url('assets/js/app.js') ?>"></script>
-<?php if (function_exists('is_ai_enabled') && is_ai_enabled()): ?>
+<?php if (function_exists('is_ai_enabled') && is_ai_enabled() && can('ai.use')): ?>
 <?= view('partials/ai_copilot_drawer') ?>
 <script src="<?= asset_url('assets/js/ai-copilot.js') ?>"></script>
 <?php endif; ?>
