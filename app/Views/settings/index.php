@@ -880,6 +880,29 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                         <label class="form-label">From Name</label>
                                         <input type="text" name="ses_from_name" class="form-control" value="<?= $val($ses, 'from_name') ?>" placeholder="Sateri Connect">
                                     </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label class="form-label">Configuration Set <span class="text-muted">(optional)</span></label>
+                                        <input type="text" name="ses_configuration_set" class="form-control" value="<?= $val($ses, 'configuration_set') ?>" placeholder="sateri-campaigns">
+                                        <div class="form-text">Enables SES event publishing &amp; per-campaign tags</div>
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label class="form-label">Max Send Rate (emails/sec)</label>
+                                        <input type="number" name="ses_max_send_rate" class="form-control" min="1" max="1000" step="1" value="<?= $val($ses, 'max_send_rate') ?>" placeholder="Auto (account quota)">
+                                        <div class="form-text">Leave blank to use your SES account quota</div>
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label class="form-label">SNS Topic ARN</label>
+                                        <input type="text" name="ses_sns_topic_arn" class="form-control font-monospace" value="<?= $val($ses, 'sns_topic_arn') ?>" placeholder="Auto-saved on first subscription">
+                                        <div class="form-text">Only this topic is accepted. Clear to re-link.</div>
+                                    </div>
+                                    <div class="col-12 mb-3">
+                                        <label class="form-label" for="sesWebhookUrl">Bounce &amp; Complaint Webhook (SNS HTTPS subscription)</label>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control font-monospace" id="sesWebhookUrl" value="<?= esc(\App\Libraries\EmailTracking::sesWebhookUrl()) ?>" readonly>
+                                            <button class="btn btn-outline-secondary" type="button" id="btnCopySesWebhook"><i class="fas fa-copy"></i> Copy</button>
+                                        </div>
+                                        <div class="form-text">In AWS: create an SNS topic → add an HTTPS subscription with this URL → set it as the Bounce &amp; Complaint notification topic of your SES identity. Hard bounces and complaints are auto-suppressed.</div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1412,6 +1435,9 @@ $(function () {
     });
     $('#btnCopyPublicCallback').on('click', function () {
         copyText($('#webhookPublicCallback').val(), 'Callback URL');
+    });
+    $('#btnCopySesWebhook').on('click', function () {
+        copyText($('#sesWebhookUrl').val(), 'SES webhook URL');
     });
 
     $('#btnGenerateVerifyToken').on('click', function () {

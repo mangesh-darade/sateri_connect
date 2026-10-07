@@ -276,6 +276,9 @@ class ApiAuthFilter implements FilterInterface
         if (str_contains($uri, 'automations') && $method === 'GET') {
             return 'automations:read';
         }
+        if (str_contains($uri, 'email/identities')) {
+            return $method === 'GET' ? 'email_identities:read' : 'email_identities:write';
+        }
         if (str_contains($uri, 'account') && $method === 'GET') {
             return 'account:read';
         }

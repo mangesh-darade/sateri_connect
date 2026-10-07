@@ -362,6 +362,116 @@ class DocsController extends BaseController
                     ],
                 ],
                 [
+                    'title'       => 'Configure New Sending Email / Domain (Amazon SES)',
+                    'method'      => 'POST',
+                    'path'        => '/api/v1/email/identities',
+                    'description' => 'Initiates configuration of a new sending domain on Amazon SES (Easy DKIM + custom MAIL FROM) and returns the DNS records to publish: DKIM CNAMEs (also verify the domain), MAIL FROM MX + SPF, root SPF and DMARC. If the From email is outside the domain, AWS emails a verification link. Requires SES credentials in Settings.',
+                    'headers'     => [
+                        'X-API-Key'    => 'sc_live_your_api_key',
+                        'Content-Type' => 'application/json',
+                    ],
+                    'body' => [
+                        'domain'              => 'example.com',
+                        'email'               => 'noreply@example.com',
+                        'name'                => 'Example Store',
+                        'mail_from_subdomain' => 'bounce',
+                        'dmarc_policy'        => 'none',
+                        'dmarc_report_email'  => 'dmarc@example.com',
+                    ],
+                    'response' => [
+                        'status'  => 'success',
+                        'message' => 'Domain registered with Amazon SES. Add the DNS records below, then call the status endpoint to verify.',
+                        'data'    => [
+                            'id'               => 1,
+                            'domain'           => 'example.com',
+                            'email'            => 'noreply@example.com',
+                            'name'             => 'Example Store',
+                            'provider'         => 'ses',
+                            'region'           => 'ap-south-1',
+                            'status'           => 'pending',
+                            'mail_from_domain' => 'bounce.example.com',
+                            'verification'     => [
+                                'domain_status'        => 'PENDING',
+                                'verified_for_sending' => false,
+                                'dkim_status'          => 'PENDING',
+                                'mail_from_status'     => 'PENDING',
+                            ],
+                            'dns_records' => [
+                                ['key' => 'dkim_1', 'category' => 'DKIM / Domain verification', 'type' => 'CNAME', 'name' => 'abc123._domainkey.example.com', 'host' => 'abc123._domainkey', 'value' => 'abc123.dkim.amazonses.com', 'ttl' => 3600, 'required' => true, 'dns_found' => false],
+                                ['key' => 'mail_from_mx', 'category' => 'Custom MAIL FROM', 'type' => 'MX', 'name' => 'bounce.example.com', 'host' => 'bounce', 'value' => 'feedback-smtp.ap-south-1.amazonses.com', 'priority' => 10, 'ttl' => 3600, 'required' => true, 'dns_found' => false],
+                                ['key' => 'mail_from_spf', 'category' => 'SPF', 'type' => 'TXT', 'name' => 'bounce.example.com', 'host' => 'bounce', 'value' => 'v=spf1 include:amazonses.com ~all', 'ttl' => 3600, 'required' => true, 'dns_found' => false],
+                                ['key' => 'root_spf', 'category' => 'SPF', 'type' => 'TXT', 'name' => 'example.com', 'host' => '@', 'value' => 'v=spf1 include:amazonses.com ~all', 'ttl' => 3600, 'required' => false, 'dns_found' => false],
+                                ['key' => 'dmarc', 'category' => 'DMARC', 'type' => 'TXT', 'name' => '_dmarc.example.com', 'host' => '_dmarc', 'value' => 'v=DMARC1; p=none; rua=mailto:dmarc@example.com; fo=1', 'ttl' => 3600, 'required' => true, 'dns_found' => false],
+                            ],
+                            'next_steps' => [
+                                'Add every record marked "required": true at your DNS provider.',
+                                'Then call GET /api/v1/email/identities/example.com to refresh the status.',
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'title'       => 'Get DNS Records for Email Domain',
+                    'method'      => 'GET',
+                    'path'        => '/api/v1/email/identities/{domain}/dns-records',
+                    'description' => 'Returns the DKIM CNAME, SPF, MAIL FROM MX and DMARC records with live DNS check (dns_found) and AWS status. Add ?refresh=0 to skip the AWS/DNS lookup and return stored records.',
+                    'headers'     => [
+                        'X-API-Key' => 'sc_live_your_api_key',
+                    ],
+                    'response' => [
+                        'status'  => 'success',
+                        'message' => 'DNS records to publish at your DNS provider.',
+                        'data'    => [
+                            'domain'      => 'example.com',
+                            'status'      => 'pending',
+                            'dns_records' => ['…same shape as above…'],
+                            'next_steps'  => ['…'],
+                        ],
+                    ],
+                ],
+                [
+                    'title'       => 'Email Domain Verification Status',
+                    'method'      => 'GET',
+                    'path'        => '/api/v1/email/identities/{domain}',
+                    'description' => 'Re-checks Amazon SES verification (domain, DKIM, MAIL FROM, From email) and returns the full identity with DNS records. Status: pending | verified | failed.',
+                    'headers'     => [
+                        'X-API-Key' => 'sc_live_your_api_key',
+                    ],
+                    'response' => [
+                        'status'  => 'success',
+                        'message' => 'Domain is verified and ready to send.',
+                        'data'    => [
+                            'domain'       => 'example.com',
+                            'status'       => 'verified',
+                            'verification' => [
+                                'domain_status'        => 'SUCCESS',
+                                'verified_for_sending' => true,
+                                'dkim_status'          => 'SUCCESS',
+                                'mail_from_status'     => 'SUCCESS',
+                                'email_status'         => 'SUCCESS',
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'title'       => 'List Configured Email Domains',
+                    'method'      => 'GET',
+                    'path'        => '/api/v1/email/identities',
+                    'description' => 'Lists all Amazon SES sending domains configured for this account with their last known status.',
+                    'headers'     => [
+                        'X-API-Key' => 'sc_live_your_api_key',
+                    ],
+                    'response' => [
+                        'status'  => 'success',
+                        'message' => 'Configured email domains retrieved.',
+                        'data'    => [
+                            'identities' => [
+                                ['id' => 1, 'domain' => 'example.com', 'status' => 'pending', 'region' => 'ap-south-1'],
+                            ],
+                        ],
+                    ],
+                ],
+                [
                     'title'       => 'Account & WhatsApp Diagnostics',
                     'method'      => 'GET',
                     'path'        => '/api/v1/account',

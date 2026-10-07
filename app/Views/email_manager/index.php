@@ -22,7 +22,7 @@ $activeTab = $activeTab ?? 'campaigns';
 <a href="<?= site_url('analytics?tab=email') ?>" class="btn btn-sm btn-outline-primary">
     <i class="fas fa-chart-pie me-1"></i> Analytics &amp; Reports
 </a>
-<a href="<?= site_url('settings') ?>#tabEmail" class="btn btn-sm btn-outline-secondary">
+<a href="<?= site_url('settings/email') ?>" class="btn btn-sm btn-outline-secondary">
     <i class="fas fa-cog me-1"></i> Email Settings
 </a>
 <?= $this->endSection() ?>
@@ -106,7 +106,7 @@ $tabUrl = static fn (string $t): string => site_url('email-manager?tab=' . $t);
         <?php elseif ($activeTab === 'campaigns'): ?>
             <?= view('email_manager/_tab_campaigns', compact('campaigns', 'builders', 'customerGroups', 'canSend', 'isCheerio')) ?>
         <?php else: ?>
-            <?= view('email_manager/_tab_senders', compact('senders', 'canSend', 'isCheerio')) ?>
+            <?= view('email_manager/_tab_senders', compact('senders', 'canSend', 'isCheerio', 'isSes')) ?>
         <?php endif; ?>
     </div>
 </div>
@@ -118,4 +118,5 @@ $tabUrl = static fn (string $t): string => site_url('email-manager?tab=' . $t);
 
 <?= $this->section('scripts') ?>
 <script src="<?= asset_url('assets/js/email-manager.js') ?>"></script>
+<script src="<?= asset_url('assets/js/email-identities.js') ?>"></script>
 <?= $this->endSection() ?>

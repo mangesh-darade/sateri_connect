@@ -75,6 +75,7 @@ class EmailManager extends BaseController
             'provider'           => $provider,
             'providerLabel'      => $this->providerLabel($provider),
             'isCheerio'          => $provider === SettingsService::EMAIL_PROVIDER_CHEERIO,
+            'isSes'              => $provider === SettingsService::EMAIL_PROVIDER_SES,
             'builders'           => model(EmailBuilderModel::class)->orderBy('id', 'DESC')->findAll(100),
             'drips'              => model(EmailDripModel::class)->withSteps(50),
             'campaigns'          => $campaigns,
@@ -678,8 +679,13 @@ class EmailManager extends BaseController
             }
 
             if ($id > 0) {
-                if (! $model->find($id)) {
+                $existing = $model->find($id);
+                if (! $existing) {
                     return $this->jsonResponse(false, null, 'Record not found.', [], 404);
+                }
+                // Amazon SES identities: DNS records + status are owned by AWS (see sesCheck).
+                if (($existing['provider'] ?? '') === \App\Libraries\SesIdentityService::PROVIDER) {
+                    unset($row['dns_records'], $row['status'], $row['type'], $row['domain']);
                 }
                 $model->update($id, $row);
             } else {
@@ -699,21 +705,118 @@ class EmailManager extends BaseController
         }
 
         $model = model(EmailSenderModel::class);
-        if (! $model->find($id)) {
+        $row   = $model->find($id);
+        if (! $row) {
             return $this->jsonResponse(false, null, 'Record not found.', [], 404);
         }
         $model->delete($id);
+        log_activity('email_sender_deleted', 'emails', 'Deleted ' . ($row['type'] ?? 'sender') . ' ' . ($row['email'] ?? $row['domain'] ?? $row['name'] ?? ('#' . $id)), [
+            'id'       => $id,
+            'type'     => $row['type'] ?? null,
+            'provider' => $row['provider'] ?? null,
+        ]);
 
         return $this->jsonResponse(true, null, 'Deleted.');
     }
 
+    /**
+     * Add a From address on an Amazon SES domain.
+     * POST email-manager/ses-senders
+     */
+    public function sesAddSender(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('emails.send')) {
+            return $denied;
+        }
+
+        return $this->sesResult((new \App\Libraries\SesIdentityService())->addSender($this->requestInput()));
+    }
+
+    /**
+     * Make a sender the default Amazon SES From address.
+     * POST email-manager/ses-senders/{id}/default
+     */
+    public function sesDefaultSender(int $id): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('emails.send')) {
+            return $denied;
+        }
+
+        return $this->sesResult((new \App\Libraries\SesIdentityService())->setDefaultSender($id));
+    }
+
+    /**
+     * Start Amazon SES setup for a domain (+ From email/name) and return DNS records.
+     * POST email-manager/ses-identities
+     */
+    public function sesConfigure(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('emails.send')) {
+            return $denied;
+        }
+
+        return $this->sesResult((new \App\Libraries\SesIdentityService())->configure($this->requestInput()));
+    }
+
+    /**
+     * Re-check Amazon SES verification + live DNS for a configured domain.
+     * POST email-manager/ses-identities/check
+     */
+    public function sesCheck(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('emails.send')) {
+            return $denied;
+        }
+
+        $domain = trim((string) ($this->requestInput()['domain'] ?? ''));
+        if ($domain === '') {
+            return $this->jsonResponse(false, null, 'Domain is required.', ['domain' => 'Required'], 422);
+        }
+
+        return $this->sesResult((new \App\Libraries\SesIdentityService())->refresh($domain));
+    }
+
+    /**
+     * One-click SES → SNS → webhook wiring for delivery / bounce / complaint tracking.
+     * POST email-manager/ses-bounce-tracking
+     */
+    public function sesBounceConnect(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('emails.send')) {
+            return $denied;
+        }
+
+        return $this->sesResult((new \App\Libraries\SesBounceTrackingService())->connect());
+    }
+
+    /**
+     * GET email-manager/ses-bounce-tracking
+     */
+    public function sesBounceStatus(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('emails.view')) {
+            return $denied;
+        }
+
+        return $this->jsonResponse(true, (new \App\Libraries\SesBounceTrackingService())->status());
+    }
+
+    /**
+     * @param array{ok: bool, status: int, message: string, data?: mixed, errors?: array<string, string>} $result
+     */
+    protected function sesResult(array $result): ResponseInterface
+    {
+        return $this->jsonResponse(
+            $result['ok'],
+            $result['data'] ?? null,
+            $result['message'],
+            $result['errors'] ?? [],
+            $result['ok'] ? 200 : $result['status']
+        );
+    }
+
     protected function providerLabel(string $provider): string
     {
-        return match ($provider) {
-            SettingsService::EMAIL_PROVIDER_SENDGRID => 'SendGrid',
-            SettingsService::EMAIL_PROVIDER_CHEERIO  => 'Cheerio Email API',
-            SettingsService::EMAIL_PROVIDER_SES      => 'Amazon SES',
-            default                                  => 'SMTP',
-        };
+        return (new SettingsService())->emailProviderLabel($provider);
     }
 }

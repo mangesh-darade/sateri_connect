@@ -146,6 +146,41 @@ class Settings extends BaseController
         return $this->render('settings/index', $data);
     }
 
+    /**
+     * Email Settings — sending domains (DNS / verification) and sender emails.
+     */
+    public function email(): string|ResponseInterface
+    {
+        if ($denied = $this->requirePermission('settings.view')) {
+            return $denied;
+        }
+
+        $settings = service('settingsService');
+        $provider = $settings->getEmailProvider();
+        $ses      = $settings->getSesConfig();
+        $rows     = model(\App\Models\EmailSenderModel::class)->orderBy('id', 'DESC')->findAll(300);
+
+        $isSesRow = static fn (array $r): bool => ($r['provider'] ?? '') === \App\Libraries\SesIdentityService::PROVIDER;
+
+        return $this->render('settings/email', [
+            'pageTitle'     => 'Email Settings',
+            'subtitle'      => 'Connect your sending domain, publish DNS records and manage From addresses.',
+            'breadcrumb'    => [
+                ['label' => 'Settings', 'url' => site_url('settings')],
+                ['label' => 'Email Settings'],
+            ],
+            'isSes'         => $provider === \App\Libraries\SettingsService::EMAIL_PROVIDER_SES,
+            'providerLabel' => $settings->emailProviderLabel($provider),
+            'sesReady'      => trim($ses['access_key']) !== '' && trim($ses['secret_key']) !== '',
+            'sesRegion'     => $ses['region'],
+            'bounceTracking' => (new \App\Libraries\SesBounceTrackingService($settings))->status(false),
+            'fromEmail'     => $ses['from_email'],
+            'fromName'      => $ses['from_name'],
+            'domains'       => array_values(array_filter($rows, static fn ($r) => ($r['type'] ?? '') === 'domain' && $isSesRow($r))),
+            'senders'       => array_values(array_filter($rows, static fn ($r) => ($r['type'] ?? '') === 'sender' && $isSesRow($r))),
+        ]);
+    }
+
     public function save(): ResponseInterface
     {
         if ($denied = $this->requirePermission('settings.edit')) {
@@ -210,6 +245,16 @@ class Settings extends BaseController
                     $ses,
                     static fn ($v) => $v !== null && $v !== ''
                 ));
+
+                // Optional fields may be cleared (empty = use account quota / no config set / re-pin topic).
+                if ($this->request->getPost('ses_max_send_rate') !== null) {
+                    $rate = trim((string) $this->request->getPost('ses_max_send_rate'));
+                    $settings->setSesConfig([
+                        'configuration_set' => trim((string) $this->request->getPost('ses_configuration_set')),
+                        'max_send_rate'     => $rate === '' ? '' : (string) max(1, min(1000, (float) $rate)),
+                        'sns_topic_arn'     => trim((string) $this->request->getPost('ses_sns_topic_arn')),
+                    ]);
+                }
             }
 
             if (in_array($section, ['all', 'cheerio_email', 'email'], true)) {
@@ -512,7 +557,10 @@ class Settings extends BaseController
             $ok     = (bool) ($result['ok'] ?? false);
             $msg    = (string) ($result['message'] ?? ($ok ? 'Test email sent.' : 'Email test failed.'));
 
-            return $this->jsonResponse($ok, $result, $ok ? ('Test email sent to ' . $to . ' via ' . $this->emailProviderLabel($mailer->getProvider())) : $msg);
+            $notice = trim((string) ($result['notice'] ?? ''));
+            $okMsg  = 'Test email sent to ' . $to . ' via ' . $this->emailProviderLabel($mailer->getProvider()) . '.' . ($notice !== '' ? ' ' . $notice : '');
+
+            return $this->jsonResponse($ok, $result, $ok ? $okMsg : $msg);
         } catch (\Throwable $e) {
             return $this->jsonResponse(false, null, $e->getMessage(), [], 500);
         }
@@ -624,10 +672,11 @@ class Settings extends BaseController
         try {
             $stats = (new \App\Libraries\ElintOmCustomerSyncService())->sync();
             $msg = sprintf(
-                'ElintOm sync done: %d created, %d updated, %d skipped, %d failed (of %d).',
+                'ElintOm sync done: %d created, %d updated, %d skipped, %d deleted in app (not restored), %d failed (of %d).',
                 (int) ($stats['created'] ?? 0),
                 (int) ($stats['updated'] ?? 0),
                 (int) ($stats['skipped'] ?? 0),
+                (int) ($stats['deleted'] ?? 0),
                 (int) ($stats['failed'] ?? 0),
                 (int) ($stats['total'] ?? 0)
             );

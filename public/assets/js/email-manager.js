@@ -483,7 +483,7 @@
         name: document.getElementById('sender_name').value,
         email: document.getElementById('sender_email').value,
         domain: document.getElementById('sender_domain').value,
-        cheerio_id: document.getElementById('sender_cheerio_id').value,
+        cheerio_id: (document.getElementById('sender_cheerio_id') || {}).value || '',
         status: document.getElementById('sender_status').value,
         notes: document.getElementById('sender_notes').value,
         is_default: document.getElementById('sender_default').checked ? 1 : 0
@@ -511,7 +511,7 @@
         document.getElementById('sender_name').value = s.name || '';
         document.getElementById('sender_email').value = s.email || '';
         document.getElementById('sender_domain').value = s.domain || '';
-        document.getElementById('sender_cheerio_id').value = s.cheerio_id || '';
+        if (document.getElementById('sender_cheerio_id')) document.getElementById('sender_cheerio_id').value = s.cheerio_id || '';
         document.getElementById('sender_status').value = s.status || 'pending';
         document.getElementById('sender_notes').value = s.notes || '';
         document.getElementById('sender_default').checked = !!Number(s.is_default);

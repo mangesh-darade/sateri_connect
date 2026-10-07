@@ -660,11 +660,32 @@
                     </li>
                     <?php endif; ?>
                     <?php if (function_exists('can') && can('settings.view')): ?>
-                    <li class="nav-item">
-                        <a href="<?= site_url('settings') ?>" class="nav-link <?= str_starts_with(uri_string(), 'settings') ? 'active' : '' ?>" title="Settings" aria-label="Settings">
+                    <?php
+                    $settingsUri    = trim(uri_string(), '/');
+                    $settingsOpen   = $settingsUri === 'settings' || str_starts_with($settingsUri, 'settings/');
+                    $settingsEmail  = str_starts_with($settingsUri, 'settings/email');
+                    $settingsSystem = $settingsOpen && ! $settingsEmail;
+                    ?>
+                    <li class="nav-item app-sidebar-item has-tree<?= $settingsOpen ? ' menu-open' : '' ?>" data-menu-label="settings">
+                        <a href="<?= site_url('settings') ?>" class="nav-link app-sidebar-toggle<?= $settingsOpen ? ' active' : '' ?>" data-toggle="tree" aria-expanded="<?= $settingsOpen ? 'true' : 'false' ?>" title="Settings" aria-label="Settings">
                             <i class="nav-icon" data-lucide="settings" aria-hidden="true"></i>
                             <p>Settings</p>
+                            <i class="right sidebar-link-arrow" data-lucide="chevron-down" aria-hidden="true"></i>
                         </a>
+                        <ul class="nav nav-treeview app-sidebar-tree">
+                            <li class="nav-item<?= $settingsSystem ? ' is-active' : '' ?>" data-menu-label="system settings">
+                                <a href="<?= site_url('settings') ?>" class="nav-link<?= $settingsSystem ? ' active' : '' ?>" title="System Settings" aria-current="<?= $settingsSystem ? 'page' : 'false' ?>">
+                                    <i class="nav-icon" data-lucide="sliders-horizontal" aria-hidden="true"></i>
+                                    <p>System Settings</p>
+                                </a>
+                            </li>
+                            <li class="nav-item<?= $settingsEmail ? ' is-active' : '' ?>" data-menu-label="email settings">
+                                <a href="<?= site_url('settings/email') ?>" class="nav-link<?= $settingsEmail ? ' active' : '' ?>" title="Email Settings" aria-current="<?= $settingsEmail ? 'page' : 'false' ?>">
+                                    <i class="nav-icon" data-lucide="mail" aria-hidden="true"></i>
+                                    <p>Email Settings</p>
+                                </a>
+                            </li>
+                        </ul>
                     </li>
                     <?php endif; ?>
                 </ul>
@@ -712,7 +733,7 @@
                             <div class="page-intro-title-row">
                                 <h1 class="mb-0"><?= esc($title ?? 'Dashboard') ?></h1>
                                 <?php
-                                $isEmailRoute = str_starts_with($currentUri, 'email') || str_starts_with($currentUri, 'emails') || ($req->getGet('channel') === 'email');
+                                $isEmailRoute = str_starts_with($currentUri, 'email') || str_starts_with($currentUri, 'emails') || str_starts_with($currentUri, 'settings/email') || ($req->getGet('channel') === 'email');
                                 if (! $isEmailRoute && function_exists('whatsapp_provider_short')): ?>
                                     <span class="provider-chip <?= function_exists('is_meta_provider') && is_meta_provider() ? 'is-meta' : 'is-cheerio' ?>" title="<?= esc(function_exists('whatsapp_provider_label') ? whatsapp_provider_label() : '') ?>">
                                         <i class="<?= function_exists('is_meta_provider') && is_meta_provider() ? 'fab fa-meta' : 'fas fa-bolt' ?>"></i>

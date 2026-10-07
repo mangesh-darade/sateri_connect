@@ -49,6 +49,10 @@ $routes->get('emails/track/open/(:num)', 'Emails::trackOpen/$1');
 $routes->get('emails/track/click/(:num)', 'Emails::trackClick/$1');
 $routes->match(['get', 'post'], 'emails/unsubscribe', 'Emails::unsubscribe');
 
+// Amazon SES bounce / complaint notifications via SNS (public, signature-verified)
+$routes->post('webhooks/ses', 'SesWebhook::receive');
+$routes->post('webhooks/ses/(:segment)', 'SesWebhook::receive/$1');
+
 /*
  * --------------------------------------------------------------------
  * Platform super admin (all clients)
@@ -89,6 +93,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
 
     // Settings
     $routes->get('settings', 'Settings::index');
+    $routes->get('settings/email', 'Settings::email');
     $routes->post('settings/save', 'Settings::save', ['filter' => 'csrf']);
     $routes->post('settings/test-smtp', 'Settings::testSmtp', ['filter' => 'csrf']);
     $routes->post('settings/test-email', 'Settings::testEmail', ['filter' => 'csrf']);
@@ -163,6 +168,12 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('email-manager/campaigns/(:num)/delete', 'EmailManager::deleteCampaign/$1', ['filter' => 'csrf']);
     $routes->post('email-manager/senders', 'EmailManager::saveSender', ['filter' => 'csrf']);
     $routes->post('email-manager/senders/(:num)/delete', 'EmailManager::deleteSender/$1', ['filter' => 'csrf']);
+    $routes->post('email-manager/ses-identities', 'EmailManager::sesConfigure', ['filter' => 'csrf']);
+    $routes->post('email-manager/ses-identities/check', 'EmailManager::sesCheck', ['filter' => 'csrf']);
+    $routes->post('email-manager/ses-senders', 'EmailManager::sesAddSender', ['filter' => 'csrf']);
+    $routes->get('email-manager/ses-bounce-tracking', 'EmailManager::sesBounceStatus');
+    $routes->post('email-manager/ses-bounce-tracking', 'EmailManager::sesBounceConnect', ['filter' => 'csrf']);
+    $routes->post('email-manager/ses-senders/(:num)/default', 'EmailManager::sesDefaultSender/$1', ['filter' => 'csrf']);
 
     // Emails (single + bulk via active email provider)
     $routes->get('emails', 'Emails::index');
@@ -413,6 +424,12 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1', 'filter' => '
     // Automations & Webhooks
     $routes->post('automations/trigger', 'AutomationsController::trigger');
     $routes->get('automations', 'AutomationsController::index');
+
+    // Email sending identities (Amazon SES domain / sender onboarding)
+    $routes->post('email/identities', 'EmailIdentitiesController::create');
+    $routes->get('email/identities', 'EmailIdentitiesController::index');
+    $routes->get('email/identities/(:segment)/dns-records', 'EmailIdentitiesController::dnsRecords/$1');
+    $routes->get('email/identities/(:segment)', 'EmailIdentitiesController::show/$1');
 
     // Account & Health Diagnostics
     $routes->get('account', 'AccountController::index');

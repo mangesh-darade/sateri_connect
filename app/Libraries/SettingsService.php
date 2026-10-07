@@ -549,6 +549,31 @@ class SettingsService
         ], true) ? $provider : self::EMAIL_PROVIDER_SMTP;
     }
 
+    public function emailProviderLabel(?string $provider = null): string
+    {
+        return match ($provider ?? $this->getEmailProvider()) {
+            self::EMAIL_PROVIDER_SENDGRID => 'SendGrid',
+            self::EMAIL_PROVIDER_CHEERIO  => 'Cheerio Email API',
+            self::EMAIL_PROVIDER_SES      => 'Amazon SES',
+            default                       => 'SMTP',
+        };
+    }
+
+    /**
+     * Whether the active email provider has the minimum credentials needed to send.
+     */
+    public function isEmailConfigured(): bool
+    {
+        return match ($this->getEmailProvider()) {
+            self::EMAIL_PROVIDER_SENDGRID => trim($this->getSendGridConfig()['api_key']) !== '',
+            self::EMAIL_PROVIDER_CHEERIO  => trim($this->getCheerioEmailConfig()['api_key']) !== '',
+            self::EMAIL_PROVIDER_SES      => trim($this->getSesConfig()['access_key']) !== ''
+                && trim($this->getSesConfig()['secret_key']) !== '',
+            default => trim($this->getSmtpConfig()['host']) !== ''
+                && trim($this->getSmtpConfig()['from_email']) !== '',
+        };
+    }
+
     public function setEmailProvider(string $provider): void
     {
         $provider = strtolower(trim($provider));
@@ -719,6 +744,9 @@ class SettingsService
             'region'     => (string) $this->get('ses_region', 'ap-south-1'),
             'from_email' => (string) $this->get('ses_from_email', ''),
             'from_name'  => (string) $this->get('ses_from_name', ''),
+            'configuration_set' => (string) $this->get('ses_configuration_set', ''),
+            'max_send_rate'     => (string) $this->get('ses_max_send_rate', ''),
+            'sns_topic_arn'     => (string) $this->get('ses_sns_topic_arn', ''),
         ];
     }
 
@@ -733,6 +761,9 @@ class SettingsService
             'region'     => ['ses_region', 'email', false],
             'from_email' => ['ses_from_email', 'email', false],
             'from_name'  => ['ses_from_name', 'email', false],
+            'configuration_set' => ['ses_configuration_set', 'email', false],
+            'max_send_rate'     => ['ses_max_send_rate', 'email', false],
+            'sns_topic_arn'     => ['ses_sns_topic_arn', 'email', false],
         ];
 
         foreach ($map as $inputKey => [$settingKey, $group, $encrypt]) {

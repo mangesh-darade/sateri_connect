@@ -5,13 +5,54 @@
 $senders = $senders ?? [];
 $canSend = ! empty($canSend);
 $isCheerio = ! empty($isCheerio);
+$isSes = ! empty($isSes);
 ?>
 <div class="row g-3">
     <!-- Sender Identity Form -->
     <div class="col-lg-5">
+        <?php if ($isSes && $canSend): ?>
+        <div class="card border-0 shadow-sm rounded-3 mb-3">
+            <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+                <h6 class="mb-0 fw-bold text-dark"><i class="fab fa-aws text-warning me-2"></i>Configure New Email (Amazon SES)</h6>
+                <span class="badge bg-success-subtle text-success" style="font-size: 0.7rem;">Automatic</span>
+            </div>
+            <div class="card-body p-3">
+                <div class="alert alert-light border py-2 small mb-3 text-secondary">
+                    <i class="fas fa-magic text-primary me-1"></i> Enter your domain and From email. We register it with Amazon SES and show the exact <strong>CNAME (DKIM), SPF, MX and DMARC</strong> records to add at your DNS provider.
+                </div>
+                <form id="sesIdentityForm" class="em-form">
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold mb-1">Domain Name <span class="text-danger">*</span></label>
+                        <input type="text" name="domain" class="form-control form-control-sm" placeholder="e.g. yourbrand.com" required>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-sm-6 mb-2">
+                            <label class="form-label small fw-semibold mb-1">From Email</label>
+                            <input type="email" name="email" class="form-control form-control-sm" placeholder="hello@yourbrand.com">
+                        </div>
+                        <div class="col-sm-6 mb-2">
+                            <label class="form-label small fw-semibold mb-1">From Name</label>
+                            <input type="text" name="name" class="form-control form-control-sm" placeholder="Your Brand">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold mb-1">DMARC Policy</label>
+                        <select name="dmarc_policy" class="form-select form-select-sm">
+                            <option value="none" selected>none â€” monitor only (recommended to start)</option>
+                            <option value="quarantine">quarantine â€” failing mail goes to spam</option>
+                            <option value="reject">reject â€” failing mail is blocked</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm px-3"><i class="fas fa-play me-1"></i> Start Setup &amp; Get DNS Records</button>
+                    <div class="small mt-2 js-ses-msg" data-base-class="small mt-2 js-ses-msg"></div>
+                </form>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <div class="card border-0 shadow-sm rounded-3">
             <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
-                <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-id-badge text-primary me-2"></i>Sender &amp; Domain Identity</h6>
+                <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-id-badge text-primary me-2"></i><?= $isSes ? 'Manual Identity Record' : 'Sender &amp; Domain Identity' ?></h6>
                 <span class="badge bg-primary-subtle text-primary" style="font-size: 0.7rem;">Authentication</span>
             </div>
             <div class="card-body p-3">
@@ -114,7 +155,7 @@ $isCheerio = ! empty($isCheerio);
                                 <th>Type</th>
                                 <th>Identity Name</th>
                                 <th>Email / Domain</th>
-                                <th>Cheerio ID</th>
+                                <th>Provider / ID</th>
                                 <th>Status</th>
                                 <th class="text-end">Actions</th>
                             </tr>
@@ -136,7 +177,14 @@ $isCheerio = ! empty($isCheerio);
                                     <?php endif; ?>
                                 </td>
                                 <td class="small font-monospace"><?= esc($s['type'] === 'domain' ? ($s['domain'] ?? '') : ($s['email'] ?? '')) ?></td>
-                                <td><code class="small text-muted"><?= esc($s['cheerio_id'] ?? '—') ?></code></td>
+                                <?php $isSesRow = ($s['provider'] ?? '') === 'ses'; ?>
+                                <td>
+                                    <?php if ($isSesRow): ?>
+                                        <span class="badge bg-warning-subtle text-dark border"><i class="fab fa-aws me-1"></i>Amazon SES</span>
+                                    <?php else: ?>
+                                        <code class="small text-muted"><?= esc($s['cheerio_id'] ?? 'â€”') ?></code>
+                                    <?php endif; ?>
+                                </td>
                                 <td>
                                     <?php
                                     $st = $s['status'] ?? 'pending';
@@ -150,8 +198,16 @@ $isCheerio = ! empty($isCheerio);
                                     <span class="badge <?= $stBadge ?> text-capitalize"><?= esc($st) ?></span>
                                 </td>
                                 <td class="text-end text-nowrap">
+                                    <?php if ($isSesRow && ($s['type'] ?? '') === 'domain'): ?>
+                                        <button type="button" class="btn btn-xs btn-outline-dark em-ses-dns"><i class="fas fa-list me-1"></i>DNS</button>
+                                        <?php if ($canSend): ?>
+                                            <button type="button" class="btn btn-xs btn-outline-success em-ses-check" data-domain="<?= esc($s['domain'] ?? '', 'attr') ?>"><i class="fas fa-sync-alt me-1"></i>Check</button>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
                                     <?php if ($canSend): ?>
+                                        <?php if (! ($isSesRow && ($s['type'] ?? '') === 'domain')): ?>
                                         <button type="button" class="btn btn-xs btn-outline-primary em-edit-sender"><i class="fas fa-edit me-1"></i>Edit</button>
+                                        <?php endif; ?>
                                         <button type="button" class="btn btn-xs btn-outline-danger em-del-sender" data-id="<?= (int) $s['id'] ?>"><i class="fas fa-trash me-1"></i>Del</button>
                                     <?php endif; ?>
                                 </td>
@@ -165,3 +221,6 @@ $isCheerio = ! empty($isCheerio);
         </div>
     </div>
 </div>
+
+
+<?= view('partials/ses_dns_modal', ['canManage' => $canSend]) ?>
