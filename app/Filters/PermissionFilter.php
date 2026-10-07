@@ -58,7 +58,9 @@ class PermissionFilter implements FilterInterface
                         ->setJSON(['success' => false, 'message' => 'Permission denied: ' . $slug]);
                 }
 
-                return redirect()->to('/dashboard')->with('error', 'You do not have permission to access this resource.');
+                helper('permission');
+
+                return permission_denied_response();
             }
         }
 
