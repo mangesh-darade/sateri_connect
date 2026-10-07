@@ -263,5 +263,6 @@ $campaigns = $campaigns ?? [];
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
+<?= $this->include('partials/email_editor_assets') ?>
 <script src="<?= asset_url('assets/js/campaigns.js') ?>"></script>
 <?= $this->endSection() ?>

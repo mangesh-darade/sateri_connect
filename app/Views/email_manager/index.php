@@ -117,6 +117,7 @@ $tabUrl = static fn (string $t): string => site_url('email-manager?tab=' . $t);
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
+<?= $this->include('partials/email_editor_assets') ?>
 <script src="<?= asset_url('assets/js/email-manager.js') ?>"></script>
 <script src="<?= asset_url('assets/js/email-identities.js') ?>"></script>
 <?= $this->endSection() ?>

@@ -71,14 +71,8 @@ $emailCampaigns = $emailCampaigns ?? [];
                                value="<?= esc(old('subject') ?? '') ?>" placeholder="Subject line">
                     </div>
                     <div class="col-12">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <label class="form-label mb-0" for="emailBody">Message <span class="text-danger">*</span></label>
-                            <div class="form-check form-switch mb-0">
-                                <input class="form-check-input" type="checkbox" role="switch" id="emailIsHtml" name="is_html" value="1">
-                                <label class="form-check-label" for="emailIsHtml">HTML</label>
-                            </div>
-                        </div>
-                        <textarea class="form-control" id="emailBody" name="body" rows="10" required
+                        <label class="form-label mb-1" for="emailBody">Message <span class="text-danger">*</span></label>
+                        <textarea class="form-control font-monospace" id="emailBody" name="body" rows="10" required data-email-editor
                                   placeholder="Write your message…"><?= esc(old('body') ?? '') ?></textarea>
                     </div>
                     <div class="col-12">
@@ -116,5 +110,6 @@ $emailCampaigns = $emailCampaigns ?? [];
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
+<?= $this->include('partials/email_editor_assets') ?>
 <script src="<?= asset_url('assets/js/emails.js') ?>"></script>
 <?= $this->endSection() ?>

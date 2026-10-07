@@ -183,6 +183,7 @@
           (data.html_content || '') + '</textarea></div>' +
       '</div>';
     wrap.appendChild(div);
+    if (window.APP && APP.emailEditor) APP.emailEditor.init(div.querySelector('.step-html'), { height: 140, placeholder: 'Email content (optional if builder selected)' });
     div.querySelector('.step-remove').addEventListener('click', function () { div.remove(); });
   }
 

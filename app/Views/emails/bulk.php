@@ -385,13 +385,9 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
                             <button type="button" class="btn btn-xs btn-outline-secondary js-insert-bulk-tag fw-mono" data-tag="{{name}}" style="font-size: 0.72rem; font-family: monospace;">{{name}}</button>
                             <button type="button" class="btn btn-xs btn-outline-secondary js-insert-bulk-tag fw-mono" data-tag="{{email}}" style="font-size: 0.72rem; font-family: monospace;">{{email}}</button>
                         </div>
-                        <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
-                            <input class="form-check-input mt-0 cursor-pointer" type="checkbox" role="switch" id="bulkIsHtml" name="is_html" value="1">
-                            <label class="form-check-label small fw-semibold text-secondary cursor-pointer" for="bulkIsHtml" style="font-size: 0.78rem;">HTML Format</label>
-                        </div>
                     </div>
 
-                    <textarea class="form-control font-monospace border rounded-3 p-3" id="bulkBody" name="body" rows="7" required
+                    <textarea class="form-control font-monospace border rounded-3 p-3" id="bulkBody" name="body" rows="7" required data-email-editor
                               style="min-height: 190px; font-size: 0.85rem; background: #ffffff; border-color: #cbd5e1; line-height: 1.55;"
                               placeholder="Write your email body or HTML layout here…"><?= esc(old('body') ?? '') ?></textarea>
                 </div>
@@ -478,20 +474,13 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
+<?= $this->include('partials/email_editor_assets') ?>
 <script src="<?= asset_url('assets/js/emails.js') ?>"></script>
 <script>
 $(function () {
     // Quick tag insertion for bulk email body
     $(document).on('click', '.js-insert-bulk-tag', function () {
-        var tag = $(this).data('tag');
-        var textarea = document.getElementById('bulkBody');
-        if (!textarea) return;
-        var start = textarea.selectionStart;
-        var end = textarea.selectionEnd;
-        var text = textarea.value;
-        textarea.value = text.substring(0, start) + tag + text.substring(end);
-        textarea.focus();
-        textarea.selectionStart = textarea.selectionEnd = start + tag.length;
+        APP.emailEditor.insertText(document.getElementById('bulkBody'), $(this).data('tag'));
     });
 
     // Update pasted email count in real time

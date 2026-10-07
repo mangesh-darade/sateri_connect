@@ -80,7 +80,7 @@
             formData.append('to', $.trim($('#emailTo').val() || ''));
             formData.append('subject', $.trim($('#emailSubject').val() || ''));
             formData.append('body', $('#emailBody').val() || '');
-            formData.append('is_html', $('#emailIsHtml').is(':checked') ? '1' : '0');
+            formData.append('is_html', '1');
             formData.append('campaign_name', singleCamp);
 
             var fileInput = document.getElementById('emailAttachment');
@@ -442,7 +442,6 @@
 
                 if (tplContent) {
                     $('#bulkBody').val(tplContent);
-                    $('#bulkIsHtml').prop('checked', true);
                 }
 
                 if (window.APP && APP.toast) {
@@ -488,7 +487,7 @@
                 formData.append('mode', mode);
                 formData.append('subject', $.trim($('#bulkSubject').val() || ''));
                 formData.append('body', $('#bulkBody').val() || '');
-                formData.append('is_html', $('#bulkIsHtml').is(':checked') ? '1' : '0');
+                formData.append('is_html', '1');
                 formData.append('campaign_name', bulkCamp);
                 formData.append('recipients', $('#bulkRecipients').val() || '');
                 formData.append('label_name', selectedLabel);

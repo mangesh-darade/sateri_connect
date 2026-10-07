@@ -56,10 +56,10 @@ $isCheerio = ! empty($isCheerio);
 
                     <div class="mb-2">
                         <div class="d-flex justify-content-between align-items-center mb-1">
-                            <label class="form-label small fw-semibold mb-0">HTML Content</label>
+                            <label class="form-label small fw-semibold mb-0">Email Content</label>
                             <span class="text-muted" style="font-size: 0.7rem;">Tags: <code>{{name}}</code> <code>{{unsubscribe_url}}</code></span>
                         </div>
-                        <textarea name="html_content" id="camp_html" class="form-control form-control-sm font-monospace" rows="6" placeholder="<p>Hello {{name}}, welcome to our newsletter!</p>"></textarea>
+                        <textarea name="html_content" id="camp_html" class="form-control form-control-sm font-monospace" rows="6" placeholder="<p>Hello {{name}}, welcome to our newsletter!</p>" data-email-editor data-editor-height="200"></textarea>
                     </div>
 
                     <div class="mb-2">

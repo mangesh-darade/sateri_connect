@@ -259,6 +259,7 @@ $totalSteps = array_sum(array_map(fn($d) => is_array($d['steps'] ?? null) ? coun
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
+<?= $this->include('partials/email_editor_assets') ?>
 <script>
 $(function () {
     var dripModal = new bootstrap.Modal(document.getElementById('dripModal'));
@@ -290,7 +291,7 @@ $(function () {
                     '<select class="form-select form-select-sm step-builder">' + builderOpts + '</select>' +
                 '</div>' +
                 '<div class="col-md-7">' +
-                    '<label class="form-label small mb-1 fw-semibold">Or Custom HTML Body</label>' +
+                    '<label class="form-label small mb-1 fw-semibold">Or Custom Email Content</label>' +
                     '<textarea class="form-control form-control-sm font-monospace step-html" rows="2" placeholder="<p>Hello {{name}}, welcome!</p>">' + (escapeHtml(step.html_content || '')) + '</textarea>' +
                 '</div>' +
             '</div>' +
@@ -301,6 +302,7 @@ $(function () {
             $el.find('.step-builder').val(step.builder_id);
         }
         $('#dripStepsContainer').append($el);
+        APP.emailEditor.init($el.find('.step-html'), { height: 140, placeholder: 'Email content (optional if template selected)' });
         updateStepBadges();
     }
 

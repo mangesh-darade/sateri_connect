@@ -121,8 +121,8 @@
                             <div class="invalid-feedback">Email subject is required.</div>
                         </div>
                         <div class="mb-0">
-                            <label class="form-label fw-semibold">HTML body</label>
-                            <textarea id="cwEmailHtml" class="form-control font-monospace" rows="8" placeholder="<p>Hello…</p>"></textarea>
+                            <label class="form-label fw-semibold">Email content</label>
+                            <textarea id="cwEmailHtml" class="form-control font-monospace" rows="8" data-email-editor placeholder="<p>Hello…</p>"></textarea>
                         </div>
                     </div>
                 </div>
