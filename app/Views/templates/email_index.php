@@ -220,7 +220,7 @@ $statusCounts = $statusCounts ?? ['total' => 0, 'active' => 0, 'draft' => 0, 'ar
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-0">
-                <iframe id="previewEmailIframe" style="width:100%; height:450px; border:0; background:#fff;"></iframe>
+                <iframe id="previewEmailIframe" sandbox="" referrerpolicy="no-referrer" style="width:100%; height:450px; border:0; background:#fff;"></iframe>
             </div>
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -371,10 +371,7 @@ $(function () {
         $('#previewModalTitle').text(name);
         $('#previewModalSubject').text('Subject: ' + (subj || '(No Subject)'));
 
-        var doc = document.getElementById('previewEmailIframe').contentWindow.document;
-        doc.open();
-        doc.write(html);
-        doc.close();
+        document.getElementById('previewEmailIframe').srcdoc = String(html);
 
         prevModal.show();
     });
