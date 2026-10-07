@@ -262,9 +262,14 @@ $emailSum = $email['summary'] ?? [];
                                     <tr>
                                         <td>
                                             <span class="fw-semibold text-dark"><?= esc($log['to_email'] ?? '—') ?></span>
-                                            <?php if (! empty($log['kind'])): ?>
-                                                <div class="text-muted" style="font-size:0.7rem;"><?= esc(ucfirst((string) $log['kind'])) ?></div>
-                                            <?php endif; ?>
+                                            <div class="d-flex align-items-center gap-2" style="font-size:0.7rem;">
+                                                <?php if (! empty($log['kind'])): ?>
+                                                    <span class="text-muted"><?= esc(ucfirst((string) $log['kind'])) ?></span>
+                                                <?php endif; ?>
+                                                <?php if (! empty($log['id'])): ?>
+                                                    <a href="#" class="js-email-recipients text-decoration-none fw-semibold" data-log-id="<?= (int) $log['id'] ?>"><i class="fas fa-users me-1"></i><span>Recipients</span></a>
+                                                <?php endif; ?>
+                                            </div>
                                         </td>
                                         <td class="text-truncate small" style="max-width: 180px;" title="<?= esc($log['subject'] ?? '') ?>">
                                             <?= esc($log['subject'] ?? '—') ?>
@@ -339,6 +344,7 @@ $emailSum = $email['summary'] ?? [];
         </div>
     <?php endif; ?>
 </div>
+<?= view('partials/email_recipients_modal') ?>
 <?= $this->endSection() ?>
 
 <?= $this->section('styles') ?>
@@ -347,4 +353,5 @@ $emailSum = $email['summary'] ?? [];
 
 <?= $this->section('scripts') ?>
 <script src="<?= asset_url('assets/js/analytics.js') ?>"></script>
+<script src="<?= asset_url('assets/js/email-recipients.js') ?>"></script>
 <?= $this->endSection() ?>

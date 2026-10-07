@@ -69,13 +69,16 @@ class EmailCampaignService
         // Filter out unsubscribed contacts
         $recipients = model(\App\Models\EmailUnsubscribeModel::class)->filterActiveRecipients($rawRecipients);
 
-        // Prepare unsubscribe link and merge tags
-        $unsubUrl = site_url('emails/unsubscribe?cid=' . $id);
+        // Prepare unsubscribe link and merge tags (Cheerio label sends are not personalized per recipient)
+        $perRecipient = $provider !== SettingsService::EMAIL_PROVIDER_CHEERIO;
+        $unsubUrl     = EmailTracking::unsubscribeUrl($id, $perRecipient);
+        $options['unsubscribe_url'] = $unsubUrl;
+        $options['campaign_id']     = $id;
         if (str_contains($html, '{{unsubscribe_url}}')) {
             $html = str_replace('{{unsubscribe_url}}', $unsubUrl, $html);
         } else {
             $html .= '<div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; text-align: center;">' .
-                     'To stop receiving these emails, <a href="' . esc($unsubUrl, 'attr') . '" style="color: #64748b; text-decoration: underline;">unsubscribe here</a>.' .
+                     'To stop receiving these emails, <a href="' . htmlspecialchars($unsubUrl, ENT_QUOTES, 'UTF-8') . '" style="color: #64748b; text-decoration: underline;">unsubscribe here</a>.' .
                      '</div>';
         }
 
@@ -98,8 +101,8 @@ class EmailCampaignService
         );
 
         if ($logId > 0) {
-            $pixel = '<img src="' . site_url('emails/track/open/' . $logId) . '" width="1" height="1" alt="" style="display:none !important;" />';
-            $html .= $pixel;
+            $html .= EmailTracking::openPixelHtml($logId, $perRecipient);
+            $options['log_id'] = $logId;
         }
 
         // Attachments support from campaign or inherited template
@@ -186,8 +189,10 @@ class EmailCampaignService
             model(EmailLogModel::class)->update($logId, [
                 'status'    => $ok ? 'sent' : 'failed',
                 'message'   => (string) ($result['message'] ?? ($ok ? 'Sent' : 'Failed')),
-                'meta_json' => json_encode(['result' => $result['data'] ?? null]),
+                'meta_json' => json_encode(['result' => array_diff_key($rdata, ['recipients' => true]) ?: ($result['data'] ?? null)]),
             ]);
+            model(\App\Models\EmailRecipientEventModel::class)
+                ->recordSendResults($logId, $id, $recipients, $ok, $rdata, (string) ($result['message'] ?? ''));
         }
 
         (new ActivityLogger())->log(

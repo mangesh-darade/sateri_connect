@@ -172,6 +172,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('emails/single', 'Emails::sendSingle', ['filter' => 'csrf']);
     $routes->get('emails/bulk', 'Emails::bulk');
     $routes->post('emails/bulk', 'Emails::sendBulk', ['filter' => 'csrf']);
+    $routes->get('emails/logs/(:num)/recipients', 'Emails::logRecipients/$1');
 
     // Global Analytics (WhatsApp + Email)
     $routes->get('analytics', 'Analytics::index');

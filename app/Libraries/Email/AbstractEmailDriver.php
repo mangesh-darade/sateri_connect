@@ -186,6 +186,7 @@ abstract class AbstractEmailDriver implements EmailDriverInterface
                 'name', 'fullname', 'full_name', 'contact_name', 'customer_name', 'contact.name' => ($rawTag === strtoupper($rawTag) && strlen($rawTag) > 2) ? strtoupper($name) : $name,
                 'first_name', 'firstname', 'contact.first_name'                                  => ($rawTag === strtoupper($rawTag) && strlen($rawTag) > 2) ? strtoupper($firstName) : $firstName,
                 'email', 'contact.email'                                                         => $email,
+                'email_url'                                                                      => rawurlencode($email),
                 'mobile', 'phone', 'contact.phone', 'contact.mobile'                             => $mobile,
                 default                                                                          => $matches[0],
             };

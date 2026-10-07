@@ -98,6 +98,7 @@ class Filters extends BaseFilters
                     'webhook/*',
                     'webhooks',
                     'webhooks/*',
+                    'emails/unsubscribe',
                     'api',
                     'api/*',
                     'install',

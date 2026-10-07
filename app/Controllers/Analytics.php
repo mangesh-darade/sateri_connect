@@ -112,6 +112,7 @@ class Analytics extends BaseController
                 continue;
             }
             $recentEmailLogs[] = [
+                'id'          => (int) ($row['id'] ?? 0),
                 'created_at'  => (string) ($row['created_at'] ?? ''),
                 'kind'        => (string) ($row['kind'] ?? ''),
                 'to_email'    => (string) ($row['to_email'] ?? ''),

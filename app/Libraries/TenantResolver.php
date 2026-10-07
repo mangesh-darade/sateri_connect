@@ -89,6 +89,20 @@ class TenantResolver
         return (new TenantConnection())->apply($key, 'session');
     }
 
+    /**
+     * Public, unauthenticated endpoints (tracking pixel, unsubscribe, provider webhooks)
+     * carry the tenant key in the URL because no session exists on the portal host.
+     */
+    public static function ensureFromPublicKey(?string $tenantKey): bool
+    {
+        $tenantKey = strtolower(trim((string) $tenantKey));
+        if ($tenantKey === '' || preg_match('/^[a-z0-9_\-]{1,64}$/', $tenantKey) !== 1) {
+            return self::ensureFromSession();
+        }
+
+        return (new TenantConnection())->apply($tenantKey, 'public');
+    }
+
     public static function ensureFromJwtClaim(?string $tenantKey): bool
     {
         if ($tenantKey === null || trim($tenantKey) === '') {

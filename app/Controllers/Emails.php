@@ -137,7 +137,7 @@ class Emails extends BaseController
                 : $mailer->send($to, $subject, $body, $options);
 
             $ok = (bool) ($result['ok'] ?? false);
-            $this->logSend($ok, 'single', $to, $subject, $result);
+            $this->logSend($ok, 'single', $to, $subject, $result, [$to]);
 
             return $this->jsonResponse(
                 $ok,
@@ -258,7 +258,7 @@ class Emails extends BaseController
             $result = $mailer->sendCampaign($campaign);
             $ok     = (bool) ($result['ok'] ?? false);
             $target = $mode === 'label' ? ('label:' . $labelName) : implode(', ', array_slice($recipients, 0, 5));
-            $this->logSend($ok, 'bulk', $target, $subject, $result);
+            $this->logSend($ok, 'bulk', $target, $subject, $result, $recipients);
 
             return $this->jsonResponse(
                 $ok,
@@ -270,6 +270,57 @@ class Emails extends BaseController
 
             return $this->jsonResponse(false, null, $e->getMessage(), [], 500);
         }
+    }
+
+    /**
+     * Per-recipient status of one send (sent / failed / delivered / bounced / opened / clicked).
+     * GET emails/logs/{id}/recipients
+     */
+    public function logRecipients(int $id): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('emails.view')) {
+            return $denied;
+        }
+
+        $log = model(EmailLogModel::class)->find($id);
+        if (! $log) {
+            return $this->jsonResponse(false, null, 'Email log not found.', [], 404);
+        }
+
+        $target   = (string) ($log['to_email'] ?? '');
+        $fallback = str_starts_with($target, 'label:') ? [] : (preg_split('/\s*,\s*/', $target) ?: []);
+        $events   = model(\App\Models\EmailRecipientEventModel::class);
+        $tracked  = $events->where('log_id', $id)->whereIn('event_type', ['sent', 'failed'])->countAllResults() > 0;
+
+        // Legacy sends: apply the whole-send outcome when it is unambiguous (all sent / all failed).
+        $result = [];
+        if (! $tracked) {
+            $raw    = json_decode((string) ($log['meta_json'] ?? ''), true)['raw'] ?? [];
+            $status = (string) ($log['status'] ?? '');
+            if ($status === 'failed') {
+                $result = ['send' => 'failed', 'error' => (string) ($log['message'] ?? '')];
+            } elseif ($status === 'sent' && empty($raw['failed']) && (int) ($raw['sent'] ?? count($fallback)) >= count($fallback)) {
+                $result = ['send' => 'sent'];
+            }
+        }
+        $rows = $events->recipientsForLog($id, $fallback, $result);
+
+        $counts = array_count_values(array_column($rows, 'status'));
+
+        return $this->jsonResponse(true, [
+            'log' => [
+                'id'         => (int) $log['id'],
+                'kind'       => (string) ($log['kind'] ?? ''),
+                'subject'    => (string) ($log['subject'] ?? ''),
+                'provider'   => (string) ($log['provider'] ?? ''),
+                'status'     => (string) ($log['status'] ?? ''),
+                'message'    => (string) ($log['message'] ?? ''),
+                'created_at' => format_app_datetime($log['created_at'] ?? null),
+            ],
+            'counts'     => $counts,
+            'recipients' => $rows,
+            'tracked'    => $tracked,
+        ]);
     }
 
     /**
@@ -423,8 +474,9 @@ class Emails extends BaseController
 
     /**
      * @param array<string, mixed> $result
+     * @param list<string>         $recipients
      */
-    protected function logSend(bool $ok, string $kind, string $target, string $subject, array $result): void
+    protected function logSend(bool $ok, string $kind, string $target, string $subject, array $result, array $recipients = []): void
     {
         try {
             (new ActivityLogger())->log(
@@ -443,16 +495,19 @@ class Emails extends BaseController
         }
 
         try {
-            model(EmailLogModel::class)->record(
+            $data  = is_array($result['data'] ?? null) ? $result['data'] : [];
+            $logId = model(EmailLogModel::class)->record(
                 $kind === 'bulk' ? 'bulk' : 'single',
                 $ok ? 'sent' : 'failed',
                 $subject,
                 $target,
                 isset($result['provider']) ? (string) $result['provider'] : null,
                 isset($result['message']) ? (string) $result['message'] : null,
-                ['raw' => $result['data'] ?? null],
+                ['raw' => array_diff_key($data, ['recipients' => true])],
                 (int) ($this->currentUser['id'] ?? 0) ?: null
             );
+            model(\App\Models\EmailRecipientEventModel::class)
+                ->recordSendResults($logId, null, $recipients, $ok, $data, (string) ($result['message'] ?? ''));
         } catch (\Throwable) {
             // non-fatal — table may not exist until migrate
         }
@@ -464,11 +519,7 @@ class Emails extends BaseController
     public function trackOpen(int $id): ResponseInterface
     {
         if ($id > 0) {
-            try {
-                model(EmailLogModel::class)->recordOpen($id);
-            } catch (\Throwable) {
-                // non-fatal
-            }
+            $this->recordRecipientEngagement($id, \App\Models\EmailRecipientEventModel::TYPE_OPEN);
         }
 
         // 1x1 43-byte transparent GIF
@@ -490,11 +541,7 @@ class Emails extends BaseController
         $url = trim((string) $this->request->getGet('url'));
 
         if ($id > 0) {
-            try {
-                model(EmailLogModel::class)->recordClick($id);
-            } catch (\Throwable) {
-                // non-fatal
-            }
+            $this->recordRecipientEngagement($id, \App\Models\EmailRecipientEventModel::TYPE_CLICK);
         }
 
         if ($url === '' || ! filter_var($url, FILTER_VALIDATE_URL)) {
@@ -505,10 +552,40 @@ class Emails extends BaseController
     }
 
     /**
-     * Public 1-Click Unsubscribe endpoint.
+     * Records aggregate + per-recipient engagement for a public tracking hit.
+     */
+    protected function recordRecipientEngagement(int $logId, string $type): void
+    {
+        try {
+            \App\Libraries\TenantResolver::ensureFromPublicKey((string) $this->request->getGet('t'));
+
+            $logs = model(EmailLogModel::class);
+            $type === \App\Models\EmailRecipientEventModel::TYPE_OPEN
+                ? $logs->recordOpen($logId)
+                : $logs->recordClick($logId);
+
+            $email = strtolower(trim((string) $this->request->getGet('e')));
+            if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $log = $logs->select('html_campaign_id')->find($logId);
+                model(\App\Models\EmailRecipientEventModel::class)->record(
+                    $email,
+                    $type,
+                    $logId,
+                    ! empty($log['html_campaign_id']) ? (int) $log['html_campaign_id'] : null
+                );
+            }
+        } catch (\Throwable) {
+            // non-fatal — tracking must never break the pixel/redirect
+        }
+    }
+
+    /**
+     * Public 1-Click Unsubscribe endpoint (also RFC 8058 List-Unsubscribe-Post target).
      */
     public function unsubscribe(): ResponseInterface|string
     {
+        \App\Libraries\TenantResolver::ensureFromPublicKey((string) ($this->request->getGet('t') ?: $this->request->getPost('t')));
+
         $email      = strtolower(trim((string) ($this->request->getGet('email') ?: $this->request->getPost('email'))));
         $campaignId = (int) ($this->request->getGet('cid') ?: $this->request->getPost('cid') ?: 0);
         $reason     = trim((string) ($this->request->getPost('reason') ?: 'Direct unsubscribe request'));
@@ -517,6 +594,13 @@ class Emails extends BaseController
         if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $ip      = (string) $this->request->getIPAddress();
             $success = model(\App\Models\EmailUnsubscribeModel::class)->recordUnsubscribe($email, $campaignId ?: null, $reason, $ip);
+            if ($success) {
+                log_activity('email_unsubscribed', 'emails', 'Recipient unsubscribed: ' . $email, [
+                    'email'       => $email,
+                    'campaign_id' => $campaignId ?: null,
+                    'one_click'   => $this->request->getPost('List-Unsubscribe') === 'One-Click',
+                ]);
+            }
         }
 
         if ($this->request->isAJAX() || $this->request->getHeaderLine('Accept') === 'application/json') {

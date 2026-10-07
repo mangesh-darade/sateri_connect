@@ -367,6 +367,7 @@ $emFailRate  = $emSent > 0 ? round(($emFailed / $emSent) * 100, 1) : 0.0;
                                     </td>
                                     <td class="py-1 fw-semibold text-dark text-truncate" style="max-width: 180px;">
                                         <?= esc($log['to_email'] ?? '—') ?>
+                                        <a href="#" class="js-email-recipients d-block text-decoration-none fw-semibold" style="font-size: 0.68rem;" data-log-id="<?= (int) $log['id'] ?>"><i class="fas fa-users me-1"></i><span>Recipients</span></a>
                                     </td>
                                     <td class="py-1 text-truncate" style="max-width: 240px;" title="<?= esc($log['subject'] ?? '') ?>">
                                         <?= esc($log['subject'] ?: '(No Subject)') ?>
@@ -416,9 +417,11 @@ $emFailRate  = $emSent > 0 ? round(($emFailed / $emSent) * 100, 1) : 0.0;
     <?php endif; ?>
 
 </div>
+<?= view('partials/email_recipients_modal') ?>
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
+<script src="<?= asset_url('assets/js/email-recipients.js') ?>"></script>
 <script>
 $(function () {
     // ── WhatsApp Delivery Chart ──────────────────────────
