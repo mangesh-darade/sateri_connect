@@ -5,7 +5,7 @@
 
 Options -Indexes
 
-<FilesMatch "\.(?i:php|phtml|phar|cgi|pl|py|asp|aspx|sh)$">
+<FilesMatch "\.(?i:php\d*|pht|phtml|phps|phar|cgi|pl|py|asp|aspx|sh|shtml|htaccess|htpasswd)$">
     <IfModule mod_authz_core.c>
         Require all denied
     </IfModule>
@@ -13,3 +13,12 @@ Options -Indexes
         Deny from all
     </IfModule>
 </FilesMatch>
+
+# Uploaded markup must never run script on the app origin (still renders fine via <img>).
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    <FilesMatch "\.(?i:svgz?|html?|xhtml|xml)$">
+        Header set Content-Security-Policy "sandbox"
+        Header set Content-Disposition "attachment"
+    </FilesMatch>
+</IfModule>
