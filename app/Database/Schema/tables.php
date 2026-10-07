@@ -430,7 +430,7 @@ return array (
       'mode' => 'enum(\'recipients\',\'label\') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT \'recipients\'',
       'label_name' => 'varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL',
       'recipients_json' => 'longtext COLLATE utf8mb4_unicode_ci',
-      'status' => 'enum(\'draft\',\'queued\',\'sending\',\'sent\',\'failed\',\'cancelled\') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT \'draft\'',
+      'status' => 'enum(\'draft\',\'queued\',\'sending\',\'sent\',\'failed\',\'cancelled\',\'paused\') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT \'draft\'',
       'sent_count' => 'int NOT NULL DEFAULT \'0\'',
       'failed_count' => 'int NOT NULL DEFAULT \'0\'',
       'last_error' => 'text COLLATE utf8mb4_unicode_ci',
@@ -728,6 +728,7 @@ return array (
       'channel' => 'varchar(20) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'whatsapp\'',
       'created_at' => 'datetime DEFAULT NULL',
       'updated_at' => 'datetime DEFAULT NULL',
+      'wa_inbound_id' => 'varchar(191) COLLATE utf8mb4_general_ci GENERATED ALWAYS AS (if((`direction` = \'inbound\'),`wa_message_id`,NULL)) VIRTUAL',
     ),
     'indexes' => 
     array (
@@ -742,6 +743,7 @@ return array (
       'created_at' => 'KEY `created_at` (`created_at`)',
       'channel' => 'KEY `channel` (`channel`)',
       'external_message_id' => 'KEY `external_message_id` (`external_message_id`)',
+      'uniq_messages_wa_inbound_id' => 'UNIQUE KEY `uniq_messages_wa_inbound_id` (`wa_inbound_id`)',
     ),
     'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
   ),
