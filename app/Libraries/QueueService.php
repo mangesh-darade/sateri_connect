@@ -82,7 +82,7 @@ class QueueService
     public function processBatch(int $limit = 50): array
     {
         $limit = max(1, min(500, $limit));
-        $stats = ['processed' => 0, 'sent' => 0, 'failed' => 0];
+        $stats = ['processed' => 0, 'sent' => 0, 'failed' => 0, 'deferred' => 0];
 
         // Check and resume any due delayed automation jobs
         try {
@@ -100,9 +100,37 @@ class QueueService
             log_message('warning', 'QueueService credential refresh: {msg}', ['msg' => $e->getMessage()]);
         }
 
+        $cfg           = config('WhatsApp');
+        $minInterval   = ((int) ($cfg->queueMaxPerSecond ?? 0)) > 0 ? 1 / (int) $cfg->queueMaxPerSecond : 0.0;
+        $lastSendAt    = 0.0;
+        $quietUntil    = (new WhatsAppSendWindow())->deferUntil();
+        $throttleUntil = null;
+
         foreach ($items as $item) {
-            $stats['processed']++;
             $id = (int) $item['id'];
+
+            // Claiming already spent an attempt; give it back when the row is only postponed.
+            $unspent = max(0, ((int) ($item['attempts'] ?? 1)) - 1);
+            if ($throttleUntil !== null) {
+                $this->queue->releaseClaimed($id, $unspent, $throttleUntil, 'WhatsApp rate limit reached — retrying at ' . $throttleUntil);
+                $stats['deferred']++;
+                continue;
+            }
+            if ($quietUntil !== null && ! empty($item['campaign_id'])) {
+                $this->queue->releaseClaimed($id, $unspent, $quietUntil, WhatsAppSendWindow::DEFER_PREFIX . ' Marketing send postponed until ' . $quietUntil);
+                $stats['deferred']++;
+                continue;
+            }
+
+            $stats['processed']++;
+
+            if ($minInterval > 0 && $lastSendAt > 0) {
+                $wait = $minInterval - (microtime(true) - $lastSendAt);
+                if ($wait > 0) {
+                    usleep((int) ($wait * 1_000_000));
+                }
+            }
+            $lastSendAt = microtime(true);
 
             try {
                 $result = $this->dispatch($item);
@@ -124,10 +152,21 @@ class QueueService
                 $stats['sent']++;
             } catch (Throwable $e) {
                 // Count this attempt before deciding retry vs final failure.
-                $attempts = ((int) ($item['attempts'] ?? 0)) + 1;
-                $max      = (int) ($item['max_attempts'] ?? 3);
-                $retry    = WhatsAppConsentService::isRetryableError($e->getMessage());
-                $status   = ($retry && $attempts < $max) ? 'pending' : 'failed';
+                $attempts    = ((int) ($item['attempts'] ?? 0)) + 1;
+                $max         = (int) ($item['max_attempts'] ?? 3);
+                $httpStatus  = (int) $e->getCode();
+                $rateLimited = WhatsAppConsentService::isRateLimitError($e->getMessage(), $httpStatus);
+                if ($rateLimited) {
+                    $max = max($max, (int) ($cfg->rateLimitMaxAttempts ?? 6));
+                }
+                $retry   = WhatsAppConsentService::isRetryableError($e->getMessage());
+                $status  = ($retry && $attempts < $max) ? 'pending' : 'failed';
+                $retryAt = $status === 'pending'
+                    ? date('Y-m-d H:i:s', time() + WhatsAppConsentService::retryDelaySeconds($e->getMessage(), $attempts, $httpStatus))
+                    : null;
+                if ($retryAt !== null && WhatsAppConsentService::isAccountRateLimit($e->getMessage(), $httpStatus)) {
+                    $throttleUntil = $retryAt;
+                }
 
                 $code = WhatsAppConsentService::extractErrorCode($e->getMessage());
                 if ($code !== null && ! empty($item['contact_id'])) {
@@ -138,14 +177,15 @@ class QueueService
                 }
 
                 if (method_exists($this->queue, 'markFailed')) {
-                    $this->queue->markFailed($id, $e->getMessage(), $status, $attempts);
+                    $this->queue->markFailed($id, $e->getMessage(), $status, $attempts, $retryAt);
                 } else {
-                    $this->queue->update($id, [
+                    $this->queue->update($id, array_filter([
                         'status'        => $status,
                         'attempts'      => $attempts,
                         'error_message' => $e->getMessage(),
                         'processed_at'  => date('Y-m-d H:i:s'),
-                    ]);
+                        'scheduled_at'  => $retryAt,
+                    ], static fn ($v) => $v !== null));
                 }
 
                 // Always surface the real send error on the campaign recipient row.
@@ -326,15 +366,38 @@ class QueueService
             );
         }
 
-        $kind = ! empty($item['campaign_id'])
+        // Meta can pause or disable a template after it was queued — re-check right before sending.
+        $template = null;
+        if ($type === 'template') {
+            try {
+                $template = (new WhatsAppTemplateSendGuard())->assertSendableByName(
+                    (string) ($payload['template_name'] ?? $payload['name'] ?? ''),
+                    (string) ($payload['language'] ?? '')
+                );
+            } catch (RuntimeException $e) {
+                throw new RuntimeException(WhatsAppConsentService::POLICY_PREFIX . ' ' . $e->getMessage(), 422);
+            }
+        }
+
+        $consent = service('whatsAppConsent');
+        $kind    = (! empty($item['campaign_id']) || $consent->isMarketingTemplate($template))
             ? WhatsAppConsentService::KIND_CAMPAIGN
             : ($type === 'template' ? WhatsAppConsentService::KIND_TEMPLATE : WhatsAppConsentService::KIND_SESSION);
-        $consent = service('whatsAppConsent');
         $check   = $consent->eligibility($contact, $kind, $withinWindow);
         if (! $check['ok']) {
             throw new RuntimeException(
                 WhatsAppConsentService::POLICY_PREFIX . ' ' . $consent->denialWithConsentRequest($contact, $check),
                 422
+            );
+        }
+
+        // Opt-in was checked above; this adds the marketing frequency cap.
+        if ($template !== null) {
+            $consent->assertTemplateSendAllowed(
+                $contact,
+                $template,
+                $withinWindow,
+                ! empty($item['campaign_id']) ? (int) $item['campaign_id'] : null
             );
         }
 
