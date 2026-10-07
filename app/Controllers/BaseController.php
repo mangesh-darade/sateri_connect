@@ -169,7 +169,7 @@ abstract class BaseController extends Controller
             return $this->jsonResponse(false, null, 'Permission denied.', [], 403);
         }
 
-        return redirect()->to('/dashboard')->with('error', 'You do not have permission to access this resource.');
+        return permission_denied_response();
     }
 
     /**
@@ -187,7 +187,7 @@ abstract class BaseController extends Controller
             return $this->jsonResponse(false, null, 'Permission denied.', [], 403);
         }
 
-        return redirect()->to('/dashboard')->with('error', 'You do not have permission to access this resource.');
+        return permission_denied_response();
     }
 
     protected function userId(): ?int
