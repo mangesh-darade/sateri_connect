@@ -201,20 +201,67 @@ final class WhatsAppTemplateSendGuard
     public function assertApproved(array $tpl): void
     {
         $status = strtoupper(trim((string) ($tpl['status'] ?? '')));
-        if ($status === '') {
-            return;
-        }
 
         if (! in_array($status, self::SENDABLE_STATUSES, true)) {
             $message = match ($status) {
+                ''         => 'WhatsApp template "' . ($tpl['name'] ?? '') . '" has no approval status yet. Sync templates from Meta and try again.',
                 'PENDING'  => 'Selected WhatsApp template is still pending Meta review and cannot be sent yet.',
                 'REJECTED' => 'Selected WhatsApp template was rejected by Meta and cannot be sent.',
+                'PAUSED'   => 'Selected WhatsApp template is paused by Meta for low quality and cannot be sent.',
                 'DISABLED', 'DELETED' => 'Selected WhatsApp template is disabled and cannot be sent.',
                 default    => 'Selected WhatsApp template is not approved for this WhatsApp Business Account.',
             };
 
             throw new RuntimeException($message, 422);
         }
+    }
+
+    /**
+     * Send-time check by template name (queue, chat by name): the template must exist on this
+     * tenant's WABA and be APPROVED. Prefers the row in the requested language ("en" matches "en_US").
+     *
+     * @return array<string, mixed>
+     */
+    public function assertSendableByName(string $name, ?string $language = null): array
+    {
+        $name = trim($name);
+        if ($name === '') {
+            throw new RuntimeException('Template name is required.', 422);
+        }
+
+        $wabaId  = trim((string) ($this->settings->getMetaConfig()['waba_id'] ?? ''));
+        $builder = $this->model->where('name', $name);
+        if ($wabaId !== '' && $this->model->db->fieldExists('waba_id', 'templates')) {
+            $builder->groupStart()
+                ->where('waba_id', $wabaId)
+                ->orWhere('waba_id', null)
+                ->orWhere('waba_id', '')
+                ->groupEnd();
+        }
+        $rows = $builder->orderBy('synced_at', 'DESC')->findAll();
+        if ($rows === []) {
+            throw new RuntimeException(
+                'WhatsApp template "' . $name . '" was not found on this WhatsApp Business Account. Sync templates and try again.',
+                404
+            );
+        }
+
+        $lang = strtolower(str_replace('-', '_', trim((string) $language)));
+        $pick = $rows[0];
+        if ($lang !== '') {
+            foreach ($rows as $row) {
+                $rowLang = strtolower(str_replace('-', '_', trim((string) ($row['language'] ?? ''))));
+                if ($rowLang === $lang || ($rowLang !== '' && str_starts_with($rowLang, $lang . '_'))) {
+                    $pick = $row;
+                    break;
+                }
+            }
+        }
+
+        $this->assertBelongsToTenantWaba($pick, $wabaId);
+        $this->assertApproved($pick);
+
+        return $pick;
     }
 
     /**
