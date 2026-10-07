@@ -206,6 +206,10 @@ define('FCPATH', __DIR__ . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR)
             return;
         }
     }
+    // Never serve dotfiles (.htaccess, .env.*, …) through the fallback.
+    if (preg_match('#(^|/)\.#', $rel) === 1) {
+        return;
+    }
 
     $publicRoot = realpath(__DIR__ . DIRECTORY_SEPARATOR . 'public');
     if ($publicRoot === false) {
@@ -261,6 +265,11 @@ define('FCPATH', __DIR__ . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR)
     header('Content-Type: ' . $mime);
     header('Content-Length: ' . (string) filesize($candidate));
     header('X-Content-Type-Options: nosniff');
+    // User uploads may contain markup; never let it execute script on the app origin.
+    if (str_starts_with($relLower, 'uploads/') && preg_match('/\.(svgz?|html?|xhtml|xml)$/', $relLower) === 1) {
+        header('Content-Security-Policy: sandbox');
+        header('Content-Disposition: attachment');
+    }
     readfile($candidate);
 
     exit(0);
