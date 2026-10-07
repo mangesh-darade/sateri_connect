@@ -383,7 +383,7 @@ class ContactImportService
         fclose($handle);
         @unlink($path);
 
-        // New contacts without recorded consent get the Agree / Stop consent request.
+        // Only when the tenant enabled automatic opt-in requests (once per contact).
         $consentRequested = 0;
         $consentNote      = '';
         if ($consent === null && $newIds !== []) {
