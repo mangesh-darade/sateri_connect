@@ -123,10 +123,22 @@ class Media extends BaseController
             $mime  = is_array($media) ? (string) ($media['mime_type'] ?? mime_content_type($path)) : (mime_content_type($path) ?: 'application/octet-stream');
         }
 
-        return $this->response
-            ->setHeader('Content-Type', $mime)
+        // Only render known-safe media inline; anything else (HTML, SVG, XML…) downloads so it can't run script on the app origin.
+        $mime       = strtolower(trim(explode(';', $mime)[0]));
+        $inlineSafe = in_array($mime, ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf', 'text/plain', 'text/csv'], true)
+            || str_starts_with($mime, 'audio/')
+            || str_starts_with($mime, 'video/');
+
+        $response = $this->response
+            ->setHeader('Content-Type', $inlineSafe ? $mime : 'application/octet-stream')
             ->setHeader('Content-Length', (string) filesize($path))
             ->setHeader('Cache-Control', 'private, max-age=86400')
-            ->setBody(file_get_contents($path) ?: '');
+            ->setHeader('X-Content-Type-Options', 'nosniff');
+
+        if (! $inlineSafe) {
+            $response->setHeader('Content-Disposition', 'attachment; filename="' . preg_replace('/[^A-Za-z0-9._-]/', '_', $filename) . '"');
+        }
+
+        return $response->setBody(file_get_contents($path) ?: '');
     }
 }
