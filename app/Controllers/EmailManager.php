@@ -83,6 +83,8 @@ class EmailManager extends BaseController
             'senders'            => model(EmailSenderModel::class)->orderBy('type', 'ASC')->orderBy('id', 'DESC')->findAll(100),
             'verifications'      => model(EmailVerificationModel::class)->orderBy('id', 'DESC')->findAll(50),
             'defaultCampaign'    => (string) $settings->get('cheerio_email_campaign_name', 'app-direct'),
+            'reputation'         => (new \App\Libraries\EmailReputationGuard())->status(),
+            'companyAddress'     => \App\Libraries\EmailTracking::companyAddress(),
         ]);
     }
 
@@ -186,7 +188,7 @@ class EmailManager extends BaseController
 
     public function deleteBuilder(int $id): ResponseInterface
     {
-        if ($denied = $this->requirePermission('emails.send')) {
+        if ($denied = $this->requirePermission('emails.delete')) {
             return $denied;
         }
 
@@ -305,7 +307,7 @@ class EmailManager extends BaseController
 
     public function deleteDrip(int $id): ResponseInterface
     {
-        if ($denied = $this->requirePermission('emails.send')) {
+        if ($denied = $this->requirePermission('emails.delete')) {
             return $denied;
         }
 
@@ -361,6 +363,19 @@ class EmailManager extends BaseController
             return $this->jsonResponse(false, null, 'Step has no HTML content or builder.', [], 422);
         }
 
+        $suppressed = (new \App\Libraries\EmailSuppressionService())->reasonFor($to, true);
+        if ($suppressed !== null) {
+            $message = sprintf('Skipped: %s %s, so this drip email was not sent.', $to, \App\Libraries\EmailSuppressionService::reasonLabel($suppressed));
+
+            return $this->jsonResponse(false, ['skipped' => [strtolower($to) => $suppressed]], $message, ['to' => $message], 422);
+        }
+
+        $perRecipient = (new SettingsService())->getEmailProvider() !== SettingsService::EMAIL_PROVIDER_CHEERIO;
+        $options['unsubscribe_url'] = \App\Libraries\EmailTracking::unsubscribeUrl(0, $perRecipient);
+        if ($html !== '') {
+            $html = \App\Libraries\EmailTracking::applyMarketingFooter($html, $options['unsubscribe_url']);
+        }
+
         try {
             $mailer = service('emailProvider');
             $result = $mailer->sendHtml($to, (string) $step['subject'], $html !== '' ? $html : '<p></p>', $options);
@@ -379,6 +394,11 @@ class EmailManager extends BaseController
                 null,
                 $dripId
             );
+            log_activity($ok ? 'email_drip_step_sent' : 'email_drip_step_failed', 'emails', ($ok ? 'Sent' : 'Failed to send') . ' drip step to ' . $to, [
+                'drip_id' => $dripId,
+                'step_id' => $stepId,
+                'to'      => $to,
+            ]);
 
             return $this->jsonResponse($ok, $result, $ok ? 'Drip step sent via provider.' : (string) ($result['message'] ?? 'Send failed.'));
         } catch (\Throwable $e) {
@@ -390,7 +410,7 @@ class EmailManager extends BaseController
 
     public function verifyEmails(): ResponseInterface
     {
-        if ($denied = $this->requirePermission('emails.view')) {
+        if ($denied = $this->requirePermission('emails.send')) {
             return $denied;
         }
 
@@ -593,12 +613,19 @@ class EmailManager extends BaseController
             $result  = (new \App\Libraries\EmailCampaignService())->dispatch($camp, $actorId);
             $ok      = (bool) ($result['ok'] ?? false);
 
-            (new ActivityLogger())->log('email_campaign_send', 'emails', 'Dispatched HTML email campaign: ' . ($camp['name'] ?? ('#' . $id)), ['id' => $id, 'ok' => $ok]);
+            (new ActivityLogger())->log('email_campaign_send', 'emails', 'Dispatched HTML email campaign: ' . ($camp['name'] ?? ('#' . $id)), [
+                'id'      => $id,
+                'ok'      => $ok,
+                'skipped' => count((array) ($result['skipped'] ?? [])),
+                'paused'  => ! empty($result['paused']),
+            ]);
 
             return $this->jsonResponse(
                 $ok,
                 $model->find($id),
-                $ok ? 'Campaign sent.' : (string) ($result['message'] ?? 'Failed')
+                (string) ($result['message'] ?? ($ok ? 'Campaign sent.' : 'Failed')),
+                [],
+                $ok ? 200 : (! empty($result['paused']) ? 409 : 200)
             );
         } catch (\Throwable $e) {
             $model->update($id, ['status' => 'failed', 'last_error' => $e->getMessage()]);
@@ -609,7 +636,7 @@ class EmailManager extends BaseController
 
     public function deleteCampaign(int $id): ResponseInterface
     {
-        if ($denied = $this->requirePermission('emails.send')) {
+        if ($denied = $this->requirePermission('emails.delete')) {
             return $denied;
         }
 
@@ -700,7 +727,7 @@ class EmailManager extends BaseController
 
     public function deleteSender(int $id): ResponseInterface
     {
-        if ($denied = $this->requirePermission('emails.send')) {
+        if ($denied = $this->requirePermission('emails.delete')) {
             return $denied;
         }
 
