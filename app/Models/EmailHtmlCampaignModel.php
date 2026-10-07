@@ -9,7 +9,15 @@ use CodeIgniter\Model;
 
 class EmailHtmlCampaignModel extends Model
 {
-    use SelfHealingSchema;
+    use SelfHealingSchema {
+        initialize as protected initializeSchema;
+    }
+
+    /** Status values the app writes; `paused` = stopped by EmailReputationGuard. */
+    public const STATUSES = ['draft', 'queued', 'sending', 'sent', 'failed', 'cancelled', 'paused'];
+
+    /** @var array<string, true> databases whose status enum was already checked */
+    protected static array $statusEnumChecked = [];
 
     protected $table            = 'email_html_campaigns';
     protected $primaryKey       = 'id';
@@ -42,6 +50,43 @@ class EmailHtmlCampaignModel extends Model
     protected $beforeInsert = ['encodeRecipients'];
     protected $beforeUpdate = ['encodeRecipients'];
     protected $afterFind    = ['decodeRecipients'];
+
+    protected function initialize(): void
+    {
+        $this->initializeSchema();
+        $this->ensureStatusEnum();
+    }
+
+    /**
+     * SchemaRepairService only adds missing columns, so widen the `status` enum here
+     * (docs/sql/2026-10-07_email_campaign_paused_status.sql).
+     */
+    protected function ensureStatusEnum(): void
+    {
+        $key = (string) $this->db->getDatabase();
+        if (isset(self::$statusEnumChecked[$key])) {
+            return;
+        }
+        self::$statusEnumChecked[$key] = true;
+
+        try {
+            if (! $this->db->tableExists($this->table)) {
+                return;
+            }
+            $table = $this->db->prefixTable($this->table);
+            $row   = $this->db->query('SHOW COLUMNS FROM `' . $table . "` LIKE 'status'")->getRowArray();
+            $type  = strtolower((string) ($row['Type'] ?? ''));
+            if ($type === '' || ! str_starts_with($type, 'enum(') || str_contains($type, "'paused'")) {
+                return;
+            }
+
+            $values = implode(',', array_map(static fn (string $s) => "'" . $s . "'", self::STATUSES));
+            $this->db->query('ALTER TABLE `' . $table . '` MODIFY `status` ENUM(' . $values . ") NOT NULL DEFAULT 'draft'");
+            log_message('notice', 'Schema auto-repair on {db}: email_html_campaigns.status now allows paused', ['db' => $key]);
+        } catch (\Throwable $e) {
+            log_message('error', 'Schema auto-repair skipped for email_html_campaigns.status: {msg}', ['msg' => $e->getMessage()]);
+        }
+    }
 
     /**
      * @param array<string, mixed> $data
