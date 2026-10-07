@@ -64,7 +64,7 @@ class WebhookValidator
     /**
      * Which provider secret matched the signature (null if none).
      */
-    public function matchSignatureProvider(string $rawBody, ?string $signatureHeader): ?string
+    public function matchSignatureProvider(string $rawBody, ?string $signatureHeader, string $phoneNumberId = ''): ?string
     {
         if ($signatureHeader === null || $signatureHeader === '') {
             log_message('warning', 'Webhook signature missing.');
@@ -85,7 +85,7 @@ class WebhookValidator
         }
 
         if (MasterTenantRepository::masterConfigured()) {
-            foreach ((new MasterTenantRepository())->allAppSecrets() as $secret) {
+            foreach ((new MasterTenantRepository())->appSecretsForPhoneNumber($phoneNumberId) as $secret) {
                 $expected = 'sha256=' . hash_hmac('sha256', $rawBody, $secret);
                 if (hash_equals($expected, $signatureHeader)) {
                     return 'master';
