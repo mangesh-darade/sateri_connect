@@ -21,7 +21,7 @@ $fmt = static function ($n): string {
         <div class="platform-kpi-hint">Across all workspaces</div>
     </div>
     <div class="platform-kpi">
-        <div class="platform-kpi-label">Messages sent</div>
+        <div class="platform-kpi-label">WhatsApp sent</div>
         <div class="platform-kpi-value"><?= $fmt($totals['sent'] ?? 0) ?></div>
         <div class="platform-kpi-hint">Delivery <?= esc((string) ($totals['delivery_rate'] ?? 0)) ?>%</div>
     </div>
@@ -39,6 +39,44 @@ $fmt = static function ($n): string {
         <div class="platform-kpi-label">Meta ready</div>
         <div class="platform-kpi-value"><?= $fmt($totals['meta_ready'] ?? 0) ?>/<?= $fmt($totals['clients'] ?? 0) ?></div>
         <div class="platform-kpi-hint">WhatsApp connected</div>
+    </div>
+</section>
+
+<div class="platform-section-label">
+    <h2>Email</h2>
+    <p>Recipient-level email performance across every workspace</p>
+</div>
+
+<section class="platform-kpi-grid">
+    <div class="platform-kpi">
+        <div class="platform-kpi-label">Emails sent</div>
+        <div class="platform-kpi-value"><?= $fmt($totals['email_sent'] ?? 0) ?></div>
+        <div class="platform-kpi-hint"><?= $fmt($totals['email_failed'] ?? 0) ?> failed</div>
+    </div>
+    <div class="platform-kpi">
+        <div class="platform-kpi-label">Opens</div>
+        <div class="platform-kpi-value"><?= $fmt($totals['email_opened'] ?? 0) ?></div>
+        <div class="platform-kpi-hint">Open rate <?= esc((string) ($totals['email_open_rate'] ?? 0)) ?>%</div>
+    </div>
+    <div class="platform-kpi">
+        <div class="platform-kpi-label">Clicks</div>
+        <div class="platform-kpi-value"><?= $fmt($totals['email_clicked'] ?? 0) ?></div>
+        <div class="platform-kpi-hint">Tracked link clicks</div>
+    </div>
+    <div class="platform-kpi">
+        <div class="platform-kpi-label">Bounces</div>
+        <div class="platform-kpi-value"><?= $fmt($totals['email_bounced'] ?? 0) ?></div>
+        <div class="platform-kpi-hint">Bounce rate <?= esc((string) ($totals['email_bounce_rate'] ?? 0)) ?>%</div>
+    </div>
+    <div class="platform-kpi">
+        <div class="platform-kpi-label">Unsubscribed</div>
+        <div class="platform-kpi-value"><?= $fmt($totals['email_unsubscribed'] ?? 0) ?></div>
+        <div class="platform-kpi-hint">Active opt-outs</div>
+    </div>
+    <div class="platform-kpi">
+        <div class="platform-kpi-label">Email ready</div>
+        <div class="platform-kpi-value"><?= $fmt($totals['email_ready'] ?? 0) ?>/<?= $fmt($totals['clients'] ?? 0) ?></div>
+        <div class="platform-kpi-hint">Provider + sender set</div>
     </div>
 </section>
 
@@ -77,7 +115,7 @@ $fmt = static function ($n): string {
         <div class="platform-card-head">
             <div>
                 <h2>Contacts by client</h2>
-                <p>Audience size vs messages sent</p>
+                <p>Audience size vs WhatsApp and email sent</p>
             </div>
         </div>
         <div class="platform-chart-wrap">
@@ -99,7 +137,7 @@ $fmt = static function ($n): string {
 
 <div class="platform-section-label" id="clients">
     <h2>Client fleet</h2>
-    <p>Health, usage and Meta status for every workspace</p>
+    <p>Health, usage and WhatsApp / Email status for every workspace</p>
 </div>
 
 <section class="platform-card">
@@ -119,17 +157,18 @@ $fmt = static function ($n): string {
         </div>
     <?php else: ?>
         <div class="platform-table-wrap">
-            <table class="platform-table">
+            <table class="platform-table platform-table-cards">
                 <thead>
                 <tr>
                     <th>Client</th>
                     <th>Health</th>
-                    <th>Users</th>
+                    <th class="col-lg">Users</th>
                     <th>Contacts</th>
-                    <th>Sent</th>
-                    <th>Failed</th>
-                    <th>Chats</th>
-                    <th>Meta</th>
+                    <th>WA sent</th>
+                    <th class="col-md">WA failed</th>
+                    <th class="col-lg">Chats</th>
+                    <th>Emails</th>
+                    <th>Channels</th>
                     <th class="is-actions">Actions</th>
                 </tr>
                 </thead>
@@ -141,31 +180,35 @@ $fmt = static function ($n): string {
                     $badgeClass = $health === 'ok' ? 'platform-badge-ok' : ($health === 'warn' ? 'platform-badge-warn' : 'platform-badge-down');
                     ?>
                     <tr>
-                        <td>
+                        <td class="td-full">
                             <div class="platform-client-name"><?= esc((string) ($c['name'] ?? $key)) ?></div>
                             <div class="platform-client-meta"><?= esc($key) ?> · <?= esc((string) ($c['db_database'] ?? '')) ?></div>
                         </td>
-                        <td>
+                        <td data-label="Health">
                             <span class="platform-badge <?= $badgeClass ?>">
                                 <?= esc((string) ($c['health_label'] ?? $health)) ?>
                             </span>
                             <?php if (! empty($c['error'])): ?>
-                                <div class="platform-client-meta"><?= esc((string) $c['error']) ?></div>
+                                <div class="platform-client-meta platform-client-error" title="<?= esc((string) $c['error']) ?>"><?= esc((string) $c['error']) ?></div>
                             <?php endif; ?>
                         </td>
-                        <td><span class="platform-stat-chip"><?= $fmt($c['users'] ?? 0) ?></span></td>
-                        <td><span class="platform-stat-chip"><?= $fmt($c['contacts'] ?? 0) ?></span></td>
-                        <td><span class="platform-stat-chip"><?= $fmt($c['sent'] ?? 0) ?></span></td>
-                        <td><span class="platform-stat-chip"><?= $fmt($c['failed'] ?? 0) ?></span></td>
-                        <td><span class="platform-stat-chip"><?= $fmt($c['open_chats'] ?? 0) ?></span></td>
-                        <td>
-                            <?php if (! empty($c['meta_ready'])): ?>
-                                <span class="platform-badge platform-badge-ok">Ready</span>
-                            <?php else: ?>
-                                <span class="platform-badge platform-badge-warn">Setup</span>
-                            <?php endif; ?>
+                        <td class="col-lg" data-label="Users"><span class="platform-stat-chip"><?= $fmt($c['users'] ?? 0) ?></span></td>
+                        <td data-label="Contacts"><span class="platform-stat-chip"><?= $fmt($c['contacts'] ?? 0) ?></span></td>
+                        <td data-label="WA sent"><span class="platform-stat-chip"><?= $fmt($c['sent'] ?? 0) ?></span></td>
+                        <td class="col-md" data-label="WA failed"><span class="platform-stat-chip"><?= $fmt($c['failed'] ?? 0) ?></span></td>
+                        <td class="col-lg" data-label="Chats"><span class="platform-stat-chip"><?= $fmt($c['open_chats'] ?? 0) ?></span></td>
+                        <td data-label="Emails"><span class="platform-stat-chip"><?= $fmt($c['email_sent'] ?? 0) ?></span></td>
+                        <td data-label="Channels">
+                            <div class="platform-channel-badges">
+                                <span class="platform-badge <?= ! empty($c['meta_ready']) ? 'platform-badge-ok' : 'platform-badge-warn' ?>" title="WhatsApp (Meta)">
+                                    WA <?= ! empty($c['meta_ready']) ? 'ready' : 'setup' ?>
+                                </span>
+                                <span class="platform-badge <?= ! empty($c['email_ready']) ? 'platform-badge-ok' : 'platform-badge-warn' ?>" title="Email · <?= esc((string) ($c['email_provider_label'] ?? '—')) ?>">
+                                    Email <?= ! empty($c['email_ready']) ? 'ready' : 'setup' ?>
+                                </span>
+                            </div>
                         </td>
-                        <td class="is-actions">
+                        <td class="is-actions td-full">
                             <div class="platform-actions">
                                 <a class="btn-pf btn-pf-primary" href="<?= site_url('platform/clients/' . rawurlencode($key)) ?>">Deep view</a>
                                 <form action="<?= site_url('platform/clients/' . rawurlencode($key) . '/enter') ?>" method="post">
@@ -257,7 +300,8 @@ $fmt = static function ($n): string {
                 labels: clients.labels || [],
                 datasets: [
                     { label: 'Contacts', data: clients.contacts || [], backgroundColor: teal, borderRadius: 5, maxBarThickness: 28 },
-                    { label: 'Sent', data: clients.sent || [], backgroundColor: 'rgba(196,92,18,.78)', borderRadius: 5, maxBarThickness: 28 }
+                    { label: 'WhatsApp sent', data: clients.sent || [], backgroundColor: 'rgba(196,92,18,.78)', borderRadius: 5, maxBarThickness: 28 },
+                    { label: 'Emails sent', data: clients.email_sent || [], backgroundColor: 'rgba(26,35,48,.7)', borderRadius: 5, maxBarThickness: 28 }
                 ]
             },
             options: {

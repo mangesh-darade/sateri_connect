@@ -12,12 +12,12 @@
     <form method="post" action="<?= site_url('platform/clients') ?>" class="platform-form-grid">
         <?= csrf_field() ?>
         <div>
-            <label class="platform-label">Client key</label>
+            <label class="platform-label">Client key<span class="req">*</span></label>
             <input class="platform-input" type="text" name="key" required pattern="[a-z0-9][a-z0-9_-]{1,62}" placeholder="shop2" value="<?= esc(old('key') ?? '') ?>">
             <div class="platform-help">Unique slug (a-z, 0-9, _, -)</div>
         </div>
         <div>
-            <label class="platform-label">Display name</label>
+            <label class="platform-label">Display name<span class="req">*</span></label>
             <input class="platform-input" type="text" name="name" required placeholder="Shop 2" value="<?= esc(old('name') ?? '') ?>">
         </div>
         <div>
@@ -46,11 +46,11 @@
             <input class="platform-input" type="text" name="admin_name" value="<?= esc(old('admin_name') ?? 'Admin') ?>">
         </div>
         <div>
-            <label class="platform-label">Admin email</label>
+            <label class="platform-label">Admin email<span class="req">*</span></label>
             <input class="platform-input" type="email" name="admin_email" required value="<?= esc(old('admin_email') ?? '') ?>">
         </div>
         <div>
-            <label class="platform-label">Admin password</label>
+            <label class="platform-label">Admin password<span class="req">*</span></label>
             <input class="platform-input" type="text" name="admin_password" required minlength="8" value="<?= esc(old('admin_password') ?? '') ?>">
         </div>
         <div class="full platform-actions">
