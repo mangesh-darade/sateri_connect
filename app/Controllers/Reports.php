@@ -226,6 +226,10 @@ class Reports extends BaseController
         $html .= '</tbody></table><p style="margin-top:24px;font-size:12px;color:#666">Generated '
             . esc(format_app_datetime(app_now_storage())) . '</p></body></html>';
 
+        log_activity('export', 'reports', 'Exported delivery report (printable)', [
+            'from' => $from, 'to' => $to, 'campaign_id' => $campaignId,
+        ]);
+
         // HTML download labeled as PDF report (printable). True PDF libs optional later.
         return $this->response
             ->setHeader('Content-Type', 'text/html; charset=UTF-8')
@@ -318,6 +322,10 @@ class Reports extends BaseController
             $filename = 'delivery_report_' . str_replace('-', '', app_today_ymd()) . '.csv';
         }
 
+        log_activity('export', 'reports', 'Exported report CSV: ' . $filename, [
+            'type' => $type, 'campaign_id' => $campaignId,
+        ]);
+
         return $this->response
             ->setHeader('Content-Type', 'text/csv; charset=UTF-8')
             ->setHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
@@ -395,7 +403,7 @@ class Reports extends BaseController
 
     protected function csvCell(mixed $value): string
     {
-        $text = (string) $value;
+        $text = \App\Libraries\ContactExportService::safeCell($value);
 
         return '"' . str_replace('"', '""', $text) . '"';
     }
