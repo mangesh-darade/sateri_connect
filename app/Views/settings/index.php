@@ -578,7 +578,6 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                         <?php
                         $logoUrl    = ! empty($app['site_logo']) ? base_url(ltrim((string) $app['site_logo'], '/')) : '';
                         $faviconUrl = ! empty($app['site_favicon']) ? base_url(ltrim((string) $app['site_favicon'], '/')) : '';
-                        $effectiveFaviconUrl = $faviconUrl !== '' ? $faviconUrl : $logoUrl;
                         ?>
                         <div class="settings-panel mb-3">
                             <h6 class="settings-panel-label">Branding</h6>
@@ -610,18 +609,14 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Favicon</label>
                                     <input type="file" name="site_favicon" class="form-control" accept=".ico,.png,.jpg,.jpeg,.webp,.gif,image/png,image/x-icon,image/jpeg,image/webp,image/gif">
-                                    <div class="form-text">ICO or PNG · max 512 KB. Browser tab icon. If empty, site logo will be used automatically.</div>
-                                    <?php if ($effectiveFaviconUrl !== ''): ?>
+                                    <div class="form-text">ICO or PNG · max 512 KB. Browser tab icon. If empty, the first letter of the page title is shown.</div>
+                                    <?php if ($faviconUrl !== ''): ?>
                                         <div class="d-flex align-items-center gap-3 mt-2 branding-preview">
-                                            <img src="<?= esc($effectiveFaviconUrl) ?>" alt="Favicon preview" class="branding-preview-favicon">
-                                            <?php if ($faviconUrl !== ''): ?>
-                                                <div class="form-check mb-0">
-                                                    <input class="form-check-input" type="checkbox" name="remove_site_favicon" value="1" id="removeSiteFavicon">
-                                                    <label class="form-check-label" for="removeSiteFavicon">Remove favicon</label>
-                                                </div>
-                                            <?php else: ?>
-                                                <span class="form-text mb-0">Using site logo as favicon.</span>
-                                            <?php endif; ?>
+                                            <img src="<?= esc($faviconUrl) ?>" alt="Favicon preview" class="branding-preview-favicon">
+                                            <div class="form-check mb-0">
+                                                <input class="form-check-input" type="checkbox" name="remove_site_favicon" value="1" id="removeSiteFavicon">
+                                                <label class="form-check-label" for="removeSiteFavicon">Remove favicon</label>
+                                            </div>
                                         </div>
                                     <?php endif; ?>
                                 </div>
@@ -711,6 +706,57 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">App URL</label>
                                     <input type="url" name="app_url" class="form-control" value="<?= $val($app, 'app_url') ?>">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-panel mt-3">
+                            <h6 class="settings-panel-label">WhatsApp quiet hours</h6>
+                            <div class="row">
+                                <div class="col-md-3 mb-3">
+                                    <label class="form-label" for="waQuietStart">No marketing from</label>
+                                    <input type="time" id="waQuietStart" name="wa_quiet_hours_start" class="form-control" value="<?= $val($app, 'wa_quiet_hours_start') ?>">
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label class="form-label" for="waQuietEnd">Until</label>
+                                    <input type="time" id="waQuietEnd" name="wa_quiet_hours_end" class="form-control" value="<?= $val($app, 'wa_quiet_hours_end') ?>">
+                                </div>
+                                <div class="col-md-6 mb-3 d-flex align-items-end">
+                                    <div class="form-text mb-2">
+                                        Broadcast campaign messages are held during these hours (timezone above) and go out automatically when the window ends.
+                                        Replies, chat and automations are not affected. Example: 21:00 → 09:00. Leave both empty to turn off.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-panel mt-3">
+                            <h6 class="settings-panel-label">WhatsApp marketing limits</h6>
+                            <div class="row">
+                                <div class="col-md-3 mb-3">
+                                    <label class="form-label" for="waMarketingCapDays">Max 1 marketing message per contact every</label>
+                                    <div class="input-group">
+                                        <input type="number" id="waMarketingCapDays" name="wa_marketing_frequency_cap_days" class="form-control"
+                                               min="0" max="30" step="1" required value="<?= $val($app, 'wa_marketing_frequency_cap_days') ?>">
+                                        <span class="input-group-text">day(s)</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-9 mb-3 d-flex align-items-end">
+                                    <div class="form-text mb-2">
+                                        Contacts who already got a MARKETING template in this period are skipped (campaigns, automations, API) and shown in the campaign's skipped summary.
+                                        Utility templates, replies and chat are not affected. 0 turns the cap off.
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <input type="hidden" name="wa_auto_consent_request" value="0">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="waAutoConsent" name="wa_auto_consent_request" value="1"
+                                            <?= ($app['wa_auto_consent_request'] ?? '0') === '1' ? 'checked' : '' ?>>
+                                        <label class="form-check-label" for="waAutoConsent">Automatically ask new contacts for WhatsApp opt-in (once per contact)</label>
+                                    </div>
+                                    <div class="form-text">
+                                        Off (recommended): ask only from a contact's page with "Request opt-in". Unrequested opt-in messages can lower your WhatsApp quality rating.
+                                    </div>
                                 </div>
                             </div>
                         </div>
