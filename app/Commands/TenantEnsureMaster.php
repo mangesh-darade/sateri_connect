@@ -67,6 +67,8 @@ class TenantEnsureMaster extends BaseCommand
                 CLI::write('Master tenancy tables already present.', 'green');
             }
 
+            (new \App\Libraries\MetaDataDeletionService())->ensureTable();
+
             $repo = new \App\Libraries\MasterTenantRepository();
             if ($repo->findPlatformAdminByEmail('platform@sateri.local') === null) {
                 $repo->ensurePlatformAdmin('platform@sateri.local', 'Platform@123', 'Platform Super Admin');
