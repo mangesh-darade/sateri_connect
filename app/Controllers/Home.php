@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Libraries\InstallStatus;
+use App\Libraries\MetaDataDeletionService;
 use CodeIgniter\HTTP\ResponseInterface;
+use Throwable;
 
 /**
  * Application entry — route to install, login, or dashboard.
@@ -23,7 +25,7 @@ class Home extends BaseController
         }
 
         if ($this->session->get('user_id')) {
-            return redirect()->to(site_url('dashboard'));
+            return redirect()->to(site_url(landing_path() ?? 'dashboard'));
         }
 
         return redirect()->to(site_url('login'));
@@ -50,18 +52,37 @@ class Home extends BaseController
     public function dataDeletion(): ResponseInterface|string
     {
         // Meta Data Deletion Callback (POST)
+        $service = new MetaDataDeletionService();
+
         if (strtolower($this->request->getMethod()) === 'post') {
-            $confirmationCode = 'del_' . bin2hex(random_bytes(8));
+            try {
+                $payload = $service->parseSignedRequest((string) ($this->request->getPost('signed_request') ?? ''));
+                $result  = $service->record($payload);
+            } catch (Throwable $e) {
+                $status = in_array($e->getCode(), [400, 503], true) ? $e->getCode() : 500;
+                log_message('warning', 'Meta data deletion callback rejected: {msg}', ['msg' => $e->getMessage()]);
+
+                return $this->response->setStatusCode($status)->setJSON(['error' => $status === 500 ? 'Unable to process request.' : $e->getMessage()]);
+            }
+
+            log_activity('delete', 'privacy', 'Meta data deletion request received', [
+                'confirmation_code' => $result['confirmation_code'],
+                'status'            => $result['status'],
+            ]);
+
             return $this->response->setJSON([
-                'url'               => site_url('data-deletion?id=' . $confirmationCode),
-                'confirmation_code' => $confirmationCode,
+                'url'               => site_url('data-deletion?id=' . $result['confirmation_code']),
+                'confirmation_code' => $result['confirmation_code'],
             ]);
         }
+
+        $code = trim((string) ($this->request->getGet('id') ?? ''));
 
         return view('public/data_deletion', [
             'pageTitle' => 'User Data Deletion Request',
             'appName'   => function_exists('setting') ? (string) setting('app_name', 'Sateri Connect') : 'Sateri Connect',
-            'code'      => (string) ($this->request->getGet('id') ?? ''),
+            'code'      => $code,
+            'request'   => $code !== '' ? $service->findByCode($code) : null,
         ]);
     }
 }
