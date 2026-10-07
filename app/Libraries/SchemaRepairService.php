@@ -339,8 +339,11 @@ class SchemaRepairService
         if (! preg_match('/\(([^)]+)\)\s*$/', $indexSql, $m)) {
             return false;
         }
-        $cols = implode(', ', array_map(static fn ($c) => '`' . trim(preg_replace('/\(\d+\)/', '', $c), " `") . '`', explode(',', $m[1])));
-        $row  = $db->query("SELECT 1 FROM `{$prefixed}` GROUP BY {$cols} HAVING COUNT(*) > 1 LIMIT 1")->getRowArray();
+        $list = array_map(static fn ($c) => '`' . trim(preg_replace('/\(\d+\)/', '', $c), " `") . '`', explode(',', $m[1]));
+        $cols = implode(', ', $list);
+        // Rows with a NULL key column never conflict in a UNIQUE index.
+        $where = implode(' AND ', array_map(static fn ($c) => $c . ' IS NOT NULL', $list));
+        $row   = $db->query("SELECT 1 FROM `{$prefixed}` WHERE {$where} GROUP BY {$cols} HAVING COUNT(*) > 1 LIMIT 1")->getRowArray();
 
         return $row !== null;
     }
