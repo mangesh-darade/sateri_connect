@@ -108,6 +108,33 @@ abstract class AbstractEmailDriver implements EmailDriverInterface
     }
 
     /**
+     * RFC 2369 / RFC 8058 one-click unsubscribe headers (Gmail / Yahoo bulk sender requirement).
+     * Set only when the caller passes `unsubscribe_url` (marketing sends).
+     *
+     * @param array<string, mixed> $options
+     *
+     * @return array<string, string>
+     */
+    protected function listUnsubscribeHeaders(array $options, string $toEmail = ''): array
+    {
+        $url = trim((string) ($options['unsubscribe_url'] ?? ''));
+        if ($url !== '' && $toEmail !== '' && str_contains($url, '{{')) {
+            $url = $this->personalizeText($url, $toEmail, $options['contact'] ?? null);
+        }
+        if ($url === '' || ! str_starts_with($url, 'http') || str_contains($url, '{{')) {
+            return [];
+        }
+
+        $headers = ['List-Unsubscribe' => '<' . $url . '>'];
+        // RFC 8058: one-click POST is only valid for HTTPS URIs.
+        if (str_starts_with($url, 'https://')) {
+            $headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
+        }
+
+        return $headers;
+    }
+
+    /**
      * Preloads contacts for an array of email addresses to prevent N+1 queries.
      *
      * @param list<string> $emails
@@ -187,6 +214,7 @@ abstract class AbstractEmailDriver implements EmailDriverInterface
                 'first_name', 'firstname', 'contact.first_name'                                  => ($rawTag === strtoupper($rawTag) && strlen($rawTag) > 2) ? strtoupper($firstName) : $firstName,
                 'email', 'contact.email'                                                         => $email,
                 'email_url'                                                                      => rawurlencode($email),
+                'email_sig'                                                                      => \App\Libraries\EmailLinkSigner::unsubscribeSignature($email),
                 'mobile', 'phone', 'contact.phone', 'contact.mobile'                             => $mobile,
                 default                                                                          => $matches[0],
             };
