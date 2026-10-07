@@ -213,11 +213,6 @@ class SesEmailDriver extends AbstractEmailDriver
         $subject = $this->personalizeText($subject, $toEmail, $contact);
         $body    = $this->personalizeText($body, $toEmail, $contact);
 
-        $unsubscribeUrl = trim((string) ($options['unsubscribe_url'] ?? ''));
-        if ($unsubscribeUrl !== '') {
-            $options['unsubscribe_url'] = $this->personalizeText($unsubscribeUrl, $toEmail, $contact);
-        }
-
         $fromAddress = $this->formatFromAddress($from);
         $attachments = (array) ($options['attachments'] ?? []);
         $replyTo     = trim((string) ($options['reply_to'] ?? ''));
@@ -278,7 +273,7 @@ class SesEmailDriver extends AbstractEmailDriver
             ];
         }
 
-        $headers = $this->listUnsubscribeHeaders($options);
+        $headers = $this->listUnsubscribeHeaders($options, $toEmail);
         if ($headers !== []) {
             $payload['Content']['Simple']['Headers'] = array_map(
                 static fn (string $name, string $value) => ['Name' => $name, 'Value' => $value],
@@ -315,28 +310,6 @@ class SesEmailDriver extends AbstractEmailDriver
         }
 
         return sprintf('%s <%s>', $name, $from['email']);
-    }
-
-    /**
-     * RFC 2369 / RFC 8058 one-click unsubscribe headers (Gmail / Yahoo bulk sender requirement).
-     *
-     * @param array<string, mixed> $options
-     *
-     * @return array<string, string>
-     */
-    protected function listUnsubscribeHeaders(array $options): array
-    {
-        $url = trim((string) ($options['unsubscribe_url'] ?? ''));
-        if ($url === '' || ! str_starts_with($url, 'http') || str_contains($url, '{{')) {
-            return [];
-        }
-
-        $headers = ['List-Unsubscribe' => '<' . $url . '>'];
-        if (str_starts_with($url, 'https://')) {
-            $headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
-        }
-
-        return $headers;
     }
 
     /**
@@ -406,7 +379,7 @@ class SesEmailDriver extends AbstractEmailDriver
             $headers[] = 'Reply-To: ' . $replyTo;
         }
 
-        foreach ($this->listUnsubscribeHeaders($options) as $name => $value) {
+        foreach ($this->listUnsubscribeHeaders($options, $toEmail) as $name => $value) {
             $headers[] = $name . ': ' . $value;
         }
 
