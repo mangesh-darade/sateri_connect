@@ -68,6 +68,11 @@ $tabUrl = static fn (string $t): string => site_url('email-manager?tab=' . $t);
         </div>
     </div>
 
+    <?= view('partials/email_compliance_banner', [
+        'reputation'     => $reputation ?? null,
+        'companyAddress' => $companyAddress ?? '',
+    ]) ?>
+
     <?php if ($isCheerio): ?>
     <div class="alert alert-light border py-2 small mb-3">
         <i class="fas fa-info-circle text-success me-1"></i>
