@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Libraries\ActivityLogger;
+use App\Libraries\EmailLinkSigner;
+use App\Libraries\EmailReputationGuard;
+use App\Libraries\EmailSuppressionService;
+use App\Libraries\EmailTracking;
 use App\Libraries\SettingsService;
 use App\Models\CampaignModel;
 use App\Models\ContactModel;
@@ -106,6 +110,13 @@ class Emails extends BaseController
 
         if ($errors !== []) {
             return $this->jsonResponse(false, null, 'Please fix the form errors.', $errors, 422);
+        }
+
+        $suppressed = (new EmailSuppressionService())->reasonFor($to);
+        if ($suppressed !== null) {
+            $message = sprintf('Skipped: %s %s, so this email was not sent.', $to, EmailSuppressionService::reasonLabel($suppressed));
+
+            return $this->jsonResponse(false, ['skipped' => [strtolower($to) => $suppressed]], $message, ['to' => $message], 422);
         }
 
         $options = [];
@@ -217,15 +228,38 @@ class Emails extends BaseController
             return $this->jsonResponse(false, null, 'Please fix the form errors.', $errors, 422);
         }
 
+        try {
+            (new EmailReputationGuard())->assertHealthy();
+        } catch (\RuntimeException $e) {
+            return $this->jsonResponse(false, null, $e->getMessage(), [], 409);
+        }
+
+        $skipped = [];
+        if ($recipients !== []) {
+            $filter     = (new EmailSuppressionService())->filter($recipients);
+            $recipients = $filter['allowed'];
+            $skipped    = $filter['skipped'];
+            if ($recipients === []) {
+                $message = 'Nothing sent: all recipients were skipped — ' . EmailSuppressionService::summary($skipped) . '.';
+
+                return $this->jsonResponse(false, ['skipped' => $skipped], $message, [$mode === 'label' ? 'label_name' : 'recipients' => $message], 422);
+            }
+        }
+
         $html = $isHtml
             ? $body
             : nl2br(htmlspecialchars($body, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), false);
 
+        $perRecipient = (new SettingsService())->getEmailProvider() !== SettingsService::EMAIL_PROVIDER_CHEERIO;
+        $unsubUrl     = EmailTracking::unsubscribeUrl(0, $perRecipient);
+        $html         = EmailTracking::applyMarketingFooter($html, $unsubUrl);
+
         $campaign = [
-            'name'          => $campaignName !== '' ? $campaignName : ('bulk-' . date('Ymd-His')),
-            'subject'       => $subject,
-            'html'          => $html,
-            'campaign_name' => $campaignName !== '' ? $campaignName : null,
+            'name'            => $campaignName !== '' ? $campaignName : ('bulk-' . date('Ymd-His')),
+            'subject'         => $subject,
+            'html'            => $html,
+            'campaign_name'   => $campaignName !== '' ? $campaignName : null,
+            'unsubscribe_url' => $unsubUrl,
         ];
         if ($campaignName !== '') {
             // Persist latest campaign label as default for next sends.
@@ -260,11 +294,13 @@ class Emails extends BaseController
             $target = $mode === 'label' ? ('label:' . $labelName) : implode(', ', array_slice($recipients, 0, 5));
             $this->logSend($ok, 'bulk', $target, $subject, $result, $recipients);
 
-            return $this->jsonResponse(
-                $ok,
-                $result,
-                $ok ? (string) ($result['message'] ?? 'Bulk email queued/sent.') : (string) ($result['message'] ?? 'Bulk send failed.')
-            );
+            $message = $ok ? (string) ($result['message'] ?? 'Bulk email queued/sent.') : (string) ($result['message'] ?? 'Bulk send failed.');
+            if ($skipped !== []) {
+                $message .= ' ' . ucfirst(EmailSuppressionService::summary($skipped)) . '.';
+                $result['skipped'] = $skipped;
+            }
+
+            return $this->jsonResponse($ok, $result, $message);
         } catch (\Throwable $e) {
             log_message('error', 'Emails::sendBulk failed: {msg}', ['msg' => $e->getMessage()]);
 
@@ -534,19 +570,19 @@ class Emails extends BaseController
     }
 
     /**
-     * Link click redirector: records click and 302 redirects to target.
+     * Link click redirector: only follows http(s) targets signed for this email log (no open redirect).
      */
     public function trackClick(int $id): ResponseInterface
     {
         $url = trim((string) $this->request->getGet('url'));
+        $sig = (string) $this->request->getGet('sig');
+        $t   = (string) $this->request->getGet('t');
 
-        if ($id > 0) {
-            $this->recordRecipientEngagement($id, \App\Models\EmailRecipientEventModel::TYPE_CLICK);
+        if ($id <= 0 || ! EmailLinkSigner::isSafeRedirectUrl($url) || ! EmailLinkSigner::verifyClick($id, $url, $sig, $t)) {
+            return redirect()->to(site_url());
         }
 
-        if ($url === '' || ! filter_var($url, FILTER_VALIDATE_URL)) {
-            $url = site_url();
-        }
+        $this->recordRecipientEngagement($id, \App\Models\EmailRecipientEventModel::TYPE_CLICK);
 
         return redirect()->to($url);
     }
@@ -580,47 +616,84 @@ class Emails extends BaseController
     }
 
     /**
-     * Public 1-Click Unsubscribe endpoint (also RFC 8058 List-Unsubscribe-Post target).
+     * Public unsubscribe endpoint (signed links only).
+     *
+     * GET  → confirmation page (email scanners that pre-fetch links do not unsubscribe anyone).
+     * POST → unsubscribe; also the RFC 8058 List-Unsubscribe-Post one-click target (CSRF-exempt route).
      */
     public function unsubscribe(): ResponseInterface|string
     {
-        \App\Libraries\TenantResolver::ensureFromPublicKey((string) ($this->request->getGet('t') ?: $this->request->getPost('t')));
+        $tenant = (string) ($this->request->getGet('t') ?: $this->request->getPost('t'));
+        \App\Libraries\TenantResolver::ensureFromPublicKey($tenant);
 
         $email      = strtolower(trim((string) ($this->request->getGet('email') ?: $this->request->getPost('email'))));
+        $signature  = (string) ($this->request->getGet('sig') ?: $this->request->getPost('sig'));
         $campaignId = (int) ($this->request->getGet('cid') ?: $this->request->getPost('cid') ?: 0);
-        $reason     = trim((string) ($this->request->getPost('reason') ?: 'Direct unsubscribe request'));
+        $isPost     = $this->request->is('post');
+        $oneClick   = $isPost && $this->request->getPost('List-Unsubscribe') === 'One-Click';
+        $wantsJson  = $this->request->isAJAX() || str_contains($this->request->getHeaderLine('Accept'), 'application/json');
 
-        $success = false;
-        if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $ip      = (string) $this->request->getIPAddress();
-            $success = model(\App\Models\EmailUnsubscribeModel::class)->recordUnsubscribe($email, $campaignId ?: null, $reason, $ip);
-            if ($success) {
-                log_activity('email_unsubscribed', 'emails', 'Recipient unsubscribed: ' . $email, [
-                    'email'       => $email,
-                    'campaign_id' => $campaignId ?: null,
-                    'one_click'   => $this->request->getPost('List-Unsubscribe') === 'One-Click',
+        $valid = $email !== ''
+            && filter_var($email, FILTER_VALIDATE_EMAIL)
+            && EmailLinkSigner::verifyUnsubscribe($email, $signature, $tenant);
+
+        $page = [
+            'email'      => $email,
+            'signature'  => $signature,
+            'tenant'     => $tenant,
+            'campaignId' => $campaignId,
+            'sender'     => $this->publicSenderName(),
+        ];
+
+        if (! $valid) {
+            if ($oneClick || $wantsJson) {
+                return $this->response->setStatusCode(400)->setJSON([
+                    'status'  => 'error',
+                    'message' => 'This unsubscribe link is invalid or has expired. Please contact the sender.',
                 ]);
             }
+
+            return view('public/email_unsubscribe', ['state' => 'invalid'] + $page);
         }
 
-        if ($this->request->isAJAX() || $this->request->getHeaderLine('Accept') === 'application/json') {
-            return $this->response->setJSON([
-                'status'  => $success ? 'success' : 'error',
-                'message' => $success ? 'You have been successfully unsubscribed.' : 'Please provide a valid email.',
+        if (! $isPost) {
+            return view('public/email_unsubscribe', ['state' => 'confirm'] + $page);
+        }
+
+        $unsubscribes = model(\App\Models\EmailUnsubscribeModel::class);
+        $already      = $unsubscribes->isUnsubscribed($email);
+        $success      = $already || $unsubscribes->recordUnsubscribe(
+            $email,
+            $campaignId ?: null,
+            $oneClick ? 'One-click unsubscribe (mail app)' : 'Unsubscribe link (confirmed)',
+            (string) $this->request->getIPAddress()
+        );
+        if ($success && ! $already) {
+            log_activity('email_unsubscribed', 'emails', 'Recipient unsubscribed: ' . $email, [
+                'email'       => $email,
+                'campaign_id' => $campaignId ?: null,
+                'one_click'   => $oneClick,
             ]);
         }
 
-        // Standalone clean HTML page
-        return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Unsubscribed</title>' .
-            '<meta name="viewport" content="width=device-width, initial-scale=1">' .
-            '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">' .
-            '</head><body class="bg-light d-flex align-items-center min-vh-100">' .
-            '<div class="container" style="max-width: 520px;">' .
-            '<div class="card shadow-sm border-0 rounded-4 text-center p-4 p-md-5 bg-white">' .
-            '<div class="mb-3 text-success"><svg width="64" height="64" fill="currentColor" class="bi bi-check-circle-fill" viewBox="0 0 16 16"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/></svg></div>' .
-            '<h3 class="fw-bold mb-2">Unsubscribed Successfully</h3>' .
-            '<p class="text-muted mb-4">' . ($email !== '' ? '<strong>' . htmlspecialchars($email, ENT_QUOTES, 'UTF-8') . '</strong> will no longer receive marketing emails from this sender.' : 'Your email has been removed from future marketing lists.') . '</p>' .
-            '<p class="small text-muted mb-0">You can close this tab safely.</p>' .
-            '</div></div></body></html>';
+        if ($oneClick || $wantsJson) {
+            return $this->response->setStatusCode($success ? 200 : 500)->setJSON([
+                'status'  => $success ? 'success' : 'error',
+                'message' => $success ? 'You have been unsubscribed.' : 'Could not unsubscribe right now. Please try again later.',
+            ]);
+        }
+
+        return view('public/email_unsubscribe', ['state' => $success ? 'done' : 'error'] + $page);
+    }
+
+    protected function publicSenderName(): string
+    {
+        try {
+            $settings = service('settingsService');
+
+            return trim((string) ($settings->get('ses_from_name', '') ?: $settings->get('app_name', '')));
+        } catch (\Throwable) {
+            return '';
+        }
     }
 }
