@@ -132,6 +132,9 @@ class CreateCountriesTable extends Migration
         unset($c);
 
         $db = \Config\Database::connect();
+        if ($db->table('countries')->countAllResults() > 0) {
+            return;
+        }
         $db->table('countries')->insertBatch($countries);
     }
 

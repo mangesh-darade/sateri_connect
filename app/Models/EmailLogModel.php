@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\SelfHealingSchema;
 use CodeIgniter\Model;
 
 class EmailLogModel extends Model
 {
+    use SelfHealingSchema;
+
     protected $table            = 'email_logs';
     protected $primaryKey       = 'id';
     protected $useAutoIncrement = true;

@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\SelfHealingSchema;
 use CodeIgniter\Model;
 
 class ContactAttributeModel extends Model
 {
+    use SelfHealingSchema;
+
     protected $table          = 'contact_attributes';
     protected $primaryKey     = 'id';
     protected $returnType     = 'array';

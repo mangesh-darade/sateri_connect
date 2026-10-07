@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\SelfHealingSchema;
 use CodeIgniter\Model;
 
 class EmailSenderModel extends Model
 {
+    use SelfHealingSchema;
+
     protected $table            = 'email_senders';
     protected $primaryKey       = 'id';
     protected $useAutoIncrement = true;
@@ -15,14 +18,17 @@ class EmailSenderModel extends Model
     protected $protectFields    = true;
     protected $allowedFields    = [
         'type',
+        'provider',
         'name',
         'email',
         'domain',
+        'mail_from_domain',
         'cheerio_id',
         'status',
         'dns_records',
         'notes',
         'is_default',
+        'last_checked_at',
     ];
     protected $useTimestamps = true;
     protected $createdField  = 'created_at';

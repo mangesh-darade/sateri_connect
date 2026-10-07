@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\SelfHealingSchema;
 use CodeIgniter\Model;
 
 class CampaignContactModel extends Model
 {
+    use SelfHealingSchema;
+
     protected $table            = 'campaign_contacts';
     protected $primaryKey       = 'id';
     protected $useAutoIncrement = true;

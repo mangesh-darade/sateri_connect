@@ -45,6 +45,32 @@ CREATE TABLE `activity_logs` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `ai_copilot_logs`
+--
+
+DROP TABLE IF EXISTS `ai_copilot_logs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `ai_copilot_logs` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` int unsigned DEFAULT NULL,
+  `screen` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `page_url` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `prompt` text COLLATE utf8mb4_general_ci,
+  `reply` mediumtext COLLATE utf8mb4_general_ci,
+  `thinking` text COLLATE utf8mb4_general_ci,
+  `action_type` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `action_data` text COLLATE utf8mb4_general_ci,
+  `is_active` tinyint(1) NOT NULL DEFAULT '1',
+  `is_deleted` tinyint(1) NOT NULL DEFAULT '0',
+  `created_at` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `user_id_is_deleted` (`user_id`,`is_deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `api_tokens`
 --
 
@@ -511,14 +537,17 @@ DROP TABLE IF EXISTS `email_senders`;
 CREATE TABLE `email_senders` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `type` enum('sender','domain') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'sender',
+  `provider` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `name` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
   `email` varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `domain` varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `mail_from_domain` varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `cheerio_id` varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'External Cheerio Sender/Domain ID',
   `status` enum('pending','verified','failed','disabled') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',
   `dns_records` text COLLATE utf8mb4_unicode_ci COMMENT 'JSON SPF/DKIM/DMARC notes',
   `notes` text COLLATE utf8mb4_unicode_ci,
   `is_default` tinyint(1) NOT NULL DEFAULT '0',
+  `last_checked_at` datetime DEFAULT NULL,
   `created_at` datetime DEFAULT NULL,
   `updated_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
@@ -548,6 +577,34 @@ CREATE TABLE `email_unsubscribes` (
   UNIQUE KEY `uniq_email` (`email`),
   KEY `idx_campaign_id` (`campaign_id`),
   KEY `idx_is_deleted` (`is_deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `email_recipient_events`
+--
+
+DROP TABLE IF EXISTS `email_recipient_events`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `email_recipient_events` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `log_id` int unsigned NOT NULL DEFAULT '0',
+  `campaign_id` int unsigned DEFAULT NULL,
+  `email` varchar(191) COLLATE utf8mb4_general_ci NOT NULL,
+  `event_type` varchar(20) COLLATE utf8mb4_general_ci NOT NULL,
+  `detail` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `message_id` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `event_count` int unsigned NOT NULL DEFAULT '1',
+  `first_at` datetime DEFAULT NULL,
+  `last_at` datetime DEFAULT NULL,
+  `created_at` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_log_email_event` (`log_id`,`email`,`event_type`),
+  KEY `campaign_id` (`campaign_id`),
+  KEY `email_event_type` (`email`,`event_type`),
+  KEY `message_id` (`message_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
