@@ -729,7 +729,7 @@ class MetaCloudAPI
     }
 
     /**
-     * @return array{contents: string, mime_type: string, url: string}
+     * @return array{content: string, contents: string, mime_type: string, url: string}
      */
     public function downloadMedia(string $mediaId): array
     {
@@ -746,8 +746,12 @@ class MetaCloudAPI
             ],
         ]);
 
+        $body = (string) $response->getBody();
+
+        // 'content' matches CheerioDirectAPI::downloadMedia(); 'contents' kept for older callers.
         return [
-            'contents'  => (string) $response->getBody(),
+            'content'   => $body,
+            'contents'  => $body,
             'mime_type' => (string) ($info['mime_type'] ?? $response->getHeaderLine('Content-Type')),
             'url'       => $url,
         ];
