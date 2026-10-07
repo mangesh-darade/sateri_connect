@@ -123,6 +123,14 @@ body.platform-body {
     color: #d7f0e4;
 }
 .platform-side-link.is-danger { color: #f0b4ac; }
+button.platform-side-link {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
 .platform-side-footer {
     margin-top: auto;
     padding-top: 0.75rem;
