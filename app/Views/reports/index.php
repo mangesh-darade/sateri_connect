@@ -48,8 +48,8 @@ $summary = $summary ?? $stats ?? $overview ?? [];
 <div class="card">
     <div class="card-body py-3">
         <form method="get" action="<?= site_url('reports') ?>" class="filter-bar mb-0">
-            <input type="date" name="from" class="form-control form-control-sm" style="max-width:150px" value="<?= $from ?>" title="From">
-            <input type="date" name="to" class="form-control form-control-sm" style="max-width:150px" value="<?= $to ?>" title="To">
+            <input type="date" name="from" class="form-control form-control-sm" style="max-width:150px" value="<?= esc($from) ?>" title="From">
+            <input type="date" name="to" class="form-control form-control-sm" style="max-width:150px" value="<?= esc($to) ?>" title="To">
             <select name="campaign_id" class="form-select form-select-sm" style="max-width:180px">
                 <option value="">All campaigns</option>
                 <?php foreach (($campaigns ?? []) as $c): ?>
@@ -95,10 +95,10 @@ $summary = $summary ?? $stats ?? $overview ?? [];
             <div class="panel-body" style="height:320px">
                 <?php $trend = $charts['trends'] ?? $trend ?? []; ?>
                 <canvas id="reportTrendChart"
-                    data-labels='<?= json_encode($trend['labels'] ?? []) ?>'
-                    data-sent='<?= json_encode($trend['sent'] ?? []) ?>'
-                    data-delivered='<?= json_encode($trend['delivered'] ?? []) ?>'
-                    data-failed='<?= json_encode($trend['failed'] ?? []) ?>'></canvas>
+                    data-labels='<?= json_encode($trend['labels'] ?? [], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>'
+                    data-sent='<?= json_encode($trend['sent'] ?? [], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>'
+                    data-delivered='<?= json_encode($trend['delivered'] ?? [], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>'
+                    data-failed='<?= json_encode($trend['failed'] ?? [], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>'></canvas>
             </div>
         </div>
     </div>
