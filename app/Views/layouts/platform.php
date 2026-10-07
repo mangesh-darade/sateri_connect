@@ -67,6 +67,10 @@ $brandInitial = mb_strtoupper(mb_substr($platformSiteName !== '' ? $platformSite
                 <i class="fas fa-sliders-h" aria-hidden="true"></i>
                 <span>Settings &amp; Branding</span>
             </a>
+            <a href="<?= site_url('platform/schema') ?>" class="platform-side-link<?= $navActive === 'schema' ? ' is-active' : '' ?>">
+                <i class="fas fa-database" aria-hidden="true"></i>
+                <span>Database Health</span>
+            </a>
 
             <div class="platform-side-footer">
                 <div class="platform-side-user">
