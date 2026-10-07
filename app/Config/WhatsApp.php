@@ -114,10 +114,12 @@ class WhatsApp extends BaseConfig
     public string $consentStopLabel = 'Stop';
 
     /**
-     * Ask every contact who has neither agreed nor stopped: buttons inside the 24h window,
-     * otherwise the auto-created consent template. Blocked business sends ask instead.
+     * Default for automatically asking contacts who have neither agreed nor stopped (buttons inside
+     * the 24h window, otherwise the MARKETING consent template). Off: unsolicited consent templates
+     * hurt quality rating. Per tenant via settings key `wa_auto_consent_request`; even when on, each
+     * contact is asked at most once automatically. The manual "Request opt-in" action always works.
      */
-    public bool $autoConsentRequest = true;
+    public bool $autoConsentRequest = false;
 
     /** Auto-created per tenant on Meta; quick replies use the Agree / Stop labels above. */
     public string $consentTemplateName = 'wa_consent_request';
@@ -126,7 +128,7 @@ class WhatsApp extends BaseConfig
 
     public string $consentTemplateBody = 'Hello! Would you like to receive updates and offers from us on WhatsApp? Tap Agree to subscribe or Stop to opt out. You can unsubscribe anytime.';
 
-    /** Unanswered consent requests are re-sent at most once per this many days (repeat asks get numbers blocked). */
+    /** Minimum days between manual "Request opt-in" re-asks to the same contact (repeat asks get numbers blocked). */
     public int $consentRequestResendDays = 7;
 
     /** Max consent requests per bulk action (import / campaign start). 0 = no cap. */
@@ -146,7 +148,42 @@ class WhatsApp extends BaseConfig
     public int $campaignDailyCapPerContact = 1;
 
     /**
+     * Minimum days between MARKETING template messages to the same contact (campaigns, automations,
+     * API). 1 = at most one per rolling 24h. 0 disables. Override via settings `wa_marketing_frequency_cap_days`.
+     */
+    public int $marketingFrequencyCapDays = 1;
+
+    /**
      * Days to stop business-initiated sends after Meta reports a number undeliverable (131026).
      */
     public int $undeliverableSuppressDays = 30;
+
+    /**
+     * Queue throughput cap (messages per second per worker). 0 disables pacing.
+     * Meta's default is 80 mps per number; Cheerio/BSP plans are often lower.
+     */
+    public int $queueMaxPerSecond = 20;
+
+    /**
+     * Back-off for throughput errors (130429 / 80007 / 4 account-level, 131056 per-recipient pair).
+     * Delay = base * 2^(attempt-1), capped at max. Rate-limited items get extra attempts.
+     */
+    public int $rateLimitBackoffSeconds = 60;
+
+    public int $rateLimitBackoffMaxSeconds = 1800;
+
+    public int $rateLimitMaxAttempts = 6;
+
+    /**
+     * Back-off for other retryable errors (network / 5xx).
+     */
+    public int $retryBackoffSeconds = 30;
+
+    /**
+     * Default quiet hours for marketing (campaign) sends, tenant-local time "HH:MM".
+     * Empty start or end disables. Override per tenant via Settings → WhatsApp.
+     */
+    public string $quietHoursStart = '';
+
+    public string $quietHoursEnd = '';
 }
