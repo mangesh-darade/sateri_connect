@@ -122,6 +122,9 @@ class Users extends BaseController
         if ($user === null) {
             return redirect()->to('/users')->with('error', 'User not found.');
         }
+        if ($err = $this->assertManageableUser($user)) {
+            return redirect()->to('/users')->with('error', $err);
+        }
 
         $rules = [
             'name'    => 'required|min_length[2]|max_length[150]',
@@ -194,9 +197,15 @@ class Users extends BaseController
                 : redirect()->to('/users')->with('error', 'You cannot delete your own account.');
         }
 
-        $model = model(UserModel::class);
-        if ($model->find($id) === null) {
+        $model  = model(UserModel::class);
+        $target = $model->find($id);
+        if ($target === null) {
             return redirect()->to('/users')->with('error', 'User not found.');
+        }
+        if ($err = $this->assertManageableUser($target)) {
+            return $this->request->isAJAX()
+                ? $this->jsonResponse(false, null, $err, [], 403)
+                : redirect()->to('/users')->with('error', $err);
         }
 
         $model->delete($id);
@@ -220,14 +229,38 @@ class Users extends BaseController
         }
 
         $slug = (string) ($role['slug'] ?? '');
-        $actorSlug = (string) (session('role_slug') ?? '');
-        $isSuper = in_array($actorSlug, ['super-admin', 'super_admin'], true)
-            || (function_exists('can') && can('*'));
 
-        if (in_array($slug, ['super-admin', 'super_admin'], true) && ! $isSuper) {
+        if (in_array($slug, ['super-admin', 'super_admin'], true) && ! $this->actorIsSuperAdmin()) {
             return 'Only a super admin can assign the super-admin role.';
         }
 
         return null;
+    }
+
+    /**
+     * Non–super-admins cannot edit or delete a super-admin account (email/password takeover).
+     *
+     * @param array<string, mixed> $target
+     */
+    protected function assertManageableUser(array $target): ?string
+    {
+        if ($this->actorIsSuperAdmin()) {
+            return null;
+        }
+
+        $role = model(RoleModel::class)->find((int) ($target['role_id'] ?? 0));
+        if (in_array((string) ($role['slug'] ?? ''), ['super-admin', 'super_admin'], true)) {
+            return 'Only a super admin can change a super-admin account.';
+        }
+
+        return null;
+    }
+
+    protected function actorIsSuperAdmin(): bool
+    {
+        $actorSlug = (string) (session('role_slug') ?? '');
+
+        return in_array($actorSlug, ['super-admin', 'super_admin'], true)
+            || (function_exists('can') && can('*'));
     }
 }
