@@ -319,5 +319,19 @@
     });
   });
 
+  // Marketing footer postal address (Settings → Email Settings).
+  $(document).on('submit', '#emailComplianceForm', function (e) {
+    e.preventDefault();
+    var form = this;
+    var btn = form.querySelector('button[type="submit"]');
+    var msg = form.querySelector('.js-compliance-msg');
+    busy(btn, true, 'Saving…');
+    post('settings/save', $(form).serialize()).then(function (res) {
+      busy(btn, false);
+      setMsg(msg, res.success ? 'Address saved.' : errorText(res), !!res.success);
+      if (res.success) toast('Footer address saved');
+    });
+  });
+
   APP.emailIdentities = { showDns: showDns, check: check };
 })(window.jQuery);
