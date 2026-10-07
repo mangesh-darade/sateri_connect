@@ -93,7 +93,18 @@
         <div class="code-box">
             <strong>Deletion Request Confirmation ID:</strong><br>
             <span style="color:var(--brand-primary);font-size:1.1rem;font-weight:700"><?= esc($code) ?></span>
-            <p style="margin:0.5rem 0 0;font-size:0.88rem;color:#475569">Status: <strong>Processed</strong>. Associated temporary session and cache data have been cleared from our systems.</p>
+            <?php if (! empty($request)): ?>
+                <p style="margin:0.5rem 0 0;font-size:0.88rem;color:#475569">
+                    Status: <strong><?= esc(ucfirst((string) $request['status'])) ?></strong>
+                    · Received <?= esc((string) $request['requested_at']) ?>
+                    <?php if (! empty($request['completed_at'])): ?> · Completed <?= esc((string) $request['completed_at']) ?><?php endif; ?>
+                </p>
+                <?php if (! empty($request['notes'])): ?>
+                    <p style="margin:0.4rem 0 0;font-size:0.85rem;color:#475569"><?= esc((string) $request['notes']) ?></p>
+                <?php endif; ?>
+            <?php else: ?>
+                <p style="margin:0.5rem 0 0;font-size:0.88rem;color:#b45309">No deletion request was found for this confirmation ID.</p>
+            <?php endif; ?>
         </div>
     <?php endif; ?>
 
