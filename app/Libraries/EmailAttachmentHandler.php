@@ -63,7 +63,7 @@ class EmailAttachmentHandler
             finfo_close($finfo);
         }
 
-        if (! $mime || (! in_array($mime, self::ALLOWED_MIME_TYPES, true) && ! str_starts_with($mime, 'image/'))) {
+        if (! $mime || str_contains($mime, 'svg') || (! in_array($mime, self::ALLOWED_MIME_TYPES, true) && ! str_starts_with($mime, 'image/'))) {
             return ['ok' => false, 'error' => 'Invalid file MIME type (' . ($mime ?: 'unknown') . '). File rejected.'];
         }
 
