@@ -324,6 +324,7 @@ class CustomerGroups extends BaseController
         }
 
         $tagModel = model(TagModel::class);
+        $cell     = static fn (mixed $v): string => '"' . str_replace('"', '""', \App\Libraries\ContactExportService::safeCell($v)) . '"';
 
         if ($id > 0) {
             $group = $tagModel->find($id);
@@ -335,14 +336,19 @@ class CustomerGroups extends BaseController
             $safeName = preg_replace('/[^a-zA-Z0-9_-]+/', '_', (string) $group['name']) ?: 'group';
             $lines    = ['name,mobile,email,status,created_at'];
             foreach ($contacts as $c) {
-                $lines[] = implode(',', [
-                    '"' . str_replace('"', '""', (string) ($c['name'] ?? '')) . '"',
+                $lines[] = implode(',', array_map($cell, [
+                    $c['name'] ?? '',
                     $c['mobile'] ?? '',
                     $c['email'] ?? '',
                     $c['status'] ?? '',
                     $c['created_at'] ?? '',
-                ]);
+                ]));
             }
+
+            log_activity('export', 'customer_groups', 'Exported customer group: ' . (string) $group['name'], [
+                'group_id' => $id,
+                'rows'     => count($contacts),
+            ]);
 
             return $this->response
                 ->setHeader('Content-Type', 'text/csv')
@@ -354,11 +360,13 @@ class CustomerGroups extends BaseController
         $lines  = ['group,contacts,added_on'];
         foreach ($groups as $g) {
             $lines[] = implode(',', [
-                '"' . str_replace('"', '""', (string) ($g['name'] ?? '')) . '"',
+                $cell($g['name'] ?? ''),
                 (string) ($g['contact_count'] ?? 0),
                 $g['created_at'] ?? '',
             ]);
         }
+
+        log_activity('export', 'customer_groups', 'Exported customer groups list', ['rows' => count($groups)]);
 
         return $this->response
             ->setHeader('Content-Type', 'text/csv')
