@@ -195,7 +195,7 @@ class MessageQueueModel extends Model
         return $this->update($id, $data);
     }
 
-    public function markFailed(int $id, string $errorMessage, ?string $status = null, ?int $attempts = null): bool
+    public function markFailed(int $id, string $errorMessage, ?string $status = null, ?int $attempts = null, ?string $retryAt = null): bool
     {
         $row = $this->find($id);
 
@@ -207,11 +207,30 @@ class MessageQueueModel extends Model
         $maxAttempts = (int) ($row['max_attempts'] ?? 3);
         $status      = $status ?? ($attempts >= $maxAttempts ? 'failed' : 'pending');
 
-        return $this->update($id, [
+        $data = [
             'status'        => $status,
             'attempts'      => $attempts,
             'error_message' => $errorMessage,
             'processed_at'  => $status === 'failed' ? date('Y-m-d H:i:s') : null,
+        ];
+        if ($status === 'pending' && $retryAt !== null) {
+            $data['scheduled_at'] = $retryAt;
+        }
+
+        return $this->update($id, $data);
+    }
+
+    /**
+     * Return a claimed (processing) row to pending without spending an attempt, e.g. when the
+     * sending number is throttled or a send window is closed.
+     */
+    public function releaseClaimed(int $id, int $attempts, string $scheduledAt, ?string $reason = null): bool
+    {
+        return $this->update($id, [
+            'status'        => 'pending',
+            'attempts'      => max(0, $attempts),
+            'scheduled_at'  => $scheduledAt,
+            'error_message' => $reason,
         ]);
     }
 }
