@@ -129,6 +129,9 @@ $details = [
                     <li><span class="label">Status</span><span class="value"><?= view('partials/wa_consent_badge', ['contact' => $contact]) ?></span></li>
                     <li><span class="label">Opt-in source</span><span class="value"><?= esc(\App\Libraries\WhatsAppConsentService::OPT_IN_SOURCES[$contact['wa_opt_in_source'] ?? ''] ?? $dash($contact['wa_opt_in_source'] ?? '')) ?></span></li>
                     <li><span class="label">Opt-in date</span><span class="value"><?= esc(format_app_datetime($contact['wa_opt_in_at'] ?? null) ?: '—') ?></span></li>
+                    <?php if (! $hasOptIn && ! empty($contact['wa_consent_requested_at'])): ?>
+                        <li><span class="label">Opt-in asked</span><span class="value"><?= esc(format_app_datetime($contact['wa_consent_requested_at'])) ?></span></li>
+                    <?php endif; ?>
                     <?php if ($isOptedOut): ?>
                         <li><span class="label">Opted out</span><span class="value text-danger"><?= esc(format_app_datetime($contact['wa_opted_out_at'])) ?></span></li>
                     <?php endif; ?>
@@ -151,6 +154,8 @@ $details = [
                                     <?php endforeach; ?>
                                 </select>
                                 <button type="button" class="btn btn-sm btn-wa" data-wa-consent="opt_in"><i class="fas fa-check me-1"></i> Record opt-in</button>
+                                <button type="button" class="btn btn-sm btn-outline-success" data-wa-consent="request_opt_in"
+                                        title="Send the Agree / Stop opt-in message on WhatsApp"><i class="fab fa-whatsapp me-1"></i> Request opt-in</button>
                             <?php endif; ?>
                             <button type="button" class="btn btn-sm btn-outline-danger" data-wa-consent="opt_out"><i class="fas fa-ban me-1"></i> Opt out</button>
                             <?php if ($isSuppressed): ?>
@@ -325,6 +330,11 @@ $details = [
         };
         if (action === 'opt_out') {
             APP.confirm({ title: 'Opt out this contact?', text: 'Campaigns, automations and sequences will stop for this number.', confirmText: 'Opt out' })
+                .then(function (r) { if (r.isConfirmed) send(); });
+            return;
+        }
+        if (action === 'request_opt_in') {
+            APP.confirm({ title: 'Ask for WhatsApp opt-in?', text: 'The customer gets one Agree / Stop message. Only ask people who expect to hear from you — unwanted messages lower your WhatsApp quality rating.', confirmText: 'Send request' })
                 .then(function (r) { if (r.isConfirmed) send(); });
             return;
         }
