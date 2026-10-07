@@ -112,7 +112,7 @@ $poweredByLogoUrl = (string) ($branding['powered_by_logo_url'] ?? '');
                     </div>
 
                     <div>
-                        <input class="platform-input" type="file" name="site_logo" id="inputSiteLogo" accept=".png,.jpg,.jpeg,.webp,.gif,.svg,image/*" style="font-size:0.82rem;padding:0.45rem">
+                        <input class="platform-input" type="file" name="site_logo" id="inputSiteLogo" accept=".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif" style="font-size:0.82rem;padding:0.45rem">
                         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.4rem;font-size:0.78rem">
                             <span style="color:var(--pf-muted)">SVG, PNG or WEBP (transparent)</span>
                             <?php if ($logoUrl !== ''): ?>
@@ -148,7 +148,7 @@ $poweredByLogoUrl = (string) ($branding['powered_by_logo_url'] ?? '');
                     </div>
 
                     <div>
-                        <input class="platform-input" type="file" name="site_favicon" id="inputSiteFavicon" accept=".ico,.png,.jpg,.jpeg,.webp,.svg,image/*" style="font-size:0.82rem;padding:0.45rem">
+                        <input class="platform-input" type="file" name="site_favicon" id="inputSiteFavicon" accept=".ico,.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp,image/gif" style="font-size:0.82rem;padding:0.45rem">
                         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.4rem;font-size:0.78rem">
                             <span style="color:var(--pf-muted)">Square PNG, ICO or SVG (32x32)</span>
                             <?php if ($faviconUrl !== ''): ?>
@@ -212,7 +212,7 @@ $poweredByLogoUrl = (string) ($branding['powered_by_logo_url'] ?? '');
                         <label class="platform-label" style="font-weight:700">
                             <i class="fas fa-file-image me-1" style="color:#0284c7"></i> Provider Micro-Logo / Icon (Optional)
                         </label>
-                        <input class="platform-input" type="file" name="powered_by_logo" id="inputPoweredByLogo" accept=".png,.jpg,.jpeg,.webp,.svg,image/*" style="font-size:0.82rem;padding:0.45rem">
+                        <input class="platform-input" type="file" name="powered_by_logo" id="inputPoweredByLogo" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp,image/gif" style="font-size:0.82rem;padding:0.45rem">
                         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.4rem;font-size:0.78rem">
                             <span style="color:var(--pf-muted)">Small logo or icon (Max 1MB, approx 16x16 or 24x24)</span>
                             <?php if ($poweredByLogoUrl !== ''): ?>
