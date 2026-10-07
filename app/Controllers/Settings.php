@@ -100,6 +100,10 @@ class Settings extends BaseController
                 'powered_by_name'    => (string) $settings->get('powered_by_name', ''),
                 'powered_by_url'     => (string) $settings->get('powered_by_url', ''),
                 'powered_by_logo'    => (string) $settings->get('powered_by_logo', ''),
+                'wa_quiet_hours_start' => (string) $settings->get('wa_quiet_hours_start', ''),
+                'wa_quiet_hours_end'   => (string) $settings->get('wa_quiet_hours_end', ''),
+                'wa_marketing_frequency_cap_days' => (string) service('whatsAppConsent')->marketingFrequencyCapDays(),
+                'wa_auto_consent_request'         => service('whatsAppConsent')->autoConsentRequestEnabled() ? '1' : '0',
             ],
             'smtp' => [
                 'smtp_host'       => (string) $settings->get('smtp_host', ''),
@@ -176,6 +180,8 @@ class Settings extends BaseController
             'bounceTracking' => (new \App\Libraries\SesBounceTrackingService($settings))->status(false),
             'fromEmail'     => $ses['from_email'],
             'fromName'      => $ses['from_name'],
+            'companyAddress' => \App\Libraries\EmailTracking::companyAddress(),
+            'reputation'    => (new \App\Libraries\EmailReputationGuard())->status(),
             'domains'       => array_values(array_filter($rows, static fn ($r) => ($r['type'] ?? '') === 'domain' && $isSesRow($r))),
             'senders'       => array_values(array_filter($rows, static fn ($r) => ($r['type'] ?? '') === 'sender' && $isSesRow($r))),
         ]);
@@ -255,6 +261,11 @@ class Settings extends BaseController
                         'sns_topic_arn'     => trim((string) $this->request->getPost('ses_sns_topic_arn')),
                     ]);
                 }
+            }
+
+            if (in_array($section, ['all', 'email', 'email_compliance'], true) && $this->request->getPost('email_company_address') !== null) {
+                $address = trim(str_replace("\r\n", "\n", (string) $this->request->getPost('email_company_address')));
+                $settings->set('email_company_address', mb_substr($address, 0, 500), 'email');
             }
 
             if (in_array($section, ['all', 'cheerio_email', 'email'], true)) {
@@ -372,6 +383,36 @@ class Settings extends BaseController
                             $settings->set('timezone', (string) $val, $group);
                         }
                     }
+                }
+
+                $quietStart = $this->request->getPost('wa_quiet_hours_start');
+                $quietEnd   = $this->request->getPost('wa_quiet_hours_end');
+                if ($quietStart !== null || $quietEnd !== null) {
+                    $quietStart = substr(trim((string) $quietStart), 0, 5);
+                    $quietEnd   = substr(trim((string) $quietEnd), 0, 5);
+                    $bothEmpty  = $quietStart === '' && $quietEnd === '';
+                    $valid      = \App\Libraries\WhatsAppSendWindow::isValidTime($quietStart)
+                        && \App\Libraries\WhatsAppSendWindow::isValidTime($quietEnd)
+                        && $quietStart !== $quietEnd;
+                    if (! $bothEmpty && ! $valid) {
+                        return $this->jsonResponse(false, null, 'WhatsApp quiet hours need both a start and an end time (HH:MM), and they must be different. Leave both empty to turn quiet hours off.', [], 422);
+                    }
+                    $settings->set('wa_quiet_hours_start', $quietStart, 'whatsapp');
+                    $settings->set('wa_quiet_hours_end', $quietEnd, 'whatsapp');
+                }
+
+                $capDays = $this->request->getPost('wa_marketing_frequency_cap_days');
+                if ($capDays !== null) {
+                    $capDays = trim((string) $capDays);
+                    if ($capDays === '' || ! ctype_digit($capDays) || (int) $capDays > 30) {
+                        return $this->jsonResponse(false, null, 'Marketing frequency cap must be a whole number of days from 0 to 30 (0 turns the cap off).', [], 422);
+                    }
+                    $settings->set('wa_marketing_frequency_cap_days', (string) (int) $capDays, 'whatsapp');
+                }
+
+                $autoConsent = $this->request->getPost('wa_auto_consent_request');
+                if ($autoConsent !== null) {
+                    $settings->set('wa_auto_consent_request', (string) $autoConsent === '1' ? '1' : '0', 'whatsapp');
                 }
 
                 $pbEnabled = $this->request->getPost('powered_by_enabled') ? '1' : '0';
@@ -595,6 +636,10 @@ class Settings extends BaseController
         $tokenModel = model(\App\Models\ApiTokenModel::class);
         $result = $tokenModel->createToken($userId, $name, ['*']);
 
+        log_activity('create', 'api_tokens', 'API key generated: ' . $name, [
+            'token_id' => $result['token']['id'] ?? null,
+        ]);
+
         return $this->jsonResponse(true, [
             'id'         => $result['token']['id'] ?? null,
             'name'       => $name,
@@ -611,6 +656,8 @@ class Settings extends BaseController
 
         $tokenModel = model(\App\Models\ApiTokenModel::class);
         $tokenModel->delete($id);
+
+        log_activity('delete', 'api_tokens', 'API key revoked', ['token_id' => $id]);
 
         return $this->jsonResponse(true, null, 'API Key revoked successfully.');
     }
