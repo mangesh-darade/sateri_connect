@@ -58,7 +58,7 @@ $isPlatform     = $selectedKey === '_platform';
     <?php if ($isPlatform): ?>
         <a href="<?= site_url('login') ?>">Back to login</a>
     <?php else: ?>
-        <a href="<?= site_url('signup') ?>">Create a new account</a>
+        <span class="text-muted small">Need an account? Ask your workspace administrator.</span>
         <div class="mt-2">
             <a href="<?= site_url('login?tenant=_platform') ?>" class="text-muted small">
                 <i class="fas fa-shield-halved me-1"></i>Platform super admin
