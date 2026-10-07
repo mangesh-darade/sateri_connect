@@ -77,9 +77,37 @@ class UserModel extends Model
 
         if (password_get_info($data['data']['password'])['algo'] === null) {
             $data['data']['password'] = password_hash($data['data']['password'], PASSWORD_DEFAULT);
+
+            foreach ((array) ($data['id'] ?? []) as $userId) {
+                self::markPasswordChanged((int) $userId);
+            }
         }
 
         return $data;
+    }
+
+    /**
+     * Sessions that logged in before this moment are signed out by AuthFilter;
+     * the user's own current session stays signed in.
+     */
+    public static function markPasswordChanged(int $userId): void
+    {
+        if ($userId <= 0) {
+            return;
+        }
+
+        $now = time();
+        cache()->save(self::passwordChangedCacheKey($userId), $now, 30 * DAY);
+
+        $session = session();
+        if ((int) $session->get('user_id') === $userId) {
+            $session->set('login_at', $now + 1);
+        }
+    }
+
+    public static function passwordChangedCacheKey(int $userId): string
+    {
+        return 'pwd_changed_' . md5((\App\Libraries\TenantContext::get() ?? 'default') . '_' . $userId);
     }
 
     /**
