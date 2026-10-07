@@ -372,6 +372,7 @@ class EmailManager extends BaseController
 
         $perRecipient = (new SettingsService())->getEmailProvider() !== SettingsService::EMAIL_PROVIDER_CHEERIO;
         $options['unsubscribe_url'] = \App\Libraries\EmailTracking::unsubscribeUrl(0, $perRecipient);
+        $options['purpose']         = EmailSenderModel::PURPOSE_MARKETING;
         if ($html !== '') {
             $html = \App\Libraries\EmailTracking::applyMarketingFooter($html, $options['unsubscribe_url']);
         }
@@ -702,7 +703,8 @@ class EmailManager extends BaseController
         $model = model(EmailSenderModel::class);
         try {
             if (! empty($row['is_default'])) {
-                $model->where('type', $type)->set(['is_default' => 0])->update();
+                $purpose = EmailSenderModel::normalizePurpose($id > 0 ? ($model->find($id)['purpose'] ?? null) : null);
+                $model->where('type', $type)->where('purpose', $purpose)->set(['is_default' => 0])->update();
             }
 
             if ($id > 0) {
@@ -737,6 +739,7 @@ class EmailManager extends BaseController
             return $this->jsonResponse(false, null, 'Record not found.', [], 404);
         }
         $model->delete($id);
+        (new \App\Libraries\SesIdentityService())->forgetDefaultSender($row);
         log_activity('email_sender_deleted', 'emails', 'Deleted ' . ($row['type'] ?? 'sender') . ' ' . ($row['email'] ?? $row['domain'] ?? $row['name'] ?? ('#' . $id)), [
             'id'       => $id,
             'type'     => $row['type'] ?? null,

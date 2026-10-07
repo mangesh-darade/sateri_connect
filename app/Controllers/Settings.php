@@ -180,6 +180,8 @@ class Settings extends BaseController
             'bounceTracking' => (new \App\Libraries\SesBounceTrackingService($settings))->status(false),
             'fromEmail'     => $ses['from_email'],
             'fromName'      => $ses['from_name'],
+            'marketingFromEmail' => $ses['marketing_from_email'],
+            'marketingFromName'  => $ses['marketing_from_name'],
             'companyAddress' => \App\Libraries\EmailTracking::companyAddress(),
             'reputation'    => (new \App\Libraries\EmailReputationGuard())->status(),
             'domains'       => array_values(array_filter($rows, static fn ($r) => ($r['type'] ?? '') === 'domain' && $isSesRow($r))),

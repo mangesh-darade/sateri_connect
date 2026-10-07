@@ -300,14 +300,15 @@ class SesIdentityService
     /**
      * Add (or update) a From address on an already-configured domain.
      *
-     * @param array<string, mixed> $input email, name, is_default
+     * @param array<string, mixed> $input email, name, purpose (transactional|marketing), is_default
      *
      * @return array{ok: bool, status: int, message: string, data?: array<string, mixed>, errors?: array<string, string>}
      */
     public function addSender(array $input): array
     {
-        $email = strtolower(trim((string) ($input['email'] ?? '')));
-        $name  = trim((string) ($input['name'] ?? ''));
+        $email   = strtolower(trim((string) ($input['email'] ?? '')));
+        $name    = trim((string) ($input['name'] ?? ''));
+        $purpose = EmailSenderModel::normalizePurpose((string) ($input['purpose'] ?? ''));
 
         $errors = [];
         if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -334,13 +335,25 @@ class SesIdentityService
             ];
         }
 
-        $this->upsertSenderRow($email, $name, (string) $domainRow['domain']);
+        $existing = $this->senders->where('type', 'sender')->where('email', $email)->first();
+        if ($existing && ! empty($existing['is_default'])
+            && EmailSenderModel::normalizePurpose($existing['purpose'] ?? null) !== $purpose) {
+            return [
+                'ok'      => false,
+                'status'  => 422,
+                'message' => $email . ' is the default ' . self::purposeLabel(EmailSenderModel::normalizePurpose($existing['purpose'] ?? null)) . ' sender. Make another sender the default first, then change its use.',
+                'errors'  => ['purpose' => 'Default sender — cannot change use.'],
+            ];
+        }
+
+        $this->upsertSenderRow($email, $name, (string) $domainRow['domain'], $purpose);
         $sender = $this->senders->where('type', 'sender')->where('email', $email)->first();
         $this->senders->update((int) $sender['id'], ['status' => $domainRow['status'] === 'verified' ? 'verified' : 'pending']);
 
-        log_activity('email_sender_saved', 'emails', 'Saved sender ' . $name . ' <' . $email . '>', [
+        log_activity('email_sender_saved', 'emails', 'Saved ' . self::purposeLabel($purpose) . ' sender ' . $name . ' <' . $email . '>', [
             'sender_id' => (int) $sender['id'],
             'domain'    => $domainRow['domain'],
+            'purpose'   => $purpose,
         ]);
 
         if (! empty($input['is_default'])) {
@@ -351,7 +364,8 @@ class SesIdentityService
     }
 
     /**
-     * Mark a sender as default and use it as the Amazon SES From address for all outgoing email.
+     * Mark a sender as the default for its purpose: Primary → all system/automation mail,
+     * Promotional → campaigns, bulk sends and drips.
      *
      * @return array{ok: bool, status: int, message: string, data?: array<string, mixed>}
      */
@@ -362,13 +376,45 @@ class SesIdentityService
             return ['ok' => false, 'status' => 404, 'message' => 'Sender not found.'];
         }
 
-        $this->senders->where('type', 'sender')->set(['is_default' => 0])->update();
+        $purpose     = EmailSenderModel::normalizePurpose($sender['purpose'] ?? null);
+        $isMarketing = $purpose === EmailSenderModel::PURPOSE_MARKETING;
+
+        $this->senders->where('type', 'sender')->where('purpose', $purpose)->set(['is_default' => 0])->update();
         $this->senders->update($id, ['is_default' => 1]);
-        $this->settings->setSesConfig(['from_email' => $sender['email'], 'from_name' => $sender['name']]);
+        $this->settings->setSesConfig($isMarketing
+            ? ['marketing_from_email' => $sender['email'], 'marketing_from_name' => $sender['name']]
+            : ['from_email' => $sender['email'], 'from_name' => $sender['name']]);
 
-        log_activity('email_sender_default', 'emails', 'Default sender set to ' . $sender['email'], ['sender_id' => $id]);
+        log_activity('email_sender_default', 'emails', 'Default ' . self::purposeLabel($purpose) . ' sender set to ' . $sender['email'], [
+            'sender_id' => $id,
+            'purpose'   => $purpose,
+        ]);
 
-        return ['ok' => true, 'status' => 200, 'message' => 'Default sender updated. All emails will now go from ' . $sender['email'] . '.', 'data' => $this->senders->find($id)];
+        $message = $isMarketing
+            ? 'Default Promotional sender updated. Campaigns, bulk sends and drips will now go from ' . $sender['email'] . '.'
+            : 'Default Primary sender updated. System, automation and test emails will now go from ' . $sender['email'] . '.';
+
+        return ['ok' => true, 'status' => 200, 'message' => $message, 'data' => $this->senders->find($id)];
+    }
+
+    /**
+     * Drop the per-purpose From setting when its default sender is deleted.
+     * Promotional falls back to the Primary sender; Primary is kept so sending never breaks.
+     *
+     * @param array<string, mixed> $sender
+     */
+    public function forgetDefaultSender(array $sender): void
+    {
+        if (empty($sender['is_default']) || EmailSenderModel::normalizePurpose($sender['purpose'] ?? null) !== EmailSenderModel::PURPOSE_MARKETING) {
+            return;
+        }
+
+        $this->settings->setSesConfig(['marketing_from_email' => '', 'marketing_from_name' => '']);
+    }
+
+    public static function purposeLabel(string $purpose): string
+    {
+        return $purpose === EmailSenderModel::PURPOSE_MARKETING ? 'Promotional' : 'Primary';
     }
 
     /**
@@ -670,11 +716,12 @@ class SesIdentityService
         return null;
     }
 
-    protected function upsertSenderRow(string $email, string $name, string $domain): void
+    protected function upsertSenderRow(string $email, string $name, string $domain, ?string $purpose = null): void
     {
         $existing = $this->senders->where('type', 'sender')->where('email', $email)->first();
         $data     = [
             'type'     => 'sender',
+            'purpose'  => $purpose ?? EmailSenderModel::normalizePurpose($existing['purpose'] ?? null),
             'provider' => self::PROVIDER,
             'name'     => mb_substr($name, 0, 191),
             'email'    => $email,

@@ -6,6 +6,7 @@ namespace App\Libraries\Email;
 
 use App\Libraries\SettingsService;
 use App\Libraries\TenantContext;
+use App\Models\EmailSenderModel;
 use Config\EmailProviders;
 
 /**
@@ -25,6 +26,7 @@ class SesEmailDriver extends AbstractEmailDriver
     protected string $secretKey = '';
     protected string $region = 'ap-south-1';
     protected string $configurationSet = '';
+    protected string $marketingConfigurationSet = '';
     protected float $maxSendRate = 0.0;
     protected float $lastSendAt = 0.0;
 
@@ -45,6 +47,7 @@ class SesEmailDriver extends AbstractEmailDriver
         $this->secretKey        = trim((string) $this->settings->get('ses_secret_key', ''));
         $this->region           = trim((string) $this->settings->get('ses_region', 'ap-south-1')) ?: 'ap-south-1';
         $this->configurationSet = trim((string) $this->settings->get('ses_configuration_set', ''));
+        $this->marketingConfigurationSet = trim((string) $this->settings->get('ses_marketing_configuration_set', ''));
         $this->maxSendRate      = max(0.0, (float) $this->settings->get('ses_max_send_rate', '0'));
     }
 
@@ -67,6 +70,18 @@ class SesEmailDriver extends AbstractEmailDriver
         $isHtml = (bool) ($options['html'] ?? false);
         if (! $isHtml && (str_contains($body, '<html') || str_contains($body, '<body') || str_contains($body, '<p>') || str_contains($body, '<br') || str_contains($body, '<div>'))) {
             $isHtml = true;
+        }
+
+        $options['purpose'] = EmailSenderModel::normalizePurpose((string) ($options['purpose'] ?? ''));
+        if ($options['purpose'] === EmailSenderModel::PURPOSE_MARKETING && trim((string) ($options['from_email'] ?? '')) === '') {
+            $marketingFrom = trim((string) $this->settings->get('ses_marketing_from_email', ''));
+            if ($marketingFrom !== '') {
+                $options['from_email'] = $marketingFrom;
+                $marketingName = trim((string) $this->settings->get('ses_marketing_from_name', ''));
+                if (trim((string) ($options['from_name'] ?? '')) === '' && $marketingName !== '') {
+                    $options['from_name'] = $marketingName;
+                }
+            }
         }
 
         $from = $this->resolveFrom($options, 'ses_from_email', 'ses_from_name');
@@ -120,6 +135,7 @@ class SesEmailDriver extends AbstractEmailDriver
             'html'            => $html !== '',
             'attachments'     => $campaign['attachments'] ?? [],
             'unsubscribe_url' => $campaign['unsubscribe_url'] ?? null,
+            'purpose'         => $campaign['purpose'] ?? EmailSenderModel::PURPOSE_MARKETING,
         ];
 
         return $this->send($recipients, $subject, $body, array_filter(
@@ -322,11 +338,14 @@ class SesEmailDriver extends AbstractEmailDriver
      */
     protected function withDeliveryOptions(array $payload, array $options): array
     {
-        if ($this->configurationSet !== '') {
-            $payload['ConfigurationSetName'] = $this->configurationSet;
+        $isMarketing = ($options['purpose'] ?? '') === EmailSenderModel::PURPOSE_MARKETING;
+        $set         = $isMarketing && $this->marketingConfigurationSet !== '' ? $this->marketingConfigurationSet : $this->configurationSet;
+        if ($set !== '') {
+            $payload['ConfigurationSetName'] = $set;
         }
 
         $tags = [
+            'purpose'     => $isMarketing ? EmailSenderModel::PURPOSE_MARKETING : EmailSenderModel::PURPOSE_TRANSACTIONAL,
             'campaign'    => (string) ($options['campaign_name'] ?? ''),
             'campaign_id' => (string) ($options['campaign_id'] ?? ''),
             'log_id'      => (string) ($options['log_id'] ?? ''),

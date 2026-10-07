@@ -260,6 +260,7 @@ class Emails extends BaseController
             'html'            => $html,
             'campaign_name'   => $campaignName !== '' ? $campaignName : null,
             'unsubscribe_url' => $unsubUrl,
+            'purpose'         => \App\Models\EmailSenderModel::PURPOSE_MARKETING,
         ];
         if ($campaignName !== '') {
             // Persist latest campaign label as default for next sends.

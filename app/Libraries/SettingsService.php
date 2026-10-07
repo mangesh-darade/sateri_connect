@@ -747,6 +747,9 @@ class SettingsService
             'configuration_set' => (string) $this->get('ses_configuration_set', ''),
             'max_send_rate'     => (string) $this->get('ses_max_send_rate', ''),
             'sns_topic_arn'     => (string) $this->get('ses_sns_topic_arn', ''),
+            'marketing_from_email'        => (string) $this->get('ses_marketing_from_email', ''),
+            'marketing_from_name'         => (string) $this->get('ses_marketing_from_name', ''),
+            'marketing_configuration_set' => (string) $this->get('ses_marketing_configuration_set', ''),
         ];
     }
 
@@ -764,6 +767,9 @@ class SettingsService
             'configuration_set' => ['ses_configuration_set', 'email', false],
             'max_send_rate'     => ['ses_max_send_rate', 'email', false],
             'sns_topic_arn'     => ['ses_sns_topic_arn', 'email', false],
+            'marketing_from_email'        => ['ses_marketing_from_email', 'email', false],
+            'marketing_from_name'         => ['ses_marketing_from_name', 'email', false],
+            'marketing_configuration_set' => ['ses_marketing_configuration_set', 'email', false],
         ];
 
         foreach ($map as $inputKey => [$settingKey, $group, $encrypt]) {

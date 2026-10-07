@@ -4,7 +4,7 @@
  *
  * Markup contract:
  *   #sesIdentityForm            domain setup form (domain, email, name, dmarc_policy)
- *   #sesSenderForm              sender email form (email, name, is_default)
+ *   #sesSenderForm              sender email form (email, name, purpose, is_default)
  *   #sesDnsModal                partials/ses_dns_modal
  *   .em-ses-dns                 button inside [data-sender] row → show stored DNS records
  *   .em-ses-check[data-domain]  button → re-check verification with AWS + live DNS
@@ -212,6 +212,13 @@
     });
   });
 
+  $(document).on('change', '#sesSenderForm input[name="purpose"]', function () {
+    var form = this.form;
+    if (form.is_default) {
+      form.is_default.checked = form.getAttribute('data-default-' + this.value) !== '1';
+    }
+  });
+
   $(document).on('submit', '#sesSenderForm', function (e) {
     e.preventDefault();
     var form = this;
@@ -222,6 +229,7 @@
     post('email-manager/ses-senders', {
       email: form.email.value,
       name: form.name.value,
+      purpose: (form.querySelector('input[name="purpose"]:checked') || {}).value || 'transactional',
       is_default: form.is_default && form.is_default.checked ? 1 : 0
     }).then(function (res) {
       busy(btn, false);

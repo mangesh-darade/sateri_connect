@@ -11,6 +11,9 @@ class EmailSenderModel extends Model
 {
     use SelfHealingSchema;
 
+    public const PURPOSE_TRANSACTIONAL = 'transactional';
+    public const PURPOSE_MARKETING     = 'marketing';
+
     protected $table            = 'email_senders';
     protected $primaryKey       = 'id';
     protected $useAutoIncrement = true;
@@ -18,6 +21,7 @@ class EmailSenderModel extends Model
     protected $protectFields    = true;
     protected $allowedFields    = [
         'type',
+        'purpose',
         'provider',
         'name',
         'email',
@@ -33,6 +37,11 @@ class EmailSenderModel extends Model
     protected $useTimestamps = true;
     protected $createdField  = 'created_at';
     protected $updatedField  = 'updated_at';
+
+    public static function normalizePurpose(?string $purpose): string
+    {
+        return $purpose === self::PURPOSE_MARKETING ? self::PURPOSE_MARKETING : self::PURPOSE_TRANSACTIONAL;
+    }
 
     protected $beforeInsert = ['encodeDns'];
     protected $beforeUpdate = ['encodeDns'];

@@ -1366,7 +1366,11 @@ class AutomationEngine
         $isHtml   = $body !== strip_tags($body);
         $body     = EmailTracking::applyMarketingFooter($body, $unsubUrl, $isHtml);
 
-        $result = service('emailProvider')->send($to, $subject, $body, ['unsubscribe_url' => $unsubUrl, 'html' => $isHtml]);
+        $result = service('emailProvider')->send($to, $subject, $body, [
+            'unsubscribe_url' => $unsubUrl,
+            'html'            => $isHtml,
+            'purpose'         => \App\Models\EmailSenderModel::PURPOSE_MARKETING,
+        ]);
         if (! ($result['ok'] ?? false)) {
             $context['_action_failed'] = true;
             log_message('error', 'Automation send_email failed: {debug}', ['debug' => $result['message'] ?? 'unknown']);

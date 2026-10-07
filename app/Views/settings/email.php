@@ -9,6 +9,8 @@ $domains    = $domains ?? [];
 $senders    = $senders ?? [];
 $fromEmail  = (string) ($fromEmail ?? '');
 $fromName   = (string) ($fromName ?? '');
+$mktEmail   = (string) ($marketingFromEmail ?? '');
+$mktName    = (string) ($marketingFromName ?? '');
 $verified   = count(array_filter($domains, static fn ($d) => ($d['status'] ?? '') === 'verified'));
 
 $statusBadge = static function (?string $status): string {
@@ -45,7 +47,7 @@ $steps = [
     ['Connect AWS', 'Access key, secret & region saved', $sesReady],
     ['Add domain', 'Register your domain with SES', $domains !== []],
     ['Publish DNS', 'DKIM, MAIL FROM, SPF & DMARC', $verified > 0],
-    ['Default sender', 'From address for all emails', $fromEmail !== ''],
+    ['Default sender', 'Primary From address (+ optional Promotional)', $fromEmail !== ''],
 ];
 ?>
 
@@ -134,12 +136,14 @@ $steps = [
                     <div class="es-stat-icon bg-success-subtle text-success"><i class="fas fa-paper-plane"></i></div>
                     <div class="min-w-0">
                         <div class="text-muted small">Default From</div>
-                        <?php if ($fromEmail !== ''): ?>
-                            <div class="fw-bold text-truncate"><?= esc($fromName !== '' ? $fromName : $fromEmail) ?></div>
-                            <div class="small text-muted text-truncate"><?= esc($fromEmail) ?></div>
-                        <?php else: ?>
-                            <div class="fw-semibold text-danger small">Not set</div>
-                        <?php endif; ?>
+                        <div class="small text-truncate" title="System, automation & test emails">
+                            <span class="badge es-purpose es-purpose-transactional me-1">Primary</span>
+                            <?= $fromEmail !== '' ? esc($fromEmail) : '<span class="text-danger fw-semibold">Not set</span>' ?>
+                        </div>
+                        <div class="small text-truncate mt-1" title="Campaigns, bulk sends & drips">
+                            <span class="badge es-purpose es-purpose-marketing me-1">Promotional</span>
+                            <?= $mktEmail !== '' ? esc($mktEmail) : '<span class="text-muted">Uses Primary</span>' ?>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -290,7 +294,7 @@ $steps = [
         <div class="card-header bg-white py-3 d-flex align-items-center justify-content-between">
             <div>
                 <h6 class="mb-0 fw-bold"><i class="fas fa-at text-primary me-2"></i>Sender Emails</h6>
-                <div class="small text-muted">From addresses on your domains. The default one is used for all outgoing emails.</div>
+                <div class="small text-muted">Primary sends system, automation alerts &amp; tests. Promotional sends campaigns, bulk &amp; drips — keep it on a separate subdomain to protect your main reputation.</div>
             </div>
             <?php if ($canSetup && $domains !== []): ?>
             <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#sesAddSenderModal"><i class="fas fa-plus me-1"></i> Add Sender</button>
@@ -314,6 +318,7 @@ $steps = [
                             <th class="ps-3">From Name</th>
                             <th>Email</th>
                             <th>Domain</th>
+                            <th>Use</th>
                             <th>Status</th>
                             <th>Default</th>
                             <th class="text-end pe-3">Actions</th>
@@ -321,11 +326,17 @@ $steps = [
                     </thead>
                     <tbody>
                         <?php foreach ($senders as $s): ?>
-                        <?php $isDefault = strcasecmp((string) ($s['email'] ?? ''), $fromEmail) === 0; ?>
+                        <?php
+                        $isMarketing = ($s['purpose'] ?? '') === 'marketing';
+                        $isDefault   = strcasecmp((string) ($s['email'] ?? ''), $isMarketing ? $mktEmail : $fromEmail) === 0;
+                        ?>
                         <tr>
                             <td class="ps-3 fw-semibold"><?= esc($s['name']) ?></td>
                             <td><?= esc($s['email']) ?></td>
                             <td class="small text-muted"><?= esc($s['domain'] ?? '—') ?></td>
+                            <td>
+                                <span class="badge es-purpose es-purpose-<?= $isMarketing ? 'marketing' : 'transactional' ?>"><?= $isMarketing ? 'Promotional' : 'Primary' ?></span>
+                            </td>
                             <td><?= $statusBadge($s['status'] ?? null) ?></td>
                             <td>
                                 <?php if ($isDefault): ?>
@@ -398,7 +409,8 @@ $steps = [
 <!-- Add sender -->
 <div class="modal fade" id="sesAddSenderModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <form class="modal-content" id="sesSenderForm" novalidate>
+        <form class="modal-content" id="sesSenderForm" novalidate
+              data-default-transactional="<?= $fromEmail !== '' ? '1' : '0' ?>" data-default-marketing="<?= $mktEmail !== '' ? '1' : '0' ?>">
             <div class="modal-header">
                 <h5 class="modal-title"><i class="fas fa-at text-primary me-2"></i>Add Sender Email</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -415,9 +427,28 @@ $steps = [
                         <?= implode(', ', array_map(static fn ($d) => '<code>' . esc($d['domain']) . '</code>', $domains)) ?>
                     </div>
                 </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Use for <span class="text-danger">*</span></label>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <input type="radio" class="btn-check" name="purpose" id="sesPurposeTransactional" value="transactional" checked>
+                            <label class="es-purpose-option" for="sesPurposeTransactional">
+                                <span class="fw-semibold"><i class="fas fa-shield-alt me-1"></i>Primary</span>
+                                <span class="small text-muted">System, automation alerts, tests</span>
+                            </label>
+                        </div>
+                        <div class="col-6">
+                            <input type="radio" class="btn-check" name="purpose" id="sesPurposeMarketing" value="marketing">
+                            <label class="es-purpose-option" for="sesPurposeMarketing">
+                                <span class="fw-semibold"><i class="fas fa-bullhorn me-1"></i>Promotional</span>
+                                <span class="small text-muted">Campaigns, bulk sends, drips</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" name="is_default" id="sesSenderDefault" value="1" <?= $fromEmail === '' ? 'checked' : '' ?>>
-                    <label class="form-check-label small" for="sesSenderDefault">Use as default From address for all emails</label>
+                    <label class="form-check-label small" for="sesSenderDefault">Make this the default sender for the selected use</label>
                 </div>
                 <div class="small mt-2 js-ses-msg" data-base-class="small mt-2 js-ses-msg"></div>
             </div>
@@ -438,6 +469,11 @@ $steps = [
     .email-settings .es-stat-icon { width: 42px; height: 42px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
     .email-settings .es-step { width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: .8rem; background: #F3F4F6; color: #6B7280; flex-shrink: 0; }
     .email-settings .es-step.is-done { background: var(--bs-success); color: #fff; }
+    .es-purpose { font-weight: 600; border: 1px solid transparent; }
+    .es-purpose-transactional { background: #EEF2FF; color: #4338CA; border-color: #C7D2FE; }
+    .es-purpose-marketing { background: #FFF7ED; color: #C2410C; border-color: #FED7AA; }
+    .es-purpose-option { display: flex; flex-direction: column; gap: .15rem; height: 100%; padding: .55rem .7rem; border: 1px solid var(--bs-border-color); border-radius: 8px; cursor: pointer; }
+    .btn-check:checked + .es-purpose-option { border-color: var(--bs-primary); background: rgba(var(--bs-primary-rgb), .06); box-shadow: 0 0 0 1px var(--bs-primary); }
     .email-settings .es-empty-icon { width: 56px; height: 56px; border-radius: 50%; background: #F3F4F6; color: #9CA3AF; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
 </style>
 <?= $this->endSection() ?>

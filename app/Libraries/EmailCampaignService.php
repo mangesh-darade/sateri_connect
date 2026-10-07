@@ -96,6 +96,7 @@ class EmailCampaignService
         $unsubUrl     = EmailTracking::unsubscribeUrl($id, $perRecipient);
         $options['unsubscribe_url'] = $unsubUrl;
         $options['campaign_id']     = $id;
+        $options['purpose']         = \App\Models\EmailSenderModel::PURPOSE_MARKETING;
         $html = EmailTracking::applyMarketingFooter($html, $unsubUrl);
 
         // Pre-create log to get ID for open tracking pixel

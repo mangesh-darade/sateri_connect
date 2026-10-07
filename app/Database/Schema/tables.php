@@ -516,6 +516,7 @@ return array (
     array (
       'id' => 'int unsigned NOT NULL AUTO_INCREMENT',
       'type' => 'enum(\'sender\',\'domain\') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT \'sender\'',
+      'purpose' => 'enum(\'transactional\',\'marketing\') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT \'transactional\'',
       'provider' => 'varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL',
       'name' => 'varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL',
       'email' => 'varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL',

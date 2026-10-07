@@ -56,38 +56,54 @@ class SesBounceTrackingService
             return $this->fail(502, $this->permissionHint($sub['error'] ?: 'Could not subscribe the webhook to Amazon SNS.', 'sns:Subscribe'));
         }
 
-        $setName = trim($cfg['configuration_set']) !== '' ? trim($cfg['configuration_set']) : 'sateri-' . $suffix;
-        $created = $this->ses->apiRequest('POST', '/v2/email/configuration-sets', ['ConfigurationSetName' => $setName]);
-        if (! $created['ok'] && ! $this->isAlreadyExists($created)) {
-            return $this->fail(502, $this->permissionHint($created['error'], 'ses:CreateConfigurationSet'));
+        // Separate sets keep Primary (transactional) and Promotional (marketing) metrics apart in SES.
+        // SES configuration set names: max 64 chars (letters, digits, - and _).
+        $setName      = trim($cfg['configuration_set']) !== '' ? trim($cfg['configuration_set']) : rtrim(substr('sateri-' . $suffix, 0, 64), '-');
+        $marketingSet = trim($cfg['marketing_configuration_set']) !== ''
+            ? trim($cfg['marketing_configuration_set'])
+            : rtrim(substr($setName, 0, 54), '-_') . '-marketing';
+        $sets         = [$setName, $marketingSet];
+
+        foreach ($sets as $set) {
+            $created = $this->ses->apiRequest('POST', '/v2/email/configuration-sets', ['ConfigurationSetName' => $set]);
+            if (! $created['ok'] && ! $this->isAlreadyExists($created)) {
+                return $this->fail(502, $this->permissionHint($created['error'], 'ses:CreateConfigurationSet'));
+            }
         }
 
         $policy = $this->ses->snsRequest([
             'Action'         => 'SetTopicAttributes',
             'TopicArn'       => $arn,
             'AttributeName'  => 'Policy',
-            'AttributeValue' => $this->topicPolicy($arn, $setName),
+            'AttributeValue' => $this->topicPolicy($arn, $sets),
         ]);
         if (! $policy['ok']) {
             return $this->fail(502, $this->permissionHint($policy['error'], 'sns:SetTopicAttributes'));
         }
 
         $destination = ['Enabled' => true, 'MatchingEventTypes' => self::EVENT_TYPES, 'SnsDestination' => ['TopicArn' => $arn]];
-        $path        = '/v2/email/configuration-sets/' . rawurlencode($setName) . '/event-destinations';
-        $dest        = $this->ses->apiRequest('POST', $path, ['EventDestinationName' => self::DESTINATION, 'EventDestination' => $destination]);
-        if (! $dest['ok'] && $this->isAlreadyExists($dest)) {
-            $dest = $this->ses->apiRequest('PUT', $path . '/' . self::DESTINATION, ['EventDestination' => $destination]);
-        }
-        if (! $dest['ok']) {
-            return $this->fail(502, $this->permissionHint($dest['error'], 'ses:CreateConfigurationSetEventDestination'));
+        foreach ($sets as $set) {
+            $path = '/v2/email/configuration-sets/' . rawurlencode($set) . '/event-destinations';
+            $dest = $this->ses->apiRequest('POST', $path, ['EventDestinationName' => self::DESTINATION, 'EventDestination' => $destination]);
+            if (! $dest['ok'] && $this->isAlreadyExists($dest)) {
+                $dest = $this->ses->apiRequest('PUT', $path . '/' . self::DESTINATION, ['EventDestination' => $destination]);
+            }
+            if (! $dest['ok']) {
+                return $this->fail(502, $this->permissionHint($dest['error'], 'ses:CreateConfigurationSetEventDestination'));
+            }
         }
 
-        $this->settings->setSesConfig(['configuration_set' => $setName, 'sns_topic_arn' => $arn]);
+        $this->settings->setSesConfig([
+            'configuration_set'           => $setName,
+            'marketing_configuration_set' => $marketingSet,
+            'sns_topic_arn'               => $arn,
+        ]);
 
         log_activity('ses_bounce_tracking_connected', 'settings', 'Amazon SES bounce & delivery tracking connected', [
-            'topic_arn'         => $arn,
-            'configuration_set' => $setName,
-            'webhook'           => $webhook,
+            'topic_arn'                   => $arn,
+            'configuration_set'           => $setName,
+            'marketing_configuration_set' => $marketingSet,
+            'webhook'                     => $webhook,
         ]);
 
         return [
@@ -125,17 +141,24 @@ class SesBounceTrackingService
             'state'             => $state,
             'topic_arn'         => $arn,
             'configuration_set' => trim($cfg['configuration_set']),
+            'marketing_configuration_set' => trim($cfg['marketing_configuration_set']),
             'webhook'           => $webhook,
             'webhook_public'    => $this->isPublicHttps($webhook),
         ];
     }
 
     /**
-     * Topic access policy: account owner keeps full control, SES may publish only for this configuration set.
+     * Topic access policy: account owner keeps full control, SES may publish only for these configuration sets.
+     *
+     * @param list<string> $configurationSets
      */
-    protected function topicPolicy(string $topicArn, string $configurationSet): string
+    protected function topicPolicy(string $topicArn, array $configurationSets): string
     {
         [, , , $region, $account] = array_pad(explode(':', $topicArn), 6, '');
+        $sourceArns = array_map(
+            static fn (string $set): string => 'arn:aws:ses:' . $region . ':' . $account . ':configuration-set/' . $set,
+            $configurationSets
+        );
 
         return (string) json_encode([
             'Version'   => '2012-10-17',
@@ -155,7 +178,7 @@ class SesBounceTrackingService
                     'Resource'  => $topicArn,
                     'Condition' => ['StringEquals' => [
                         'AWS:SourceAccount' => $account,
-                        'AWS:SourceArn'     => 'arn:aws:ses:' . $region . ':' . $account . ':configuration-set/' . $configurationSet,
+                        'AWS:SourceArn'     => $sourceArns,
                     ]],
                 ],
             ],
