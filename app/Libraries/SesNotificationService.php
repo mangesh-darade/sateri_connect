@@ -42,13 +42,15 @@ class SesNotificationService
 
         $topicArn = (string) ($msg['TopicArn'] ?? '');
         $pinned   = trim((string) $this->settings->get('ses_sns_topic_arn', ''));
-        if ($pinned !== '' && ! hash_equals($pinned, $topicArn)) {
+        if ($pinned === '') {
+            log_message('warning', 'SES SNS webhook: no topic pinned, rejected {topic}.', ['topic' => $topicArn]);
+
+            return ['status' => 403, 'message' => 'SNS topic not configured. Connect bounce tracking in Settings → Email first.'];
+        }
+        if (! hash_equals($pinned, $topicArn)) {
             log_message('warning', 'SES SNS webhook: unexpected topic {topic}.', ['topic' => $topicArn]);
 
             return ['status' => 403, 'message' => 'Unexpected SNS topic.'];
-        }
-        if ($pinned === '' && $topicArn !== '') {
-            $this->settings->setSesConfig(['sns_topic_arn' => $topicArn]);
         }
 
         return match ((string) $msg['Type']) {
