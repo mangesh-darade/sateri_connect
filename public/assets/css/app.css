@@ -1455,6 +1455,99 @@ body.layout-fixed .main-sidebar > .sidebar {
     margin-top: 0.15rem;
 }
 
+.channel-panel { --channel-accent: var(--wa-green); border-top: 3px solid var(--channel-accent); }
+.channel-panel.channel-email { --channel-accent: #5b8def; }
+.channel-panel .channel-title {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+}
+.channel-chip {
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--channel-accent) 14%, white);
+    color: var(--channel-accent);
+    font-size: 0.95rem;
+}
+.channel-metrics {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.5rem;
+}
+.channel-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.6rem 0.7rem;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--channel-accent) 5%, var(--surface));
+    border: 1px solid var(--border);
+    min-width: 0;
+}
+.channel-metric-label {
+    font-size: 0.66rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+}
+.channel-metric-value {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--wa-ink);
+    letter-spacing: -0.03em;
+}
+.channel-metric-hint {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.channel-metric.is-alert {
+    background: color-mix(in srgb, #e25555 6%, var(--surface));
+    border-color: color-mix(in srgb, #e25555 30%, transparent);
+}
+.channel-metric.is-alert .channel-metric-value { color: #c43d3d; }
+.channel-head-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+.channel-head-meta strong { color: var(--wa-ink); }
+@media (max-width: 575.98px) {
+    .channel-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* Compact dashboard density */
+.dashboard-page { --section-gap: 0.7rem; }
+.dashboard-page .kpi-grid,
+.dashboard-page .dash-row { --bs-gutter-x: 0.7rem; --bs-gutter-y: 0.7rem; }
+.dashboard-page .kpi-card.kpi-compact { min-height: 0; padding: 0.6rem 0.8rem; gap: 0.1rem; }
+.dashboard-page .kpi-card.kpi-compact .kpi-value { font-size: 1.2rem; }
+.dashboard-page .kpi-card.kpi-compact .kpi-meta { display: none; }
+.dashboard-page .kpi-card.kpi-compact .kpi-icon { width: 1.7rem; height: 1.7rem; font-size: 0.75rem; top: 50%; transform: translateY(-50%); }
+.dashboard-page .dash-panel .panel-head { padding: 0.55rem 0.8rem 0.3rem; }
+.dashboard-page .dash-panel .panel-body { padding: 0.25rem 0.8rem 0.7rem; }
+.dashboard-page .dash-panel .panel-body.p-0 { padding: 0; }
+.dashboard-page .chart-frame { height: 220px; }
+.dashboard-page .channel-chip { width: 1.6rem; height: 1.6rem; font-size: 0.8rem; }
+.dashboard-page .channel-metrics { gap: 0.4rem; }
+.dashboard-page .channel-metric { padding: 0.4rem 0.55rem; gap: 0.05rem; }
+.dashboard-page .channel-metric-value { font-size: 1.05rem; }
+.dashboard-page .channel-metric-label,
+.dashboard-page .channel-metric-hint { font-size: 0.64rem; }
+.dashboard-page .table-sm > :not(caption) > * > * { padding: 0.35rem 0.6rem; font-size: 0.8rem; }
+.dashboard-page .activity-empty { padding: 1rem; }
+
 .activity-empty {
     text-align: center;
     padding: 1.75rem 1rem;

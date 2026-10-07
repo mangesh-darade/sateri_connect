@@ -4,51 +4,30 @@
 (function (window, $) {
     'use strict';
 
-    function parseJsonAttr($el, name, fallback) {
-        var raw = $el.attr(name);
-        if (!raw) {
-            return fallback;
-        }
-        try {
-            return JSON.parse(raw);
-        } catch (e) {
-            return fallback;
-        }
-    }
+    var charts = window.dashboardCharts || {};
 
     function initTrendChart() {
         var canvas = document.getElementById('chartTrends');
         if (!canvas || typeof Chart === 'undefined') {
             return;
         }
-        var $c = $(canvas);
-        var labels = parseJsonAttr($c, 'data-labels', []);
-        var sent = parseJsonAttr($c, 'data-sent', []);
-        var delivered = parseJsonAttr($c, 'data-delivered', []);
-        var read = parseJsonAttr($c, 'data-read', []);
-        var failed = parseJsonAttr($c, 'data-failed', []);
-        var replies = parseJsonAttr($c, 'data-replies', []);
-
-        if (window.dashboardCharts && window.dashboardCharts.trends) {
-            labels = window.dashboardCharts.trends.labels || labels;
-            sent = window.dashboardCharts.trends.sent || sent;
-            delivered = window.dashboardCharts.trends.delivered || delivered;
-            read = window.dashboardCharts.trends.read || read;
-            failed = window.dashboardCharts.trends.failed || failed;
-            replies = window.dashboardCharts.trends.replies || replies;
+        var t = charts.trends || {};
+        var datasets = [
+            { label: 'WhatsApp', data: t.whatsapp || [], borderColor: '#25a35a', backgroundColor: 'rgba(37,211,102,.12)', tension: 0.3, fill: true }
+        ];
+        if (canvas.getAttribute('data-show-email') === '1') {
+            datasets.push({ label: 'Email', data: t.email || [], borderColor: '#5b8def', backgroundColor: 'rgba(91,141,239,.10)', tension: 0.3, fill: true });
         }
+        datasets.push(
+            { label: 'Replies', data: t.replies || [], borderColor: '#f0a202', backgroundColor: 'transparent', borderDash: [4, 3], tension: 0.3, fill: false },
+            { label: 'Failed', data: t.failed || [], borderColor: '#e25555', backgroundColor: 'transparent', tension: 0.3, fill: false }
+        );
 
         new Chart(canvas.getContext('2d'), {
             type: 'line',
             data: {
-                labels: labels,
-                datasets: [
-                    { label: 'Sent', data: sent, borderColor: '#4b3786', backgroundColor: 'rgba(142,83,247,.15)', tension: 0.3, fill: true },
-                    { label: 'Delivered', data: delivered, borderColor: '#8e53f7', backgroundColor: 'rgba(142,83,247,.1)', tension: 0.3, fill: false },
-                    { label: 'Read', data: read, borderColor: '#34B7F1', backgroundColor: 'transparent', tension: 0.3, fill: false },
-                    { label: 'Failed', data: failed, borderColor: '#dc3545', backgroundColor: 'transparent', tension: 0.3, fill: false },
-                    { label: 'Replies', data: replies, borderColor: '#fd7e14', backgroundColor: 'transparent', tension: 0.3, fill: false }
-                ]
+                labels: t.labels || [],
+                datasets: datasets
             },
             options: {
                 responsive: true,
@@ -92,14 +71,8 @@
         if (!canvas || typeof Chart === 'undefined') {
             return;
         }
-        var $c = $(canvas);
-        var labels = parseJsonAttr($c, 'data-labels', []);
-        var values = parseJsonAttr($c, 'data-values', []);
-
-        if (window.dashboardCharts && window.dashboardCharts.campaigns) {
-            labels = window.dashboardCharts.campaigns.labels || labels;
-            values = window.dashboardCharts.campaigns.values || values;
-        }
+        var labels = (charts.campaigns && charts.campaigns.labels) || [];
+        var values = (charts.campaigns && charts.campaigns.values) || [];
 
         if (!labels.length || !values.length || sumValues(values) <= 0) {
             showCampaignEmptyState(canvas);
