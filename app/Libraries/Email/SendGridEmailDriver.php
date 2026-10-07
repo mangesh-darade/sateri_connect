@@ -93,6 +93,11 @@ class SendGridEmailDriver extends AbstractEmailDriver
             $payload['reply_to'] = ['email' => $replyTo];
         }
 
+        $headers = $this->listUnsubscribeHeaders($options, $toEmail);
+        if ($headers !== []) {
+            $payload['headers'] = $headers;
+        }
+
         try {
             $response = $this->request('POST', $this->config->sendGridApiUrl, $payload);
             $status   = (int) ($response['status'] ?? 0);
