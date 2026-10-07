@@ -152,6 +152,16 @@ class CampaignService
 
         $useCheerioBulk = $this->shouldDispatchViaCheerioBulk($campaign);
 
+        // Bulk API sends cannot be postponed per message, so refuse to start inside quiet hours;
+        // a scheduled campaign stays scheduled and starts on the next run after the window.
+        $quietUntil = $useCheerioBulk ? (new WhatsAppSendWindow())->deferUntil() : null;
+        if ($quietUntil !== null) {
+            throw new RuntimeException(
+                'Quiet hours are on (no marketing messages until ' . $quietUntil . '). Schedule this campaign for that time or later.',
+                422
+            );
+        }
+
         if ($useCheerioBulk) {
             $queued = $this->dispatchCheerioBulkCampaign($campaignId, $contactIds, $tagIds, $allActive);
         } else {
@@ -174,8 +184,9 @@ class CampaignService
             if ($queuedCount > 0) {
                 try {
                     $stats = service('queueService')->processBatch(max(50, min(500, $queuedCount)));
-                    $queued['sent']   = (int) ($stats['sent'] ?? 0);
-                    $queued['failed'] = (int) ($stats['failed'] ?? 0);
+                    $queued['sent']     = (int) ($stats['sent'] ?? 0);
+                    $queued['failed']   = (int) ($stats['failed'] ?? 0);
+                    $queued['deferred'] = (int) ($stats['deferred'] ?? 0);
                 } catch (\Throwable $e) {
                     log_message('error', 'Campaign #{id} immediate queue flush failed: {msg}', [
                         'id'  => $campaignId,
@@ -205,6 +216,12 @@ class CampaignService
         $queued['sent']   = (int) ($fresh['sent_count'] ?? ($queued['sent'] ?? 0));
         $queued['failed'] = (int) ($fresh['failed_count'] ?? ($queued['failed'] ?? 0));
         $queued['excluded_summary'] = WhatsAppConsentService::describeExclusions($queued['excluded'] ?? []);
+        if (! empty($queued['deferred'])) {
+            $window = (new WhatsAppSendWindow())->deferUntil();
+            $queued['excluded_summary'] .= ($queued['excluded_summary'] !== '' ? '; ' : '')
+                . $queued['deferred'] . ' postponed'
+                . ($window !== null ? ' (quiet hours, sends at ' . $window . ')' : ' (WhatsApp rate limit, retrying automatically)');
+        }
         $queued['consent_requested'] = $this->lastConsentRequested;
         if ($this->lastConsentRequested > 0) {
             $queued['excluded_summary'] .= ($queued['excluded_summary'] !== '' ? '; ' : '')
@@ -234,19 +251,20 @@ class CampaignService
 
         $template = $this->templates->find((int) $campaign['template_id']);
         if (! is_array($template)) {
-            return;
+            throw new RuntimeException(
+                WhatsAppConsentService::POLICY_PREFIX . ' The campaign template no longer exists. Sync templates and select an APPROVED template.',
+                422
+            );
         }
 
-        $status = strtoupper(trim((string) ($template['status'] ?? '')));
-        if ($status === 'APPROVED') {
-            return;
+        try {
+            (new WhatsAppTemplateSendGuard())->assertApproved($template);
+        } catch (RuntimeException $e) {
+            throw new RuntimeException(
+                WhatsAppConsentService::POLICY_PREFIX . ' ' . $e->getMessage() . ' Use an APPROVED template (sync templates if you just fixed it).',
+                422
+            );
         }
-
-        throw new RuntimeException(
-            WhatsAppConsentService::POLICY_PREFIX . ' Template "' . ($template['name'] ?? '') . '" is ' . ($status !== '' ? $status : 'not approved')
-            . ' on Meta. Use an APPROVED template (sync templates if you just fixed it).',
-            422
-        );
     }
 
     /**
@@ -503,6 +521,15 @@ class CampaignService
 
         foreach ($pending as $row) {
             $previous = trim((string) ($row['error_message'] ?? ''));
+
+            // Leave rows that were never attempted or are deliberately postponed (quiet hours,
+            // WhatsApp rate limit back-off) for the queue worker instead of failing them.
+            if ((string) ($row['status'] ?? '') === 'pending'
+                && ((int) ($row['attempts'] ?? 0) === 0
+                    || str_starts_with($previous, WhatsAppSendWindow::DEFER_PREFIX)
+                    || WhatsAppConsentService::isRateLimitError($previous))) {
+                continue;
+            }
             // Prefer the real provider/validation error over the generic flush message.
             $fullError = $previous !== '' ? $previous : $error;
             if ($previous !== '' && ! str_contains($previous, 'campaign start')) {
