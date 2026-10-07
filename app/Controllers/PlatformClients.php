@@ -274,6 +274,13 @@ class PlatformClients extends BaseController
             return redirect()->back()->withInput()->with('error', (string) $result['message']);
         }
 
+        log_activity('update', 'platform', 'Platform admin updated client login: ' . $key, [
+            'tenant_key'        => $key,
+            'admin_email'       => (string) $this->request->getPost('admin_email'),
+            'password_changed'  => $password !== '',
+            'platform_admin_id' => (int) session('platform_admin_id'),
+        ]);
+
         return redirect()->to('/platform/clients/' . rawurlencode($key))->with('success', (string) $result['message']);
     }
 
@@ -330,6 +337,11 @@ class PlatformClients extends BaseController
             'tenant_key'  => $key,
             'platform_impersonating' => true,
         ]);
+
+        log_activity('impersonate', 'platform', 'Platform admin opened client workspace: ' . $key, [
+            'tenant_key'        => $key,
+            'platform_admin_id' => (int) session('platform_admin_id'),
+        ], (int) $user['id']);
 
         return redirect()->to('/dashboard')->with('success', 'Opened workspace: ' . $key);
     }
@@ -425,7 +437,7 @@ class PlatformClients extends BaseController
     protected function handlePlatformUpload($file, string $prefix, int $maxBytes): string
     {
         $ext = strtolower((string) $file->getExtension());
-        if (! in_array($ext, ['png', 'jpg', 'jpeg', 'webp', 'gif', 'ico', 'svg'], true)) {
+        if (! in_array($ext, ['png', 'jpg', 'jpeg', 'webp', 'gif', 'ico'], true)) {
             return '';
         }
         if ($file->getSize() > $maxBytes) {
