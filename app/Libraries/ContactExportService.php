@@ -88,7 +88,7 @@ class ContactExportService
     public static function safeCell(mixed $value): string
     {
         $value = (string) $value;
-        if ($value !== '' && (in_array($value[0], ['=', '@'], true) || (in_array($value[0], ['+', '-'], true) && ! is_numeric(substr($value, 1))))) {
+        if ($value !== '' && (in_array($value[0], ['=', '@', "\t", "\r"], true) || (in_array($value[0], ['+', '-'], true) && ! is_numeric(substr($value, 1))))) {
             return "'" . $value;
         }
 
