@@ -20,6 +20,9 @@ class AiCopilot extends BaseController
         if (! session('user_id')) {
             return $this->jsonResponse(false, null, 'Unauthenticated. Please log in.', [], 401);
         }
+        if ($denied = $this->requirePermission('ai.use')) {
+            return $denied;
+        }
 
         if (function_exists('is_ai_enabled') && ! is_ai_enabled()) {
             return $this->jsonResponse(false, null, 'AI Assistant & Gemini Auto-Bot is disabled in Settings.', [], 403);
@@ -108,6 +111,9 @@ class AiCopilot extends BaseController
     {
         if (! session('user_id')) {
             return $this->jsonResponse(false, null, 'Unauthenticated.', [], 401);
+        }
+        if ($denied = $this->requirePermission('ai.use')) {
+            return $denied;
         }
 
         $userId = (int) session('user_id');
