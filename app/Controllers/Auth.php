@@ -21,7 +21,7 @@ class Auth extends BaseController
     public function login(): string|ResponseInterface
     {
         if ($this->session->get('user_id')) {
-            return redirect()->to('/dashboard');
+            return redirect()->to(site_url(landing_path() ?? 'dashboard'));
         }
         if ($this->session->get('platform_admin_id')) {
             return redirect()->to('/platform/clients');
@@ -55,18 +55,14 @@ class Auth extends BaseController
     public function signup(): string|ResponseInterface
     {
         if ($this->session->get('user_id')) {
-            return redirect()->to('/dashboard');
+            return redirect()->to(site_url(landing_path() ?? 'dashboard'));
         }
 
-        if (strtolower($this->request->getMethod()) === 'post') {
-            return $this->attemptSignup();
-        }
-
-        return view('auth/signup', [
-            'pageTitle' => 'Sign Up',
-            'csrfName'  => csrf_token(),
-            'csrfToken' => csrf_hash(),
-        ]);
+        // Invite-only: accounts are created by a workspace administrator (Users → Add user).
+        return redirect()->to('/login')->with(
+            'warning',
+            'Self sign-up is disabled. Ask your workspace administrator to create your account.'
+        );
     }
 
     protected function attemptLogin(): ResponseInterface
@@ -94,6 +90,15 @@ class Auth extends BaseController
 
         $email    = (string) $this->request->getPost('email');
         $password = (string) $this->request->getPost('password');
+
+        // Per-account lockout too, so attacks spread across many IPs still hit a limit.
+        $accountKey = 'login_attempts_acct_' . md5(strtolower(trim($email)));
+        if ($this->isRateLimited($accountKey)) {
+            return redirect()->back()->withInput()->with(
+                'error',
+                'Too many login attempts for this account. Please try again in 15 minutes or reset your password.'
+            );
+        }
         $postedTenant = strtolower(trim((string) $this->request->getPost('tenant_key')));
 
         // Platform super admin (master.platform_admins) — manages all clients.
@@ -151,6 +156,7 @@ class Auth extends BaseController
 
         if ($user === null || ! password_verify($password, (string) ($user['password'] ?? ''))) {
             $this->incrementAttempts($key);
+            $this->incrementAttempts($accountKey);
 
             return redirect()->back()->withInput()->with('error', 'Invalid email or password.');
         }
@@ -169,13 +175,14 @@ class Auth extends BaseController
         }
 
         $this->clearAttempts($key);
+        $this->clearAttempts($accountKey);
         $this->establishSession($user, $tenantKey ?? \App\Libraries\TenantContext::get());
 
         $users->update((int) $user['id'], ['last_login' => date('Y-m-d H:i:s')]);
 
         (new ActivityLogger())->log('login', 'auth', 'User logged in', ['user_id' => $user['id']]);
 
-        $redirect = (string) ($this->session->getFlashdata('redirect_after_login') ?: '/dashboard');
+        $redirect = (string) ($this->session->getFlashdata('redirect_after_login') ?: site_url(landing_path() ?? 'dashboard'));
 
         return redirect()->to($redirect)->with('success', 'Welcome back, ' . ($user['name'] ?? 'User') . '!');
     }
@@ -185,6 +192,8 @@ class Auth extends BaseController
      */
     protected function establishSession(array $user, ?string $tenantKey = null): void
     {
+        \App\Libraries\PermissionDefaults::ensure();
+
         $roleModel   = model(RoleModel::class);
         $role        = $roleModel->find((int) ($user['role_id'] ?? 0));
         $permissions = [];
@@ -214,6 +223,7 @@ class Auth extends BaseController
             'role_slug'   => $role['slug'] ?? null,
             'permissions' => $permissions,
             'logged_in'   => true,
+            'login_at'    => time(),
         ];
         if ($tenantKey !== null && $tenantKey !== '') {
             $sessionData['tenant_key'] = strtolower($tenantKey);
@@ -309,9 +319,18 @@ class Auth extends BaseController
         ]);
     }
 
-    public function logout(): ResponseInterface
+    public function logout(): string|ResponseInterface
     {
-        if ($this->session->get('user_id') || $this->session->get('platform_admin_id')) {
+        $loggedIn = $this->session->get('user_id') || $this->session->get('platform_admin_id');
+
+        // GET only confirms: cross-site links/images must not be able to sign the user out.
+        if (strtolower($this->request->getMethod()) !== 'post') {
+            return $loggedIn
+                ? view('auth/logout_confirm', ['pageTitle' => 'Sign out'])
+                : redirect()->to('/login');
+        }
+
+        if ($loggedIn) {
             (new ActivityLogger())->log('logout', 'auth', 'User logged out');
         }
 
@@ -340,6 +359,7 @@ class Auth extends BaseController
         }
 
         $email = (string) $this->request->getPost('email');
+        $this->connectTenantForEmail($email);
         $user  = model(UserModel::class)->findByEmail($email);
 
         // Always show success to avoid email enumeration
@@ -364,6 +384,7 @@ class Auth extends BaseController
             return $this->processReset($token);
         }
 
+        $this->connectTenantForEmail($email);
         $valid = $email !== '' && model(PasswordResetModel::class)->verifyToken($email, $token);
 
         return view('auth/reset_password', [
@@ -389,6 +410,7 @@ class Auth extends BaseController
         }
 
         $email = (string) $this->request->getPost('email');
+        $this->connectTenantForEmail($email);
         $resets = model(PasswordResetModel::class);
 
         if (! $resets->verifyToken($email, $token)) {
@@ -413,6 +435,21 @@ class Auth extends BaseController
         ]);
 
         return redirect()->to('/login')->with('success', 'Password updated. You can now log in.');
+    }
+
+    /**
+     * Portal multi-client: password reset must run against the user's workspace DB, not the default.
+     */
+    protected function connectTenantForEmail(string $email): void
+    {
+        if ($email === '' || ! \App\Libraries\MasterTenantRepository::masterConfigured()) {
+            return;
+        }
+
+        $tenantKey = (new \App\Libraries\MasterTenantRepository())->findTenantKeyByEmail($email);
+        if ($tenantKey !== null) {
+            (new \App\Libraries\TenantConnection())->apply($tenantKey, 'login');
+        }
     }
 
     protected function sendPasswordResetEmail(string $email, string $name, string $link): void
@@ -541,12 +578,8 @@ class Auth extends BaseController
      */
     protected function resolveSignupRole(): ?array
     {
-        $roles = model(RoleModel::class);
-
-        return $roles->findBySlug('agent')
-            ?? $roles->findBySlug('manager')
-            ?? $roles->findBySlug('admin')
-            ?? $roles->first();
+        // Self-registration must never fall back to a privileged role (admin / super-admin).
+        return model(RoleModel::class)->findBySlug('agent');
     }
 
     protected function isRateLimited(string $key): bool
