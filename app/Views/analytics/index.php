@@ -15,8 +15,8 @@ $emailSum = $email['summary'] ?? [];
         <div class="card-body py-3">
             <form method="get" action="<?= site_url('analytics') ?>" class="filter-bar mb-0">
                 <input type="hidden" name="tab" value="<?= esc($activeTab) ?>">
-                <input type="date" name="from" class="form-control form-control-sm" style="max-width:150px" value="<?= $from ?>" title="From">
-                <input type="date" name="to" class="form-control form-control-sm" style="max-width:150px" value="<?= $to ?>" title="To">
+                <input type="date" name="from" class="form-control form-control-sm" style="max-width:150px" value="<?= esc($from) ?>" title="From">
+                <input type="date" name="to" class="form-control form-control-sm" style="max-width:150px" value="<?= esc($to) ?>" title="To">
                 <div class="filter-bar-actions">
                     <button type="submit" class="btn btn-wa btn-sm"><i class="fas fa-filter me-1"></i> Apply</button>
                 </div>
@@ -72,10 +72,10 @@ $emailSum = $email['summary'] ?? [];
                     <div class="panel-body" style="height:320px">
                         <?php $ch = $wa['charts'] ?? []; ?>
                         <canvas id="waTrendChart"
-                            data-labels='<?= json_encode($ch['labels'] ?? []) ?>'
-                            data-sent='<?= json_encode($ch['sent'] ?? []) ?>'
-                            data-delivered='<?= json_encode($ch['delivered'] ?? []) ?>'
-                            data-failed='<?= json_encode($ch['failed'] ?? []) ?>'></canvas>
+                            data-labels='<?= json_encode($ch['labels'] ?? [], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>'
+                            data-sent='<?= json_encode($ch['sent'] ?? [], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>'
+                            data-delivered='<?= json_encode($ch['delivered'] ?? [], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>'
+                            data-failed='<?= json_encode($ch['failed'] ?? [], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>'></canvas>
                     </div>
                 </div>
             </div>
@@ -207,9 +207,9 @@ $emailSum = $email['summary'] ?? [];
                     <div class="panel-body" style="height:320px">
                         <?php $ch = $email['charts'] ?? []; ?>
                         <canvas id="emailTrendChart"
-                            data-labels='<?= json_encode($ch['labels'] ?? []) ?>'
-                            data-sent='<?= json_encode($ch['sent'] ?? []) ?>'
-                            data-failed='<?= json_encode($ch['failed'] ?? []) ?>'></canvas>
+                            data-labels='<?= json_encode($ch['labels'] ?? [], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>'
+                            data-sent='<?= json_encode($ch['sent'] ?? [], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>'
+                            data-failed='<?= json_encode($ch['failed'] ?? [], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>'></canvas>
                     </div>
                 </div>
             </div>
