@@ -33,6 +33,14 @@ class EmailCampaignService
             $options['email_builder_id'] = (string) $camp['cheerio_builder_id'];
         }
 
+        try {
+            (new EmailReputationGuard())->assertHealthy();
+        } catch (RuntimeException $e) {
+            $model->update($id, ['status' => 'paused', 'last_error' => $e->getMessage()]);
+
+            return ['ok' => false, 'sent' => 0, 'message' => $e->getMessage(), 'paused' => true];
+        }
+
         $model->update($id, ['status' => 'sending', 'last_error' => null]);
 
         $mailer = service('emailProvider');
@@ -66,21 +74,29 @@ class EmailCampaignService
             }
         }
 
-        // Filter out unsubscribed contacts
-        $recipients = model(\App\Models\EmailUnsubscribeModel::class)->filterActiveRecipients($rawRecipients);
+        // Skip unsubscribed / bounced / complained / verifier-invalid addresses
+        $filter     = (new EmailSuppressionService())->filter($rawRecipients);
+        $recipients = $filter['allowed'];
+        $skipped    = $filter['skipped'];
+
+        // Re-sending a campaign only targets recipients that have not received it yet.
+        $alreadySent = $this->alreadySentRecipients($id, $recipients);
+        if ($alreadySent !== []) {
+            $recipients = array_values(array_diff($recipients, $alreadySent));
+        }
+        if ($recipients === [] && $alreadySent !== []) {
+            $message = 'Everyone on this campaign has already received it — nothing left to send.';
+            $model->update($id, ['status' => 'sent', 'last_error' => null]);
+
+            return ['ok' => true, 'sent' => 0, 'message' => $message];
+        }
 
         // Prepare unsubscribe link and merge tags (Cheerio label sends are not personalized per recipient)
         $perRecipient = $provider !== SettingsService::EMAIL_PROVIDER_CHEERIO;
         $unsubUrl     = EmailTracking::unsubscribeUrl($id, $perRecipient);
         $options['unsubscribe_url'] = $unsubUrl;
         $options['campaign_id']     = $id;
-        if (str_contains($html, '{{unsubscribe_url}}')) {
-            $html = str_replace('{{unsubscribe_url}}', $unsubUrl, $html);
-        } else {
-            $html .= '<div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; text-align: center;">' .
-                     'To stop receiving these emails, <a href="' . htmlspecialchars($unsubUrl, ENT_QUOTES, 'UTF-8') . '" style="color: #64748b; text-decoration: underline;">unsubscribe here</a>.' .
-                     '</div>';
-        }
+        $html = EmailTracking::applyMarketingFooter($html, $unsubUrl);
 
         // Pre-create log to get ID for open tracking pixel
         $target = $mode === 'label'
@@ -101,6 +117,7 @@ class EmailCampaignService
         );
 
         if ($logId > 0) {
+            $html  = EmailTracking::rewriteLinks($html, $logId, $perRecipient);
             $html .= EmailTracking::openPixelHtml($logId, $perRecipient);
             $options['log_id'] = $logId;
         }
@@ -157,9 +174,10 @@ class EmailCampaignService
             // For SMTP, Amazon SES, SendGrid:
             if ($recipients === []) {
                 $lbl = trim((string) ($camp['label_name'] ?? ''));
-                $msg = $lbl !== ''
+                $why = $skipped !== [] ? ' ' . ucfirst(EmailSuppressionService::summary($skipped)) . '.' : '';
+                $msg = ($lbl !== ''
                     ? 'No contacts with valid email found in customer group / label "' . $lbl . '" (or all contacts unsubscribed).'
-                    : 'No active recipients on this campaign (or all unsubscribed).';
+                    : 'No active recipients on this campaign (or all unsubscribed).') . $why;
                 throw new RuntimeException($msg);
             }
             $result = $mailer->sendHtml($recipients, $subject, $html !== '' ? $html : '<p></p>', $options);
@@ -171,14 +189,26 @@ class EmailCampaignService
         if ($ok && $sentCount === 0 && $mode === 'recipients') {
             $sentCount = count($recipients);
         }
-        $failedCount = is_array($rdata['failed'] ?? null) ? count($rdata['failed']) : ($ok ? 0 : 1);
+        $failedCount = is_array($rdata['failed'] ?? null)
+            ? count($rdata['failed'])
+            : ($ok ? 0 : max(1, count($recipients) - $sentCount));
+
+        // Partial success is still a sent campaign; failed recipients show in failed_count / last_error
+        // and the next Send only retries them.
+        $delivered = $ok || $sentCount > 0;
+        $notes     = array_filter([
+            $alreadySent !== [] ? count($alreadySent) . ' already received it earlier' : '',
+            EmailSuppressionService::summary($skipped),
+        ]);
+        $message = trim((string) ($result['message'] ?? ($ok ? 'Sent' : 'Send failed')))
+            . ($notes !== [] ? ' ' . ucfirst(implode('; ', $notes)) . '.' : '');
 
         $update = [
-            'status'       => $ok ? 'sent' : 'failed',
-            'sent_count'   => $sentCount,
+            'status'       => $delivered ? 'sent' : 'failed',
+            'sent_count'   => count($alreadySent) + $sentCount,
             'failed_count' => $failedCount,
             'last_error'   => $ok ? null : (string) ($result['message'] ?? 'Send failed'),
-            'sent_at'      => $ok ? date('Y-m-d H:i:s') : null,
+            'sent_at'      => $delivered ? date('Y-m-d H:i:s') : ($camp['sent_at'] ?? null),
         ];
         if (db_connect()->fieldExists('scheduled_at', 'email_html_campaigns')) {
             $update['scheduled_at'] = null;
@@ -187,8 +217,8 @@ class EmailCampaignService
 
         if ($logId > 0) {
             model(EmailLogModel::class)->update($logId, [
-                'status'    => $ok ? 'sent' : 'failed',
-                'message'   => (string) ($result['message'] ?? ($ok ? 'Sent' : 'Failed')),
+                'status'    => $delivered ? 'sent' : 'failed',
+                'message'   => $message,
                 'meta_json' => json_encode(['result' => array_diff_key($rdata, ['recipients' => true]) ?: ($result['data'] ?? null)]),
             ]);
             model(\App\Models\EmailRecipientEventModel::class)
@@ -196,19 +226,62 @@ class EmailCampaignService
         }
 
         (new ActivityLogger())->log(
-            $ok ? 'email_campaign_sent' : 'email_campaign_failed',
+            $delivered ? 'email_campaign_sent' : 'email_campaign_failed',
             'emails',
-            ($ok ? 'Sent' : 'Failed') . ' HTML email campaign: ' . $name,
-            ['campaign_id' => $id]
+            ($delivered ? 'Sent' : 'Failed') . ' HTML email campaign: ' . $name,
+            [
+                'campaign_id'  => $id,
+                'sent'         => $sentCount,
+                'failed'       => $failedCount,
+                'skipped'      => count($skipped),
+                'already_sent' => count($alreadySent),
+            ]
         );
 
         return [
-            'ok'       => $ok,
+            'ok'       => $delivered,
             'sent'     => $sentCount,
-            'message'  => (string) ($result['message'] ?? ($ok ? 'sent' : 'failed')),
+            'failed'   => $failedCount,
+            'skipped'  => $skipped,
+            'message'  => $message,
             'provider' => (string) ($result['provider'] ?? ''),
             'data'     => $result['data'] ?? null,
         ];
+    }
+
+    /**
+     * Recipients that already have a successful send recorded for this campaign.
+     *
+     * @param list<string> $recipients
+     *
+     * @return list<string>
+     */
+    protected function alreadySentRecipients(int $campaignId, array $recipients): array
+    {
+        if ($campaignId <= 0 || $recipients === []) {
+            return [];
+        }
+
+        try {
+            $sent = [];
+            foreach (array_chunk($recipients, 500) as $chunk) {
+                $rows = model(\App\Models\EmailRecipientEventModel::class)
+                    ->select('email')
+                    ->where('campaign_id', $campaignId)
+                    ->where('event_type', \App\Models\EmailRecipientEventModel::TYPE_SENT)
+                    ->whereIn('email', $chunk)
+                    ->findColumn('email') ?: [];
+                foreach ($rows as $email) {
+                    $sent[strtolower((string) $email)] = true;
+                }
+            }
+
+            return array_values(array_filter($recipients, static fn (string $e) => isset($sent[$e])));
+        } catch (\Throwable $e) {
+            log_message('error', 'Email campaign resend lookup failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return [];
+        }
     }
 
     /**
