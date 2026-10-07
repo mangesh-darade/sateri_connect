@@ -91,6 +91,7 @@ class Messages extends BaseApiController
                     (string) ($input['template_name'] ?? $input['name'] ?? ''),
                     isset($input['language']) ? (string) $input['language'] : null
                 );
+                service('whatsAppConsent')->assertTemplateSendAllowed($contact, $tpl, $within24h, null, true);
                 $components = is_array($input['components'] ?? null) ? $input['components'] : [];
                 if ($components === [] && is_array($input['variables'] ?? null)) {
                     $components = $guard->buildBodyComponents($tpl, $input['variables']);
@@ -133,12 +134,14 @@ class Messages extends BaseApiController
                 'last_message_at' => date('Y-m-d H:i:s'),
             ]);
 
+            log_activity('send', 'api', 'API WhatsApp ' . $type . ' sent', ['contact_id' => $contactId, 'message_id' => (int) $messageId]);
+
             return $this->respondSuccess([
                 'message'  => model(MessageModel::class)->find((int) $messageId),
                 'api'      => $result,
             ], 'Message sent.', 201);
         } catch (Throwable $e) {
-            return $this->respondError($e->getMessage(), [], 500);
+            return $this->respondSendError($e);
         }
     }
 
@@ -234,6 +237,7 @@ class Messages extends BaseApiController
                     (string) ($input['template_name'] ?? $input['name'] ?? ''),
                     isset($input['language']) ? (string) $input['language'] : null
                 );
+                service('whatsAppConsent')->assertTemplateSendAllowed($contact, $tpl, $within24h, null, true);
                 $components = is_array($input['components'] ?? null) ? $input['components'] : [];
                 if ($components === [] && is_array($input['variables'] ?? null)) {
                     $components = $guard->buildBodyComponents($tpl, $input['variables']);
@@ -270,9 +274,25 @@ class Messages extends BaseApiController
                 'last_message_at' => date('Y-m-d H:i:s'),
             ]);
 
+            log_activity('send', 'api', 'API WhatsApp ' . $type . ' sent', ['contact_id' => $contactId, 'message_id' => (int) $messageId]);
+
             return $this->respondSuccess(model(MessageModel::class)->find((int) $messageId), 'Message sent.', 201);
         } catch (Throwable $e) {
-            return $this->respondError($e->getMessage(), [], 500);
+            return $this->respondSendError($e);
         }
+    }
+
+    /**
+     * Policy / template validation failures are client errors (4xx); everything else is 500.
+     */
+    protected function respondSendError(Throwable $e): ResponseInterface
+    {
+        $code    = (int) $e->getCode();
+        $message = $e->getMessage();
+        if (str_starts_with($message, \App\Libraries\WhatsAppConsentService::POLICY_PREFIX)) {
+            return $this->respondError(trim(substr($message, strlen(\App\Libraries\WhatsAppConsentService::POLICY_PREFIX))), ['policy' => 'whatsapp'], 422);
+        }
+
+        return $this->respondError($message, [], in_array($code, [403, 404, 422], true) ? $code : 500);
     }
 }
