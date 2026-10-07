@@ -183,8 +183,10 @@ $isCheerio = ! empty($isCheerio);
                                 'sent', 'completed' => 'bg-success-subtle text-success border border-success-subtle',
                                 'failed'            => 'bg-danger-subtle text-danger border border-danger-subtle',
                                 'sending'           => 'bg-info-subtle text-info border border-info-subtle',
+                                'paused'            => 'bg-warning-subtle text-warning-emphasis border border-warning-subtle',
                                 default             => 'bg-secondary-subtle text-secondary border border-secondary-subtle',
                             };
+                            $canRetryFailed = $campaignStatus === 'sent' && (int) ($c['failed_count'] ?? 0) > 0;
                             ?>
                             <tr>
                                 <td>
@@ -202,8 +204,13 @@ $isCheerio = ! empty($isCheerio);
                                 </td>
                                 <td>
                                     <span class="badge <?= $stBadge ?> rounded-pill px-2 py-1">
-                                        <?= esc(ucfirst($campaignStatus)) ?>
+                                        <?= esc($canRetryFailed ? 'Sent with errors' : ucfirst($campaignStatus)) ?>
                                     </span>
+                                    <?php if (in_array($campaignStatus, ['paused', 'failed'], true) && ! empty($c['last_error'])): ?>
+                                        <div class="text-muted small text-truncate" style="max-width: 220px;" title="<?= esc((string) $c['last_error'], 'attr') ?>">
+                                            <?= esc((string) $c['last_error']) ?>
+                                        </div>
+                                    <?php endif; ?>
                                 </td>
                                 <td>
                                     <span class="text-success fw-semibold"><?= (int) ($c['sent_count'] ?? 0) ?></span>
@@ -214,9 +221,13 @@ $isCheerio = ! empty($isCheerio);
                                     <a href="<?= site_url('campaigns/email/' . $campaignId) ?>" class="btn btn-xs btn-outline-secondary me-1" title="View details">
                                         <i class="fas fa-eye me-1"></i> View
                                     </a>
-                                    <?php if ($canSend && $campaignId > 0 && in_array($campaignStatus, ['draft', 'failed'], true)): ?>
-                                        <button type="button" class="btn btn-xs btn-primary em-send-camp" data-id="<?= $campaignId ?>" title="Broadcast campaign now">
-                                            <i class="fas fa-paper-plane me-1"></i> Send
+                                    <?php if ($canSend && $campaignId > 0 && in_array($campaignStatus, ['draft', 'failed', 'paused'], true)): ?>
+                                        <button type="button" class="btn btn-xs btn-primary em-send-camp" data-id="<?= $campaignId ?>" title="<?= $campaignStatus === 'draft' ? 'Broadcast campaign now' : 'Send to recipients who have not received it yet' ?>">
+                                            <i class="fas fa-paper-plane me-1"></i> <?= $campaignStatus === 'draft' ? 'Send' : ($campaignStatus === 'paused' ? 'Resume' : 'Retry') ?>
+                                        </button>
+                                    <?php elseif ($canSend && $campaignId > 0 && $canRetryFailed): ?>
+                                        <button type="button" class="btn btn-xs btn-outline-primary em-send-camp" data-id="<?= $campaignId ?>" title="Send only to recipients that failed">
+                                            <i class="fas fa-redo me-1"></i> Retry failed
                                         </button>
                                     <?php endif; ?>
                                     <?php if ($canSend && $campaignId > 0): ?>
