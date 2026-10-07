@@ -12,11 +12,8 @@
     $platformLogoUrl  = $platformBranding['logo_url'];
     ?>
     <title><?= esc($pageTitle ?? 'Platform') ?> | <?= esc($platformSiteName) ?></title>
-    <?php if ($platformFavicon !== ''): ?>
-        <link rel="icon" href="<?= esc($platformFavicon) ?>">
-        <link rel="shortcut icon" href="<?= esc($platformFavicon) ?>">
-        <link rel="apple-touch-icon" href="<?= esc($platformFavicon) ?>">
-    <?php endif; ?>
+    <?php helper('settings'); ?>
+    <?= favicon_link_tags($platformFavicon, (string) ($pageTitle ?? 'Platform')) ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
@@ -77,10 +74,13 @@ $brandInitial = mb_strtoupper(mb_substr($platformSiteName !== '' ? $platformSite
                     <i class="fas fa-user-shield" aria-hidden="true"></i>
                     <span><?= esc($platformName) ?></span>
                 </div>
-                <a href="<?= site_url('logout') ?>" class="platform-side-link is-danger">
-                    <i class="fas fa-right-from-bracket" aria-hidden="true"></i>
-                    <span>Logout</span>
-                </a>
+                <form action="<?= site_url('logout') ?>" method="post" style="margin:0">
+                    <?= csrf_field() ?>
+                    <button type="submit" class="platform-side-link is-danger">
+                        <i class="fas fa-right-from-bracket" aria-hidden="true"></i>
+                        <span>Logout</span>
+                    </button>
+                </form>
                 <?php if (! empty($platformBranding['powered_by_enabled'])): ?>
                     <div style="margin-top:0.75rem;padding-top:0.65rem;border-top:1px solid rgba(255,255,255,0.08);font-size:0.7rem;color:rgba(232,238,240,0.5);display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:wrap">
                         <span>Powered by</span>
