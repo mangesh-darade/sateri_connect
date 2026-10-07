@@ -80,6 +80,10 @@ class SmtpEmailDriver extends AbstractEmailDriver
                 $email->setReplyTo($replyTo);
             }
 
+            foreach ($this->listUnsubscribeHeaders($options, $toEmail) as $name => $value) {
+                $email->setHeader($name, $value);
+            }
+
             $attachments = (array) ($options['attachments'] ?? []);
             foreach ($attachments as $att) {
                 $filePath = (string) ($att['path'] ?? '');
@@ -167,6 +171,7 @@ class SmtpEmailDriver extends AbstractEmailDriver
             'reply_to'    => $campaign['reply_to'] ?? null,
             'html'        => $html !== '',
             'attachments' => $campaign['attachments'] ?? [],
+            'unsubscribe_url' => $campaign['unsubscribe_url'] ?? null,
         ];
 
         return $this->send($recipients, $subject, $body, array_filter(
