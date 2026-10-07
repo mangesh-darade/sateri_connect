@@ -578,7 +578,7 @@ class Contacts extends BaseController
     }
 
     /**
-     * Single-contact WhatsApp consent action (AJAX): opt_in | opt_out | clear_suppression.
+     * Single-contact WhatsApp consent action (AJAX): opt_in | opt_out | clear_suppression | request_opt_in.
      */
     public function consent(int $id): ResponseInterface
     {
@@ -621,6 +621,17 @@ class Contacts extends BaseController
             case 'clear_suppression':
                 $service->clearSuppression($id);
                 $msg = 'Delivery pause cleared.';
+                break;
+            case 'request_opt_in':
+                $result = $service->requestConsentManually($id);
+                (new ActivityLogger())->log('wa_consent_request', 'contacts', 'WhatsApp opt-in request ' . ($result['ok'] ? 'sent' : 'not sent'), [
+                    'contact_id' => $id,
+                    'message'    => $result['message'],
+                ]);
+                if (! $result['ok']) {
+                    return $this->jsonResponse(false, null, $result['message'], [], 422);
+                }
+                $msg = $result['message'];
                 break;
             default:
                 return $this->jsonResponse(false, null, 'Unknown consent action.', [], 422);
