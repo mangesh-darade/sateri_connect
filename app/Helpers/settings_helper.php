@@ -50,6 +50,31 @@ if (! function_exists('setting_asset_url')) {
     }
 }
 
+if (! function_exists('favicon_link_tags')) {
+    /**
+     * Favicon <link> tags: the uploaded icon when set, otherwise a generated badge with the
+     * first letter of the page title (so the browser never falls back to /favicon.ico).
+     */
+    function favicon_link_tags(string $faviconUrl, string $title): string
+    {
+        if ($faviconUrl === '') {
+            $letter = mb_strtoupper(mb_substr(trim($title), 0, 1)) ?: 'S';
+            $svg    = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
+                . '<rect width="64" height="64" rx="14" fill="#0b6e4f"/>'
+                . '<text x="32" y="44" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif" font-size="36" font-weight="700" fill="#fff">'
+                . htmlspecialchars($letter, ENT_XML1 | ENT_QUOTES, 'UTF-8')
+                . '</text></svg>';
+            $faviconUrl = 'data:image/svg+xml,' . rawurlencode($svg);
+        }
+
+        $href = htmlspecialchars($faviconUrl, ENT_QUOTES, 'UTF-8');
+
+        return '<link rel="icon" href="' . $href . '">' . "\n"
+            . '    <link rel="shortcut icon" href="' . $href . '">' . "\n"
+            . '    <link rel="apple-touch-icon" href="' . $href . '">';
+    }
+}
+
 if (! function_exists('whatsapp_provider')) {
     /** Active WhatsApp transport: cheerio | meta */
     function whatsapp_provider(): string
