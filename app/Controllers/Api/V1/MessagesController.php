@@ -9,6 +9,7 @@ use App\Models\ContactModel;
 use App\Models\ConversationModel;
 use App\Models\MessageModel;
 use CodeIgniter\HTTP\ResponseInterface;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -159,21 +160,31 @@ class MessagesController extends BaseV1Controller
             $contact = $contactModel->findOrCreateForChannel('whatsapp', $phone, ['mobile' => $phone]);
             $contactId = (int) $contact['id'];
 
-            // Meta Policy: Check recipient opt-out status (STOP)
-            $consentService = new \App\Libraries\WhatsAppConsentService();
-            if ($consentService->isOptedOut($contact)) {
-                return $this->respondError(
-                    'Recipient has opted out of WhatsApp messages from this business (STOP). Under Meta policy, messages cannot be delivered.',
-                    422,
-                    ['policy' => 'meta_consent', 'code' => 'RECIPIENT_OPTED_OUT']
-                );
-            }
-            if (($contact['status'] ?? '') === 'blocked') {
-                return $this->respondError('Recipient contact is marked as blocked in your CRM.', 403);
+            $guard = new WhatsAppTemplateSendGuard();
+            try {
+                $tpl = $guard->resolveApprovedTemplate(null, $templateName, $language);
+            } catch (RuntimeException $e) {
+                return $this->respondError($e->getMessage(), 422, ['policy' => 'template', 'code' => 'TEMPLATE_NOT_SENDABLE']);
             }
 
-            $guard = new WhatsAppTemplateSendGuard();
-            $tpl   = $guard->resolveApprovedTemplate(null, $templateName, $language);
+            // Same WhatsApp policy gate as campaigns / queue (opt-in, suppression, approval, caps, daily limit).
+            $consentService = service('whatsAppConsent');
+            if (filter_var($input['opt_in'] ?? false, FILTER_VALIDATE_BOOLEAN) && ! $consentService->isOptedOut($contact)) {
+                $consentService->optIn($contactId, (string) ($input['opt_in_source'] ?? 'api'));
+                $contact = $contactModel->find($contactId) ?? $contact;
+            }
+            $check = $consentService->templateSendCheck($contact, $tpl, null, null, true);
+            if (! $check['ok']) {
+                return $this->respondError(
+                    $check['message'],
+                    422,
+                    [
+                        'policy'        => 'meta_consent',
+                        'code'          => $check['reason'] === 'opted_out' ? 'RECIPIENT_OPTED_OUT' : strtoupper('POLICY_' . $check['reason']),
+                        'policy_reason' => $check['reason'],
+                    ]
+                );
+            }
 
             $components = is_array($input['components'] ?? null) ? $input['components'] : [];
             if ($components === [] && is_array($input['variables'] ?? null)) {
@@ -235,6 +246,12 @@ class MessagesController extends BaseV1Controller
                 'last_message_id' => $msgId,
                 'last_message_at' => date('Y-m-d H:i:s'),
                 'status'          => 'open',
+            ]);
+
+            log_activity('send', 'api', 'API WhatsApp template sent: ' . $tpl['name'], [
+                'contact_id' => $contactId,
+                'message_id' => (int) $msgId,
+                'category'   => (string) ($tpl['category'] ?? ''),
             ]);
 
             return $this->respondSuccess([
