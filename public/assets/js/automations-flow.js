@@ -597,6 +597,55 @@
         return html;
     }
 
+    /**
+     * "+ Variable" picker under a text field: click a chip to insert {{…}} at the cursor.
+     * target = data-k of the .insp field it fills.
+     */
+    function varPickerHtml(target) {
+        var chip = function (token, text) {
+            return '<button type="button" class="btn btn-sm btn-light border insp-var-insert" data-token="' + esc(token) + '">' + esc(text) + '</button>';
+        };
+        var group = function (title, chips) {
+            return chips ? '<div class="small text-muted mt-2 mb-1">' + esc(title) + '</div><div class="d-flex flex-wrap gap-1">' + chips + '</div>' : '';
+        };
+
+        var contactChips = chip('{{contact.name}}', 'Name') + chip('{{contact.mobile}}', 'Mobile') + chip('{{contact.email}}', 'Email');
+
+        var defs = Flow.meta.attribute_defs || {};
+        var attrChips = '';
+        var seen = {};
+        Object.keys(defs).forEach(function (k) {
+            seen[k] = true;
+            attrChips += chip('{{attributes.' + k + '}}', defs[k].label || k);
+        });
+        knownAttributes([]).forEach(function (k) {
+            if (seen[k] || CORE_ATTR_LABELS[k]) return;
+            attrChips += chip('{{attributes.' + k + '}}', k);
+        });
+
+        return '<div class="insp-var-picker mt-1" data-target="' + esc(target) + '">' +
+            '<button type="button" class="btn btn-sm btn-outline-primary insp-var-toggle"><i class="fas fa-plus me-1"></i>Variable</button>' +
+            '<div class="insp-var-menu d-none border rounded p-2 mt-1 bg-white">' +
+                group('Contact', contactChips) +
+                group('Attributes', attrChips) +
+                group('Flow', chip('{{answer}}', 'Last answer')) +
+            '</div></div>';
+    }
+
+    function insertVarToken($picker, token) {
+        var $field = $('#inspectorBody .insp[data-k="' + $picker.data('target') + '"]').first();
+        if (!$field.length) return;
+        var el = $field[0];
+        var val = String($field.val() || '');
+        var start = typeof el.selectionStart === 'number' ? el.selectionStart : val.length;
+        var end = typeof el.selectionEnd === 'number' ? el.selectionEnd : val.length;
+        $field.val(val.slice(0, start) + token + val.slice(end));
+        el.focus();
+        var pos = start + token.length;
+        if (el.setSelectionRange) el.setSelectionRange(pos, pos);
+        $field.trigger('input');
+    }
+
     function knownAttributes(extra) {
         var set = {};
         (Flow.meta.attributes || []).forEach(function (k) { if (k) set[String(k)] = true; });
@@ -807,17 +856,21 @@
             html += inspHint('Business-initiated outreach (outside 24h window) via approved WA template. Sent only to contacts with recorded WhatsApp opt-in.');
             html += templateSelectHtml(d);
             html += '<label>Fallback note (optional)</label><textarea class="form-control insp" data-k="text" rows="2">' + esc(d.text || '') + '</textarea>';
+            html += varPickerHtml('text');
         } else if (a === 'response_message' || a === 'send_text') {
             html += '<label>Message text</label><textarea class="form-control insp" data-k="text" rows="4" placeholder="Hi {{contact.name}}!">' + esc(d.text || d.note || '') + '</textarea>';
-            html += inspHint('Use {{contact.name}}, {{contact.mobile}} placeholders.');
+            html += varPickerHtml('text');
+            html += inspHint('Click "+ Variable" to insert the customer name, an attribute or the last answer.');
             html += inspHint('WhatsApp policy: free text is delivered only if the customer messaged you in the last 24h. For other triggers (new contact, Shopify, birthday…) use Send template. Contacts who sent STOP get no automated replies.');
         } else if (a === 'collect_images') {
             html += '<label>How many images?</label><input type="number" min="1" max="20" class="form-control insp" data-k="count" value="' + esc(d.count || d.max_images || 1) + '">';
             html += '<label>Prompt message</label><textarea class="form-control insp" data-k="prompt" rows="3" placeholder="Please send your photo…">' + esc(d.prompt || d.text || '') + '</textarea>';
+            html += varPickerHtml('prompt');
             html += inspHint('Asks the contact for images, then stores them on the contact until the count is met.');
         } else if (a === 'ask_question') {
             var rt = d.reply_type || 'text';
             html += '<label>Question</label><textarea class="form-control insp" data-k="text" rows="3" placeholder="Which city are you from?">' + esc(d.text || '') + '</textarea>';
+            html += varPickerHtml('text');
             html += '<label>Answer type</label><select class="form-select insp" data-k="reply_type">';
             [['text', 'Free text'], ['buttons', 'Buttons (max 3)'], ['list', 'List (max 10)']].forEach(function (p) {
                 html += '<option value="' + p[0] + '"' + (rt === p[0] ? ' selected' : '') + '>' + p[1] + '</option>';
@@ -840,7 +893,7 @@
             html += attrDropdownHtml({ k: 'save_as', label: 'Save answer to attribute', cur: d.save_as || '', empty: "— Don't save —", noMobile: true });
             html += '<label>Wrong answer message</label><input class="form-control insp" data-k="retry_text" value="' + esc(d.retry_text || '') + '" placeholder="Please choose one of the options.">';
             html += '<label>Wait for reply (minutes)</label><input type="number" min="1" max="10080" class="form-control insp" data-k="timeout_minutes" value="' + esc(d.timeout_minutes || 1440) + '">';
-            html += inspHint('The flow waits for the reply. A wrong answer is asked once more; no reply in time follows the "No reply" path. Use {{answer}} or {{attributes.' + (d.save_as || 'city') + '}} in later nodes.');
+            html += inspHint('The flow waits for the reply. A wrong answer is asked once more; no reply in time follows the "No reply" path. In later nodes use "+ Variable" → Last answer, or the attribute you saved it to.');
         } else if (a === 'send_media') {
             html += '<label>Media type</label><select class="form-select insp" data-k="media_type">';
             ['image', 'video', 'document'].forEach(function (t) {
@@ -849,6 +902,7 @@
             html += '</select>';
             html += '<label>Media URL</label><input class="form-control insp" data-k="media_url" value="' + esc(d.media_url || '') + '" placeholder="https://…/brochure.pdf">';
             html += '<label>Caption (optional)</label><textarea class="form-control insp" data-k="caption" rows="2">' + esc(d.caption || '') + '</textarea>';
+            html += varPickerHtml('caption');
             if ((d.media_type || 'image') === 'document') {
                 html += '<label>File name (optional)</label><input class="form-control insp" data-k="filename" value="' + esc(d.filename || '') + '" placeholder="brochure.pdf">';
             }
@@ -863,7 +917,8 @@
             html += attributeSelectHtml(d, { noMobile: true });
             html += '<label>New value</label><input class="form-control insp" data-k="text" list="inspAttrValueList" value="' + esc(d.text || d.attributeNewValue || '') + '" placeholder="Value or {{contact.name}}">';
             html += '<datalist id="inspAttrValueList"></datalist><div class="small text-muted mt-1" id="inspAttrTypeHint"></div>';
-            html += inspHint('Core fields (name, email…) update the contact row; others go into custom attributes. Use {{answer}} or {{message}}-style variables for dynamic values.');
+            html += varPickerHtml('text');
+            html += inspHint('Core fields (name, email…) update the contact row; others go into custom attributes. Use "+ Variable" for dynamic values.');
         } else if (a === 'assign_agent') {
             html += agentSelectHtml(d);
         } else if (a === 'assign_bot') {
@@ -877,10 +932,13 @@
         } else if (a === 'send_email') {
             html += '<label>To (optional)</label><input class="form-control insp" data-k="to" value="' + esc(d.to || '') + '" placeholder="Leave blank = contact email">';
             html += '<label>Subject</label><input class="form-control insp" data-k="subject" value="' + esc(d.subject || '') + '">';
+            html += varPickerHtml('subject');
             html += '<label>Body</label><textarea class="form-control insp" data-k="text" rows="4">' + esc(d.text || d.body || '') + '</textarea>';
-            html += inspHint('Uses the active Email provider. Placeholders: {{contact.name}}, {{contact.email}}.');
+            html += varPickerHtml('text');
+            html += inspHint('Uses the active Email provider.');
         } else if (a === 'add_note') {
             html += '<label>Note</label><textarea class="form-control insp" data-k="text" rows="3">' + esc(d.text || d.note || '') + '</textarea>';
+            html += varPickerHtml('text');
         } else if (a === 'delay') {
             html += '<label>Delay (minutes)</label><input type="number" min="1" class="form-control insp" data-k="minutes" value="' + esc(d.minutes || Math.round((d.seconds || 60) / 60) || 1) + '">';
         } else if (a === 'webhook' || a === 'webhook_call') {
@@ -1444,6 +1502,15 @@
 
         $('#inspectorBody').on('change input', '.insp', function () {
             applyInspector($(this));
+        });
+        $('#inspectorBody').on('click', '.insp-var-toggle', function () {
+            $(this).siblings('.insp-var-menu').toggleClass('d-none');
+        });
+        $('#inspectorBody').on('mousedown', '.insp-var-insert', function (e) {
+            e.preventDefault();
+        });
+        $('#inspectorBody').on('click', '.insp-var-insert', function () {
+            insertVarToken($(this).closest('.insp-var-picker'), String($(this).data('token')));
         });
         $('#inspectorBody').on('change input', '.insp-var', function () {
             var node = findNode(Flow.selectedId);
