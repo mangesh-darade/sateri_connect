@@ -107,6 +107,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('settings/test-elintom', 'Settings::testElintOm', ['filter' => 'csrf']);
     $routes->post('settings/sync-elintom', 'Settings::syncElintOm', ['filter' => 'csrf']);
     $routes->post('settings/test-whatsapp', 'Settings::testCheerio', ['filter' => 'csrf']); // active provider via UI uses specific buttons
+    $routes->post('settings/setup-webhook', 'Settings::setupWebhook', ['filter' => 'csrf']);
     $routes->post('settings/test-ai', 'Settings::testAi', ['filter' => 'csrf']);
     $routes->post('settings/api-tokens/generate', 'Settings::generateApiToken', ['filter' => 'csrf']);
     $routes->post('settings/api-tokens/(:num)/delete', 'Settings::deleteApiToken/$1', ['filter' => 'csrf']);
