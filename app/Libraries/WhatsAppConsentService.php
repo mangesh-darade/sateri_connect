@@ -911,10 +911,11 @@ class WhatsAppConsentService
 
     /**
      * Customer asked for a person: alert the team and acknowledge in chat.
+     * $sendReply = false when a workflow already answered the customer.
      *
      * @param array<string, mixed> $contact
      */
-    public function escalateToHuman(array $contact, ?string $provider = null): void
+    public function escalateToHuman(array $contact, ?string $provider = null, bool $sendReply = true): void
     {
         $contactId = (int) ($contact['id'] ?? 0);
         if ($contactId <= 0) {
@@ -933,7 +934,9 @@ class WhatsAppConsentService
             log_message('warning', 'Human escalation notify failed: {msg}', ['msg' => $e->getMessage()]);
         }
 
-        $this->sendComplianceReply($contact, $this->config->humanAgentReply, $provider);
+        if ($sendReply) {
+            $this->sendComplianceReply($contact, $this->config->humanAgentReply, $provider);
+        }
         $this->log('wa_human_escalation', 'Customer requested a human agent', ['contact_id' => $contactId]);
     }
 

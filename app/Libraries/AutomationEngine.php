@@ -1108,6 +1108,23 @@ class AutomationEngine
     }
 
     /**
+     * Drop open "Ask question" waits for a contact (e.g. customer asked for a human agent).
+     */
+    public function cancelAwaitedReplies(int $contactId): int
+    {
+        $db = db_connect();
+        if ($contactId <= 0 || ! $db->tableExists('automation_delayed_jobs')) {
+            return 0;
+        }
+        $db->table('automation_delayed_jobs')
+            ->where('contact_id', $contactId)
+            ->where('status', 'awaiting_reply')
+            ->update(['status' => 'cancelled', 'updated_at' => date('Y-m-d H:i:s')]);
+
+        return $db->affectedRows();
+    }
+
+    /**
      * Inbound message for a contact with an open Ask question: validate, save to the attribute,
      * and continue on the chosen option's branch. Returns true when the message was consumed.
      *

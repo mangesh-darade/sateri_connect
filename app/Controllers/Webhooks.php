@@ -651,8 +651,14 @@ class Webhooks extends Controller
             return;
         }
 
+        // "agent" / "human": leave any open question, let workflows answer, then always alert staff.
+        $wantsHuman = $consentIntent === WhatsAppConsentService::INTENT_HUMAN;
+        if ($wantsHuman) {
+            service('automationEngine')->cancelAwaitedReplies($contactId);
+        }
+
         // Reply to an open workflow "Ask question": continue that flow instead of starting new ones.
-        if ($autoReplyAllowed) {
+        if ($autoReplyAllowed && ! $wantsHuman) {
             try {
                 $wa = service('whatsApp');
                 $wa->forceProvider($activeProvider);
@@ -716,13 +722,6 @@ class Webhooks extends Controller
             return;
         }
 
-        // Policy: automated chats must offer a direct path to a person.
-        if (! $botMatched && $consentIntent === WhatsAppConsentService::INTENT_HUMAN) {
-            $consent->escalateToHuman($contact, $activeProvider);
-
-            return;
-        }
-
         try {
             $wa = service('whatsApp');
             $wa->forceProvider($activeProvider);
@@ -766,11 +765,17 @@ class Webhooks extends Controller
             // AI Smart Assistant / Fallback:
             // When neither Keyword Bot nor Automation workflows triggered, invoke AI
             $hasExecutedAction = ($autoRes1['executed'] ?? 0) > 0 || ($autoRes2['executed'] ?? 0) > 0;
-            if (! $botMatched && ! $hasExecutedAction && $runKeywordMatch) {
-                $this->handleAiAutoReply($contactId, (int) $conversation['id'], $keywordText, $from, $channel, $activeProvider);
+            // Policy: automated chats must offer a direct path to a person.
+            if ($wantsHuman) {
+                $consent->escalateToHuman($contact, $activeProvider, ! $botMatched && ! $hasExecutedAction);
+            } elseif (! $botMatched && ! $hasExecutedAction && $runKeywordMatch) {
+                $this->handleAiAutoReply($contactId, (int) $conversation['id'], $keywordText, $from, 'whatsapp', $activeProvider);
             }
         } catch (Throwable $e) {
             log_message('error', 'Automation trigger error: {msg}', ['msg' => $e->getMessage()]);
+            if ($wantsHuman) {
+                $consent->escalateToHuman($contact, $activeProvider);
+            }
         } finally {
             try {
                 service('whatsApp')->clearForcedProvider();
