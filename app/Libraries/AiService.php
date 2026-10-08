@@ -313,6 +313,78 @@ PROMPT;
     }
 
     /**
+     * Draft or rewrite a marketing email (subject + body HTML fragment for the visual editor).
+     * When $currentHtml is given, the brief is treated as an edit instruction for that draft.
+     *
+     * @return array{success: bool, subject: string, html: string, error: string}
+     */
+    public function writeEmail(string $brief, string $tone = 'friendly', string $language = 'English', string $currentSubject = '', string $currentHtml = ''): array
+    {
+        $fail = static fn (string $msg): array => ['success' => false, 'subject' => '', 'html' => '', 'error' => $msg];
+
+        if (! $this->isConfigured()) {
+            return $fail('AI assistant is not configured or disabled in Settings → AI.');
+        }
+        $brief = trim($brief);
+        if ($brief === '') {
+            return $fail('Describe what the email should say.');
+        }
+
+        $config       = $this->settings->getAiConfig();
+        $businessName = trim((string) ($config['business_name'] ?: 'Our Business'));
+        $model        = trim((string) ($config['model'] ?: 'gemini-flash-latest'));
+
+        $instructions = "You are an expert email marketing copywriter for '{$businessName}'.\n"
+            . "Write in {$language} with a {$tone} tone. Be clear, concise and persuasive; one clear call to action.\n"
+            . "Return ONLY valid JSON: {\"subject\": \"...\", \"html\": \"...\"}. No markdown fences.\n"
+            . "Rules for subject: under 70 characters, no ALL CAPS, no spammy words, at most one emoji.\n"
+            . "Rules for html: an HTML body FRAGMENT only (no <html>, <head>, <body>, <style> or <script>). "
+            . "Use simple tags: <p>, <h2>, <h3>, <strong>, <em>, <ul>, <li>, <a>, <br>, <hr>. "
+            . "Inline styles only if needed. Start with a greeting using {{first_name}}. "
+            . "Use [placeholders] for facts you do not know (prices, dates, links). "
+            . "Do NOT add an unsubscribe link or footer — it is added automatically.";
+
+        $userText = "Brief: {$brief}";
+        if (trim($currentHtml) !== '') {
+            $userText = "Current subject: {$currentSubject}\nCurrent email HTML:\n" . mb_substr($currentHtml, 0, 12000)
+                . "\n\nEdit the email according to this instruction and return the full updated subject and html: {$brief}";
+        }
+
+        $payload = [
+            'system_instruction' => ['parts' => [['text' => $instructions]]],
+            'contents'           => [['role' => 'user', 'parts' => [['text' => $userText]]]],
+            'generationConfig'   => [
+                'temperature'      => 0.7,
+                'maxOutputTokens'  => 4096,
+                'responseMimeType' => 'application/json',
+            ],
+        ];
+
+        $res = $this->requestGemini(trim((string) $config['api_key']), $model, $payload);
+        if (! $res['success']) {
+            return $fail((string) ($res['error'] ?? 'AI request failed.'));
+        }
+
+        $clean   = trim(preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim((string) $res['text'])) ?? '');
+        $decoded = json_decode($clean, true);
+        if (! is_array($decoded) || trim((string) ($decoded['html'] ?? '')) === '') {
+            return $fail('AI returned an unexpected response. Please try again.');
+        }
+
+        $html = (string) $decoded['html'];
+        $html = preg_replace('#<(script|style|head)\b[^>]*>.*?</\1>#is', '', $html) ?? $html;
+        $html = preg_replace('#</?(html|body|!doctype)\b[^>]*>#i', '', $html) ?? $html;
+        $html = preg_replace('/\son\w+\s*=\s*("[^"]*"|\'[^\']*\')/i', '', $html) ?? $html;
+
+        return [
+            'success' => true,
+            'subject' => mb_substr(trim((string) ($decoded['subject'] ?? '')), 0, 255),
+            'html'    => trim($html),
+            'error'   => '',
+        ];
+    }
+
+    /**
      * Context-aware AI Copilot across Sateri Connect.
      * Can generate visual automation workflow graphs, suggest keywords, draft campaigns, etc.
      *

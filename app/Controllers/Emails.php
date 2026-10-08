@@ -43,6 +43,45 @@ class Emails extends BaseController
         return $this->render('emails/single', $this->composeCommonData('Send email'));
     }
 
+    /**
+     * Shared AI email writer for every email editor (campaigns, templates, builder, drips, compose).
+     */
+    public function aiWrite(): ResponseInterface
+    {
+        if (! (can('emails.send') || can('templates.create') || can('automations.edit'))) {
+            return $this->jsonResponse(false, null, 'You do not have permission to write emails.', [], 403);
+        }
+
+        $brief = trim((string) $this->request->getPost('brief'));
+        if ($brief === '' || mb_strlen($brief) > 2000) {
+            return $this->jsonResponse(false, null, 'Describe the email in up to 2000 characters.', [], 422);
+        }
+
+        $tone     = in_array($t = (string) $this->request->getPost('tone'), ['friendly', 'professional', 'promotional', 'urgent', 'formal'], true) ? $t : 'friendly';
+        $language = in_array($l = (string) $this->request->getPost('language'), ['English', 'Marathi', 'Hindi'], true) ? $l : 'English';
+        $mode     = $this->request->getPost('mode') === 'edit' ? 'edit' : 'new';
+
+        $result = service('aiService')->writeEmail(
+            $brief,
+            $tone,
+            $language,
+            $mode === 'edit' ? (string) $this->request->getPost('subject') : '',
+            $mode === 'edit' ? (string) $this->request->getPost('html') : ''
+        );
+        if (! $result['success']) {
+            return $this->jsonResponse(false, null, $result['error'], [], 422);
+        }
+
+        log_activity('generate', 'emails', 'AI email content generated', [
+            'mode'     => $mode,
+            'tone'     => $tone,
+            'language' => $language,
+            'page'     => (string) $this->request->getHeaderLine('Referer'),
+        ]);
+
+        return $this->jsonResponse(true, ['subject' => $result['subject'], 'html' => $result['html']], 'Email drafted with AI.');
+    }
+
     public function bulk(): string|ResponseInterface
     {
         if ($denied = $this->requirePermission('emails.send')) {

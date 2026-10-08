@@ -262,14 +262,8 @@ $statusCounts = $statusCounts ?? ['total' => 0, 'active' => 0, 'draft' => 0, 'ar
                     <div class="mb-2">
                         <div class="d-flex justify-content-between align-items-center mb-1">
                             <label class="form-label small fw-semibold mb-0">Email Content <span class="text-danger">*</span></label>
-                            <div class="small">
-                                <span class="text-muted me-1">Insert tags:</span>
-                                <button type="button" class="badge bg-light text-primary border js-insert-tag" data-tag="{{name}}">{{name}}</button>
-                                <button type="button" class="badge bg-light text-primary border js-insert-tag" data-tag="{{email}}">{{email}}</button>
-                                <button type="button" class="badge bg-light text-primary border js-insert-tag" data-tag="{{mobile}}">{{mobile}}</button>
-                            </div>
                         </div>
-                        <textarea name="html_content" id="tpl_html" class="form-control form-control-sm font-monospace" rows="12" placeholder="<div style='font-family:sans-serif;'>&#10;  <h2>Hello {{name}},</h2>&#10;  <p>Thank you for choosing us.</p>&#10;</div>" required data-email-editor data-editor-height="300"></textarea>
+                        <textarea name="html_content" id="tpl_html" class="form-control form-control-sm font-monospace" rows="12" placeholder="<div style='font-family:sans-serif;'>&#10;  <h2>Hello {{name}},</h2>&#10;  <p>Thank you for choosing us.</p>&#10;</div>" required data-email-editor data-email-subject="#tpl_subject" data-editor-height="300"></textarea>
                     </div>
                     <div class="alert alert-danger py-2 small d-none mb-0" id="tplModalError"></div>
                 </div>
@@ -328,11 +322,6 @@ $(function () {
         $('#tpl_html').val($btn.data('html') || '');
         $('#tplModalError').addClass('d-none').text('');
         editModal.show();
-    });
-
-    // Tag Insertion
-    $(document).on('click', '.js-insert-tag', function () {
-        APP.emailEditor.insertText(document.getElementById('tpl_html'), $(this).data('tag'));
     });
 
     // Submit Form

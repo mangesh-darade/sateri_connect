@@ -72,7 +72,7 @@ $emailCampaigns = $emailCampaigns ?? [];
                     </div>
                     <div class="col-12">
                         <label class="form-label mb-1" for="emailBody">Message <span class="text-danger">*</span></label>
-                        <textarea class="form-control font-monospace" id="emailBody" name="body" rows="10" required data-email-editor
+                        <textarea class="form-control font-monospace" id="emailBody" name="body" rows="10" required data-email-editor data-email-subject="#emailSubject"
                                   placeholder="Write your message…"><?= esc(old('body') ?? '') ?></textarea>
                     </div>
                     <div class="col-12">

@@ -185,16 +185,18 @@ abstract class AbstractEmailDriver implements EmailDriverInterface
             return $text;
         }
 
-        $emailLower = strtolower(trim($email));
+        $emailLower    = strtolower(trim($email));
+        $needsCustom   = stripos($text, 'attributes.') !== false;
+        $missingCustom = $needsCustom && is_array($contact) && ! array_key_exists('custom_fields', $contact);
 
-        if ($contact === null && $emailLower !== '') {
+        if (($contact === null || $missingCustom) && $emailLower !== '') {
             try {
                 $contact = model(\App\Models\ContactModel::class)
-                    ->select('id, name, email, mobile')
+                    ->select('id, name, email, mobile, custom_fields')
                     ->where('email', $emailLower)
-                    ->first();
+                    ->first() ?? $contact;
             } catch (\Throwable $e) {
-                $contact = null;
+                // keep the caller-supplied contact (if any)
             }
         }
 
@@ -205,9 +207,17 @@ abstract class AbstractEmailDriver implements EmailDriverInterface
         $firstName = explode(' ', $name)[0] ?? $name;
         $mobile    = trim((string) ($contact['mobile'] ?? ''));
 
-        return (string) preg_replace_callback('/\{\{\s*([a-zA-Z0-9_\.]+)\s*\}\}/', function ($matches) use ($name, $firstName, $email, $mobile) {
+        return (string) preg_replace_callback('/\{\{\s*([a-zA-Z0-9_\.]+)\s*\}\}/', function ($matches) use ($name, $firstName, $email, $mobile, $contact) {
             $rawTag = $matches[1];
             $tag    = strtolower($rawTag);
+
+            if (str_starts_with($tag, 'attributes.')) {
+                try {
+                    return service('contactAttributes')->valueFor((array) $contact, substr($rawTag, 11));
+                } catch (\Throwable $e) {
+                    return '';
+                }
+            }
 
             return match ($tag) {
                 'name', 'fullname', 'full_name', 'contact_name', 'customer_name', 'contact.name' => ($rawTag === strtoupper($rawTag) && strlen($rawTag) > 2) ? strtoupper($name) : $name,

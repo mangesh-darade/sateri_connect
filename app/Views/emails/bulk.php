@@ -381,13 +381,10 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
                             <label class="form-label small fw-bold text-dark mb-0" for="bulkBody">
                                 Message Body <span class="text-danger">*</span>
                             </label>
-                            <span class="text-muted small ms-1" style="font-size: 0.75rem;">Insert tags:</span>
-                            <button type="button" class="btn btn-xs btn-outline-secondary js-insert-bulk-tag fw-mono" data-tag="{{name}}" style="font-size: 0.72rem; font-family: monospace;">{{name}}</button>
-                            <button type="button" class="btn btn-xs btn-outline-secondary js-insert-bulk-tag fw-mono" data-tag="{{email}}" style="font-size: 0.72rem; font-family: monospace;">{{email}}</button>
                         </div>
                     </div>
 
-                    <textarea class="form-control font-monospace border rounded-3 p-3" id="bulkBody" name="body" rows="7" required data-email-editor
+                    <textarea class="form-control font-monospace border rounded-3 p-3" id="bulkBody" name="body" rows="7" required data-email-editor data-email-subject="#bulkSubject"
                               style="min-height: 190px; font-size: 0.85rem; background: #ffffff; border-color: #cbd5e1; line-height: 1.55;"
                               placeholder="Write your email body or HTML layout here…"><?= esc(old('body') ?? '') ?></textarea>
                 </div>
@@ -478,11 +475,6 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
 <script src="<?= asset_url('assets/js/emails.js') ?>"></script>
 <script>
 $(function () {
-    // Quick tag insertion for bulk email body
-    $(document).on('click', '.js-insert-bulk-tag', function () {
-        APP.emailEditor.insertText(document.getElementById('bulkBody'), $(this).data('tag'));
-    });
-
     // Update pasted email count in real time
     $('#bulkRecipients').on('input', function () {
         var text = $.trim($(this).val() || '');

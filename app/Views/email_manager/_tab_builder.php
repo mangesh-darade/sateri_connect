@@ -40,7 +40,7 @@ $canSend = ! empty($canSend);
                             <label class="form-label small fw-semibold mb-0">Email Content</label>
                             <span class="text-muted" style="font-size: 0.7rem;">Tags: <code>{{name}}</code> <code>{{email}}</code></span>
                         </div>
-                        <textarea name="html_content" id="builder_html" class="form-control form-control-sm font-monospace" rows="10" placeholder="<div style='font-family:sans-serif;'>&#10;  <h2>Hello {{name}},</h2>&#10;  <p>Thank you for choosing us.</p>&#10;</div>" data-email-editor></textarea>
+                        <textarea name="html_content" id="builder_html" data-email-subject="#builder_subject" class="form-control form-control-sm font-monospace" rows="10" placeholder="<div style='font-family:sans-serif;'>&#10;  <h2>Hello {{name}},</h2>&#10;  <p>Thank you for choosing us.</p>&#10;</div>" data-email-editor></textarea>
                     </div>
 
                     <div class="mb-3">
