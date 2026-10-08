@@ -32,6 +32,7 @@ class EmailHtmlCampaignModel extends Model
         'attachment_name',
         'builder_id',
         'cheerio_builder_id',
+        'sender_id',
         'mode',
         'label_name',
         'recipients_json',

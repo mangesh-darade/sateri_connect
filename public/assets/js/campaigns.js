@@ -119,6 +119,7 @@
         state.step = step;
         $('#cwStep').val(String(step));
         clearWizardErrors();
+        if (APP.emailEditor && APP.emailEditor.closeAi) APP.emailEditor.closeAi();
         $('.campaign-wizard-step').removeClass('is-active');
         $('.campaign-wizard-step[data-step="' + step + '"]').addClass('is-active');
         $('#cwBackBtn').toggleClass('d-none', step <= 1);
@@ -163,6 +164,7 @@
             state.data = (res && res.data) ? res.data : res;
             populateLabels();
             populateEmailBuilders();
+            populateEmailSenders();
             return state.data;
         });
     }
@@ -197,6 +199,35 @@
                     .attr('data-cheerio', b.cheerio_builder_id || '')
             );
         });
+    }
+
+    /** Email-only From picker: "" = default sender. Hidden for WhatsApp and for providers without sender choice. */
+    function populateEmailSenders() {
+        var cfg = state.data.email_senders || {};
+        var $sel = $('#cwSender');
+        var def = cfg.default || {};
+        var defText = def.email || '';
+        $('#cwSenderDefault').text(defText).attr('title', defText).toggleClass('d-none', !defText);
+        $sel.empty().append($('<option>').val('').text('Default'));
+        (cfg.senders || []).forEach(function (s) {
+            $sel.append($('<option>').val(s.id).text(s.email).attr('title', s.name || ''));
+        });
+        $sel.val('').prop('disabled', !cfg.enabled)
+            .attr('title', cfg.enabled ? '' : 'Your email provider sends from the sender configured in its own dashboard.');
+        toggleSenderPicker();
+    }
+
+    function toggleSenderPicker() {
+        var show = state.channel === 'email';
+        $('#cwSenderWrap').toggleClass('d-none', !show).toggleClass('d-flex', show);
+    }
+
+    function selectedSenderText() {
+        if (!$('#cwSender').val()) {
+            var def = $('#cwSenderDefault').text();
+            return def ? def + ' (Default)' : 'Default sender';
+        }
+        return $('#cwSender option:selected').text();
     }
 
     function selectedLabelName() {
@@ -655,6 +686,9 @@
             ? (state.audience.email_count + ' emails')
             : ((state.audience.wa_eligible_count || 0) + ' opted-in of ' + state.audience.phone_count + ' phones / ' + state.audience.total + ' contacts');
         $('#cwShareCounts').text(countLabel);
+        var showSender = state.channel === 'email';
+        $('#cwShareSenderWrap').toggleClass('d-none', !showSender);
+        $('#cwShareSender').text(showSender ? selectedSenderText() : '—');
         if (state.channel === 'email') {
             $('#cwShareTplName').text($('#cwEmailSubject').val() || 'Email campaign');
             $('#cwShareTplBody').text(($('#cwEmailHtml').val() || '').replace(/<[^>]+>/g, ' ').slice(0, 160));
@@ -852,6 +886,7 @@
             payload.builder_id = parseInt($('#cwEmailBuilder').val() || '0', 10) || null;
             var $opt = $('#cwEmailBuilder option:selected');
             payload.cheerio_builder_id = $opt.data('cheerio') || '';
+            payload.sender_id = parseInt($('#cwSender').val() || '0', 10) || null;
         }
 
         var $btn = $('#cwNextBtn').prop('disabled', true);
@@ -992,6 +1027,8 @@
         $('#cwMediaStatus').addClass('d-none').text('');
         $('#cwEmailSubject').val('');
         $('#cwEmailHtml').val('');
+        $('#cwSender').val('');
+        toggleSenderPicker();
         $('#cwTemplateSearch').val('');
         $('#cwScheduledAt').val('');
         $('#cwTotalCount, #cwPhoneCount, #cwEmailCount, #cwEligibleCount, #cwSkippedCount').text('0');
@@ -1200,6 +1237,9 @@
                 $btn.prop('disabled', false).text('SYNC');
             });
         });
+
+        // Shared AI writer (email-editor.js) replaced the content — it no longer matches the chosen builder.
+        $('#cwEmailHtml').on('email-ai:applied', function () { $('#cwEmailBuilder').val(''); });
 
         $('#cwEmailBuilder').on('change', function () {
             var $opt = $(this).find('option:selected');

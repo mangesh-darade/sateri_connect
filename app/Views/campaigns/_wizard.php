@@ -12,6 +12,12 @@
                     <h5 class="modal-title mb-0" id="cwTitle">New Campaign</h5>
                 </div>
                 <div class="d-flex align-items-center gap-2">
+                    <div class="d-none align-items-center gap-2" id="cwSenderWrap">
+                        <label class="small text-muted fw-semibold mb-0 text-nowrap" for="cwSender">Sender</label>
+                        <span class="small fw-semibold text-nowrap d-none" id="cwSenderDefault"></span>
+                        <select id="cwSender" class="form-select form-select-sm" style="width:auto;min-width:140px;max-width:240px"></select>
+                        <a href="<?= site_url('email-manager?tab=senders') ?>" target="_blank" class="small text-nowrap" id="cwSenderManage" title="Add or verify senders">Manage</a>
+                    </div>
                     <a href="<?= site_url('templates') ?>" class="btn btn-outline-secondary btn-sm rounded-pill d-none" id="cwHelpSyncLink" target="_blank">Help guide</a>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
@@ -122,7 +128,7 @@
                         </div>
                         <div class="mb-0">
                             <label class="form-label fw-semibold">Email content</label>
-                            <textarea id="cwEmailHtml" class="form-control font-monospace" rows="8" data-email-editor placeholder="<p>Hello…</p>"></textarea>
+                            <textarea id="cwEmailHtml" class="form-control font-monospace" rows="8" data-email-editor data-email-subject="#cwEmailSubject" placeholder="<p>Hello…</p>"></textarea>
                         </div>
                     </div>
                 </div>
@@ -170,6 +176,10 @@
                     <div class="mb-3">
                         <div class="text-muted small mb-1">Audience</div>
                         <div id="cwShareCounts" class="fw-semibold">0 contacts</div>
+                    </div>
+                    <div class="mb-3 d-none" id="cwShareSenderWrap">
+                        <div class="text-muted small mb-1">Sender</div>
+                        <div id="cwShareSender" class="fw-semibold">—</div>
                     </div>
                     <div class="mb-3">
                         <div class="text-muted small mb-1">Template used</div>

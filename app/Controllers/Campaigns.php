@@ -744,6 +744,9 @@ class Campaigns extends BaseController
             'labels'           => $labels,
             'templates'        => $templateCards,
             'email_builders'   => $builders,
+            'email_senders'    => function_exists('can') && can('emails.send')
+                ? (new \App\Libraries\EmailSenderService($settings))->campaignSenderOptions()
+                : ['enabled' => false, 'default' => ['email' => '', 'name' => ''], 'senders' => []],
             'attribute_fields' => service('contactAttributes')->pickerFields(),
             'conditions' => [
                 ['value' => 'equals', 'label' => 'Equals'],
@@ -1107,6 +1110,12 @@ class Campaigns extends BaseController
             return $this->jsonResponse(false, null, 'Select a label.', [], 422);
         }
 
+        try {
+            $senderId = (new \App\Libraries\EmailSenderService())->assertSelectable((int) ($input['sender_id'] ?? 0));
+        } catch (\InvalidArgumentException $e) {
+            return $this->jsonResponse(false, null, $e->getMessage(), ['sender_id' => $e->getMessage()], 422);
+        }
+
         if ($builderId > 0) {
             $builder = model(EmailBuilderModel::class)->find($builderId);
             if ($builder) {
@@ -1151,6 +1160,7 @@ class Campaigns extends BaseController
             'html_content'       => $html,
             'builder_id'         => $builderId > 0 ? $builderId : null,
             'cheerio_builder_id' => $cheerioBuilderId !== '' ? $cheerioBuilderId : null,
+            'sender_id'          => $senderId,
             'mode'               => 'recipients',
             'label_name'         => (string) ($label['name'] ?? ''),
             'recipients_json'    => $emails,
@@ -1175,6 +1185,7 @@ class Campaigns extends BaseController
                 'channel'     => 'email',
                 'name'        => $name,
                 'subject'     => $subject,
+                'sender_id'   => $senderId,
             ]);
 
             return $this->jsonResponse(true, [

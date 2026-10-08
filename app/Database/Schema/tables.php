@@ -427,6 +427,7 @@ return array (
       'html_content' => 'longtext COLLATE utf8mb4_unicode_ci',
       'builder_id' => 'int unsigned DEFAULT NULL',
       'cheerio_builder_id' => 'varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL',
+      'sender_id' => 'int unsigned DEFAULT NULL',
       'mode' => 'enum(\'recipients\',\'label\') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT \'recipients\'',
       'label_name' => 'varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL',
       'recipients_json' => 'longtext COLLATE utf8mb4_unicode_ci',

@@ -97,6 +97,9 @@ class EmailCampaignService
         $options['unsubscribe_url'] = $unsubUrl;
         $options['campaign_id']     = $id;
         $options['purpose']         = \App\Models\EmailSenderModel::PURPOSE_MARKETING;
+        $options += (new EmailSenderService($settings))->fromOptions(
+            ! empty($camp['sender_id']) ? (int) $camp['sender_id'] : null
+        );
         $html = EmailTracking::applyMarketingFooter($html, $unsubUrl);
 
         // Pre-create log to get ID for open tracking pixel
@@ -232,6 +235,7 @@ class EmailCampaignService
             ($delivered ? 'Sent' : 'Failed') . ' HTML email campaign: ' . $name,
             [
                 'campaign_id'  => $id,
+                'from_email'   => $options['from_email'] ?? 'default',
                 'sent'         => $sentCount,
                 'failed'       => $failedCount,
                 'skipped'      => count($skipped),

@@ -303,6 +303,7 @@
 | `email_html_campaigns` | Added `attachment_path VARCHAR(255)`, `attachment_name VARCHAR(191)` | Campaign broadcast physical file attachment support | 2026-10-06 |
 | `email_logs` | Added `open_count`, `click_count`, `first_opened_at`, `campaign_id` | Email tracking & analytics | 2026-10-06 |
 | `email_unsubscribes` | Created table `(id, email, reason, campaign_id, created_at)` | One-click CAN-SPAM / GDPR unsubscribe suppression | 2026-10-06 |
+| `email_html_campaigns` | Added `sender_id INT UNSIGNED NULL` (email_senders.id) | Per-campaign From address in the campaign wizard; NULL = default sender | 2026-10-08 |
 
 ---
 
