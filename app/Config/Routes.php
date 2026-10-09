@@ -420,6 +420,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1', 'filter' => '
     $routes->post('messages/send-text', 'MessagesController::sendText');
     $routes->post('messages/send-template', 'MessagesController::sendTemplate');
     $routes->post('messages/send-media', 'MessagesController::sendMedia');
+    $routes->get('messages', 'MessagesController::index');
     $routes->get('messages/(:segment)/status', 'MessagesController::status/$1');
 
     // WhatsApp Templates Discovery

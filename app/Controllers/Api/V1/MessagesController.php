@@ -272,6 +272,61 @@ class MessagesController extends BaseV1Controller
     }
 
     /**
+     * Conversation thread (inbound + outbound) for one WhatsApp number.
+     * GET /api/v1/messages?phone=+917744010738&after_id=0&limit=50
+     */
+    public function index(): ResponseInterface
+    {
+        $rawPhone = trim((string) ($this->request->getGet('phone') ?? ''));
+        $digits   = preg_replace('/\D/', '', $rawPhone);
+        if (strlen($digits) < 7 || strlen($digits) > 15) {
+            return $this->respondValidationError(['phone' => 'A valid phone number is required (7 to 15 digits with country code).']);
+        }
+        $afterId = max(0, (int) ($this->request->getGet('after_id') ?? 0));
+        $limit   = min(100, max(1, (int) ($this->request->getGet('limit') ?? 50)));
+
+        $contactModel = model(ContactModel::class);
+        $contact = $contactModel->findByMobile('+' . $digits) ?? $contactModel->findByMobile($digits);
+        if (! $contact) {
+            return $this->respondSuccess([
+                'contact'  => null,
+                'messages' => [],
+            ], 'No conversation for this number yet.');
+        }
+
+        $builder = model(MessageModel::class)
+            ->where('contact_id', (int) $contact['id'])
+            ->where('channel', 'whatsapp');
+        if ($afterId > 0) {
+            $rows = $builder->where('id >', $afterId)->orderBy('id', 'ASC')->findAll($limit);
+        } else {
+            $rows = array_reverse($builder->orderBy('id', 'DESC')->findAll($limit));
+        }
+
+        $messages = array_map(static fn (array $m): array => [
+            'id'         => (int) $m['id'],
+            'direction'  => (string) ($m['direction'] ?? ''),
+            'type'       => (string) ($m['message_type'] ?? 'text'),
+            'content'    => (string) ($m['content'] ?? ''),
+            'media_url'  => $m['media_url'] ?? null,
+            'status'     => (string) ($m['status'] ?? ''),
+            'error'      => $m['error_message'] ?? null,
+            'created_at' => (string) ($m['created_at'] ?? ''),
+        ], $rows);
+
+        return $this->respondSuccess([
+            'contact' => [
+                'id'            => (int) $contact['id'],
+                'name'          => (string) ($contact['name'] ?? ''),
+                'phone'         => (string) ($contact['mobile'] ?? ''),
+                'last_reply_at' => $contact['last_reply_at'] ?? null,
+                'within_24h'    => is_within_24h_window($contact['last_reply_at'] ?? null),
+            ],
+            'messages' => $messages,
+        ], 'Conversation retrieved.');
+    }
+
+    /**
      * Check delivery status of a sent message.
      * GET /api/v1/messages/{idOrWamid}/status
      */

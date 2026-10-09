@@ -251,6 +251,50 @@ class DocsController extends BaseController
                     ],
                 ],
                 [
+                    'title'       => 'Get Conversation Thread (Inbox)',
+                    'method'      => 'GET',
+                    'path'        => '/api/v1/messages?phone=+917744010738&limit=50',
+                    'description' => 'Latest WhatsApp messages (sent + customer replies) for one phone number, oldest first, with live status (sent / delivered / read / failed / received) and 24-hour window flag. Poll it to build an inbox with WhatsApp-style ticks. Requires ability messages:read.',
+                    'headers'     => [
+                        'X-API-Key' => 'sc_live_your_api_key',
+                    ],
+                    'response' => [
+                        'status'  => 'success',
+                        'message' => 'Conversation retrieved.',
+                        'data'    => [
+                            'contact' => [
+                                'id'            => 1042,
+                                'name'          => 'Mangesh Darade',
+                                'phone'         => '917744010738',
+                                'last_reply_at' => '2026-10-03 07:16:05',
+                                'within_24h'    => true,
+                            ],
+                            'messages' => [
+                                [
+                                    'id'         => 850,
+                                    'direction'  => 'outbound',
+                                    'type'       => 'template',
+                                    'content'    => 'Template: order_confirmation',
+                                    'media_url'  => null,
+                                    'status'     => 'read',
+                                    'error'      => null,
+                                    'created_at' => '2026-10-03 07:15:00',
+                                ],
+                                [
+                                    'id'         => 851,
+                                    'direction'  => 'inbound',
+                                    'type'       => 'text',
+                                    'content'    => 'Thanks, when will it be delivered?',
+                                    'media_url'  => null,
+                                    'status'     => 'received',
+                                    'error'      => null,
+                                    'created_at' => '2026-10-03 07:16:05',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                [
                     'title'       => 'Trigger Automation Workflow',
                     'method'      => 'POST',
                     'path'        => '/api/v1/automations/trigger',

@@ -224,6 +224,7 @@
                                 <option value="messages_media">POST /api/v1/messages/send-media — Send Media (PDF / Image / Video)</option>
                                 <option value="messages_template">POST /api/v1/messages/send-template — Send Approved Template</option>
                                 <option value="messages_status">GET /api/v1/messages/{id}/status — Check Message Status</option>
+                                <option value="messages_thread">GET /api/v1/messages?phone= — Conversation Thread (Inbox)</option>
                                 <option value="templates_list">GET /api/v1/templates — List WhatsApp Templates</option>
                                 <option value="automations_trigger">POST /api/v1/automations/trigger — Trigger Workflow Event</option>
                                 <option value="contacts_search">GET /api/v1/contacts/search — Search Contacts</option>
@@ -423,6 +424,11 @@
             messages_status: {
                 method: 'GET',
                 url: BASE_URL + '/messages/1/status',
+                body: null
+            },
+            messages_thread: {
+                method: 'GET',
+                url: BASE_URL + '/messages?phone=%2B917744010738&limit=50',
                 body: null
             },
             templates_list: {

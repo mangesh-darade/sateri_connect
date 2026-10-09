@@ -155,6 +155,23 @@
             },
             "description": "Check if a message was sent, delivered, or read by customer using internal message ID or WhatsApp WAMID."
           }
+        },
+        {
+          "name": "Get Conversation Thread (Inbox)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/messages?phone=%2B917744010738&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["messages"],
+              "query": [
+                { "key": "phone", "value": "%2B917744010738", "description": "Customer WhatsApp number with country code" },
+                { "key": "limit", "value": "50", "description": "1 to 100 latest messages (default 50)" }
+              ]
+            },
+            "description": "Latest messages (sent + customer replies) for one number, oldest first, with status sent / delivered / read / failed / received and within_24h flag. Requires ability messages:read."
+          }
         }
       ]
     },
