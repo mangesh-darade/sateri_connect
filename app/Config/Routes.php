@@ -67,6 +67,8 @@ $routes->group('platform', ['filter' => 'platformAuth'], static function ($route
     $routes->post('meta-tech/test', 'PlatformClients::testMetaTech', ['filter' => 'csrf']);
     $routes->get('settings', 'PlatformClients::settings');
     $routes->post('settings', 'PlatformClients::saveSettings', ['filter' => 'csrf']);
+    $routes->get('api-usage', 'PlatformApiUsage::index');
+    $routes->get('api-usage/(:segment)', 'PlatformApiUsage::client/$1');
     $routes->get('schema', 'PlatformSchema::index');
     $routes->post('schema/(:segment)/check', 'PlatformSchema::check/$1', ['filter' => 'csrf']);
     $routes->post('schema/(:segment)/repair', 'PlatformSchema::repair/$1', ['filter' => 'csrf']);

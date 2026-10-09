@@ -1372,6 +1372,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                         <th>Token Identifier</th>
                                         <th>Created</th>
                                         <th>Last Used</th>
+                                        <th>Calls (30 days)</th>
                                         <th class="text-end">Actions</th>
                                     </tr>
                                 </thead>
@@ -1379,7 +1380,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                     <?php $tokens = $apiTokens ?? []; ?>
                                     <?php if (empty($tokens)): ?>
                                         <tr id="noApiTokensRow">
-                                            <td colspan="5" class="text-center py-4 text-muted">
+                                            <td colspan="6" class="text-center py-4 text-muted">
                                                 <i class="fas fa-key fs-4 d-block mb-1 text-secondary opacity-50"></i>
                                                 No API keys generated yet. Click "Generate Secret Key" above.
                                             </td>
@@ -1393,11 +1394,61 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                                 <td>
                                                     <?= ! empty($tk['last_used_at']) ? '<span class="badge bg-success-subtle text-success">' . esc($tk['last_used_at']) . '</span>' : '<span class="text-muted">Never</span>' ?>
                                                 </td>
+                                                <td>
+                                                    <?php $use = $apiUsage[(int) $tk['id']] ?? null; ?>
+                                                    <?php if ($use): ?>
+                                                        <span class="fw-semibold"><?= (int) $use['total'] ?></span>
+                                                        <?php if ((int) $use['failed'] > 0): ?><span class="badge bg-danger-subtle text-danger ms-1"><?= (int) $use['failed'] ?> failed</span><?php endif; ?>
+                                                        <div class="small text-muted"><?= (int) $use['ips'] ?> IP<?= (int) $use['ips'] === 1 ? '' : 's' ?></div>
+                                                    <?php else: ?>
+                                                        <span class="text-muted">0</span>
+                                                    <?php endif; ?>
+                                                </td>
                                                 <td class="text-end">
                                                     <button type="button" class="btn btn-xs btn-outline-danger js-delete-api-token" data-id="<?= (int) $tk['id'] ?>">
                                                         <i class="fas fa-trash-alt me-1"></i> Revoke
                                                     </button>
                                                 </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <h6 class="fw-bold mt-4 mb-1">Recent API Calls</h6>
+                        <p class="small text-muted mb-2">Last 50 requests made by external systems with an API key.</p>
+                        <div class="table-responsive bg-white border rounded" style="max-height: 360px;">
+                            <table class="table table-hover align-middle mb-0" style="font-size: 0.8rem;" id="apiRecentCallsTable">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>API Key</th>
+                                        <th>Request</th>
+                                        <th>Status</th>
+                                        <th>IP / Client</th>
+                                        <th class="text-end">Time taken</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php $calls = $apiRecentCalls ?? []; ?>
+                                    <?php if (empty($calls)): ?>
+                                        <tr>
+                                            <td colspan="6" class="text-center py-4 text-muted">No external API calls recorded yet.</td>
+                                        </tr>
+                                    <?php else: ?>
+                                        <?php foreach ($calls as $call): ?>
+                                            <?php $code = (int) $call['status_code']; ?>
+                                            <tr>
+                                                <td class="text-muted text-nowrap"><?= esc($call['created_at'] ?? '') ?></td>
+                                                <td class="fw-semibold"><?= esc($call['token_name'] ?: ('#' . (int) $call['token_id'])) ?></td>
+                                                <td><span class="badge bg-light text-dark border me-1"><?= esc($call['method']) ?></span><code class="text-secondary"><?= esc($call['endpoint']) ?></code></td>
+                                                <td><span class="badge <?= $code >= 400 ? 'bg-danger-subtle text-danger' : 'bg-success-subtle text-success' ?>"><?= $code ?></span></td>
+                                                <td>
+                                                    <div><?= esc($call['ip_address'] ?? '') ?></div>
+                                                    <div class="small text-muted text-truncate" style="max-width: 220px;" title="<?= esc($call['user_agent'] ?? '', 'attr') ?>"><?= esc($call['user_agent'] ?? '') ?></div>
+                                                </td>
+                                                <td class="text-end text-muted"><?= (int) $call['duration_ms'] ?> ms</td>
                                             </tr>
                                         <?php endforeach; ?>
                                     <?php endif; ?>
@@ -2253,6 +2304,7 @@ $(function () {
                             '<td><code class="text-secondary">sc_live_••••' + token.slice(-6) + '</code></td>' +
                             '<td class="text-muted">Just now</td>' +
                             '<td><span class="text-muted">Never</span></td>' +
+                            '<td><span class="text-muted">0</span></td>' +
                             '<td class="text-end">' +
                                 '<button type="button" class="btn btn-xs btn-outline-danger js-delete-api-token" data-id="' + res.data.id + '">' +
                                     '<i class="fas fa-trash-alt me-1"></i> Revoke' +

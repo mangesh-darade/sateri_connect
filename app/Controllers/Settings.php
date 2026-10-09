@@ -146,6 +146,9 @@ class Settings extends BaseController
         $data['ai'] = $aiDisplay;
 
         $data['apiTokens'] = model(\App\Models\ApiTokenModel::class)->orderBy('id', 'DESC')->findAll(30);
+        $apiLogModel = model(\App\Models\ApiRequestLogModel::class);
+        $data['apiUsage']       = $apiLogModel->usageByToken(30);
+        $data['apiRecentCalls'] = $apiLogModel->recent(50);
 
         return $this->render('settings/index', $data);
     }

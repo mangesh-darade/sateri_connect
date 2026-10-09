@@ -68,6 +68,10 @@ $brandInitial = mb_strtoupper(mb_substr($platformSiteName !== '' ? $platformSite
                 <i class="fas fa-database" aria-hidden="true"></i>
                 <span>Database Health</span>
             </a>
+            <a href="<?= site_url('platform/api-usage') ?>" class="platform-side-link<?= $navActive === 'api-usage' ? ' is-active' : '' ?>">
+                <i class="fas fa-plug" aria-hidden="true"></i>
+                <span>API Usage</span>
+            </a>
 
             <div class="platform-side-footer">
                 <div class="platform-side-user">

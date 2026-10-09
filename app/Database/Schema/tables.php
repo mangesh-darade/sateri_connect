@@ -53,6 +53,30 @@ return array (
     ),
     'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
   ),
+  'api_request_logs' => 
+  array (
+    'columns' => 
+    array (
+      'id' => 'bigint unsigned NOT NULL AUTO_INCREMENT',
+      'token_id' => 'int unsigned DEFAULT NULL',
+      'token_name' => 'varchar(150) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'user_id' => 'int unsigned DEFAULT NULL',
+      'method' => 'varchar(10) COLLATE utf8mb4_general_ci NOT NULL',
+      'endpoint' => 'varchar(255) COLLATE utf8mb4_general_ci NOT NULL',
+      'status_code' => 'smallint unsigned NOT NULL DEFAULT \'0\'',
+      'ip_address' => 'varchar(45) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'user_agent' => 'varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'duration_ms' => 'int unsigned NOT NULL DEFAULT \'0\'',
+      'created_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' => 
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+      'token_id_created_at' => 'KEY `token_id_created_at` (`token_id`,`created_at`)',
+      'created_at' => 'KEY `created_at` (`created_at`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
   'api_tokens' => 
   array (
     'columns' => 

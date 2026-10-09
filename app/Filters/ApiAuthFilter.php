@@ -18,8 +18,18 @@ use CodeIgniter\HTTP\ResponseInterface;
  */
 class ApiAuthFilter implements FilterInterface
 {
+    /**
+     * API key that authenticated the current request; static because CI may build separate
+     * filter instances for before() and after().
+     *
+     * @var array{token_id: int, token_name: string, user_id: int}|null
+     */
+    private static ?array $apiKeyCaller = null;
+
     public function before(RequestInterface $request, $arguments = null)
     {
+        self::$apiKeyCaller = null;
+
         // Multi-tenant resolution:
         // 1. If session tenant exists (e.g. testing from browser API docs console)
         \App\Libraries\TenantResolver::ensureFromSession();
@@ -176,6 +186,12 @@ class ApiAuthFilter implements FilterInterface
                 ],
             ]);
 
+            self::$apiKeyCaller = [
+                'token_id'   => (int) $apiTokenRow['id'],
+                'token_name' => (string) ($apiTokenRow['name'] ?? ''),
+                'user_id'    => $userId,
+            ];
+
             return null;
         }
 
@@ -272,6 +288,32 @@ class ApiAuthFilter implements FilterInterface
 
     public function after(RequestInterface $request, ResponseInterface $response, $arguments = null)
     {
+        $caller = self::$apiKeyCaller;
+        self::$apiKeyCaller = null;
+
+        if ($caller === null) {
+            return null;
+        }
+
+        // Usage logging must never break the API response.
+        try {
+            $started = (float) ($_SERVER['REQUEST_TIME_FLOAT'] ?? microtime(true));
+            model(\App\Models\ApiRequestLogModel::class)->insert([
+                'token_id'    => $caller['token_id'],
+                'token_name'  => mb_substr($caller['token_name'], 0, 150),
+                'user_id'     => $caller['user_id'],
+                'method'      => strtoupper($request->getMethod()),
+                'endpoint'    => mb_substr((string) $request->getUri()->getPath(), 0, 255),
+                'status_code' => $response->getStatusCode(),
+                'ip_address'  => $request->getIPAddress(),
+                'user_agent'  => mb_substr((string) $request->getHeaderLine('User-Agent'), 0, 255),
+                'duration_ms' => max(0, (int) round((microtime(true) - $started) * 1000)),
+                'created_at'  => date('Y-m-d H:i:s'),
+            ]);
+        } catch (\Throwable $e) {
+            log_message('error', 'API request log failed: {msg}', ['msg' => $e->getMessage()]);
+        }
+
         return null;
     }
 
