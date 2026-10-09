@@ -190,6 +190,14 @@ body.flow-builder-page .swal2-container {
     cursor: pointer;
     user-select: none;
 }
+.flow-palette h6 small {
+    display: block;
+    font-family: system-ui, sans-serif;
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: #8a8fa3;
+    margin-top: 1px;
+}
 .palette-chevron {
     font-size: 0.65rem;
     color: #8a8fa3;
@@ -258,9 +266,11 @@ body.flow-builder-page .swal2-container {
     position: relative;
     overflow: hidden;
     cursor: default;
-    background-color: #ffffff;
-    background-image: radial-gradient(circle at 1px 1px, rgba(75, 55, 134, 0.08) 1px, transparent 0);
-    background-size: 24px 24px;
+    background-color: #fbfbfd;
+    background-image:
+        linear-gradient(rgba(26, 18, 40, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(26, 18, 40, 0.045) 1px, transparent 1px);
+    background-size: 20px 20px;
 }
 .flow-canvas-wrap.can-pan,
 .flow-canvas-wrap.panning {
@@ -330,11 +340,11 @@ body.flow-builder-page .swal2-container {
 .flow-node {
     --nc: #8e53f7;
     position: absolute;
-    width: 210px;
+    width: 230px;
     background: #ffffff;
-    border: 1px solid rgba(75, 55, 134, 0.14);
-    border-radius: 14px;
-    box-shadow: 0 4px 16px rgba(4, 47, 42, 0.08);
+    border: 1px solid rgba(26, 18, 40, 0.08);
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(26, 18, 40, 0.08);
     cursor: move;
     user-select: none;
     animation: flowNodeIn 0.28s ease-out;
@@ -359,9 +369,9 @@ body.flow-builder-page .swal2-container {
     display: flex;
     align-items: center;
     gap: 0.45rem;
-    padding: 0.5rem 0.75rem;
+    padding: 0.5rem 0.7rem;
     background: var(--nc);
-    border-radius: 13px 13px 0 0;
+    border-radius: 11px 11px 0 0;
     color: #ffffff;
     font-size: 0.8rem;
     font-weight: 650;
@@ -369,33 +379,73 @@ body.flow-builder-page .swal2-container {
     letter-spacing: -0.01em;
 }
 .flow-node-head span {
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+.flow-node-edit {
+    font-size: 0.72rem;
+    opacity: 0.85;
+}
+.flow-node:not(:has(.flow-node-body)) .flow-node-head {
+    border-radius: 11px;
+}
 .flow-node-body {
-    padding: 0.55rem 0.75rem 0.75rem;
-    font-size: 0.9rem;
-    font-weight: 600;
+    padding: 0.6rem 0.7rem 0.7rem;
     color: #1a1228;
     word-break: break-word;
-    font-family: 'Onest', system-ui, sans-serif;
-    letter-spacing: -0.02em;
-}
-.flow-node-sub {
-    display: block;
-    margin-top: 0.25rem;
-    font-size: 0.75rem;
-    font-weight: 400;
     font-family: 'DM Sans', system-ui, sans-serif;
-    color: #5a726c;
-    letter-spacing: 0;
+}
+.flow-node-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #4b4560;
+    margin-bottom: 0.35rem;
+}
+.flow-node-box {
+    font-size: 0.72rem;
+    line-height: 1.35;
+    color: #3b3550;
+    background: #f6f6f9;
+    border: 1px solid #ececf2;
+    border-radius: 8px;
+    padding: 0.4rem 0.5rem;
+    max-height: 4.2em;
+    overflow: hidden;
+}
+.flow-node-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-top: 0.5rem;
+}
+.flow-node-title + .flow-node-rows,
+.flow-node-rows:first-child {
+    margin-top: 0;
+}
+.flow-node-row {
+    position: relative;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: #3b3550;
+    background: #f3f2f7;
+    border-radius: 7px;
+    padding: 0.35rem 0.55rem;
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: ellipsis;
+}
+.flow-node .flow-node-row .flow-port {
+    right: calc(-0.7rem - 7px);
+    top: 50%;
 }
 
 .flow-port {
     position: absolute;
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
     border: 2px solid #ffffff;
     cursor: crosshair;
@@ -409,10 +459,10 @@ body.flow-builder-page .swal2-container {
     box-shadow: 0 0 0 4px rgba(142, 83, 247, 0.25);
 }
 .flow-port.in {
-    left: -7px;
-    top: 50%;
+    left: -6px;
+    top: 16px;
     transform: translateY(-50%);
-    background: #94a3b8;
+    background: #9b7be8;
 }
 .flow-port.in:hover,
 .flow-port.in.link-target {
@@ -420,10 +470,10 @@ body.flow-builder-page .swal2-container {
     box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.35);
 }
 .flow-port.out {
-    right: -7px;
-    top: 50%;
+    right: -6px;
+    top: 16px;
     transform: translateY(-50%);
-    background: var(--nc, #8e53f7);
+    background: #9b7be8;
 }
 .flow-port.true {
     right: -7px;
@@ -468,8 +518,8 @@ body.flow-builder-page .swal2-container {
 
 .flow-edge {
     fill: none;
-    stroke: rgba(75, 55, 134, 0.35);
-    stroke-width: 2.4;
+    stroke: #b9a3ef;
+    stroke-width: 2;
     pointer-events: stroke;
     cursor: pointer;
     transition: stroke 0.15s ease, stroke-width 0.15s ease;

@@ -111,7 +111,7 @@
     function nodeStyle(node) {
         var kind = nodeKind(node);
         var label;
-        if (node.type === 'trigger') label = TRIGGER_LABELS[kind] || 'Trigger';
+        if (node.type === 'trigger') label = 'Event';
         else if (node.type === 'condition') label = 'Condition';
         else if (node.type === 'end') label = 'End Flow';
         else label = ACTION_LABELS[kind] || 'Action';
@@ -467,6 +467,7 @@
         var $c = $('#flowCanvas').empty();
         Flow.nodes.forEach(function (node) {
             var ports = '';
+            var rows = '';
             if (node.type !== 'trigger') {
                 ports += '<div class="flow-port in" data-port="in" data-node="' + esc(node.id) + '"></div>';
             }
@@ -474,23 +475,24 @@
             var branched = outPorts.length > 1 || outPorts.indexOf('true') >= 0 || outPorts.indexOf('false') >= 0
                 || outPorts.some(function (p) { return String(p).indexOf('opt_') === 0; });
             if (branched) {
-                var n = outPorts.length || 2;
-                outPorts.forEach(function (p, i) {
-                    var top = Math.round(((i + 1) / (n + 1)) * 100);
+                outPorts.forEach(function (p) {
                     var cls = p === 'true' ? 'true' : (p === 'false' ? 'false' : 'out');
-                    ports += '<div class="flow-port ' + cls + '" data-port="' + esc(p) + '" data-node="' + esc(node.id) + '" style="top:' + top + '%;transform:translateY(-50%)"></div>';
-                    var lbl = portLabel(node, p);
-                    ports += '<span class="flow-port-label" style="top:' + Math.max(8, top - 6) + '%">' + esc(lbl) + '</span>';
+                    rows += '<div class="flow-node-row">' + esc(portLabel(node, p)) +
+                        '<div class="flow-port ' + cls + '" data-port="' + esc(p) + '" data-node="' + esc(node.id) + '"></div></div>';
                 });
             } else if (node.type !== 'end') {
                 ports += '<div class="flow-port out" data-port="out" data-node="' + esc(node.id) + '"></div>';
             }
             var st = nodeStyle(node);
             var title = nodeTitle(node);
+            var sub = nodeSubtitle(node);
+            var body = (title !== st.label ? '<div class="flow-node-title">' + esc(title) + '</div>' : '') +
+                (sub ? '<div class="flow-node-box">' + esc(sub) + '</div>' : '') +
+                (rows ? '<div class="flow-node-rows">' + rows + '</div>' : '');
             var html =
                 '<div class="flow-node ' + esc(node.type) + (Flow.selectedId === node.id ? ' selected' : '') + '" data-id="' + esc(node.id) + '" style="left:' + node.x + 'px;top:' + node.y + 'px;--nc:' + esc(st.color) + '">' +
-                '<div class="flow-node-head"><i class="' + esc(st.icon) + '"></i><span>' + esc(st.label) + '</span></div>' +
-                '<div class="flow-node-body">' + (title !== st.label ? esc(title) : '') + '<span class="flow-node-sub">' + esc(nodeSubtitle(node)) + '</span></div>' +
+                '<div class="flow-node-head"><i class="' + esc(st.icon) + '"></i><span>' + esc(st.label) + '</span><i class="fas fa-pen-to-square flow-node-edit"></i></div>' +
+                (body ? '<div class="flow-node-body">' + body + '</div>' : '') +
                 ports +
                 '</div>';
             $c.append(html);
@@ -547,9 +549,9 @@
         if (!svg.querySelector('defs')) {
             var defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
             defs.innerHTML =
-                '<marker id="flowArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(7, 94, 84, 0.45)"></path></marker>' +
-                '<marker id="flowArrowTrue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#8e53f7"></path></marker>' +
-                '<marker id="flowArrowFalse" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#e25555"></path></marker>';
+                '<marker id="flowArrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4"><circle cx="5" cy="5" r="5" fill="#9b7be8"></circle></marker>' +
+                '<marker id="flowArrowTrue" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4"><circle cx="5" cy="5" r="5" fill="#8e53f7"></circle></marker>' +
+                '<marker id="flowArrowFalse" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4"><circle cx="5" cy="5" r="5" fill="#e25555"></circle></marker>';
             svg.appendChild(defs);
         }
     }
@@ -590,6 +592,7 @@
             else if (e.port === 'false') { edgeCls += ' false'; marker = 'url(#flowArrowFalse)'; }
             if (Flow.selectedEdge && Flow.selectedEdge === key) edgeCls += ' selected';
             path.setAttribute('class', edgeCls);
+            path.setAttribute('marker-start', marker);
             path.setAttribute('marker-end', marker);
             path.setAttribute('data-edge-idx', String(idx));
             path.setAttribute('data-edge-key', key);

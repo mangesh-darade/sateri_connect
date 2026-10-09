@@ -41,7 +41,7 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
 
     <div class="flow-workspace">
         <aside class="flow-palette">
-            <h6>When this happens</h6>
+            <h6><span>Triggers<small>When this happens</small></span></h6>
             <div class="palette-item" draggable="true" data-palette="trigger" data-trigger="incoming_message">
                 <i class="fab fa-whatsapp"></i> Incoming WhatsApp
             </div>
@@ -81,8 +81,6 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
             <div class="palette-item" draggable="true" data-palette="trigger" data-trigger="form_response">
                 <i class="fas fa-wpforms"></i> New form response
             </div>
-
-            <h6 class="mt-3">More triggers</h6>
             <div class="palette-item" draggable="true" data-palette="trigger" data-trigger="keyword_matched">
                 <i class="fas fa-key"></i> Keyword matched
             </div>
@@ -99,33 +97,7 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
                 <i class="fas fa-reply"></i> Campaign reply
             </div>
 
-            <h6 class="mt-3">Logic</h6>
-            <div class="palette-item" draggable="true" data-palette="condition" data-condition="message_contains">
-                <i class="fas fa-code-branch"></i> If / Else
-            </div>
-            <div class="palette-item" draggable="true" data-palette="condition" data-condition="message_equals">
-                <i class="fas fa-equals"></i> Message equals
-            </div>
-            <div class="palette-item" draggable="true" data-palette="condition" data-condition="caption_contains">
-                <i class="fas fa-closed-captioning"></i> Caption contains
-            </div>
-            <div class="palette-item" draggable="true" data-palette="condition" data-condition="message_type">
-                <i class="fas fa-photo-video"></i> Message type
-            </div>
-            <div class="palette-item" draggable="true" data-palette="condition" data-condition="has_tag">
-                <i class="fas fa-tag"></i> Has tag
-            </div>
-            <div class="palette-item" draggable="true" data-palette="condition" data-condition="within_window">
-                <i class="fas fa-clock"></i> Within 24h window
-            </div>
-            <div class="palette-item" draggable="true" data-palette="condition" data-condition="contact_status">
-                <i class="fas fa-user-check"></i> Contact status
-            </div>
-            <div class="palette-item" draggable="true" data-palette="condition" data-condition="attribute_condition">
-                <i class="fas fa-sliders-h"></i> Attribute condition
-            </div>
-
-            <h6 class="mt-3">Actions</h6>
+            <h6 class="mt-3"><span>Actions<small>System initiated</small></span></h6>
             <div class="palette-item" draggable="true" data-palette="action" data-action="system_initiated">
                 <i class="fas fa-robot"></i> System initiated
             </div>
@@ -144,8 +116,6 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
             <div class="palette-item" draggable="true" data-palette="action" data-action="send_template">
                 <i class="fas fa-file-alt"></i> Send WA template
             </div>
-
-            <h6 class="mt-3">More actions</h6>
             <div class="palette-item" draggable="true" data-palette="action" data-action="send_text">
                 <i class="fas fa-comment"></i> Send text
             </div>
@@ -179,6 +149,30 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
             <div class="palette-item" draggable="true" data-palette="action" data-action="webhook">
                 <i class="fas fa-plug"></i> Webhook
             </div>
+            <div class="palette-item" draggable="true" data-palette="condition" data-condition="message_contains">
+                <i class="fas fa-code-branch"></i> If / Else
+            </div>
+            <div class="palette-item" draggable="true" data-palette="condition" data-condition="message_equals">
+                <i class="fas fa-equals"></i> Message equals
+            </div>
+            <div class="palette-item" draggable="true" data-palette="condition" data-condition="caption_contains">
+                <i class="fas fa-closed-captioning"></i> Caption contains
+            </div>
+            <div class="palette-item" draggable="true" data-palette="condition" data-condition="message_type">
+                <i class="fas fa-photo-video"></i> Message type
+            </div>
+            <div class="palette-item" draggable="true" data-palette="condition" data-condition="has_tag">
+                <i class="fas fa-tag"></i> Has tag
+            </div>
+            <div class="palette-item" draggable="true" data-palette="condition" data-condition="within_window">
+                <i class="fas fa-clock"></i> Within 24h window
+            </div>
+            <div class="palette-item" draggable="true" data-palette="condition" data-condition="contact_status">
+                <i class="fas fa-user-check"></i> Contact status
+            </div>
+            <div class="palette-item" draggable="true" data-palette="condition" data-condition="attribute_condition">
+                <i class="fas fa-sliders-h"></i> Attribute condition
+            </div>
             <div class="palette-item" draggable="true" data-palette="end" data-action="end">
                 <i class="fas fa-flag-checkered"></i> End
             </div>
@@ -189,14 +183,14 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
             <div class="flow-viewport" id="flowViewport">
                 <svg id="flowEdges" class="flow-edges">
                     <defs>
-                        <marker id="flowArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                            <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(7, 94, 84, 0.45)"></path>
+                        <marker id="flowArrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4">
+                            <circle cx="5" cy="5" r="5" fill="#9b7be8"></circle>
                         </marker>
-                        <marker id="flowArrowTrue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                            <path d="M 0 0 L 10 5 L 0 10 z" fill="#8e53f7"></path>
+                        <marker id="flowArrowTrue" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4">
+                            <circle cx="5" cy="5" r="5" fill="#8e53f7"></circle>
                         </marker>
-                        <marker id="flowArrowFalse" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                            <path d="M 0 0 L 10 5 L 0 10 z" fill="#e25555"></path>
+                        <marker id="flowArrowFalse" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4">
+                            <circle cx="5" cy="5" r="5" fill="#e25555"></circle>
                         </marker>
                     </defs>
                 </svg>
