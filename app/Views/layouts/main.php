@@ -384,8 +384,6 @@
                         ['label' => 'All Contacts', 'icon' => 'users', 'url' => site_url('contacts'), 'match' => ['contacts']],
                         ['label' => 'Customer Groups', 'icon' => 'tags', 'url' => site_url('customer-groups'), 'match' => ['customer-groups']],
                         ['label' => 'Attributes', 'icon' => 'list-plus', 'url' => site_url('attributes'), 'match' => ['attributes']],
-                        ['label' => 'Import Contacts', 'icon' => 'file-up', 'url' => site_url('contacts/import'), 'match' => ['contacts/import'], 'perm' => 'contacts.import'],
-                        ['label' => 'Duplicate Check', 'icon' => 'copy', 'url' => site_url('contacts/duplicates'), 'match' => ['contacts/duplicates']],
                     ],
                 ];
             }
@@ -413,8 +411,6 @@
                     ['label' => 'Email Templates', 'icon' => 'mail', 'url' => site_url('templates?channel=email'), 'match' => ['templates'], 'query' => $emailQuery, 'perm' => 'templates.view'],
                     ['label' => 'Email Workflows (Auto Drips)', 'icon' => 'workflow', 'url' => site_url('automations?channel=email'), 'match' => ['automations'], 'query' => ['channel' => ['email', 'drips']], 'perm' => 'automations.view'],
                     ['label' => 'Email List Verifier', 'icon' => 'shield', 'url' => site_url('email-manager?tab=verifier'), 'match' => ['email-manager'], 'tab' => 'verifier', 'perm' => 'emails.view'],
-                    ['label' => 'Send Single Email', 'icon' => 'send', 'url' => site_url('emails/send'), 'match' => ['emails/send', 'emails/single'], 'perm' => 'emails.send'],
-                    ['label' => 'Bulk Email', 'icon' => 'mails', 'url' => site_url('emails/bulk'), 'match' => ['emails/bulk'], 'perm' => 'emails.send'],
                 ],
             ];
             $marketingItems[] = [
@@ -424,10 +420,6 @@
                 'match' => ['templates'],
                 'not_query' => $emailQuery,
                 'perm' => 'templates.view',
-                'children' => [
-                    ['label' => 'WhatsApp Templates', 'icon' => 'message-square', 'url' => site_url('templates'), 'match' => ['templates'], 'not_query' => $emailQuery],
-                    ['label' => 'Create Template', 'icon' => 'plus', 'url' => site_url('templates/create'), 'match' => ['templates/create'], 'perm' => 'templates.create'],
-                ],
             ];
             if ($marketingItems !== []) {
                 $navGroups[] = ['title' => 'Marketing', 'items' => $marketingItems];
@@ -457,10 +449,6 @@
                     'icon' => 'key-round',
                     'url' => site_url('keywords'),
                     'match' => ['keywords'],
-                    'children' => [
-                        ['label' => 'All Keywords', 'icon' => 'key-round', 'url' => site_url('keywords'), 'match' => ['keywords']],
-                        ['label' => 'Create Keyword', 'icon' => 'plus', 'url' => site_url('keywords/create'), 'match' => ['keywords/create'], 'perm' => 'keywords.create'],
-                    ],
                 ];
             }
             if (function_exists('can') && can('queue.view')) {
