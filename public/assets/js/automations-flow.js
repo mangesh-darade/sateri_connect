@@ -80,6 +80,72 @@
         attribute_condition: 'Attribute condition'
     };
 
+    /** Block colours (palette tiles + node headers). Key = trigger_type / condition_type / action_type / 'end'. */
+    var KIND_COLORS = {
+        incoming_message: '#25D366', campaign_sent: '#7c3aed', shopify_event: '#5e8e3e', facebook_lead: '#1877F2',
+        kylas_event_create: '#4f46e5', kylas_event_update: '#6366f1', pabbly_event: '#16a34a', incoming_webhook: '#8b5cf6',
+        messenger: '#0084FF', instagram: '#E1306C', commerce_event: '#9333ea', contact_created: '#0ea5e9',
+        form_response: '#f97316', keyword_matched: '#f59e0b', tag_added: '#14b8a6', attribute_updated: '#8b5cf6',
+        birthday: '#ec4899', campaign_replied: '#06b6d4', schedule: '#0ea5e9',
+        system_initiated: '#0ea5e9', response_message: '#22c55e', ask_question: '#10b981', send_media: '#06b6d4',
+        collect_images: '#0891b2', send_template: '#16a34a', send_text: '#22c55e', send_email: '#f97316',
+        set_attribute: '#7c3aed', add_tag: '#14b8a6', remove_tag: '#64748b', assign_agent: '#2563eb', assign_bot: '#0ea5e9',
+        update_chat_status: '#6366f1', add_note: '#eab308', delay: '#f59e0b', webhook: '#8b5cf6', webhook_call: '#8b5cf6',
+        end: '#ef4444'
+    };
+    var TYPE_COLORS = { trigger: '#25D366', condition: '#f59e0b', action: '#8e53f7', updateAttribute: '#7c3aed', end: '#ef4444' };
+    var TYPE_ICONS = { trigger: 'fas fa-bolt', condition: 'fas fa-code-branch', action: 'fas fa-play', updateAttribute: 'fas fa-pen', end: 'fas fa-flag-checkered' };
+    /** kind → icon class, read from the palette markup (single source for tiles and nodes). */
+    var KIND_ICONS = {};
+
+    function nodeKind(node) {
+        var d = node.data || {};
+        if (node.type === 'trigger') return d.trigger_type || '';
+        if (node.type === 'condition') return d.condition_type || '';
+        if (node.type === 'end') return 'end';
+        if (node.type === 'updateAttribute') return 'set_attribute';
+        return d.action_type || '';
+    }
+
+    /** Header colour, icon and name for a canvas node. */
+    function nodeStyle(node) {
+        var kind = nodeKind(node);
+        var label;
+        if (node.type === 'trigger') label = TRIGGER_LABELS[kind] || 'Trigger';
+        else if (node.type === 'condition') label = 'Condition';
+        else if (node.type === 'end') label = 'End Flow';
+        else label = ACTION_LABELS[kind] || 'Action';
+        return {
+            color: KIND_COLORS[kind] || (node.type === 'condition' ? TYPE_COLORS.condition : TYPE_COLORS[node.type] || TYPE_COLORS.action),
+            icon: KIND_ICONS[kind] || TYPE_ICONS[node.type] || TYPE_ICONS.action,
+            label: label
+        };
+    }
+
+    /** Palette: colour tiles, 2-column grids and collapsible sections. */
+    function decoratePalette() {
+        $('.flow-palette .palette-item').each(function () {
+            var $it = $(this);
+            var kind = $it.data('trigger') || $it.data('condition') || $it.data('action') || '';
+            var $icon = $it.find('i').first();
+            if (kind && $icon.length) KIND_ICONS[kind] = $icon.attr('class');
+            var color = KIND_COLORS[kind] || TYPE_COLORS[$it.data('palette')] || TYPE_COLORS.action;
+            $it[0].style.setProperty('--pc', color);
+            $it.attr('title', $.trim($it.text()));
+            $icon.wrap('<span class="palette-icon"></span>');
+            $it.contents().filter(function () { return this.nodeType === 3 && $.trim(this.nodeValue); })
+                .wrap('<span class="palette-label"></span>');
+        });
+        $('.flow-palette h6').each(function () {
+            var $h = $(this);
+            $h.nextUntil('h6, .palette-hint').wrapAll('<div class="palette-grid"></div>');
+            $h.addClass('palette-section').append('<i class="fas fa-chevron-up palette-chevron"></i>');
+        });
+        $('.flow-palette').on('click', '.palette-section', function () {
+            $(this).toggleClass('collapsed').next('.palette-grid').slideToggle(150);
+        });
+    }
+
     var TRIGGER_CONFIG_KEYS = [
         'keyword', 'content', 'event_topic', 'event_type', 'shopify_topic',
         'form_id', 'ad_id', 'page_id', 'token', 'secret', 'campaign_id',
@@ -419,11 +485,12 @@
             } else if (node.type !== 'end') {
                 ports += '<div class="flow-port out" data-port="out" data-node="' + esc(node.id) + '"></div>';
             }
-            var typeLabel = node.type === 'updateAttribute' ? 'action' : node.type;
+            var st = nodeStyle(node);
+            var title = nodeTitle(node);
             var html =
-                '<div class="flow-node ' + esc(node.type) + (Flow.selectedId === node.id ? ' selected' : '') + '" data-id="' + esc(node.id) + '" style="left:' + node.x + 'px;top:' + node.y + 'px">' +
-                '<div class="flow-node-head"><i class="fas fa-' + (node.type === 'trigger' ? 'bolt' : node.type === 'condition' ? 'code-branch' : node.type === 'end' ? 'flag-checkered' : 'play') + '"></i> ' + esc(typeLabel) + '</div>' +
-                '<div class="flow-node-body">' + esc(nodeTitle(node)) + '<span class="flow-node-sub">' + esc(nodeSubtitle(node)) + '</span></div>' +
+                '<div class="flow-node ' + esc(node.type) + (Flow.selectedId === node.id ? ' selected' : '') + '" data-id="' + esc(node.id) + '" style="left:' + node.x + 'px;top:' + node.y + 'px;--nc:' + esc(st.color) + '">' +
+                '<div class="flow-node-head"><i class="' + esc(st.icon) + '"></i><span>' + esc(st.label) + '</span></div>' +
+                '<div class="flow-node-body">' + (title !== st.label ? esc(title) : '') + '<span class="flow-node-sub">' + esc(nodeSubtitle(node)) + '</span></div>' +
                 ports +
                 '</div>';
             $c.append(html);
@@ -1564,6 +1631,7 @@
 
     $(function () {
         if (!$('#flowBuilder').length) return;
+        decoratePalette();
         loadGraph();
         renderNodes();
         bind();

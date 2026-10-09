@@ -171,43 +171,81 @@ body.flow-builder-page .swal2-container {
 }
 
 .flow-palette {
-    background: #ffffff;
+    background: #fbfaff;
     border-right: 1px solid rgba(75, 55, 134, 0.12);
-    padding: 0.95rem;
+    padding: 0.85rem 0.75rem;
     overflow: auto;
 }
 .flow-palette h6 {
     font-family: 'Onest', system-ui, sans-serif;
-    color: #5a726c;
-    text-transform: uppercase;
-    font-size: 0.65rem;
+    color: #1a1228;
+    font-size: 0.82rem;
     font-weight: 650;
-    letter-spacing: 0.1em;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.55rem;
 }
-.palette-item {
+.flow-palette h6.palette-section {
     display: flex;
     align-items: center;
-    gap: 0.55rem;
-    background: #f7faf8;
-    border: 1px solid rgba(75, 55, 134, 0.1);
-    border-radius: 12px;
-    padding: 0.55rem 0.7rem;
-    margin-bottom: 0.45rem;
-    cursor: grab;
-    font-size: 0.84rem;
-    color: #1a1228;
+    justify-content: space-between;
+    cursor: pointer;
     user-select: none;
-    transition: border-color 0.15s, transform 0.15s, background 0.15s;
+}
+.palette-chevron {
+    font-size: 0.65rem;
+    color: #8a8fa3;
+    transition: transform 0.15s ease;
+}
+.palette-section.collapsed .palette-chevron {
+    transform: rotate(180deg);
+}
+.palette-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+}
+.palette-item {
+    --pc: #8e53f7;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.35rem;
+    background: #ffffff;
+    border: 1px solid #ece9f5;
+    border-radius: 12px;
+    padding: 0.55rem 0.3rem 0.5rem;
+    cursor: grab;
+    color: #1a1228;
+    text-align: center;
+    user-select: none;
+    transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
 }
 .palette-item:hover {
-    border-color: rgba(142, 83, 247, 0.55);
-    background: rgba(142, 83, 247, 0.1);
+    border-color: var(--pc);
+    box-shadow: 0 6px 14px -8px var(--pc);
     transform: translateY(-1px);
 }
-.palette-item i {
-    width: 1.15rem;
-    color: #8e53f7;
+.palette-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--pc);
+    box-shadow: 0 4px 10px -4px var(--pc);
+}
+.palette-icon i {
+    color: #ffffff;
+    font-size: 1.05rem;
+    width: auto;
+}
+.palette-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1.2;
+    word-break: break-word;
 }
 .palette-hint {
     margin-top: 1rem;
@@ -290,6 +328,7 @@ body.flow-builder-page .swal2-container {
 }
 
 .flow-node {
+    --nc: #8e53f7;
     position: absolute;
     width: 210px;
     background: #ffffff;
@@ -312,27 +351,30 @@ body.flow-builder-page .swal2-container {
     box-shadow: 0 12px 28px rgba(4, 47, 42, 0.16);
 }
 .flow-node.selected {
-    border-color: #8e53f7;
-    box-shadow: 0 0 0 2px rgba(142, 83, 247, 0.28), 0 8px 20px rgba(4, 47, 42, 0.1);
+    border-color: var(--nc);
+    box-shadow: 0 0 0 2px var(--nc), 0 8px 20px rgba(4, 47, 42, 0.12);
 }
-.flow-node.trigger { border-top: 3px solid #34B7F1; }
-.flow-node.condition { border-top: 3px solid #f0a202; }
-.flow-node.action { border-top: 3px solid #8e53f7; }
-.flow-node.end { border-top: 3px solid #94a3b8; opacity: 0.92; }
 
 .flow-node-head {
     display: flex;
     align-items: center;
     gap: 0.45rem;
-    padding: 0.55rem 0.7rem 0.2rem;
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: #5a726c;
-    font-weight: 600;
+    padding: 0.5rem 0.75rem;
+    background: var(--nc);
+    border-radius: 13px 13px 0 0;
+    color: #ffffff;
+    font-size: 0.8rem;
+    font-weight: 650;
+    font-family: 'Onest', system-ui, sans-serif;
+    letter-spacing: -0.01em;
+}
+.flow-node-head span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .flow-node-body {
-    padding: 0.2rem 0.75rem 0.75rem;
+    padding: 0.55rem 0.75rem 0.75rem;
     font-size: 0.9rem;
     font-weight: 600;
     color: #1a1228;
@@ -381,7 +423,7 @@ body.flow-builder-page .swal2-container {
     right: -7px;
     top: 50%;
     transform: translateY(-50%);
-    background: #8e53f7;
+    background: var(--nc, #8e53f7);
 }
 .flow-port.true {
     right: -7px;
