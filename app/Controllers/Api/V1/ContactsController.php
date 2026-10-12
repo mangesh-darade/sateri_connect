@@ -195,8 +195,7 @@ class ContactsController extends BaseV1Controller
 
                 $source = (string) ($input['opt_in_source'] ?? $input['source'] ?? 'api');
 
-                // Only the customer can reverse their own STOP (START keyword).
-                if ($shouldOptIn === true && ! $consentService->isOptedOut($contact)) {
+                if ($shouldOptIn === true) {
                     $consentService->optIn($contactId, $source);
                 } elseif ($shouldOptIn === false) {
                     $consentService->optOut($contactId, $source);
@@ -335,14 +334,6 @@ class ContactsController extends BaseV1Controller
         $source = (string) ($input['source'] ?? $input['opt_in_source'] ?? 'api');
         $contactId = (int) $contact['id'];
         $consentService = service('whatsAppConsent');
-
-        if ($shouldOptIn && $consentService->isOptedOut($contact)) {
-            return $this->respondError(
-                'Contact opted out of WhatsApp messages (STOP). Only they can opt back in by sending START.',
-                422,
-                ['policy' => 'meta_consent', 'code' => 'RECIPIENT_OPTED_OUT']
-            );
-        }
 
         if ($shouldOptIn) {
             $consentService->optIn($contactId, $source);
