@@ -142,16 +142,18 @@ class WhatsApp extends BaseConfig
     public int $catchAllAutoReplyCooldownMinutes = 0;
 
     /**
-     * Max campaign (broadcast) messages per contact in a rolling 24h. 0 disables the cap.
-     * Override per tenant with settings key `wa_campaign_daily_cap`.
+     * Max campaign messages per contact in a rolling 24h. 0 disables the cap.
+     * Meta has no fixed "one campaign per 24h" rule, so this stays off.
+     * A real Meta marketing limit (error 131049) still pauses that contact for 24h.
      */
-    public int $campaignDailyCapPerContact = 1;
+    public int $campaignDailyCapPerContact = 0;
 
     /**
-     * Minimum days between MARKETING template messages to the same contact (campaigns, automations,
-     * API). 1 = at most one per rolling 24h. 0 disables. Override via settings `wa_marketing_frequency_cap_days`.
+     * Minimum days between MARKETING template messages to the same contact.
+     * Kept at 0: opted-in contacts are not skipped for a recent marketing send.
+     * Meta error 131049 still pauses that one contact.
      */
-    public int $marketingFrequencyCapDays = 1;
+    public int $marketingFrequencyCapDays = 0;
 
     /**
      * Days to stop business-initiated sends after Meta reports a number undeliverable (131026).

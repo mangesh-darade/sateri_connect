@@ -743,8 +743,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                 </div>
                                 <div class="col-md-9 mb-3 d-flex align-items-end">
                                     <div class="form-text mb-2">
-                                        Contacts who already got a MARKETING template in this period are skipped (campaigns, automations, API) and shown in the campaign's skipped summary.
-                                        Utility templates, replies and chat are not affected. 0 turns the cap off.
+                                        Contacts are not skipped for a recent marketing message. Opt-in is still required. Meta can still pause one contact if it hits its own limit (error 131049).
                                     </div>
                                 </div>
                                 <div class="col-12">

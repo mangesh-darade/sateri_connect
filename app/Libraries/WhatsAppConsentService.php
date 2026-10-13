@@ -342,18 +342,7 @@ class WhatsAppConsentService
 
     public function campaignDailyCap(): int
     {
-        $override = null;
-        try {
-            $override = service('settingsService')->get('wa_campaign_daily_cap');
-        } catch (Throwable) {
-            // settings unavailable (CLI tests)
-        }
-
-        if (is_numeric($override)) {
-            return max(0, (int) $override);
-        }
-
-        return max(0, $this->config->campaignDailyCapPerContact);
+        return 0;
     }
 
     /**
@@ -394,19 +383,12 @@ class WhatsAppConsentService
     }
 
     /**
-     * Days between MARKETING template messages to the same contact (settings
-     * `wa_marketing_frequency_cap_days`). 0 disables the cap.
+     * App-side marketing gap is off (0). Opted-in contacts are not skipped
+     * because they already got a marketing template.
      */
     public function marketingFrequencyCapDays(): int
     {
-        $value = null;
-        try {
-            $value = service('settingsService')->get('wa_marketing_frequency_cap_days');
-        } catch (Throwable) {
-            // settings unavailable (CLI tests)
-        }
-
-        return is_numeric($value) ? max(0, (int) $value) : max(0, $this->config->marketingFrequencyCapDays);
+        return 0;
     }
 
     /**

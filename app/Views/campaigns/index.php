@@ -240,6 +240,16 @@ $campaigns = $campaigns ?? [];
 }
 .cw-phone-preview .cw-bubble {
     background: #005c4b; border-radius: 8px; padding: .75rem; margin-top: .5rem;
+    white-space: normal;
+}
+.cw-phone-preview .cw-bubble img,
+.cw-phone-preview .cw-bubble video,
+.cw-phone-preview .cw-preview-media {
+    display: block; width: 100%; max-height: 180px; object-fit: cover;
+    border-radius: 6px; margin: 0 0 .5rem; background: #0b141a;
+}
+.cw-phone-preview .cw-preview-doc {
+    display: inline-block; margin-bottom: .5rem; color: #d9fdd3;
 }
 .cw-attr-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: .5rem; align-items: center; margin-bottom: .5rem; }
 @media (max-width: 767px) {

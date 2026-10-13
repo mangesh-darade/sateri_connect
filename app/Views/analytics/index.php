@@ -95,38 +95,41 @@ $emailSum = $email['summary'] ?? [];
 
         <div class="dash-panel">
             <div class="panel-head d-flex justify-content-between">
-                <h3>Recent WhatsApp campaigns</h3>
+                <h3>Recent recipients</h3>
                 <a href="<?= site_url('reports') ?>" class="btn btn-xs btn-outline-secondary">Full reports</a>
             </div>
             <div class="panel-body p-0">
                 <div class="table-responsive">
                     <table class="table table-sm table-hover mb-0">
-                        <thead><tr><th>Name</th><th>Status</th><th>Sent</th><th>Delivered</th><th>Failed</th></tr></thead>
+                        <thead><tr><th>Recipient</th><th>Status</th><th>Campaign</th></tr></thead>
                         <tbody>
                         <?php if (empty($wa['campaigns'])): ?>
-                            <tr><td colspan="5" class="text-muted text-center py-3">No campaigns.</td></tr>
+                            <tr><td colspan="3" class="text-muted text-center py-3">No recipients yet.</td></tr>
                         <?php else: ?>
                             <?php foreach ($wa['campaigns'] as $c): ?>
                             <?php
                             if (! is_array($c)) {
                                 continue;
                             }
-                            $waCampaignId = (int) ($c['id'] ?? 0);
-                            $waCampaignName = (string) ($c['name'] ?? ($waCampaignId > 0 ? ('Campaign #' . $waCampaignId) : 'Campaign'));
-                            $waCampaignStatus = (string) ($c['status'] ?? 'unknown');
+                            $waCampaignId = (int) ($c['campaign_id'] ?? 0);
+                            $waCampaignName = trim((string) ($c['campaign_name'] ?? ''));
+                            $recipientStatus = (string) ($c['status'] ?? 'sent');
                             ?>
                             <tr>
                                 <td>
-                                    <?php if ($waCampaignId > 0): ?>
-                                        <a href="<?= site_url('campaigns/' . $waCampaignId) ?>"><?= esc($waCampaignName) ?></a>
-                                    <?php else: ?>
-                                        <?= esc($waCampaignName) ?>
+                                    <div class="fw-semibold"><?= esc((string) ($c['name'] ?? '')) ?></div>
+                                    <?php if (trim((string) ($c['mobile'] ?? '')) !== ''): ?>
+                                        <div class="small text-muted"><?= esc((string) $c['mobile']) ?></div>
                                     <?php endif; ?>
                                 </td>
-                                <td><?= esc($waCampaignStatus) ?></td>
-                                <td><?= (int) ($c['sent_count'] ?? 0) ?></td>
-                                <td><?= (int) ($c['delivered_count'] ?? 0) ?></td>
-                                <td><?= (int) ($c['failed_count'] ?? 0) ?></td>
+                                <td><?= view('partials/status_badge', ['status' => $recipientStatus]) ?></td>
+                                <td>
+                                    <?php if ($waCampaignId > 0): ?>
+                                        <a href="<?= site_url('campaigns/' . $waCampaignId) ?>"><?= esc($waCampaignName !== '' ? $waCampaignName : ('Campaign #' . $waCampaignId)) ?></a>
+                                    <?php else: ?>
+                                        <?= esc($waCampaignName !== '' ? $waCampaignName : '—') ?>
+                                    <?php endif; ?>
+                                </td>
                             </tr>
                             <?php endforeach; ?>
                         <?php endif; ?>

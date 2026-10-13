@@ -146,7 +146,7 @@
                                 <button type="button" class="btn btn-outline-secondary btn-sm mt-3" id="cwChooseFileBtn">Choose File</button>
                                 <input type="file" id="cwMediaFile" class="d-none" accept="image/png,image/jpeg,image/jpg,image/webp,video/mp4,application/pdf">
                                 <input type="url" id="cwMediaUrl" class="form-control form-control-sm mt-2" placeholder="Or paste media URL">
-                                <div class="invalid-feedback d-block d-none" id="cwMediaUrlError">Upload or paste a valid media URL for this template header.</div>
+                                <div class="small text-danger mt-1 d-none" id="cwMediaUrlError">Upload or paste a valid media URL for this template header.</div>
                                 <div class="small text-muted mt-2 d-none" id="cwMediaStatus"></div>
                             </div>
                             <div class="mt-3" id="cwVarMapWrap">

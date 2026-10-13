@@ -234,7 +234,7 @@
             return '';
         }
 
-        var isUrl = /^https?:\/\//i.test(content);
+        var isUrl = /^(https?:|blob:)/i.test(content);
         if (type === 'text' || (type === '' && !isUrl)) {
             return '<div class="fw-semibold">' + APP.escapeHtml(content) + '</div>';
         }

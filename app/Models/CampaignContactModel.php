@@ -62,17 +62,48 @@ class CampaignContactModel extends Model
 
     public function updateStatusByWaMessageId(string $waMessageId, string $status): bool
     {
-        $data = ['status' => $status];
-        $now  = date('Y-m-d H:i:s');
-
-        if ($status === 'sent') {
-            $data['sent_at'] = $now;
-        } elseif ($status === 'delivered') {
-            $data['delivered_at'] = $now;
-        } elseif ($status === 'read') {
-            $data['read_at'] = $now;
+        $waMessageId = trim($waMessageId);
+        $status      = strtolower(trim($status));
+        if ($waMessageId === '' || $status === '') {
+            return false;
         }
 
-        return $this->where('wa_message_id', $waMessageId)->set($data)->update();
+        $rows = $this->where('wa_message_id', $waMessageId)->findAll();
+        if ($rows === []) {
+            return false;
+        }
+
+        $now     = date('Y-m-d H:i:s');
+        $updated = false;
+        foreach ($rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            if (! \App\Libraries\WhatsAppDeliveryStatus::shouldAdvance((string) ($row['status'] ?? ''), $status)) {
+                continue;
+            }
+
+            $data = ['status' => $status];
+            if ($status === 'sent' && trim((string) ($row['sent_at'] ?? '')) === '') {
+                $data['sent_at'] = $now;
+            } elseif ($status === 'delivered') {
+                if (trim((string) ($row['delivered_at'] ?? '')) === '') {
+                    $data['delivered_at'] = $now;
+                }
+            } elseif ($status === 'read') {
+                if (trim((string) ($row['read_at'] ?? '')) === '') {
+                    $data['read_at'] = $now;
+                }
+                if (trim((string) ($row['delivered_at'] ?? '')) === '') {
+                    $data['delivered_at'] = $now;
+                }
+            } 
+
+            if ($this->update((int) $row['id'], $data)) {
+                $updated = true;
+            }
+        }
+
+        return $updated;
     }
 }

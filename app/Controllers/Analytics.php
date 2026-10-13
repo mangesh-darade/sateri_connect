@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
-use App\Models\CampaignModel;
 use App\Models\EmailHtmlCampaignModel;
 use App\Models\EmailLogModel;
 use CodeIgniter\HTTP\ResponseInterface;
@@ -63,25 +62,7 @@ class Analytics extends BaseController
             ];
         }
 
-        $waCampaignRows = model(CampaignModel::class)
-            ->orderBy('created_at', 'DESC')
-            ->findAll(20);
-        $waCampaigns = [];
-        foreach ($waCampaignRows as $row) {
-            if (! is_array($row)) {
-                continue;
-            }
-
-            $waCampaignId = (int) ($row['id'] ?? 0);
-            $waCampaigns[] = [
-                'id'              => $waCampaignId,
-                'name'            => (string) ($row['name'] ?? ('Campaign #' . $waCampaignId)),
-                'status'          => (string) ($row['status'] ?? 'unknown'),
-                'sent_count'      => (int) ($row['sent_count'] ?? 0),
-                'delivered_count' => (int) ($row['delivered_count'] ?? 0),
-                'failed_count'    => (int) ($row['failed_count'] ?? 0),
-            ];
-        }
+        $waCampaigns = (new \App\Libraries\WhatsAppDeliveryStatus())->recentRecipients(20);
 
         $waTrendLabels = [];
         $waTrendSent = [];

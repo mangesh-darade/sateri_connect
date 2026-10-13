@@ -810,7 +810,7 @@ class Webhooks extends Controller
             $message = $messages->findByExternalMessageId($waId);
         }
 
-        if ($message !== null) {
+        if ($message !== null && \App\Libraries\WhatsAppDeliveryStatus::shouldAdvance((string) ($message['status'] ?? ''), $newStatus)) {
             $update = ['status' => $newStatus];
             if ($newStatus === 'failed' && is_array($errors) && isset($errors[0])) {
                 $update['error_code']    = (string) ($errors[0]['code'] ?? '');
@@ -829,7 +829,11 @@ class Webhooks extends Controller
         // Also update by joining if wa_message_id was set on send
         $cc = $ccModel->where('wa_message_id', $waId)->first();
         if ($cc !== null && ! empty($cc['campaign_id'])) {
-            if ($newStatus === 'failed' && is_array($errors) && isset($errors[0])) {
+            if ($newStatus === 'failed'
+                && strtolower((string) ($cc['status'] ?? '')) === 'failed'
+                && is_array($errors)
+                && isset($errors[0])
+            ) {
                 $ccModel->update((int) $cc['id'], [
                     'error_message' => (string) ($errors[0]['title'] ?? 'Failed'),
                 ]);

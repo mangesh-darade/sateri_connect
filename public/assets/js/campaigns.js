@@ -20,6 +20,8 @@
         mediaUrl: '',
         mediaId: '',
         mediaMime: '',
+        mediaFile: null,
+        mediaPreviewUrl: '',
         variables: {}
     };
 
@@ -81,6 +83,38 @@
             }
         }
         return fallback || 'Request failed.';
+    }
+
+    function clearLocalPreview() {
+        if (state.mediaPreviewUrl && String(state.mediaPreviewUrl).indexOf('blob:') === 0) {
+            try { URL.revokeObjectURL(state.mediaPreviewUrl); } catch (e) { /* already revoked */ }
+        }
+        state.mediaPreviewUrl = '';
+        state.mediaFile = null;
+    }
+
+    function rememberMediaFile(file) {
+        clearLocalPreview();
+        state.mediaFile = file || null;
+        state.mediaMime = String((file && file.type) || state.mediaMime || '').trim();
+        if (file && window.URL && typeof URL.createObjectURL === 'function') {
+            state.mediaPreviewUrl = URL.createObjectURL(file);
+        }
+    }
+
+    function previewSource() {
+        if (state.mediaPreviewUrl) {
+            return state.mediaPreviewUrl;
+        }
+        var typed = String($('#cwMediaUrl').val() || '').trim();
+        if (/^(https?:|blob:)/i.test(typed)) {
+            return typed;
+        }
+        var stored = String(state.mediaUrl || '').trim();
+        if (/^(https?:|blob:)/i.test(stored)) {
+            return stored;
+        }
+        return '';
     }
 
     function isBadMediaUrl(url) {
@@ -594,6 +628,7 @@
         $('#cwMediaCol').toggleClass('d-none', !showMedia);
         $('#cwMediaFile').attr('accept', tpl.media_accept || 'image/png,image/jpeg,image/webp,video/mp4,application/pdf');
         if (!showMedia) {
+            clearLocalPreview();
             state.mediaUrl = '';
             state.mediaId = '';
             state.mediaMime = '';
@@ -602,6 +637,7 @@
             $('#cwMediaStatus').addClass('d-none').text('');
         } else if (mediaOptional) {
             // Drop stale override from a previous template/upload so sample can be used.
+            clearLocalPreview();
             state.mediaUrl = '';
             state.mediaId = '';
             state.mediaMime = '';
@@ -614,6 +650,7 @@
             $('#cwUploadHint').text('Approved template already has a reusable ' + (tpl.header_type || 'media')
                 + ' sample. Leave empty to use that sample, or upload to override.');
         } else if (needsMedia) {
+            clearLocalPreview();
             state.mediaUrl = '';
             state.mediaId = '';
             state.mediaMime = '';
@@ -660,18 +697,43 @@
             + '. You uploaded ' + mime + '.';
     }
 
+    function previewHeaderType() {
+        var headerType = String((state.template && state.template.header_type) || '').toLowerCase();
+        var mime = String(state.mediaMime || (state.mediaFile && state.mediaFile.type) || '').toLowerCase();
+        if (headerType === 'image' || headerType === 'video' || headerType === 'document') {
+            return headerType;
+        }
+        if (mime.indexOf('video/') === 0) return 'video';
+        if (mime === 'application/pdf') return 'document';
+        return 'image';
+    }
+
+    function mediaPreviewHtml(src) {
+        src = String(src || '').trim();
+        if (!src) return '';
+        var headerType = previewHeaderType();
+        var safe = esc(src);
+        if (headerType === 'video') {
+            return '<video src="' + safe + '" controls preload="metadata" class="cw-preview-media"></video>';
+        }
+        if (headerType === 'document') {
+            return '<a href="' + safe + '" target="_blank" rel="noopener" class="cw-preview-doc">PDF attached</a>';
+        }
+        return '<img src="' + safe + '" alt="Uploaded header" class="cw-preview-media">';
+    }
+
     function updateWaPreview() {
         var tpl = state.template || {};
         var body = String(tpl.body || 'Select a template to preview.');
         var footer = String(tpl.footer || '');
-        var media = $('#cwMediaUrl').val() || state.mediaUrl || '';
-        var html = '';
-        if (media) {
-            html += '<div class="mb-2 small text-info">[Media attached]</div>';
-        } else if (tpl.media_optional) {
-            html += '<div class="mb-2 small text-muted">[Using approved template sample media]</div>';
-        } else if (tpl.needs_media) {
-            html += '<div class="mb-2 small text-warning">[Upload required: Meta sample cannot be reused]</div>';
+        var src = previewSource();
+        var html = mediaPreviewHtml(src);
+        if (!html && (state.mediaId || state.mediaUrl)) {
+            html = '<div class="mb-2 small text-info">[Media attached]</div>';
+        } else if (!html && tpl.media_optional) {
+            html = '<div class="mb-2 small text-muted">[Using approved template sample media]</div>';
+        } else if (!html && tpl.needs_media) {
+            html = '<div class="mb-2 small text-warning">[Upload required: Meta sample cannot be reused]</div>';
         }
         html += esc(body).replace(/\n/g, '<br>');
         if (footer) {
@@ -1011,7 +1073,10 @@
         state.template = null;
         state.builderId = 0;
         state.campaignId = 0;
+        clearLocalPreview();
         state.mediaUrl = '';
+        state.mediaId = '';
+        state.mediaMime = '';
         state.variables = {};
         state.attributes = [];
         state.audience = { total: 0, phone_count: 0, email_count: 0, contact_ids: [] };
@@ -1249,18 +1314,30 @@
             }
         });
 
+        var settingMediaUrl = false;
+        function setMediaUrlField(value) {
+            settingMediaUrl = true;
+            $('#cwMediaUrl').val(value);
+            settingMediaUrl = false;
+        }
+
         $('#cwMediaUrl').on('input', function () {
+            if (settingMediaUrl) {
+                return;
+            }
             $('#cwMediaUrlError').addClass('d-none');
             $('#cwMediaUrl').removeClass('is-invalid');
             var v = String($(this).val() || '').trim();
             if (!v) {
                 // Cleared → fall back to approved sample; drop stale override ids.
+                clearLocalPreview();
                 state.mediaUrl = '';
                 state.mediaId = '';
                 state.mediaMime = '';
                 $('#cwMediaFile').val('');
                 $('#cwMediaStatus').addClass('d-none').text('');
             } else {
+                clearLocalPreview();
                 state.mediaUrl = v;
             }
             updateWaPreview();
@@ -1284,6 +1361,9 @@
                 toast('File exceeds 16MB limit.', 'error');
                 return;
             }
+
+            rememberMediaFile(file);
+            updateWaPreview();
 
             var $status = $('#cwMediaStatus').removeClass('d-none text-danger text-success').addClass('text-muted').text('Uploading ' + file.name + '…');
             var fd = new FormData();
@@ -1322,7 +1402,10 @@
                 var showUrl = /^https?:\/\//i.test(url)
                     && !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(url)
                     && url.indexOf('/media/serve/') === -1;
-                $('#cwMediaUrl').val(showUrl ? url : '');
+                setMediaUrlField(showUrl ? url : '');
+                if (!state.mediaPreviewUrl && /^https?:\/\//i.test(url)) {
+                    state.mediaPreviewUrl = url;
+                }
                 $('#cwMediaUrlError').addClass('d-none');
                 $('#cwMediaUrl').removeClass('is-invalid');
                 $status.removeClass('text-muted').addClass('text-success').text('Uploaded ✓');
@@ -1330,12 +1413,14 @@
                 toast('Media uploaded.', 'success');
             }).fail(function (xhr) {
                 var err = (xhr.responseJSON && xhr.responseJSON.message) || 'Upload failed';
+                clearLocalPreview();
                 state.mediaUrl = '';
                 state.mediaId = '';
                 state.mediaMime = '';
                 $('#cwMediaUrl').val('').addClass('is-invalid');
                 $('#cwMediaUrlError').removeClass('d-none');
                 $status.removeClass('text-muted').addClass('text-danger').text(err);
+                updateWaPreview();
                 showWizardError(err, $('#cwMediaUrl'));
             });
         }

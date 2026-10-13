@@ -155,6 +155,14 @@ class Campaigns extends BaseController
             }
         }
 
+        $aligned = (new \App\Libraries\WhatsAppDeliveryStatus())->syncCampaign($id);
+        if ($aligned > 0) {
+            $this->logActivity('update', 'campaigns', 'Aligned recipient status with WhatsApp delivery receipts', [
+                'campaign_id' => $id,
+                'updated'     => $aligned,
+            ]);
+        }
+
         model(CampaignModel::class)->updateStats($id);
         $campaign = model(CampaignModel::class)->find($id);
 
@@ -321,6 +329,7 @@ class Campaigns extends BaseController
             }
         }
 
+        (new \App\Libraries\WhatsAppDeliveryStatus())->syncCampaign($id);
         model(CampaignModel::class)->updateStats($id);
         $campaign = model(CampaignModel::class)->find($id);
 
@@ -486,8 +495,7 @@ class Campaigns extends BaseController
         }
 
         $scheduledAt = (string) ($this->request->getPost('scheduled_at')
-            ?? $this->request->getJSON(true)['scheduled_at']
-            ?? '');
+            ?? ($this->requestJson()['scheduled_at'] ?? ''));
 
         if (app_local_to_storage($scheduledAt) === null) {
             return $this->failOrRedirect('A valid scheduled_at datetime is required.');
@@ -1569,11 +1577,33 @@ class Campaigns extends BaseController
     }
 
     /**
+     * JSON body only when the request is actually JSON.
+     * A normal Send form is form-urlencoded; parsing that as JSON throws.
+     *
+     * @return array<string, mixed>
+     */
+    protected function requestJson(): array
+    {
+        $contentType = strtolower($this->request->getHeaderLine('Content-Type'));
+        if (! str_contains($contentType, 'application/json')) {
+            return [];
+        }
+
+        try {
+            $json = $this->request->getJSON(true);
+
+            return is_array($json) ? $json : [];
+        } catch (Throwable) {
+            return [];
+        }
+    }
+
+    /**
      * @return list<int>|null
      */
     protected function optionalIdList(string $key): ?array
     {
-        $json = $this->request->getJSON(true);
+        $json = $this->requestJson();
         $raw  = $this->request->getPost($key)
             ?? (is_array($json) ? ($json[$key] ?? ($json['audience'][$key] ?? null)) : null);
         if ($raw === null || $raw === '') {
@@ -1591,7 +1621,7 @@ class Campaigns extends BaseController
      */
     protected function parseAudienceFromRequest(): array
     {
-        $json = $this->request->getJSON(true);
+        $json = $this->requestJson();
         $all  = (string) ($this->request->getPost('audience_all')
             ?? (is_array($json) ? ($json['audience_all'] ?? $json['audience']['all_active'] ?? $json['all_active'] ?? '0') : '0'));
 
