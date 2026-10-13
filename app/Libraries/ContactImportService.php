@@ -363,8 +363,8 @@ class ContactImportService
                 }
             }
 
-            // Operator confirmed the file holds recorded WhatsApp consent; a customer STOP still wins.
-            if ($consent !== null && ($existing === null || ! $consent->isOptedOut($existing))) {
+            // Opt-in only on a new insert. An existing customer is left as they are.
+            if ($consent !== null && $existing === null) {
                 $consent->optIn($contactId, $optInSource, null, false);
             }
 

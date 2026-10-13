@@ -200,8 +200,9 @@ class ContactsController extends BaseV1Controller
                 } elseif ($shouldOptIn === false) {
                     $consentService->optOut($contactId, $source);
                 }
-            } elseif ($wasCreated && ! empty($input['opt_in_source'])) {
-                $consentService->optIn($contactId, (string) $input['opt_in_source']);
+            } elseif ($wasCreated) {
+                $source = trim((string) ($input['opt_in_source'] ?? $input['source'] ?? ''));
+                $consentService->optIn($contactId, $source !== '' ? $source : 'api');
             }
 
             // Reload fresh contact state after consent changes

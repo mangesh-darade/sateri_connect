@@ -115,7 +115,7 @@ class DocsController extends BaseController
                     'title'       => 'Upsert Customer Contact',
                     'method'      => 'POST',
                     'path'        => '/api/v1/contacts/upsert',
-                    'description' => 'Create or update a customer with name, email, tags, opt-in consent, and custom attributes. Triggers contact automations.',
+                    'description' => 'Create or update a customer with name, email, tags, and custom attributes. A new contact is opted in automatically (opt_in 1, source api) unless the body sends opt_in false. An existing contact keeps its consent unless opt_in is sent. Triggers contact automations.',
                     'headers'     => [
                         'X-API-Key'    => 'sc_live_your_api_key',
                         'Content-Type' => 'application/json',
