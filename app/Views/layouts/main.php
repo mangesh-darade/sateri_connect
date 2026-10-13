@@ -379,11 +379,12 @@
                     'label' => 'Contacts',
                     'icon' => 'users',
                     'url' => site_url('contacts'),
-                    'match' => ['contacts', 'customer-groups', 'attributes'],
+                    'match' => ['contacts', 'customer-groups', 'attributes', 'smart-forms'],
                     'children' => [
                         ['label' => 'All Contacts', 'icon' => 'users', 'url' => site_url('contacts'), 'match' => ['contacts']],
                         ['label' => 'Customer Groups', 'icon' => 'tags', 'url' => site_url('customer-groups'), 'match' => ['customer-groups']],
                         ['label' => 'Attributes', 'icon' => 'list-plus', 'url' => site_url('attributes'), 'match' => ['attributes']],
+                        ['label' => 'Smart Forms', 'icon' => 'clipboard-list', 'url' => site_url('smart-forms'), 'match' => ['smart-forms']],
                     ],
                 ];
             }

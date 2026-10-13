@@ -91,6 +91,9 @@ $routes->match(['get', 'post'], 'webhook', 'Webhooks::index');
  * Authenticated panel
  * --------------------------------------------------------------------
  */
+$routes->get('f/(:segment)', 'SmartForms::showPublic/$1');
+$routes->post('f/(:segment)', 'SmartForms::submitPublic/$1', ['filter' => 'rateLimit:20,600']);
+
 $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->get('dashboard', 'Dashboard::index');
     $routes->get('guide', 'Guide::index');
@@ -138,6 +141,14 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->get('contacts/(:num)/edit', 'Contacts::edit/$1');
     $routes->post('contacts/(:num)', 'Contacts::update/$1', ['filter' => 'csrf']);
     $routes->post('contacts/(:num)/delete', 'Contacts::delete/$1', ['filter' => 'csrf']);
+
+    $routes->get('smart-forms', 'SmartForms::index');
+    $routes->post('smart-forms/captcha', 'SmartForms::saveCaptcha', ['filter' => 'csrf']);
+    $routes->get('smart-forms/create', 'SmartForms::create');
+    $routes->post('smart-forms', 'SmartForms::store', ['filter' => 'csrf']);
+    $routes->get('smart-forms/(:num)/edit', 'SmartForms::edit/$1');
+    $routes->post('smart-forms/(:num)', 'SmartForms::update/$1', ['filter' => 'csrf']);
+    $routes->post('smart-forms/(:num)/delete', 'SmartForms::delete/$1', ['filter' => 'csrf']);
 
     // Contact attribute definitions + inbox quick replies
     $routes->get('attributes', 'Attributes::index');

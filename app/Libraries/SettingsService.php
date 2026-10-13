@@ -43,6 +43,7 @@ class SettingsService
         'ses_secret_key',
         'elintom_api_private_key',
         'ai_api_key',
+        'recaptcha_secret_key',
     ];
 
     public function __construct(?SettingModel $settings = null, ?EncryptionService $encryption = null)

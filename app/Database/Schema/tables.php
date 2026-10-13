@@ -964,6 +964,45 @@ return array (
     ),
     'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
   ),
+  'smart_form_responses' => 
+  array (
+    'columns' => 
+    array (
+      'id' => 'int unsigned NOT NULL AUTO_INCREMENT',
+      'form_id' => 'int unsigned NOT NULL',
+      'contact_id' => 'int unsigned DEFAULT NULL',
+      'payload' => 'text COLLATE utf8mb4_general_ci',
+      'created_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' => 
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+      'form_id' => 'KEY `form_id` (`form_id`)',
+      'contact_id' => 'KEY `contact_id` (`contact_id`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
+  'smart_forms' => 
+  array (
+    'columns' => 
+    array (
+      'id' => 'int unsigned NOT NULL AUTO_INCREMENT',
+      'name' => 'varchar(120) COLLATE utf8mb4_general_ci NOT NULL',
+      'slug' => 'varchar(80) COLLATE utf8mb4_general_ci NOT NULL',
+      'status' => 'varchar(20) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'active\'',
+      'success_message' => 'varchar(255) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'Thank you. We have received your details.\'',
+      'fields' => 'text COLLATE utf8mb4_general_ci',
+      'created_by' => 'int unsigned DEFAULT NULL',
+      'created_at' => 'datetime DEFAULT NULL',
+      'updated_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' => 
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+      'slug' => 'UNIQUE KEY `slug` (`slug`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
   'tags' => 
   array (
     'columns' => 
