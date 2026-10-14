@@ -203,7 +203,9 @@ if (! function_exists('is_ai_enabled')) {
     function is_ai_enabled(): bool
     {
         try {
-            return (bool) setting('ai_enabled', 0);
+            $value = setting('ai_enabled', '0');
+
+            return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
         } catch (\Throwable) {
             return false;
         }

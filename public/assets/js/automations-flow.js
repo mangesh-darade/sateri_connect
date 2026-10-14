@@ -236,8 +236,8 @@
             Flow.nodes.push({
                 id: 'trigger',
                 type: 'trigger',
-                x: 60,
-                y: 180,
+                x: 24,
+                y: 24,
                 data: { trigger_type: 'incoming_message', label: TRIGGER_LABELS.incoming_message }
             });
         }
@@ -288,7 +288,9 @@
         }
         if (node.type === 'condition') return d.value ? ('“' + d.value + '”') : 'Configure…';
         if (d.action_type === 'response_message' || d.action_type === 'send_text') {
-            return d.text ? String(d.text).slice(0, 42) : 'Write message…';
+            var bit = d.text ? String(d.text).slice(0, 28) : 'Write message…';
+            var n = choiceOptions(d).length;
+            return n ? bit + ' · ' + n + ' option' + (n === 1 ? '' : 's') : bit;
         }
         if (d.action_type === 'system_initiated' || d.action_type === 'send_template') {
             return d.template_name || 'Pick template…';
@@ -317,6 +319,19 @@
         return (!d.label || /\snode$/i.test(String(d.label))) ? '' : String(d.label);
     }
 
+    /** Response message / Send text option labels, in order, skipping blanks. Max 10. */
+    function choiceOptions(d) {
+        if (!d || (d.action_type !== 'response_message' && d.action_type !== 'send_text')) return [];
+        var raw = Array.isArray(d.options) ? d.options : String(d.options || '').split(/\r?\n/);
+        return raw.map(function (s) { return String(s).trim(); }).filter(Boolean).slice(0, 10);
+    }
+
+    function choicePorts(d) {
+        var opts = choiceOptions(d);
+        if (!opts.length) return null;
+        return opts.map(function (_, i) { return 'opt_' + (i + 1); }).concat(['false']);
+    }
+
     /** Ask question options (one per line), max 10; empty for free-text answers. */
     function questionOptions(d) {
         if (!d || (d.reply_type || 'text') === 'text') return [];
@@ -332,11 +347,12 @@
 
     function portLabel(node, p) {
         var d = node.data || {};
-        if (d.action_type === 'ask_question') {
+        if (d.action_type === 'ask_question' || d.action_type === 'response_message' || d.action_type === 'send_text') {
             if (p === 'true') return 'Answered';
             if (p === 'false') return 'No reply';
-            var opt = questionOptions(d)[parseInt(String(p).slice(4), 10) - 1];
-            if (opt) return opt.length > 14 ? opt.slice(0, 13) + '…' : opt;
+            var list = d.action_type === 'ask_question' ? questionOptions(d) : choiceOptions(d);
+            var opt = list[parseInt(String(p).slice(4), 10) - 1];
+            if (opt) return opt.length > 18 ? opt.slice(0, 17) + '…' : opt;
         }
         return p === 'true' ? 'Yes' : (p === 'false' ? 'No' : (String(p).indexOf('opt_') === 0 ? ('#' + String(p).slice(4)) : 'Out'));
     }
@@ -349,8 +365,19 @@
         });
     }
 
+    function pruneChoiceEdges(node) {
+        var d = node.data || {};
+        if (d.action_type !== 'response_message' && d.action_type !== 'send_text') return;
+        var valid = choicePorts(d) || ['out'];
+        Flow.edges = Flow.edges.filter(function (e) {
+            return e.from !== node.id || valid.indexOf(e.port || 'out') >= 0;
+        });
+    }
+
     function portsForNode(node) {
         if ((node.data || {}).action_type === 'ask_question') return askQuestionPorts(node.data);
+        var choice = choicePorts(node.data || {});
+        if (choice) return choice;
         var ports = {};
         Flow.edges.forEach(function (e) {
             if (e.from === node.id) ports[e.port || 'out'] = true;
@@ -428,8 +455,9 @@
         var s = Math.min(1.1, rw / bw, rh / bh);
         s = Math.max(MIN_SCALE, Math.min(MAX_SCALE, s));
         Flow.scale = s;
-        Flow.panX = (rw - bw * s) / 2 - (minX - 40) * s;
-        Flow.panY = (rh - bh * s) / 2 - (minY - 40) * s;
+        // Pin the flow to the top-left of the canvas so the empty grid is to the right, not around the nodes.
+        Flow.panX = 24 - minX * s;
+        Flow.panY = 24 - minY * s;
         applyViewport();
         drawEdges();
     }
@@ -918,6 +946,34 @@
         return html;
     }
 
+    function choiceMessageFields(d) {
+        var list = Array.isArray(d.options) ? d.options : [];
+        var filled = choiceOptions(d);
+        var html = '<label>Image</label><input class="form-control insp" data-k="media_url" value="' + esc(d.media_url || '') + '" placeholder="https://…/image.jpg">';
+        if (/^https?:\/\//i.test(String(d.media_url || ''))) {
+            html += '<img src="' + esc(d.media_url) + '" alt="" class="mt-1 rounded border" style="max-width:100%;max-height:88px;object-fit:cover">';
+        }
+        html += '<label>Add body text</label><textarea class="form-control insp" data-k="text" rows="3" placeholder="Welcome to Gulf Pharmacy">' + esc(d.text || d.note || '') + '</textarea>';
+        html += varPickerHtml('text');
+        html += '<label>Configure input options</label>';
+        list.forEach(function (label, i) {
+            html += '<div class="input-group input-group-sm mb-1">' +
+                '<span class="input-group-text">' + (i + 1) + '.</span>' +
+                '<input class="form-control insp-option" data-i="' + i + '" maxlength="24" value="' + esc(label) + '" placeholder="Option">' +
+                '<button type="button" class="btn btn-outline-secondary insp-option-remove" data-i="' + i + '" title="Remove">×</button>' +
+                '</div>';
+        });
+        if (list.length < 10) {
+            html += '<button type="button" class="btn btn-sm btn-outline-success mb-2" id="inspAddOption">Add option</button>';
+        }
+        html += attrDropdownHtml({ k: 'save_as', label: 'Save reply in a variable', cur: d.save_as || '', empty: '— Don\'t save —', noMobile: true });
+        html += inspHint(filled.length > 3
+            ? '4 or more options are sent as a WhatsApp list. Each option gets its own path. No reply follows the "No reply" path.'
+            : 'Up to 3 options are WhatsApp buttons (20 characters). Each option gets its own path.');
+        html += inspHint('Free text and buttons are delivered only if the customer messaged you in the last 24h. Contacts who sent STOP get no automated replies.');
+        return html;
+    }
+
     function renderActionFields(d) {
         var a = d.action_type || 'response_message';
         var html = '';
@@ -928,10 +984,7 @@
             html += '<label>Fallback note (optional)</label><textarea class="form-control insp" data-k="text" rows="2">' + esc(d.text || '') + '</textarea>';
             html += varPickerHtml('text');
         } else if (a === 'response_message' || a === 'send_text') {
-            html += '<label>Message text</label><textarea class="form-control insp" data-k="text" rows="4" placeholder="Hi {{contact.name}}!">' + esc(d.text || d.note || '') + '</textarea>';
-            html += varPickerHtml('text');
-            html += inspHint('Click "+ Variable" to insert the customer name, an attribute or the last answer.');
-            html += inspHint('WhatsApp policy: free text is delivered only if the customer messaged you in the last 24h. For other triggers (new contact, Shopify, birthday…) use Send template. Contacts who sent STOP get no automated replies.');
+            html += choiceMessageFields(d);
         } else if (a === 'collect_images') {
             html += '<label>How many images?</label><input type="number" min="1" max="20" class="form-control insp" data-k="count" value="' + esc(d.count || d.max_images || 1) + '">';
             html += '<label>Prompt message</label><textarea class="form-control insp" data-k="prompt" rows="3" placeholder="Please send your photo…">' + esc(d.prompt || d.text || '') + '</textarea>';
@@ -1169,6 +1222,11 @@
             renderNodes();
             $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
             if (k === 'reply_type') renderInspector();
+            return;
+        }
+        if ((node.data.action_type === 'response_message' || node.data.action_type === 'send_text') && (k === 'text' || k === 'save_as' || k === 'media_url')) {
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
             return;
         }
         if (node.data.action_type === 'send_media' && k === 'media_type') {
@@ -1425,7 +1483,7 @@
                 var x = snap(pt.x - 100);
                 var y = snap(pt.y - 30);
                 var extra = p.trigger || p.condition || p.action;
-                addNodeFromPalette(p.palette, extra, Math.max(20, x), Math.max(20, y));
+                addNodeFromPalette(p.palette, extra, Math.max(0, x), Math.max(0, y));
             } catch (err) {
                 // ignore
             }
@@ -1473,8 +1531,8 @@
                 var node = findNode(Flow.dragNode.id);
                 if (!node) return;
                 var pt = clientToCanvas(e.clientX, e.clientY);
-                node.x = Math.max(10, snap(pt.x - Flow.dragNode.ox));
-                node.y = Math.max(10, snap(pt.y - Flow.dragNode.oy));
+                node.x = Math.max(0, snap(pt.x - Flow.dragNode.ox));
+                node.y = Math.max(0, snap(pt.y - Flow.dragNode.oy));
                 $('.flow-node[data-id="' + node.id + '"]').css({ left: node.x, top: node.y });
                 resizeCanvas();
                 drawEdges();
@@ -1606,6 +1664,49 @@
             node.data = node.data || {};
             node.data.header = node.data.header || { key: 'Content-Type', value: 'application/json' };
             node.data.header[$(this).data('hk')] = $(this).val();
+        });
+        $('#inspectorBody').on('change', '.insp[data-k="media_url"]', function () {
+            var node = findNode(Flow.selectedId);
+            if (!node) return;
+            var a = (node.data || {}).action_type;
+            if (a !== 'response_message' && a !== 'send_text') return;
+            renderInspector();
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+        });
+        $('#inspectorBody').on('input', '.insp-option', function () {
+            var node = findNode(Flow.selectedId);
+            if (!node) return;
+            node.data = node.data || {};
+            if (!Array.isArray(node.data.options)) node.data.options = [];
+            node.data.options[parseInt($(this).data('i'), 10)] = $(this).val();
+            pruneChoiceEdges(node);
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+        });
+        $('#inspectorBody').on('click', '#inspAddOption', function () {
+            var node = findNode(Flow.selectedId);
+            if (!node) return;
+            node.data = node.data || {};
+            var list = Array.isArray(node.data.options) ? node.data.options.slice() : [];
+            if (list.length >= 10) return;
+            list.push('');
+            node.data.options = list;
+            renderInspector();
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+        });
+        $('#inspectorBody').on('click', '.insp-option-remove', function () {
+            var node = findNode(Flow.selectedId);
+            if (!node) return;
+            node.data = node.data || {};
+            var list = Array.isArray(node.data.options) ? node.data.options.slice() : [];
+            list.splice(parseInt($(this).data('i'), 10), 1);
+            node.data.options = list;
+            pruneChoiceEdges(node);
+            renderInspector();
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
         });
         $('#inspectorBody').on('click', '#inspAddParam', function () {
             var node = findNode(Flow.selectedId);

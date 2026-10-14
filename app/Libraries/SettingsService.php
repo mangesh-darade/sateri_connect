@@ -1022,7 +1022,7 @@ class SettingsService
     public function getAiConfig(): array
     {
         return [
-            'enabled'                 => (bool) ($this->get('ai_enabled', 0)),
+            'enabled'                 => in_array(strtolower(trim((string) $this->get('ai_enabled', '0'))), ['1', 'true', 'yes', 'on'], true),
             'provider'                => (string) ($this->get('ai_provider', 'gemini')),
             'api_key'                 => (string) ($this->get('ai_api_key', '')),
             'model'                   => (string) ($this->get('ai_model', 'gemini-flash-latest')),

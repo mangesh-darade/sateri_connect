@@ -203,6 +203,13 @@ class WorkflowGraph
                 }
             }
 
+            if ($action === 'response_message' || $action === 'send_text') {
+                $errors = array_merge($errors, $this->validateReplyOptions(
+                    $action === 'send_text' ? 'Send text' : 'Response message',
+                    $data
+                ));
+            }
+
             if ($action === 'set_attribute') {
                 $attr  = trim((string) ($data['attribute'] ?? ''));
                 $value = (string) ($data['text'] ?? $data['value'] ?? $data['attributeNewValue'] ?? '');
@@ -240,6 +247,45 @@ class WorkflowGraph
         }
 
         return array_values(array_unique($errors));
+    }
+
+    /**
+     * Response message and Send text options: body is required, and each label must fit WhatsApp.
+     *
+     * @param array<string, mixed> $data
+     *
+     * @return list<string>
+     */
+    protected function validateReplyOptions(string $label, array $data): array
+    {
+        $options = AutomationEngine::questionOptions($data);
+        if ($options === []) {
+            return [];
+        }
+
+        $errors = [];
+        if (trim((string) ($data['text'] ?? '')) === '') {
+            $errors[] = $label . ': add body text.';
+        }
+        $max = count($options) <= 3 ? 20 : 24;
+        foreach ($options as $option) {
+            if (mb_strlen($option) > $max) {
+                $errors[] = $label . ': option "' . $option . '" is too long (' . $max . ' characters).';
+            }
+        }
+        $saveAs = trim((string) ($data['save_as'] ?? ''));
+        if ($saveAs !== '' && preg_match('/^[A-Za-z][A-Za-z0-9_]{0,49}$/', $saveAs) !== 1) {
+            $errors[] = $label . ': variable name "' . $saveAs . '" may use letters, numbers and _ only.';
+        } elseif ($saveAs !== '') {
+            foreach ($options as $option) {
+                $check = service('contactAttributes')->normalizeValue($saveAs, $option);
+                if (! $check['ok']) {
+                    $errors[] = $label . ': option "' . $option . '" cannot be saved to ' . service('contactAttributes')->label($saveAs) . ' — ' . $check['error'];
+                }
+            }
+        }
+
+        return $errors;
     }
 
     /**

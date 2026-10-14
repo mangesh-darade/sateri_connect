@@ -553,7 +553,7 @@ class MetaCloudAPI
      *
      * @return array<string, mixed>
      */
-    public function sendInteractiveButtons(string $to, string $bodyText, array $buttons, ?string $header = null, ?string $footer = null): array
+    public function sendInteractiveButtons(string $to, string $bodyText, array $buttons, array|string|null $header = null, ?string $footer = null): array
     {
         $actionButtons = [];
         foreach (array_slice($buttons, 0, 3) as $i => $btn) {
@@ -571,9 +571,7 @@ class MetaCloudAPI
             'body'   => ['text' => $bodyText],
             'action' => ['buttons' => $actionButtons],
         ];
-        if ($header) {
-            $interactive['header'] = ['type' => 'text', 'text' => $header];
-        }
+        $this->applyInteractiveHeader($interactive, $header);
         if ($footer) {
             $interactive['footer'] = ['text' => $footer];
         }
@@ -601,7 +599,7 @@ class MetaCloudAPI
         string $bodyText,
         string $buttonText,
         array $sections,
-        ?string $header = null,
+        array|string|null $header = null,
         ?string $footer = null
     ): array {
         $interactive = [
@@ -612,14 +610,27 @@ class MetaCloudAPI
                 'sections' => $sections,
             ],
         ];
-        if ($header) {
-            $interactive['header'] = ['type' => 'text', 'text' => $header];
-        }
+        $this->applyInteractiveHeader($interactive, $header);
         if ($footer) {
             $interactive['footer'] = ['text' => $footer];
         }
 
         return $this->sendMessage($to, ['type' => 'interactive', 'interactive' => $interactive]);
+    }
+
+    /**
+     * Text header stays a string. An image header is the Meta header object.
+     *
+     * @param array<string, mixed>        $interactive
+     * @param array<string, mixed>|string|null $header
+     */
+    protected function applyInteractiveHeader(array &$interactive, array|string|null $header): void
+    {
+        if (is_string($header) && $header !== '') {
+            $interactive['header'] = ['type' => 'text', 'text' => $header];
+        } elseif (is_array($header) && $header !== []) {
+            $interactive['header'] = $header;
+        }
     }
 
     /**

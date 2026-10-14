@@ -567,7 +567,19 @@ class AutomationEngine
                 if ($contactId <= 0) {
                     throw new RuntimeException('send_text requires contact_id in context.');
                 }
-                $text = $this->interpolate((string) ($config['text'] ?? $config['body'] ?? ''), $context);
+                if (self::questionOptions($config) !== []) {
+                    $this->askQuestion($config, $context);
+                    break;
+                }
+                $text  = $this->interpolate((string) ($config['text'] ?? $config['body'] ?? ''), $context);
+                $media = trim($this->interpolate((string) ($config['media_url'] ?? ''), $context));
+                if ($media !== '' && preg_match('#^https?://#i', $media)) {
+                    $this->queue->enqueue($contactId, 'image', [
+                        'link'    => $media,
+                        'caption' => $text !== '' ? $text : null,
+                    ], null, (int) ($config['priority'] ?? 3));
+                    break;
+                }
                 $this->queue->enqueue($contactId, 'text', [
                     'text' => $text,
                 ], null, (int) ($config['priority'] ?? 3));
@@ -1024,7 +1036,11 @@ class AutomationEngine
             }
         }
 
-        return (string) ($config['reply_type'] ?? 'text') === 'text' ? [] : $options;
+        // Ask question "free text" has reply_type=text and must not branch.
+        // Response message / Send text omit reply_type and use the option list.
+        $replyType = array_key_exists('reply_type', $config) ? (string) $config['reply_type'] : '';
+
+        return $replyType === 'text' ? [] : $options;
     }
 
     /**
@@ -1043,18 +1059,14 @@ class AutomationEngine
         if ($question === '') {
             throw new RuntimeException('Ask question node has no question text.');
         }
-        $body    = $prefix !== '' ? $prefix . "\n\n" . $question : $question;
-        $options = $this->questionOptions($config);
+        $body     = $prefix !== '' ? $prefix . "\n\n" . $question : $question;
+        $options  = $this->questionOptions($config);
+        $replyType = (string) ($config['reply_type'] ?? '');
+        $header   = $this->interactiveImageHeader($config, $context);
 
         if ($options === []) {
             $this->queue->enqueue($contactId, 'text', ['text' => $body], null, 2);
-        } elseif (count($options) <= 3 && (string) ($config['reply_type'] ?? '') === 'buttons') {
-            $buttons = [];
-            foreach ($options as $id => $label) {
-                $buttons[] = ['id' => $id, 'title' => mb_substr($label, 0, 20)];
-            }
-            $this->queue->enqueue($contactId, 'interactive_buttons', ['body' => $body, 'buttons' => $buttons], null, 2);
-        } else {
+        } elseif ($replyType === 'list' || count($options) > 3) {
             $rows = [];
             foreach ($options as $id => $label) {
                 $rows[] = ['id' => $id, 'title' => mb_substr($label, 0, 24)];
@@ -1063,11 +1075,40 @@ class AutomationEngine
                 'body'        => $body,
                 'button_text' => mb_substr(trim((string) ($config['list_button'] ?? '')) ?: 'Choose', 0, 20),
                 'sections'    => [['title' => 'Options', 'rows' => $rows]],
+                'header'      => $header,
+            ], null, 2);
+        } else {
+            $buttons = [];
+            foreach ($options as $id => $label) {
+                $buttons[] = ['id' => $id, 'title' => mb_substr($label, 0, 20)];
+            }
+            $this->queue->enqueue($contactId, 'interactive_buttons', [
+                'body'    => $body,
+                'buttons' => $buttons,
+                'header'  => $header,
             ], null, 2);
         }
 
         $context['_await_reply']     = true;
         $context['_stop_automation'] = true;
+    }
+
+    /**
+     * Optional https image shown above a button or list message.
+     *
+     * @param array<string, mixed> $config
+     * @param array<string, mixed> $context
+     *
+     * @return array{type: string, image: array{link: string}}|null
+     */
+    protected function interactiveImageHeader(array $config, array $context): ?array
+    {
+        $media = trim($this->interpolate((string) ($config['media_url'] ?? ''), $context));
+        if ($media === '' || preg_match('#^https?://#i', $media) !== 1) {
+            return null;
+        }
+
+        return ['type' => 'image', 'image' => ['link' => $media]];
     }
 
     /**
