@@ -67,19 +67,9 @@
             <input type="text" name="app_name" class="form-control" value="<?= esc(old('app_name') ?? 'WhatsApp Automation') ?>">
         </div>
         <div class="col-md-6">
-            <label class="form-label">Timezone</label>
+            <label class="form-label" for="appTimezoneSearch">Timezone</label>
             <?php $selectedTimezone = (string) (old('app_timezone') ?? 'UTC'); ?>
-            <select name="app_timezone" class="form-select">
-                <?php foreach ($timezoneOptions as $group => $options): ?>
-                    <optgroup label="<?= esc($group) ?>">
-                        <?php foreach ($options as $option): ?>
-                            <option value="<?= esc($option['value']) ?>" <?= $selectedTimezone === $option['value'] ? 'selected' : '' ?>>
-                                <?= esc($option['label']) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </optgroup>
-                <?php endforeach; ?>
-            </select>
+            <?= view('partials/timezone_select', ['selectedTimezone' => $selectedTimezone, 'timezoneOptions' => $timezoneOptions], ['saveData' => false]) ?>
         </div>
     </div>
 

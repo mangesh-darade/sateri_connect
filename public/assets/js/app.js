@@ -1203,7 +1203,204 @@
 
     APP.autoSync = function (force) { return AutoSync.run(!!force); };
 
+    /**
+     * Searchable timezone picker. The native select stays in the form so the
+     * posted value is unchanged when JavaScript is off.
+     */
+    function initTimezoneSearch() {
+        $('select.js-timezone-select').each(function () {
+            var select = this;
+            if (select.dataset.tzReady === '1') return;
+            select.dataset.tzReady = '1';
+
+            var items = [];
+            Array.prototype.forEach.call(select.querySelectorAll('option'), function (opt) {
+                var group = opt.parentElement && opt.parentElement.tagName === 'OPTGROUP'
+                    ? opt.parentElement.getAttribute('label') || ''
+                    : '';
+                items.push({
+                    value: opt.value,
+                    label: (opt.textContent || '').trim(),
+                    keywords: (opt.getAttribute('data-keywords') || '').trim(),
+                    group: group
+                });
+            });
+
+            var wrap = document.createElement('div');
+            wrap.className = 'tz-search';
+            select.parentNode.insertBefore(wrap, select);
+
+            var input = document.createElement('input');
+            input.type = 'search';
+            input.className = 'form-control tz-search-input';
+            input.placeholder = 'Search timezone, e.g. UAE or Dubai';
+            input.autocomplete = 'off';
+            input.setAttribute('role', 'combobox');
+            input.setAttribute('aria-expanded', 'false');
+            input.setAttribute('aria-autocomplete', 'list');
+            if (!document.getElementById('appTimezoneSearch')) {
+                input.id = 'appTimezoneSearch';
+            }
+
+            var menu = document.createElement('div');
+            menu.className = 'tz-search-menu';
+            menu.hidden = true;
+            menu.setAttribute('role', 'listbox');
+
+            wrap.appendChild(input);
+            document.body.appendChild(menu);
+            select.classList.add('tz-search-native');
+
+            var activeIndex = -1;
+            var visible = [];
+
+            function selectedItem() {
+                var value = select.value;
+                for (var i = 0; i < items.length; i++) {
+                    if (items[i].value === value) return items[i];
+                }
+                return null;
+            }
+
+            function showSelectedLabel() {
+                var current = selectedItem();
+                input.value = current ? current.label : '';
+            }
+
+            function placeMenu() {
+                var rect = input.getBoundingClientRect();
+                var spaceBelow = window.innerHeight - rect.bottom;
+                menu.style.left = rect.left + 'px';
+                menu.style.width = rect.width + 'px';
+                if (spaceBelow < 220 && rect.top > spaceBelow) {
+                    menu.style.top = 'auto';
+                    menu.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+                } else {
+                    menu.style.bottom = 'auto';
+                    menu.style.top = (rect.bottom + 4) + 'px';
+                }
+            }
+
+            function closeMenu() {
+                menu.hidden = true;
+                input.setAttribute('aria-expanded', 'false');
+                activeIndex = -1;
+            }
+
+            function paint() {
+                menu.innerHTML = '';
+                if (!visible.length) {
+                    var empty = document.createElement('div');
+                    empty.className = 'tz-search-empty';
+                    empty.textContent = 'No timezone found';
+                    menu.appendChild(empty);
+                    return;
+                }
+                var lastGroup = null;
+                visible.forEach(function (item, index) {
+                    if (item.group && item.group !== lastGroup) {
+                        var heading = document.createElement('div');
+                        heading.className = 'tz-search-group';
+                        heading.textContent = item.group;
+                        menu.appendChild(heading);
+                        lastGroup = item.group;
+                    }
+                    var row = document.createElement('button');
+                    row.type = 'button';
+                    row.className = 'tz-search-option' + (item.value === select.value ? ' is-selected' : '') + (index === activeIndex ? ' is-active' : '');
+                    row.textContent = item.label;
+                    row.setAttribute('role', 'option');
+                    row.addEventListener('mousedown', function (e) {
+                        e.preventDefault();
+                        choose(item);
+                    });
+                    menu.appendChild(row);
+                });
+                var active = menu.querySelector('.tz-search-option.is-active');
+                if (active && typeof active.scrollIntoView === 'function') {
+                    active.scrollIntoView({ block: 'nearest' });
+                }
+            }
+
+            function openMenu(query) {
+                var q = String(query || '').trim().toLowerCase();
+                visible = items.filter(function (item) {
+                    if (!q) return true;
+                    var hay = (item.label + ' ' + item.value + ' ' + item.keywords + ' ' + item.group).toLowerCase();
+                    return hay.indexOf(q) !== -1;
+                });
+                activeIndex = -1;
+                if (visible.length) {
+                    activeIndex = 0;
+                    if (!q) {
+                        for (var i = 0; i < visible.length; i++) {
+                            if (visible[i].value === select.value) {
+                                activeIndex = i;
+                                break;
+                            }
+                        }
+                    }
+                }
+                placeMenu();
+                paint();
+                menu.hidden = false;
+                input.setAttribute('aria-expanded', 'true');
+            }
+
+            function choose(item) {
+                select.value = item.value;
+                input.value = item.label;
+                closeMenu();
+            }
+
+            input.addEventListener('focus', function () {
+                input.select();
+                openMenu('');
+            });
+            input.addEventListener('input', function () {
+                openMenu(input.value);
+            });
+            input.addEventListener('keydown', function (e) {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (menu.hidden) openMenu(input.value);
+                    if (!visible.length) return;
+                    activeIndex = Math.min(visible.length - 1, activeIndex + 1);
+                    paint();
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (!visible.length) return;
+                    activeIndex = Math.max(0, activeIndex - 1);
+                    paint();
+                } else if (e.key === 'Enter') {
+                    if (menu.hidden || activeIndex < 0 || !visible[activeIndex]) return;
+                    e.preventDefault();
+                    choose(visible[activeIndex]);
+                } else if (e.key === 'Escape') {
+                    showSelectedLabel();
+                    closeMenu();
+                }
+            });
+            input.addEventListener('blur', function () {
+                window.setTimeout(function () {
+                    showSelectedLabel();
+                    closeMenu();
+                }, 120);
+            });
+
+            window.addEventListener('resize', function () {
+                if (!menu.hidden) placeMenu();
+            });
+            document.addEventListener('scroll', function () {
+                if (!menu.hidden) placeMenu();
+            }, true);
+
+            showSelectedLabel();
+        });
+    }
+
     $(function () {
+        initTimezoneSearch();
         initNavTimezoneClock();
         LiveNotif.start();
         refreshWaIdentityIfNeeded();

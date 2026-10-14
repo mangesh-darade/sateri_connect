@@ -684,19 +684,9 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                             <h6 class="settings-panel-label">Application</h6>
                             <div class="row">
                                 <div class="col-md-6 mb-3">
-                                    <label class="form-label">Timezone</label>
+                                    <label class="form-label" for="appTimezoneSearch">Timezone</label>
                                     <?php $selectedTimezone = (string) (old('app_timezone') ?? ($app['app_timezone'] ?? 'UTC')); ?>
-                                    <select name="app_timezone" class="form-select">
-                                        <?php foreach ($timezoneOptions as $group => $options): ?>
-                                            <optgroup label="<?= esc($group) ?>">
-                                                <?php foreach ($options as $option): ?>
-                                                    <option value="<?= esc($option['value']) ?>" <?= $selectedTimezone === $option['value'] ? 'selected' : '' ?>>
-                                                        <?= esc($option['label']) ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </optgroup>
-                                        <?php endforeach; ?>
-                                    </select>
+                                    <?= view('partials/timezone_select', ['selectedTimezone' => $selectedTimezone, 'timezoneOptions' => $timezoneOptions], ['saveData' => false]) ?>
                                     <div class="form-text">All dates/times across the app (chat, campaigns, reports, schedules) use this timezone.</div>
                                 </div>
                                 <div class="col-md-6 mb-3">

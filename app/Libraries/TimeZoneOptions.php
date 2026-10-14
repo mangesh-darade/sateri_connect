@@ -10,12 +10,36 @@ use DateTimeZone;
 class TimeZoneOptions
 {
     /**
-     * @var array<string, list<array{value: string, label: string}>>
+     * Extra words so search can match a country when the zone id is a city.
+     *
+     * @var array<string, string>
+     */
+    private const SEARCH_KEYWORDS = [
+        'Asia/Dubai'           => 'UAE United Arab Emirates Gulf',
+        'Asia/Kolkata'         => 'India IST',
+        'Asia/Calcutta'        => 'India IST',
+        'Asia/Karachi'         => 'Pakistan',
+        'Asia/Riyadh'          => 'Saudi Arabia KSA',
+        'Asia/Qatar'           => 'Qatar',
+        'Asia/Kuwait'          => 'Kuwait',
+        'Asia/Bahrain'         => 'Bahrain',
+        'Asia/Muscat'          => 'Oman',
+        'Europe/London'        => 'UK United Kingdom Britain',
+        'America/New_York'     => 'USA US United States Eastern',
+        'America/Chicago'      => 'USA US United States Central',
+        'America/Denver'       => 'USA US United States Mountain',
+        'America/Los_Angeles'  => 'USA US United States Pacific',
+        'Australia/Sydney'     => 'Australia',
+        'Pacific/Auckland'     => 'New Zealand',
+    ];
+
+    /**
+     * @var array<string, list<array{value: string, label: string, keywords: string}>>
      */
     protected static array $cache = [];
 
     /**
-     * @return array<string, list<array{value: string, label: string}>>
+     * @return array<string, list<array{value: string, label: string, keywords: string}>>
      */
     public function grouped(): array
     {
@@ -38,8 +62,9 @@ class TimeZoneOptions
             $prettyName = str_replace('_', ' ', $identifier);
 
             $groups[$group][] = [
-                'value' => $identifier,
-                'label' => '(' . $offsetLabel . ') ' . $prettyName,
+                'value'    => $identifier,
+                'label'    => '(' . $offsetLabel . ') ' . $prettyName,
+                'keywords' => self::SEARCH_KEYWORDS[$identifier] ?? '',
             ];
         }
 
