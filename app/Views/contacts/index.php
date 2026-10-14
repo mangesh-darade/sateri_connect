@@ -143,7 +143,7 @@
     font-size: 0.95rem;
     flex-shrink: 0;
 }
-.contacts-kpi-icon.kpi-purple { background: #f5f3ff; color: #7c3aed; }
+.contacts-kpi-icon.kpi-purple { background: #fff1f2; color: #e11d48; }
 .contacts-kpi-icon.kpi-green  { background: #ecfdf5; color: #10b981; }
 .contacts-kpi-icon.kpi-blue   { background: #eff6ff; color: #3b82f6; }
 .contacts-kpi-icon.kpi-amber  { background: #fffbeb; color: #f59e0b; }

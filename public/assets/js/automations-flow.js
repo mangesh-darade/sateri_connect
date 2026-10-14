@@ -82,18 +82,18 @@
 
     /** Block colours (palette tiles + node headers). Key = trigger_type / condition_type / action_type / 'end'. */
     var KIND_COLORS = {
-        incoming_message: '#25D366', campaign_sent: '#7c3aed', shopify_event: '#5e8e3e', facebook_lead: '#1877F2',
-        kylas_event_create: '#4f46e5', kylas_event_update: '#6366f1', pabbly_event: '#16a34a', incoming_webhook: '#8b5cf6',
+        incoming_message: '#25D366', campaign_sent: '#e11d48', shopify_event: '#5e8e3e', facebook_lead: '#1877F2',
+        kylas_event_create: '#4f46e5', kylas_event_update: '#6366f1', pabbly_event: '#16a34a', incoming_webhook: '#f43f5e',
         messenger: '#0084FF', instagram: '#E1306C', commerce_event: '#9333ea', contact_created: '#0ea5e9',
-        form_response: '#f97316', keyword_matched: '#f59e0b', tag_added: '#14b8a6', attribute_updated: '#8b5cf6',
+        form_response: '#f97316', keyword_matched: '#f59e0b', tag_added: '#14b8a6', attribute_updated: '#f43f5e',
         birthday: '#ec4899', campaign_replied: '#06b6d4', schedule: '#0ea5e9',
         system_initiated: '#0ea5e9', response_message: '#22c55e', ask_question: '#10b981', send_media: '#06b6d4',
         collect_images: '#0891b2', send_template: '#16a34a', send_text: '#22c55e', send_email: '#f97316',
-        set_attribute: '#7c3aed', add_tag: '#14b8a6', remove_tag: '#64748b', assign_agent: '#2563eb', assign_bot: '#0ea5e9',
-        update_chat_status: '#6366f1', add_note: '#eab308', delay: '#f59e0b', webhook: '#8b5cf6', webhook_call: '#8b5cf6',
+        set_attribute: '#e11d48', add_tag: '#14b8a6', remove_tag: '#64748b', assign_agent: '#2563eb', assign_bot: '#0ea5e9',
+        update_chat_status: '#6366f1', add_note: '#eab308', delay: '#f59e0b', webhook: '#f43f5e', webhook_call: '#f43f5e',
         end: '#ef4444'
     };
-    var TYPE_COLORS = { trigger: '#25D366', condition: '#f59e0b', action: '#8e53f7', updateAttribute: '#7c3aed', end: '#ef4444' };
+    var TYPE_COLORS = { trigger: '#25D366', condition: '#f59e0b', action: '#e11d48', updateAttribute: '#e11d48', end: '#ef4444' };
     var TYPE_ICONS = { trigger: 'fas fa-bolt', condition: 'fas fa-code-branch', action: 'fas fa-play', updateAttribute: 'fas fa-pen', end: 'fas fa-flag-checkered' };
     /** kind → icon class, read from the palette markup (single source for tiles and nodes). */
     var KIND_ICONS = {};
@@ -577,8 +577,8 @@
         if (!svg.querySelector('defs')) {
             var defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
             defs.innerHTML =
-                '<marker id="flowArrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4"><circle cx="5" cy="5" r="5" fill="#9b7be8"></circle></marker>' +
-                '<marker id="flowArrowTrue" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4"><circle cx="5" cy="5" r="5" fill="#8e53f7"></circle></marker>' +
+                '<marker id="flowArrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4"><circle cx="5" cy="5" r="5" fill="#fda4af"></circle></marker>' +
+                '<marker id="flowArrowTrue" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4"><circle cx="5" cy="5" r="5" fill="#e11d48"></circle></marker>' +
                 '<marker id="flowArrowFalse" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4"><circle cx="5" cy="5" r="5" fill="#e25555"></circle></marker>';
             svg.appendChild(defs);
         }

@@ -18,7 +18,7 @@ $poweredByLogoUrl = (string) ($branding['powered_by_logo_url'] ?? '');
     <!-- Header Banner -->
     <div style="background:var(--pf-card);border:1px solid var(--pf-line);border-radius:14px;padding:1.5rem 1.75rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.02)">
         <div style="display:flex;align-items:center;gap:1rem">
-            <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#0b6e4f,#10b981);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.35rem;box-shadow:0 4px 12px rgba(11,110,79,0.25)">
+            <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#e11d48,#fb7185);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.35rem;box-shadow:0 4px 12px rgba(225,29,72,0.25)">
                 <i class="fas fa-sliders-h"></i>
             </div>
             <div>
@@ -42,7 +42,7 @@ $poweredByLogoUrl = (string) ($branding['powered_by_logo_url'] ?? '');
         <!-- SECTION 1: Site Identity -->
         <section class="platform-card" style="padding:1.75rem;border-radius:14px">
             <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1.25rem;padding-bottom:1rem;border-bottom:1px solid var(--pf-line)">
-                <div style="width:34px;height:34px;border-radius:8px;background:rgba(11,110,79,0.1);color:var(--pf-teal);display:flex;align-items:center;justify-content:center;font-size:0.95rem">
+                <div style="width:34px;height:34px;border-radius:8px;background:rgba(225,29,72,0.1);color:var(--pf-teal);display:flex;align-items:center;justify-content:center;font-size:0.95rem">
                     <i class="fas fa-globe"></i>
                 </div>
                 <div>
@@ -255,7 +255,7 @@ $poweredByLogoUrl = (string) ($branding['powered_by_logo_url'] ?? '');
                 <a href="<?= site_url('platform/clients') ?>" class="btn-pf" style="padding:0.65rem 1.25rem">
                     Cancel
                 </a>
-                <button type="submit" class="btn-pf btn-pf-primary" style="padding:0.65rem 1.75rem;font-size:0.88rem;box-shadow:0 2px 6px rgba(11,110,79,0.25)">
+                <button type="submit" class="btn-pf btn-pf-primary" style="padding:0.65rem 1.75rem;font-size:0.88rem;box-shadow:0 2px 6px rgba(225,29,72,0.25)">
                     <i class="fas fa-save me-1"></i> Save Platform Settings
                 </button>
             </div>

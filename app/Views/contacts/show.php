@@ -63,7 +63,7 @@ $details = [
                     <?= view('partials/status_badge', ['status' => $contact['status'] ?? 'active']) ?>
                     <?= view('partials/wa_consent_badge', ['contact' => $contact]) ?>
                     <?php foreach (($contact['tags'] ?? []) as $tag): ?>
-                        <span class="badge rounded-pill" style="background:<?= esc($tag['color'] ?? '#8e53f7') ?>;color:#042f2a"><?= esc($tag['name'] ?? $tag) ?></span>
+                        <span class="badge rounded-pill" style="background:<?= esc($tag['color'] ?? '#e11d48') ?>;color:#042f2a"><?= esc($tag['name'] ?? $tag) ?></span>
                     <?php endforeach; ?>
                 </div>
             </div>

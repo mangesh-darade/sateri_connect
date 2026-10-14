@@ -41,9 +41,9 @@ class InboxTest extends BaseCommand
         $chatView = file_get_contents($root . 'app/Views/chat/index.php') ?: '';
         $chatJs = file_get_contents($root . 'public/assets/js/chat.js') ?: '';
 
-        $check('brand purple token', str_contains($css, '--brand-500: #8e53f7'));
+        $check('brand rose token', str_contains($css, '--brand-500: #e11d48'));
         $check('Onest font wired', str_contains($css, 'Onest') && str_contains($layout, 'Onest'));
-        $check('sidebar purple', str_contains($sidebarCss, '--elint-primary: #8e53f7'));
+        $check('sidebar rose', str_contains($sidebarCss, '--elint-primary: #e11d48'));
         $check('nav Inbox group', str_contains($layout, "'title' => 'Inbox'"));
         $check('nav Analytics group', str_contains($layout, "'title' => 'Analytics'"));
         $check('chat CTWA filter UI', str_contains($chatView, 'data-scope="ctwa"'));

@@ -18,9 +18,9 @@
             font-family: 'DM Sans', system-ui, sans-serif;
             color: #fff;
             background:
-                radial-gradient(800px 500px at 20% 10%, rgba(142, 83, 247, 0.35), transparent 60%),
-                radial-gradient(600px 400px at 90% 80%, rgba(75, 55, 134, 0.45), transparent 55%),
-                linear-gradient(160deg, #1a1228 0%, #4b3786 55%, #7b3ff0 100%);
+                radial-gradient(800px 500px at 20% 10%, rgba(225, 29, 72, 0.35), transparent 60%),
+                radial-gradient(600px 400px at 90% 80%, rgba(159, 18, 57, 0.45), transparent 55%),
+                linear-gradient(160deg, #1a1228 0%, #9f1239 55%, #be123c 100%);
         }
         .box {
             text-align: center;
@@ -37,7 +37,7 @@
             height: 64px;
             margin: 0 auto 1.25rem;
             border-radius: 20px;
-            background: linear-gradient(145deg, #9b6af8, #4b3786);
+            background: linear-gradient(145deg, #fb7185, #9f1239);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -60,7 +60,7 @@
         }
         .msg { opacity: 0.7; font-size: 0.95rem; margin: 0; }
         .btn-home {
-            background: linear-gradient(180deg, #9b6af8, #8e53f7);
+            background: linear-gradient(180deg, #fb7185, #e11d48);
             border: 0;
             color: #1a1228;
             padding: .7rem 1.5rem;
@@ -69,7 +69,7 @@
             display: inline-block;
             margin-top: 1.5rem;
             font-weight: 600;
-            box-shadow: 0 6px 18px rgba(142, 83, 247, 0.35);
+            box-shadow: 0 6px 18px rgba(225, 29, 72, 0.35);
         }
         .btn-home:hover { filter: brightness(1.05); color: #1a1228; }
     </style>

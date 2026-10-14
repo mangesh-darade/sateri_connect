@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --brand-primary: #0b6e4f;
+            --brand-primary: #e11d48;
             --text-main: #1e293b;
             --text-muted: #64748b;
             --bg-page: #f8fafc;

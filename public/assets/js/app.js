@@ -346,7 +346,7 @@
             text: options.text || 'This action cannot be undone.',
             icon: options.icon || 'warning',
             showCancelButton: true,
-            confirmButtonColor: '#8e53f7',
+            confirmButtonColor: '#e11d48',
             cancelButtonColor: '#6c757d',
             confirmButtonText: options.confirmText || 'Yes, continue',
             cancelButtonText: options.cancelText || 'Cancel'
@@ -530,7 +530,7 @@
             body: n.display_body || n.message || '',
             link: n.link || '#',
             initials: n.avatar_initials || 'N',
-            color: n.avatar_color || '#7c3aed',
+            color: n.avatar_color || '#e11d48',
             created: n.created_at || '',
             type: (n.type || 'info').toLowerCase()
         };

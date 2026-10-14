@@ -98,7 +98,7 @@ body.flow-builder-page .swal2-container {
     gap: 1rem;
     padding: 0.7rem 1.1rem;
     background: #ffffff;
-    border-bottom: 1px solid rgba(75, 55, 134, 0.12);
+    border-bottom: 1px solid rgba(159, 18, 57, 0.12);
 }
 .flow-topbar-left,
 .flow-topbar-right {
@@ -109,25 +109,25 @@ body.flow-builder-page .swal2-container {
 }
 .flow-topbar .btn-outline-secondary,
 .flow-topbar .btn-outline-light {
-    border-color: rgba(75, 55, 134, 0.2);
+    border-color: rgba(159, 18, 57, 0.2);
     color: #1a1228;
     border-radius: 999px;
     background: #fff;
 }
 .flow-topbar .btn-outline-secondary:hover,
 .flow-topbar .btn-outline-light:hover {
-    background: #f6f1ff;
-    color: #4b3786;
-    border-color: rgba(75, 55, 134, 0.35);
+    background: #fff1f2;
+    color: #9f1239;
+    border-color: rgba(159, 18, 57, 0.35);
 }
 .flow-topbar .btn-success,
 .flow-topbar #btnFlowSave {
-    background: linear-gradient(180deg, #9b6af8, #8e53f7) !important;
+    background: linear-gradient(180deg, #fb7185, #e11d48) !important;
     border: 0 !important;
     color: #1a1228 !important;
     font-weight: 600;
     border-radius: 999px;
-    box-shadow: 0 4px 14px rgba(142, 83, 247, 0.35);
+    box-shadow: 0 4px 14px rgba(225, 29, 72, 0.35);
 }
 .flow-name-input {
     background: transparent;
@@ -143,14 +143,14 @@ body.flow-builder-page .swal2-container {
 }
 .flow-name-input:focus {
     outline: none;
-    border-bottom-color: #8e53f7;
+    border-bottom-color: #e11d48;
 }
 .flow-pill {
     font-size: 0.7rem;
     font-weight: 600;
-    background: rgba(142, 83, 247, 0.12);
-    color: #4b3786;
-    border: 1px solid rgba(142, 83, 247, 0.3);
+    background: rgba(225, 29, 72, 0.12);
+    color: #9f1239;
+    border: 1px solid rgba(225, 29, 72, 0.3);
     border-radius: 999px;
     padding: 0.25rem 0.7rem;
     letter-spacing: 0.02em;
@@ -172,7 +172,7 @@ body.flow-builder-page .swal2-container {
 
 .flow-palette {
     background: #fbfaff;
-    border-right: 1px solid rgba(75, 55, 134, 0.12);
+    border-right: 1px solid rgba(159, 18, 57, 0.12);
     padding: 0.85rem 0.75rem;
     overflow: auto;
 }
@@ -213,7 +213,7 @@ body.flow-builder-page .swal2-container {
     margin-bottom: 0.6rem;
 }
 .palette-item {
-    --pc: #8e53f7;
+    --pc: #e11d48;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -228,7 +228,7 @@ body.flow-builder-page .swal2-container {
     transition: background 0.15s;
 }
 .palette-item:hover {
-    background: rgba(142, 83, 247, 0.07);
+    background: rgba(225, 29, 72, 0.07);
 }
 .palette-icon {
     width: 40px;
@@ -283,7 +283,7 @@ body.flow-builder-page .swal2-container {
     cursor: crosshair;
 }
 .flow-canvas-wrap.drop-target {
-    outline: 2px dashed rgba(142, 83, 247, 0.55);
+    outline: 2px dashed rgba(225, 29, 72, 0.55);
     outline-offset: -6px;
 }
 .flow-viewport {
@@ -324,7 +324,7 @@ body.flow-builder-page .swal2-container {
     font-size: 0.72rem;
     color: #5a726c;
     background: rgba(255, 255, 255, 0.92);
-    border: 1px solid rgba(75, 55, 134, 0.12);
+    border: 1px solid rgba(159, 18, 57, 0.12);
     border-radius: 999px;
     padding: 0.3rem 0.75rem;
     backdrop-filter: blur(6px);
@@ -338,7 +338,7 @@ body.flow-builder-page .swal2-container {
 }
 
 .flow-node {
-    --nc: #8e53f7;
+    --nc: #e11d48;
     position: absolute;
     width: 230px;
     background: #ffffff;
@@ -456,13 +456,13 @@ body.flow-builder-page .swal2-container {
 .flow-port.linking,
 .flow-port.link-target {
     transform: translateY(-50%) scale(1.35);
-    box-shadow: 0 0 0 4px rgba(142, 83, 247, 0.25);
+    box-shadow: 0 0 0 4px rgba(225, 29, 72, 0.25);
 }
 .flow-port.in {
     left: -6px;
     top: 16px;
     transform: translateY(-50%);
-    background: #9b7be8;
+    background: #fda4af;
 }
 .flow-port.in:hover,
 .flow-port.in.link-target {
@@ -473,13 +473,13 @@ body.flow-builder-page .swal2-container {
     right: -6px;
     top: 16px;
     transform: translateY(-50%);
-    background: #9b7be8;
+    background: #fda4af;
 }
 .flow-port.true {
     right: -7px;
     top: 32%;
     transform: translateY(-50%);
-    background: #8e53f7;
+    background: #e11d48;
 }
 .flow-port.false {
     right: -7px;
@@ -503,8 +503,8 @@ body.flow-builder-page .swal2-container {
     cursor: copy;
 }
 .flow-node.link-target-node {
-    border-color: #8e53f7;
-    box-shadow: 0 0 0 3px rgba(142, 83, 247, 0.25);
+    border-color: #e11d48;
+    box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.25);
 }
 .flow-port-label {
     position: absolute;
@@ -524,11 +524,11 @@ body.flow-builder-page .swal2-container {
     cursor: pointer;
     transition: stroke 0.15s ease, stroke-width 0.15s ease;
 }
-.flow-edge.true { stroke: #8e53f7; }
+.flow-edge.true { stroke: #e11d48; }
 .flow-edge.false { stroke: #e25555; }
 .flow-edge.temp {
     stroke-dasharray: 6 5;
-    stroke: rgba(142, 83, 247, 0.75);
+    stroke: rgba(225, 29, 72, 0.75);
     animation: flowDash 0.7s linear infinite;
 }
 .flow-edge.selected {
@@ -546,7 +546,7 @@ body.flow-builder-page .swal2-container {
 
 .flow-inspector {
     background: #ffffff;
-    border-left: 1px solid rgba(75, 55, 134, 0.12);
+    border-left: 1px solid rgba(159, 18, 57, 0.12);
     padding: 0.95rem;
     overflow: auto;
 }
@@ -564,7 +564,7 @@ body.flow-builder-page .swal2-container {
 .flow-inspector .form-control,
 .flow-inspector .form-select {
     background: #ffffff;
-    border-color: rgba(75, 55, 134, 0.18);
+    border-color: rgba(159, 18, 57, 0.18);
     color: #1a1228;
     font-size: 0.85rem;
     border-radius: 10px;
@@ -573,8 +573,8 @@ body.flow-builder-page .swal2-container {
 .flow-inspector .form-select:focus {
     background: #ffffff;
     color: #1a1228;
-    border-color: #8e53f7;
-    box-shadow: 0 0 0 3px rgba(142, 83, 247, 0.2);
+    border-color: #e11d48;
+    box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.2);
 }
 .flow-inspector .btn-outline-danger {
     border-radius: 999px;

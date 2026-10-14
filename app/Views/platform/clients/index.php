@@ -233,7 +233,7 @@ $fmt = static function ($n): string {
     var data = <?= $chartsJson ?? '{}' ?>;
     if (!window.Chart || !data || !data.trend) return;
 
-    var teal = '#0b6e4f';
+    var teal = '#e11d48';
     var coral = '#c45c12';
     var ink = '#1a2330';
     var mute = '#6b7780';
@@ -251,7 +251,7 @@ $fmt = static function ($n): string {
             data: {
                 labels: trend.labels || [],
                 datasets: [
-                    { label: 'Sent', data: trend.sent || [], borderColor: teal, backgroundColor: 'rgba(11,110,79,.10)', tension: 0.35, fill: true, borderWidth: 2.5, pointRadius: 2 },
+                    { label: 'Sent', data: trend.sent || [], borderColor: teal, backgroundColor: 'rgba(225,29,72,.10)', tension: 0.35, fill: true, borderWidth: 2.5, pointRadius: 2 },
                     { label: 'Delivered', data: trend.delivered || [], borderColor: soft, backgroundColor: 'transparent', tension: 0.35, borderWidth: 2, pointRadius: 2 },
                     { label: 'Failed', data: trend.failed || [], borderColor: coral, backgroundColor: 'transparent', tension: 0.35, borderWidth: 2, pointRadius: 2 },
                     { label: 'Replies', data: trend.replies || [], borderColor: ink, backgroundColor: 'transparent', tension: 0.35, borderWidth: 2, borderDash: [5, 4], pointRadius: 2 }

@@ -290,7 +290,7 @@ class NotificationModel extends Model
 
     protected function avatarColor(string $seed): string
     {
-        $palette = ['#7c3aed', '#2563eb', '#059669', '#d97706', '#db2777', '#0891b2', '#4f46e5', '#0f766e'];
+        $palette = ['#e11d48', '#2563eb', '#059669', '#d97706', '#db2777', '#0891b2', '#4f46e5', '#0f766e'];
         $hash    = abs(crc32($seed));
 
         return $palette[$hash % count($palette)];

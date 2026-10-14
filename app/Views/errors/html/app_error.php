@@ -59,13 +59,13 @@ try {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
     <style>
         :root {
-            --brand-500: #8e53f7; --wa-green: #8e53f7;
+            --brand-500: #e11d48; --wa-green: #e11d48;
             --wa-ink: #1a1228;
-            --wa-teal: #4b3786;
+            --wa-teal: #9f1239;
             --surface: #ffffff;
             --text: #1a1228;
             --muted: #6b7280;
-            --border: rgba(75, 55, 134, 0.14);
+            --border: rgba(159, 18, 57, 0.14);
             --radius: 18px;
         }
         * { box-sizing: border-box; }
@@ -79,9 +79,9 @@ try {
             font-family: 'DM Sans', system-ui, sans-serif;
             color: var(--text);
             background:
-                radial-gradient(900px 520px at 12% 0%, rgba(142, 83, 247, 0.22), transparent 55%),
-                radial-gradient(700px 420px at 100% 100%, rgba(75, 55, 134, 0.18), transparent 50%),
-                linear-gradient(165deg, #fafafa 0%, #f6f1ff 45%, #f6f1ff 100%);
+                radial-gradient(900px 520px at 12% 0%, rgba(225, 29, 72, 0.22), transparent 55%),
+                radial-gradient(700px 420px at 100% 100%, rgba(159, 18, 57, 0.18), transparent 50%),
+                linear-gradient(165deg, #fafafa 0%, #fff1f2 45%, #fff1f2 100%);
         }
         .error-shell {
             width: 100%;
@@ -89,7 +89,7 @@ try {
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: var(--radius);
-            box-shadow: 0 12px 40px rgba(75, 55, 134, 0.08);
+            box-shadow: 0 12px 40px rgba(159, 18, 57, 0.08);
             overflow: hidden;
         }
         .error-top {
@@ -117,8 +117,8 @@ try {
             align-items: center;
             justify-content: center;
             color: #fff;
-            background: linear-gradient(145deg, #9b6af8, #4b3786);
-            box-shadow: 0 8px 18px rgba(75, 55, 134, 0.28);
+            background: linear-gradient(145deg, #fb7185, #9f1239);
+            box-shadow: 0 8px 18px rgba(159, 18, 57, 0.28);
             margin-bottom: 0.85rem;
             font-size: 1.05rem;
         }
@@ -129,7 +129,7 @@ try {
             font-size: 0.75rem;
             font-weight: 650;
             color: var(--wa-teal);
-            background: #f6f1ff;
+            background: #fff1f2;
             border: 1px solid var(--border);
             border-radius: 999px;
             padding: 0.2rem 0.65rem;
@@ -188,8 +188,8 @@ try {
         .btn-err-primary {
             border: 0;
             color: var(--wa-ink);
-            background: linear-gradient(180deg, #9b6af8, #8e53f7);
-            box-shadow: 0 6px 16px rgba(142, 83, 247, 0.28);
+            background: linear-gradient(180deg, #fb7185, #e11d48);
+            box-shadow: 0 6px 16px rgba(225, 29, 72, 0.28);
         }
         .btn-err:hover { filter: brightness(0.98); }
         .error-details {
@@ -209,7 +209,7 @@ try {
             padding: 0.75rem 0.85rem;
             border-radius: 10px;
             background: #1a1228;
-            color: #f6f1ff;
+            color: #fff1f2;
             font-size: 0.75rem;
             line-height: 1.45;
             overflow: auto;
@@ -221,7 +221,7 @@ try {
             font-size: 0.75rem;
             color: var(--muted);
         }
-        .error-kind-database .error-mark { background: linear-gradient(145deg, #34b7f1, #4b3786); }
+        .error-kind-database .error-mark { background: linear-gradient(145deg, #34b7f1, #9f1239); }
         .error-kind-permission .error-mark { background: linear-gradient(145deg, #f59e0b, #b45309); }
         .error-kind-not_found .error-mark { background: linear-gradient(145deg, #94a3b8, #475569); }
     </style>

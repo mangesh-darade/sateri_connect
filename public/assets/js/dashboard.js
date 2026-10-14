@@ -41,7 +41,7 @@
                 },
                 scales: {
                     x: { ticks: { maxRotation: 0, autoSkipPadding: 8, font: { size: 10 } }, grid: { display: false } },
-                    y: { beginAtZero: true, ticks: { precision: 0, font: { size: 10 } }, grid: { color: 'rgba(75,55,134,.06)' } }
+                    y: { beginAtZero: true, ticks: { precision: 0, font: { size: 10 } }, grid: { color: 'rgba(159,18,57,.06)' } }
                 }
             }
         });
@@ -86,7 +86,7 @@
                 datasets: [{
                     data: values,
                     backgroundColor: [
-                        '#8e53f7', '#4b3786', '#34B7F1', '#f0a202', '#e25555', '#5b8def', '#6c757d'
+                        '#e11d48', '#9f1239', '#34B7F1', '#f0a202', '#e25555', '#5b8def', '#6c757d'
                     ],
                     borderWidth: 0
                 }]

@@ -9,8 +9,8 @@
     --pf-card: #ffffff;
     --pf-line: rgba(21, 32, 41, 0.09);
     --pf-muted: #667480;
-    --pf-teal: #0b6e4f;
-    --pf-teal-deep: #08553d;
+    --pf-teal: #e11d48;
+    --pf-teal-deep: #be123c;
     --pf-coral: #c45c12;
     --pf-ok: #1b7f5a;
     --pf-warn: #a56a00;
@@ -66,8 +66,8 @@ body.platform-body {
     font-family: var(--pf-display);
     font-weight: 800;
     font-size: 1.05rem;
-    color: #102018;
-    background: #c8e06a;
+    color: #fff;
+    background: #e11d48;
     flex: 0 0 auto;
 }
 .platform-sidebar-name {
@@ -119,8 +119,8 @@ body.platform-body {
     color: #fff;
 }
 .platform-side-link.is-active {
-    background: rgba(11, 110, 79, 0.35);
-    color: #d7f0e4;
+    background: rgba(225, 29, 72, 0.35);
+    color: #ffe4e6;
 }
 .platform-side-link.is-danger { color: #f0b4ac; }
 button.platform-side-link {
@@ -149,7 +149,7 @@ button.platform-side-link {
 .platform-main {
     min-width: 0;
     background:
-        radial-gradient(640px 260px at 0% 0%, rgba(11, 110, 79, 0.06), transparent 55%),
+        radial-gradient(640px 260px at 0% 0%, rgba(225, 29, 72, 0.06), transparent 55%),
         var(--pf-paper);
 }
 
@@ -257,7 +257,7 @@ button.platform-side-link {
     background: var(--pf-teal);
 }
 .platform-kpi:nth-child(4)::before { background: var(--pf-coral); }
-.platform-kpi:nth-child(6)::before { background: #9cbc3a; }
+.platform-kpi:nth-child(6)::before { background: #fb7185; }
 .platform-kpi-label {
     font-size: 0.66rem;
     font-weight: 750;
@@ -406,7 +406,7 @@ button.platform-side-link {
 .btn-pf:hover { background: #f2f5f1; }
 .btn-pf-primary {
     background: var(--pf-teal);
-    color: #f3fff9;
+    color: #fff1f2;
     border-color: transparent;
 }
 .btn-pf-primary:hover { background: var(--pf-teal-deep); color: #fff; }
@@ -468,7 +468,7 @@ button.platform-side-link {
 .platform-input:focus {
     outline: none;
     border-color: var(--pf-teal);
-    box-shadow: 0 0 0 3px rgba(11, 110, 79, 0.12);
+    box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.12);
 }
 .platform-help {
     font-size: 0.74rem;
@@ -574,7 +574,7 @@ button.platform-side-link {
     flex: 1;
     min-width: 0;
     border-radius: 4px 4px 1px 1px;
-    background: linear-gradient(180deg, #1fa879, var(--pf-teal-deep));
+    background: linear-gradient(180deg, #fb7185, var(--pf-teal-deep));
 }
 .platform-bar-label {
     display: flex;

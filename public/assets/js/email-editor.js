@@ -274,7 +274,7 @@
         $drawer = $(
             '<aside class="email-ai-drawer" aria-hidden="true">'
             + '<div class="d-flex align-items-center justify-content-between px-3 py-2 border-bottom">'
-            + '<span class="fw-semibold"><i class="fas fa-wand-magic-sparkles me-1" style="color:#7c3aed"></i>Write with AI</span>'
+            + '<span class="fw-semibold"><i class="fas fa-wand-magic-sparkles me-1" style="color:#e11d48"></i>Write with AI</span>'
             + '<button type="button" class="btn-close js-ai-close" aria-label="Close"></button></div>'
             + '<div class="p-3 d-flex flex-column gap-2 flex-grow-1 overflow-auto">'
             + '<label class="form-label fw-semibold small mb-0">What should the email say?</label>'

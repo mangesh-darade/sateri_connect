@@ -5,8 +5,8 @@
 :root {
     --sidebar-w: 256px;
     --sidebar-collapsed-w: 72px;
-    --elint-primary: #8e53f7;
-    --elint-primary-soft: #f6f1ff;
+    --elint-primary: #e11d48;
+    --elint-primary-soft: #fff1f2;
     --elint-border: #E5E7EB;
     --elint-text: #1a1228;
     --elint-muted: #6b7280;
@@ -103,7 +103,7 @@ body.layout-fixed .main-sidebar.elint-sidebar > .sidebar {
     width: 32px;
     height: 32px;
     border-radius: 9px;
-    background: linear-gradient(145deg, #8e53f7 0%, #5b2fd6 100%);
+    background: linear-gradient(145deg, #e11d48 0%, #9f1239 100%);
     color: #fff;
     display: inline-flex;
     align-items: center;
@@ -296,7 +296,7 @@ body.layout-fixed .main-sidebar.elint-sidebar > .sidebar {
 .elint-sidebar .nav-sidebar > .nav-item > .nav-link:focus-visible,
 .elint-sidebar .sidebar-footer-links .nav-link:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(142, 83, 247, 0.16) !important;
+    box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.16) !important;
 }
 
 /* Parent active */

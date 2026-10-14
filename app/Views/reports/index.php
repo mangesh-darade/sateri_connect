@@ -236,8 +236,8 @@ $(function () {
             data: {
                 labels: JSON.parse(t.getAttribute('data-labels') || '[]'),
                 datasets: [
-                    { label: 'Sent', data: JSON.parse(t.getAttribute('data-sent') || '[]'), borderColor: '#4b3786', tension: .3 },
-                    { label: 'Delivered', data: JSON.parse(t.getAttribute('data-delivered') || '[]'), borderColor: '#8e53f7', tension: .3 },
+                    { label: 'Sent', data: JSON.parse(t.getAttribute('data-sent') || '[]'), borderColor: '#9f1239', tension: .3 },
+                    { label: 'Delivered', data: JSON.parse(t.getAttribute('data-delivered') || '[]'), borderColor: '#e11d48', tension: .3 },
                     { label: 'Failed', data: JSON.parse(t.getAttribute('data-failed') || '[]'), borderColor: '#e25555', tension: .3 }
                 ]
             },
@@ -250,7 +250,7 @@ $(function () {
             type: 'doughnut',
             data: {
                 labels: JSON.parse(m.getAttribute('data-labels') || '[]'),
-                datasets: [{ data: JSON.parse(m.getAttribute('data-values') || '[]'), backgroundColor: ['#8e53f7','#34B7F1','#e25555','#f0a202'], borderWidth: 0 }]
+                datasets: [{ data: JSON.parse(m.getAttribute('data-values') || '[]'), backgroundColor: ['#e11d48','#34B7F1','#e25555','#f0a202'], borderWidth: 0 }]
             },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
         });

@@ -67,15 +67,15 @@ $isActive = in_array($campaign['status'] ?? '', ['running', 'scheduled', 'queued
                 </div>
                 <label class="form-label small text-muted mb-1" id="campaignProgressLabel">Progress · <?= esc((string) $sent) ?> / <?= esc((string) ($campaign['total_contacts'] ?? 0)) ?></label>
                 <div class="progress mb-3" style="height:10px;border-radius:999px;background:var(--wa-mist)">
-                    <div class="progress-bar" id="campaignProgressBar" style="width:<?= $pct ?>%;background:linear-gradient(90deg,#4b3786,#8e53f7);border-radius:999px"></div>
+                    <div class="progress-bar" id="campaignProgressBar" style="width:<?= $pct ?>%;background:linear-gradient(90deg,#9f1239,#e11d48);border-radius:999px"></div>
                 </div>
                 <div class="row g-2 text-center">
                     <div class="col">
-                        <div class="fw-bold" id="metricSent" style="font-family:var(--font-display);color:#4b3786"><?= esc((string) ($campaign['sent_count'] ?? 0)) ?></div>
+                        <div class="fw-bold" id="metricSent" style="font-family:var(--font-display);color:#9f1239"><?= esc((string) ($campaign['sent_count'] ?? 0)) ?></div>
                         <small class="text-muted">Sent</small>
                     </div>
                     <div class="col">
-                        <div class="fw-bold" id="metricDelivered" style="font-family:var(--font-display);color:#8e53f7"><?= esc((string) ($campaign['delivered_count'] ?? 0)) ?></div>
+                        <div class="fw-bold" id="metricDelivered" style="font-family:var(--font-display);color:#e11d48"><?= esc((string) ($campaign['delivered_count'] ?? 0)) ?></div>
                         <small class="text-muted">Delivered</small>
                     </div>
                     <div class="col">
@@ -193,7 +193,7 @@ $(function () {
                 labels: labels,
                 datasets: [{
                     data: values,
-                    backgroundColor: ['#4b3786','#8e53f7','#34B7F1','#e25555','#f0a202'],
+                    backgroundColor: ['#9f1239','#e11d48','#34B7F1','#e25555','#f0a202'],
                     borderWidth: 0
                 }]
             },

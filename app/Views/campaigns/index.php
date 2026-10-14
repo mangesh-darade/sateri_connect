@@ -230,7 +230,7 @@ $campaigns = $campaigns ?? [];
     border: 1px solid #e5e7eb; border-radius: 12px; padding: 1rem; background: #fff;
     display: flex; flex-direction: column; gap: .65rem; min-height: 180px;
 }
-.cw-template-card.is-selected { border-color: var(--brand-500, #8e53f7); box-shadow: 0 0 0 2px rgba(142,83,247,.2); }
+.cw-template-card.is-selected { border-color: var(--brand-500, #e11d48); box-shadow: 0 0 0 2px rgba(225,29,72,.2); }
 .cw-template-card .cw-tpl-name { font-weight: 700; font-size: .95rem; word-break: break-word; }
 .cw-template-card .cw-tpl-body { color: #667085; font-size: .82rem; flex: 1;
     display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
@@ -260,10 +260,10 @@ $campaigns = $campaigns ?? [];
     cursor: pointer; transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
 }
 .cw-upload-box:hover, .cw-upload-box:focus {
-    border-color: var(--brand-500, #8e53f7); background: #f6f1ff; outline: none;
+    border-color: var(--brand-500, #e11d48); background: #fff1f2; outline: none;
 }
 .cw-upload-box.is-dragover {
-    border-color: var(--brand-500, #8e53f7);
+    border-color: var(--brand-500, #e11d48);
     background: #eafff3;
     box-shadow: inset 0 0 0 2px rgba(37, 211, 102, .25);
 }

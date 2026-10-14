@@ -92,7 +92,7 @@
                             $nPhone = (string) ($note['display_subtitle'] ?? $note['contact_phone'] ?? '');
                             $nBody  = (string) ($note['display_body'] ?? $note['message'] ?? '');
                             $nInit  = (string) ($note['avatar_initials'] ?? 'N');
-                            $nColor = (string) ($note['avatar_color'] ?? '#7c3aed');
+                            $nColor = (string) ($note['avatar_color'] ?? '#e11d48');
                             ?>
                             <a href="<?= esc($note['link'] ?? '#') ?>" class="notif-item nav-notif-item" data-id="<?= (int) ($note['id'] ?? 0) ?>">
                                 <span class="notif-avatar" style="background:<?= esc($nColor) ?>"><?= esc($nInit) ?></span>

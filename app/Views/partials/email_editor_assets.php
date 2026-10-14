@@ -23,7 +23,7 @@ try {
 .email-editor-mode { font-size: .74rem; }
 .email-editor-tools { display: flex; justify-content: flex-end; align-items: center; gap: .5rem; margin-bottom: .35rem; }
 .email-editor-tools .btn { font-size: .78rem; padding: .15rem .6rem; }
-.email-editor-tools .email-ai-btn { background: #f3edff; color: #7c3aed; border: 1px solid #dccbff; }
+.email-editor-tools .email-ai-btn { background: #fff1f2; color: #e11d48; border: 1px solid #fecdd3; }
 .email-editor-tools .dropdown-menu { max-height: 320px; overflow: auto; }
 .email-ai-drawer {
     position: fixed; top: 0; right: 0; bottom: 0; z-index: 1090;

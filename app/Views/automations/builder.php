@@ -184,10 +184,10 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
                 <svg id="flowEdges" class="flow-edges">
                     <defs>
                         <marker id="flowArrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4">
-                            <circle cx="5" cy="5" r="5" fill="#9b7be8"></circle>
+                            <circle cx="5" cy="5" r="5" fill="#fda4af"></circle>
                         </marker>
                         <marker id="flowArrowTrue" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4">
-                            <circle cx="5" cy="5" r="5" fill="#8e53f7"></circle>
+                            <circle cx="5" cy="5" r="5" fill="#e11d48"></circle>
                         </marker>
                         <marker id="flowArrowFalse" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4">
                             <circle cx="5" cy="5" r="5" fill="#e25555"></circle>
