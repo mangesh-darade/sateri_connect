@@ -765,8 +765,7 @@
     }
 
     /**
-     * Attribute picker used everywhere in the builder: Attributes page definitions first,
-     * then contact fields, then older keys already saved on contacts (kept so old flows still show).
+     * Attribute picker: attributes defined on Contacts → Attributes, then core contact fields.
      * opts: { k, label, cur, empty, noMobile }
      */
     function attrDropdownHtml(opts) {
@@ -793,12 +792,7 @@
             if (!seen[k]) html += opt(k, CORE_ATTR_LABELS[k]);
         });
         html += '</optgroup>';
-        var others = knownAttributes([cur]).filter(function (k) { return !seen[k] && !(opts.noMobile && k === 'mobile'); });
-        if (others.length) {
-            html += '<optgroup label="Other saved fields">';
-            others.forEach(function (k) { html += opt(k, k); });
-            html += '</optgroup>';
-        }
+        if (cur && !seen[cur]) html += opt(cur, cur);
         html += '</select>';
         return html;
     }

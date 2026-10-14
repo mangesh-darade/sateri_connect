@@ -22,45 +22,21 @@ class ContactAttributes
     }
 
     /**
-     * Collect attribute keys seen across contacts + common Cheerio fields.
+     * Contact columns plus attributes defined on Contacts → Attributes.
      *
      * @return list<string>
      */
     public static function knownKeys(?ContactModel $contacts = null): array
     {
+        unset($contacts);
         $keys = self::coreKeys();
-        $extra = [
-            'source', 'city', 'business_name', 'business_type',
-            'current_software_name', 'required_features', 'product_sel_1',
-            'webhook_status', 'full_name', 'phone',
-        ];
-
         try {
-            $model = $contacts ?? model(ContactModel::class);
-            $rows  = $model->select('custom_fields')->orderBy('id', 'DESC')->findAll(500);
-            foreach ($rows as $row) {
-                $fields = $row['custom_fields'] ?? null;
-                if (is_string($fields)) {
-                    $decoded = json_decode($fields, true);
-                    $fields  = is_array($decoded) ? $decoded : null;
-                }
-                if (! is_array($fields)) {
-                    continue;
-                }
-                foreach (array_keys($fields) as $key) {
-                    $key = trim((string) $key);
-                    if ($key === '' || str_starts_with($key, '_')) {
-                        continue;
-                    }
-                    $extra[] = $key;
-                }
-            }
+            $keys = array_merge($keys, array_keys(service('contactAttributes')->definitions()));
         } catch (\Throwable $e) {
-            // ignore — builder still has core + defaults
+            // Builder still has the core contact fields.
         }
-        $extra = array_merge($extra, array_keys(service('contactAttributes')->definitions()));
 
-        $keys = array_values(array_unique(array_merge($keys, $extra)));
+        $keys = array_values(array_unique($keys));
         sort($keys, SORT_NATURAL | SORT_FLAG_CASE);
 
         return $keys;

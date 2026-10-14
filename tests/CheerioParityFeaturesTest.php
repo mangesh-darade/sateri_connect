@@ -340,8 +340,8 @@ try {
     $db->table('templates')->where('id', $tplId)->delete();
 
     $sel = view('partials/attribute_select', ['name' => 'kw_attr_key[]', 'selected' => "{$P}_city", 'attributeKeys' => ['legacy_key', 'mobile']], ['saveData' => false]);
-    check('V4 attribute dropdown: defined attr selected, legacy key listed, mobile hidden',
-        str_contains($sel, 'value="' . $P . '_city" selected') && str_contains($sel, 'value="legacy_key"') && ! str_contains($sel, 'value="mobile"'));
+    check('V4 attribute dropdown: defined attr selected, extra saved keys hidden, mobile hidden',
+        str_contains($sel, 'value="' . $P . '_city" selected') && ! str_contains($sel, 'value="legacy_key"') && ! str_contains($sel, 'Other saved fields') && ! str_contains($sel, 'value="mobile"'));
 
     $contacts->update($c3, ['custom_fields' => array_merge($cf($c3), ["{$P}_undef" => 'x'])]);
     $undef = $attrs->undefinedKeys();
