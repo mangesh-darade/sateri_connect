@@ -1,4 +1,4 @@
-# Production Guide — Live server setup
+# Production Guide â€” Live server setup
 
 **Who this is for:** Putting the app online for real customers  
 **What you will do:** Deploy on a real server with HTTPS, Cheerio API key, live phone number, and workers  
@@ -12,13 +12,13 @@
 **Example live URL:** `https://yevle.elintpos.in/` (or a subdomain like `https://wa.yevle.elintpos.in/`)  
 (Document root must point to the `public/` folder.)
 
-> **Your domain checklist:** see [DEPLOY_YEVLE.md](DEPLOY_YEVLE.md) — right now `yevle.elintpos.in` still shows another app (`login.php`), so WhatsApp must be deployed first (subdomain recommended).
+> **Your domain checklist:** see [DEPLOY_YEVLE.md](DEPLOY_YEVLE.md) â€” right now `yevle.elintpos.in` still shows another app (`login.php`), so WhatsApp must be deployed first (subdomain recommended).
 
 ---
 
 ## Big picture
 
-| Step | Do this | You are done when… |
+| Step | Do this | You are done when |
 |-----:|---------|---------------------|
 | 1 | Prepare hosting | PHP 8.2+, MySQL, HTTPS ready |
 | 2 | Upload code + `.env` | Site opens on your domain |
@@ -52,16 +52,16 @@
 |------|-----|
 | VPS or shared hosting | Runs PHP + MySQL |
 | Domain name | Public URL for users and webhooks |
-| SSL certificate | HTTPS (Let’s Encrypt is fine) |
+| SSL certificate | HTTPS (Let's Encrypt is fine) |
 | Cheerio Dashboard + live WhatsApp number | Real messaging |
 | SSH or cPanel access | Upload files, run commands |
 | Backup plan | Protect data |
 
 ---
 
-# PART A — Server
+# PART A â€” Server
 
-## Step 1 — Server requirements
+## Step 1 â€” Server requirements
 
 - PHP **8.2+** with: `intl`, `mbstring`, `json`, `curl`, `openssl`, `mysqli`  
 - MySQL 8+ (or MariaDB) with **InnoDB**  
@@ -77,7 +77,7 @@
 
 ---
 
-## Step 2 — Upload the project
+## Step 2 â€” Upload the project
 
 1. Upload the project files to the server (Git, SFTP, or zip).  
 2. Point the web root to:
@@ -106,7 +106,7 @@ chmod -R ug+rwX writable
 
 ---
 
-## Step 3 — Configure `.env`
+## Step 3 â€” Configure `.env`
 
 Set at least:
 
@@ -125,7 +125,7 @@ database.default.DBDriver = MySQLi
 
 Also set:
 
-- Strong `encryption.key` ? run `php spark key:generate`  
+- Strong `encryption.key` â†’ run `php spark key:generate`  
 - Strong `JWT_SECRET` (long random string)  
 
 Use a **normal MySQL user**, not `root`, in production.
@@ -138,7 +138,7 @@ Use a **normal MySQL user**, not `root`, in production.
 
 ---
 
-## Step 4 — Install / migrate
+## Step 4 â€” Install / migrate
 
 If first deploy:
 
@@ -168,7 +168,7 @@ https://your-domain.com/login
 
 ---
 
-## Step 5 — Security checklist
+## Step 5 â€” Security checklist
 
 - [ ] `CI_ENVIRONMENT = production`  
 - [ ] HTTPS works on all pages  
@@ -183,11 +183,11 @@ More detail: [DEPLOYMENT.md](DEPLOYMENT.md)
 
 ---
 
-# PART B — Cheerio for live WhatsApp
+# PART B â€” Cheerio for live WhatsApp
 
-## Step 6 — Live WhatsApp number + permanent token
+## Step 6 â€” Live WhatsApp number + permanent token
 
-1. Open https://app.cheerio.in/ ? your app.  
+1. Open https://app.cheerio.in/ â†’ your app.  
 2. Connect a **live** WhatsApp Business phone number (not only the test number).  
 3. Create a **System User** token with WhatsApp permissions (permanent / long-lived).  
 4. Copy:
@@ -212,14 +212,15 @@ More detail: [DEPLOYMENT.md](DEPLOYMENT.md)
 
 ---
 
-## Step 7 — Save Cheerio settings in the app
+## Step 7 â€” Save Cheerio settings in the app
 
-1. Login ? **Settings ? Cheerio API**.  
+1. Login, then open **Settings** from the profile menu (not the left sidebar) â†’ **Cheerio API**.  
 2. Paste token, \(Cheerio live number\), WABA \(in Cheerio\), Webhook Secret, Verify Token.  
 3. API base: Cheerio Direct APIs (configured in app).  
-4. **Save Settings**.
+4. **Save Settings**.  
+5. Email sending is under **Email Manager â†’ Email Settings**, not under the Settings menu.
 
-Also set **Settings ? Application**:
+Also set **Settings â†’ Application**:
 
 - App name  
 - Timezone (example: `Asia/Kolkata`)  
@@ -228,11 +229,11 @@ Also set **Settings ? Application**:
 ### Checklist
 
 - [ ] Settings saved  
-- [ ] No temporary “test-only” token left in production  
+- [ ] No temporary "test-only" token left in production  
 
 ---
 
-## Step 8 — Webhook (real HTTPS — no tunnel)
+## Step 8 â€” Webhook (real HTTPS â€” no tunnel)
 
 Callback URL:
 
@@ -261,7 +262,7 @@ In Cheerio / WABA webhook settings:
 
 ---
 
-## Step 9 — Sync templates
+## Step 9 â€” Sync templates
 
 On the server:
 
@@ -270,7 +271,7 @@ cd /path/to/sateri_connect
 php spark templates:sync
 ```
 
-Or use **Templates ? Sync** in the panel.
+Or use **Templates â†’ Sync** in the panel.
 
 Only **APPROVED** templates can be used for broadcasts outside the 24-hour window.
 
@@ -281,9 +282,9 @@ Only **APPROVED** templates can be used for broadcasts outside the 24-hour windo
 
 ---
 
-# PART C — Workers (required)
+# PART C â€” Workers (required)
 
-## Step 10 — Cron / Supervisor
+## Step 10 â€” Cron / Supervisor
 
 Messages stay pending until workers run.
 
@@ -325,9 +326,9 @@ Windows server: use Task Scheduler (see [CRON_SETUP.md](CRON_SETUP.md)).
 
 ---
 
-# PART D — Go-live test
+# PART D â€” Go-live test
 
-## Step 11 — Smoke test
+## Step 11 â€” Smoke test
 
 1. Add a real contact (or your own phone if allowed).  
 2. Send an **approved template**.  
@@ -350,12 +351,12 @@ Windows server: use Task Scheduler (see [CRON_SETUP.md](CRON_SETUP.md)).
 
 ---
 
-## Step 12 — Team and roles
+## Step 12 â€” Team and roles
 
-1. **Roles** — only give needed permissions. New modules:
+1. **Roles** â€” only give needed permissions. New modules:
    - `sequences.view|create|edit|delete`
    - `guide.view` (Setup Workspace guides)
-2. **Users** — create agent accounts (not shared admin).  
+2. **Users** â€” create agent accounts (not shared admin).  
 3. Re-seed system role matrix after upgrades (custom roles are preserved):
 
 ```bash

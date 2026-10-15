@@ -595,11 +595,15 @@ Recommended order:
 
 Use these internal screenshots while following the process:
 
-### Meta Connect WhatsApp
+### Platform Embedded Signup
+
+Connect WhatsApp lives on **Platform → Embedded Signup**, one button per client. The client login does not show it. The page must be HTTPS or Meta blocks the popup.
 
 ![Meta Connect WhatsApp](images/03-meta-api-setup.png)
 
-### Sateri Connect Meta Settings
+### Client Meta fields
+
+Manual token, phone, and WABA fields stay on the client Meta screen. Open **Settings** from the profile menu. **Email Settings** is under **Email Manager**.
 
 ![Sateri Connect Meta Settings](images/04-settings-meta.png)
 

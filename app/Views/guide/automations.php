@@ -1,8 +1,9 @@
-<?= $this->extend('layouts/main') ?>
+<?= $this->extend(! empty($platformGuide) ? 'layouts/platform' : 'layouts/main') ?>
 
 <?= $this->section('header_actions') ?>
+<?php if (empty($platformGuide)): ?>
 <a href="<?= site_url('automations') ?>" class="btn btn-sm btn-wa">Open Automations</a>
-<a href="<?= site_url('guide/local') ?>" class="btn btn-sm btn-outline-secondary">Local guide</a>
+<?php endif; ?>
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
@@ -13,6 +14,7 @@ $flows = $flows ?? [];
 $stats = $stats ?? ['total' => 0, 'active' => 0, 'triggers' => 0, 'conditions' => 0, 'actions' => 0];
 ?>
 <div class="page-list">
+<?= view('guide/_tabs', ['guideType' => $guideType ?? 'automations', 'guideBase' => $guideBase ?? 'guide/', 'guideNav' => $guideNav ?? []]) ?>
     <p class="text-muted small mb-3">
         Catalog flows seeded by trigger / condition / action.
         Active WhatsApp provider: <strong><?= esc($providerLabel) ?></strong>.

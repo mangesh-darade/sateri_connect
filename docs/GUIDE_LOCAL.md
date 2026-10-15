@@ -1,12 +1,12 @@
-# Local Guide — Test on your PC (WAMP)
+# Local Guide ï¿½ Test on your PC (WAMP)
 
 **Who this is for:** Beginners testing on a local computer  
 **What you will do:** Run the app on WAMP, connect Cheerio WhatsApp, send and receive test messages  
-**Time:** About 1–2 hours (first time)  
+**Time:** About 1ï¿½2 hours (first time)  
 **Computer:** Windows with WAMP64  
 
-> **Messaging provider:** This app uses **Cheerio Direct APIs only** — not Meta Graph API.  
-> Primary Cheerio docs: [CHEERIO_FLOW.md](CHEERIO_FLOW.md) · [CHEERIO_CONFIGURATION.md](CHEERIO_CONFIGURATION.md) · [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md)  
+> **Messaging provider:** This app uses **Cheerio Direct APIs only** ï¿½ not Meta Graph API.  
+> Primary Cheerio docs: [CHEERIO_FLOW.md](CHEERIO_FLOW.md) ï¿½ [CHEERIO_CONFIGURATION.md](CHEERIO_CONFIGURATION.md) ï¿½ [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md)  
 > API key: [https://app.cheerio.in/settings/apikey](https://app.cheerio.in/settings/apikey)
 
 > **Tip:** Finish one step fully. Then go to the next step. Use the checklists.  
@@ -21,7 +21,7 @@
 
 ![8 steps from WAMP to Live Chat](images/08-roadmap.png)
 
-| Step | Do this | You are done when… |
+| Step | Do this | You are done when |
 |-----:|---------|---------------------|
 | 1 | Start WAMP | Icon is green |
 | 2 | Install app and login | Dashboard opens |
@@ -50,9 +50,9 @@ We use a free Cloudflare tunnel for local testing.
 
 ---
 
-# PART A — Run the app on your PC
+# PART A ï¿½ Run the app on your PC
 
-## Step 1 — Start WAMP
+## Step 1 ï¿½ Start WAMP
 
 1. Open **WAMP** from the Start Menu.  
 2. Wait until the icon is **green**.  
@@ -73,7 +73,7 @@ We use a free Cloudflare tunnel for local testing.
 
 ---
 
-## Step 2 — Check the project folder
+## Step 2 ï¿½ Check the project folder
 
 Your folder should look like this:
 
@@ -99,7 +99,7 @@ http://localhost/sateri_connect/public/
 
 ---
 
-## Step 3 — Install the app (first time only)
+## Step 3 ï¿½ Install the app (first time only)
 
 Open:
 
@@ -114,7 +114,7 @@ Follow each screen:
 | Requirements | All items should be green |
 | Database | Host `localhost`, user `root`, password empty (often), database name `sateri_connect` |
 | App | Base URL: `http://localhost/sateri_connect/public/` |
-| Admin | Your name, email, password — **save these** |
+| Admin | Your name, email, password ï¿½ **save these** |
 | Cheerio | You can skip this and fill Settings later |
 | Finish | Click Finish |
 
@@ -130,7 +130,7 @@ Follow each screen:
 
 ---
 
-## Step 4 — Login
+## Step 4 ï¿½ Login
 
 Open:
 
@@ -156,11 +156,12 @@ Change the password later. Do not share it.
 ### Checklist
 
 - [ ] Dashboard opens  
-- [ ] Left menu shows **Inbox ? Data ? Marketing ? Automation ? Analytics ? System**  
+- [ ] Left menu shows **Inbox, Data, Marketing, Automation, Analytics, System**  
+- [ ] **Settings** is not in the left menu. Open it from the profile menu. **Email Settings** is under **Email Manager**  
 
 ---
 
-## Step 5 — Fix PHP SSL on Windows (important)
+## Step 5 ï¿½ Fix PHP SSL on Windows (important)
 
 Without this, Cheerio calls fail with an SSL error.
 
@@ -205,9 +206,9 @@ WAMP tray ? **Restart All Services**.
 
 ---
 
-# PART B — Cheerio setup
+# PART B ï¿½ Cheerio setup
 
-## Step 6 — Cheerio account + API key
+## Step 6 ï¿½ Cheerio account + API key
 
 1. Open https://app.cheerio.in/  
 2. Log in.  
@@ -221,7 +222,7 @@ WAMP tray ? **Restart All Services**.
 
 ---
 
-## Step 7 — Copy these values
+## Step 7 ï¿½ Copy these values
 
 ![Cheerio WhatsApp API Setup](images/03-meta-api-setup.png)
 
@@ -253,7 +254,7 @@ v21.0
 
 - Temporary tokens expire. Make a new one if send fails later.  
 - Never share your token or Webhook Secret.  
-- You do **not** need App ID in this app’s Settings screen.
+- You do **not** need App ID in this app's Settings screen.
 
 ### Add your phone for testing
 
@@ -272,11 +273,11 @@ v21.0
 
 ---
 
-# PART C — Save settings in the app
+# PART C ï¿½ Save settings in the app
 
-## Step 8 — Settings ? Cheerio API
+## Step 8 ï¿½ Settings ? Cheerio API
 
-1. In the app, open **Settings**.  
+1. Open **Settings** from the profile menu. It is not in the left sidebar.  
 2. Open the **Cheerio API** tab.
 
 ![Settings Cheerio API](images/04-settings-meta.png)
@@ -285,7 +286,7 @@ v21.0
 4. Set API Version to `v21.0`.  
 5. Click **Save Settings**.
 
-If a field shows dots (`••••`), leave it empty to keep the old value.  
+If a field shows dots (`ï¿½ï¿½ï¿½ï¿½`), leave it empty to keep the old value.  
 To change it, paste a new value and Save.
 
 ### Checklist
@@ -295,7 +296,7 @@ To change it, paste a new value and Save.
 
 ---
 
-## Step 9 — Sync templates (test the connection)
+## Step 9 ï¿½ Sync templates (test the connection)
 
 Open PowerShell:
 
@@ -331,11 +332,11 @@ You should see **`hello_world`** with status **APPROVED**.
 
 ---
 
-# PART D — Webhooks (so replies show in Live Chat)
+# PART D ï¿½ Webhooks (so replies show in Live Chat)
 
 Cheerio cannot reach `localhost`. You need a public HTTPS link (tunnel).
 
-## Step 10 — Start Cloudflare tunnel
+## Step 10 ï¿½ Start Cloudflare tunnel
 
 ### Install once
 
@@ -388,7 +389,7 @@ https://YOUR-ID.ngrok-free.app/sateri_connect/public/webhooks
 
 ---
 
-## Step 11 — Set webhook in Cheerio / WABA
+## Step 11 ï¿½ Set webhook in Cheerio / WABA
 
 1. Cheerio Dashboard / WABA webhook settings.  
 2. Edit:
@@ -413,9 +414,9 @@ You should see `12345`.
 
 ---
 
-# PART E — Send and receive messages
+# PART E ï¿½ Send and receive messages
 
-## Step 12 — Add a contact
+## Step 12 ï¿½ Add a contact
 
 1. Open **Contacts** ? Add.  
 2. Enter name.  
@@ -436,7 +437,7 @@ Example (India):
 
 ---
 
-## Step 13 — Send the first template (`hello_world`)
+## Step 13 ï¿½ Send the first template (`hello_world`)
 
 The first message to a user must be a **template**.
 
@@ -459,7 +460,7 @@ Your phone should get the Hello World message.
 
 ---
 
-## Step 14 — Reply from phone ? see Live Chat
+## Step 14 ï¿½ Reply from phone ? see Live Chat
 
 1. On your phone, reply (example: `hii`).  
 2. Keep the tunnel open.  
@@ -482,7 +483,7 @@ http://localhost/sateri_connect/public/chat
 
 ---
 
-## Step 15 — Reply from Live Chat
+## Step 15 ï¿½ Reply from Live Chat
 
 After the customer messages you, you have about **24 hours** to send free text.
 
@@ -506,7 +507,7 @@ After the customer messages you, you have about **24 hours** to send free text.
 
 ---
 
-# PART F — Queue workers
+# PART F ï¿½ Queue workers
 
 Some messages wait in **Queue** until a worker runs.
 
@@ -540,7 +541,7 @@ php spark db:seed PermissionSeeder
 
 ---
 
-# PART G — Team Inbox 2.0
+# PART G ï¿½ Team Inbox 2.0
 
 **URL:** `/chat`  
 **Permission:** `chat.view` (status change needs `chat.close`)
@@ -582,7 +583,7 @@ Mobiles use `91999900xxxx`.
 
 ---
 
-# PART H — Workflows (visual builder)
+# PART H ï¿½ Workflows (visual builder)
 
 **URL:** `/automations` ? **Builder** (fullscreen canvas)  
 **Permission:** `automations.edit`
@@ -599,7 +600,7 @@ Mobiles use `91999900xxxx`.
 
 ### How to test Delay
 
-1. Build: Trigger ? Delay (1–5 sec) ? Update chat status / Add note.  
+1. Build: Trigger ? Delay (1ï¿½5 sec) ? Update chat status / Add note.  
 2. Save + set **Active**.  
 3. Trigger the flow (send a matching WhatsApp message).  
 4. Run: `php spark automations:process`  
@@ -615,7 +616,7 @@ Catalog of sample flows: **System ? Setup Workspace ? Automations guide** (`/gui
 
 ---
 
-# PART I — Sequences (multi-step drips)
+# PART I ï¿½ Sequences (multi-step drips)
 
 **URL:** `/sequences`  
 **Permissions:** `sequences.view` / `create` / `edit` / `delete`
@@ -637,46 +638,52 @@ Agents typically have **view only**; managers/admins can edit.
 
 ---
 
-# PART J — Menu meaning (short)
+# PART J ï¿½ Menu meaning (short)
 
 Nav groups (left sidebar):
 
 | Group | Items |
 |-------|--------|
 | Inbox | Dashboard, Team Inbox |
-| Data | Contacts, Groups |
-| Marketing | Campaigns, Email, Templates |
+| Data | Contacts (All Contacts, Customer Groups, Attributes, Smart Forms) |
+| Marketing | Broadcasts, Email Manager, Template Library |
 | Automation | Workflows, Sequences, Keywords, Queue |
-| Analytics | Overview, Reports, Delivery |
-| System | Users, Roles, Setup Workspace (guides) |
+| Analytics | Analytics |
+| System | Users, Roles, Setup Workspace |
+
+**Email Manager** opens: Email Manager, Email Templates, Email Workflows (Auto Drips), Email Settings.  
+**Setup Workspace** opens: Local Guide, Production Guide, Meta Publish Guide, Meta Screenshot Guide, Automations Guide.
+
+Settings is not a sidebar item. WhatsApp **Connect WhatsApp** is not on the client screen. The platform admin connects each number from **Platform ? Embedded Signup**.
 
 | Menu | Use |
 |------|-----|
 | Team Inbox | 1:1 chat + statuses / filters |
+| Email Manager | Campaigns, templates, drips, and Email Settings |
 | Sequences | Multi-step drips |
 | Workflows | Visual automations |
 | Keyword Bot | Auto replies |
-| Setup Workspace | Local / Production / Automations guides (`guide.view`) |
+| Setup Workspace | Local / Production / Meta / Automations guides (`guide.view`) |
 | Roles | Permission matrix (includes `sequences.*`, `guide.view`) |
 
 More detail: [USER_GUIDE.md](USER_GUIDE.md)
 
 ---
 
-# PART K — WhatsApp / Cheerio rules (simple)
+# PART K ï¿½ WhatsApp / Cheerio rules (simple)
 
 1. First message to a new user ? **template only**.  
 2. After they reply ? free text for about **24 hours**.  
 3. In test mode ? only **verified test phones** work.  
 4. Webhooks need a **public HTTPS** URL (tunnel).  
-5. Temporary tokens **expire** — make a new one when needed.  
-6. Full production needs business verification later — not needed for this first test.
+5. Temporary tokens **expire** ï¿½ make a new one when needed.  
+6. Full production needs business verification later ï¿½ not needed for this first test.
 
 More: [CHEERIO_FLOW.md](CHEERIO_FLOW.md)
 
 ---
 
-# PART L — Verify with automated tests
+# PART L ï¿½ Verify with automated tests
 
 Use PHP **8.2** from WAMP if your default `php` has broken extensions:
 

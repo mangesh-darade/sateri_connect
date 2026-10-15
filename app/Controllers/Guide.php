@@ -23,7 +23,7 @@ class Guide extends BaseController
         'production' => [
             'file'     => 'GUIDE_PRODUCTION.md',
             'title'    => 'Production Guide',
-            'subtitle' => 'Put the app live on a real server with HTTPS and your WhatsApp provider (Cheerio or Meta).',
+            'subtitle' => 'Put the app live on a real server with HTTPS and your WhatsApp provider (External or Meta).',
         ],
         'meta-official' => [
             'file'     => 'META_OFFICIAL_DEVELOPER_TO_PUBLISH_GUIDE.md',
@@ -44,22 +44,22 @@ class Guide extends BaseController
 
     public function index(): ResponseInterface
     {
-        if ($denied = $this->requirePermission('guide.view')) {
+        if ($denied = $this->denyGuide()) {
             return $denied;
         }
 
-        return redirect()->to(site_url('guide/local'));
+        return redirect()->to(site_url($this->guidePath('local')));
     }
 
     public function show(string $type = 'local'): string|ResponseInterface
     {
-        if ($denied = $this->requirePermission('guide.view')) {
+        if ($denied = $this->denyGuide()) {
             return $denied;
         }
 
         $type = strtolower($type);
         if (! isset($this->guides[$type])) {
-            return redirect()->to(site_url('guide/local'));
+            return redirect()->to(site_url($this->guidePath('local')));
         }
 
         if ($type === 'automations') {
@@ -70,7 +70,7 @@ class Guide extends BaseController
         $path = ROOTPATH . 'docs' . DIRECTORY_SEPARATOR . $meta['file'];
 
         if (! is_file($path)) {
-            return $this->render('guide/index', [
+            return $this->render('guide/index', $this->guideViewData([
                 'pageTitle'  => $meta['title'],
                 'subtitle'   => $meta['subtitle'],
                 'guideType'  => $type,
@@ -80,7 +80,7 @@ class Guide extends BaseController
                 'guideHtml'  => '<div class="alert alert-warning">Guide file not found (<code>docs/'
                     . esc($meta['file']) . '</code>).</div>',
                 'toc'        => [],
-            ]);
+            ]));
         }
 
         $markdown  = (string) file_get_contents($path);
@@ -105,7 +105,7 @@ class Guide extends BaseController
             $markdown
         ) ?? $markdown;
 
-        return $this->render('guide/index', [
+        return $this->render('guide/index', $this->guideViewData([
             'pageTitle'  => $meta['title'],
             'subtitle'   => $meta['subtitle'],
             'guideType'  => $type,
@@ -114,7 +114,7 @@ class Guide extends BaseController
             'guideSub'   => $meta['subtitle'],
             'guideHtml'  => $this->markdownToHtml($markdown),
             'toc'        => $this->extractToc($markdown),
-        ]);
+        ]));
     }
 
     /**
@@ -122,14 +122,19 @@ class Guide extends BaseController
      */
     protected function automationsGuide(): string
     {
-        $settings = new \App\Libraries\SettingsService();
-        $provider = $settings->getWhatsAppProvider();
-        $prefix   = \App\Commands\SeedAutomationCatalogFlows::PREFIX;
-
-        $flows = model(\App\Models\AutomationModel::class)
-            ->like('name', $prefix, 'after')
-            ->orderBy('name', 'ASC')
-            ->findAll();
+        $provider = 'cheerio';
+        $flows    = [];
+        try {
+            $settings = new \App\Libraries\SettingsService();
+            $provider = $settings->getWhatsAppProvider();
+            $prefix   = \App\Commands\SeedAutomationCatalogFlows::PREFIX;
+            $flows = model(\App\Models\AutomationModel::class)
+                ->like('name', $prefix, 'after')
+                ->orderBy('name', 'ASC')
+                ->findAll();
+        } catch (\Throwable $e) {
+            log_message('warning', 'Automation guide catalog skipped: {msg}', ['msg' => $e->getMessage()]);
+        }
 
         $stats = [
             'total'      => count($flows),
@@ -152,14 +157,66 @@ class Guide extends BaseController
             }
         }
 
-        return $this->render('guide/automations', [
+        return $this->render('guide/automations', $this->guideViewData([
             'pageTitle'     => 'Automation Flows Guide',
             'subtitle'      => $this->guides['automations']['subtitle'],
+            'guideType'     => 'automations',
             'provider'      => $provider,
-            'providerLabel' => $provider === 'meta' ? 'Meta Cloud API' : 'Cheerio Direct API',
+            'providerLabel' => $provider === 'meta' ? 'Meta Cloud API' : 'External Direct API',
             'flows'         => $flows,
             'stats'         => $stats,
-        ]);
+        ]));
+    }
+
+    protected function isPlatformGuide(): bool
+    {
+        return $this->request->getUri()->getSegment(1) === 'platform';
+    }
+
+    protected function guidePath(string $type): string
+    {
+        return ($this->isPlatformGuide() ? 'platform/guide/' : 'guide/') . $type;
+    }
+
+    /**
+     * Workspace users need guide.view. Platform super admin is already behind platformAuth.
+     */
+    protected function denyGuide(): ?ResponseInterface
+    {
+        if ($this->isPlatformGuide() && session()->get('platform_admin_id')) {
+            return null;
+        }
+
+        return $this->requirePermission('guide.view');
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    protected function guideViewData(array $data): array
+    {
+        $data['platformGuide'] = $this->isPlatformGuide();
+        $data['guideBase']     = $this->isPlatformGuide() ? 'platform/guide/' : 'guide/';
+        $data['guideNav']      = $data['guideNav'] ?? $this->guideTabs();
+        if (! $data['platformGuide']) {
+            return $data;
+        }
+
+        $data['navActive'] = 'guide';
+        $data['waAccount'] = [
+            'provider'            => 'cheerio',
+            'display_name'        => '',
+            'phone'               => '',
+            'profile_picture_url' => '',
+            'connected'           => false,
+            'needs_refresh'       => false,
+        ];
+        $data['notifications']          = [];
+        $data['unread_notifications']   = 0;
+        $data['waIdentityNeedsRefresh'] = false;
+
+        return $data;
     }
 
     /**
@@ -170,8 +227,9 @@ class Guide extends BaseController
         return [
             ['type' => 'local', 'label' => 'Local'],
             ['type' => 'production', 'label' => 'Production'],
-            ['type' => 'meta-official', 'label' => 'Meta Guide'],
-            ['type' => 'meta-screenshots', 'label' => 'Meta Screens'],
+            ['type' => 'meta-official', 'label' => 'Meta Publish'],
+            ['type' => 'meta-screenshots', 'label' => 'Meta Screenshots'],
+            ['type' => 'automations', 'label' => 'Automations'],
         ];
     }
 
@@ -216,9 +274,13 @@ class Guide extends BaseController
                 continue;
             }
 
-            if (preg_match('/^>\s?(.*)$/', $line, $m)) {
-                $html .= '<blockquote class="guide-callout"><p>' . $this->inline($m[1]) . '</p></blockquote>' . "\n";
-                $i++;
+            if (preg_match('/^>\s?(.*)$/', $line)) {
+                $parts = [];
+                while ($i < $n && preg_match('/^>\s?(.*)$/', $lines[$i], $bm)) {
+                    $parts[] = $this->inline($bm[1]);
+                    $i++;
+                }
+                $html .= '<blockquote class="guide-callout"><p>' . implode('<br>', $parts) . "</p></blockquote>\n";
                 continue;
             }
 
@@ -226,8 +288,18 @@ class Guide extends BaseController
                 $level = strlen($m[1]);
                 $text  = trim($m[2]);
                 $id    = $this->slug($text);
-                $html .= '<h' . $level . ' id="' . esc($id, 'attr') . '" class="guide-h">'
-                    . $this->inline($text) . '</h' . $level . ">\n";
+                if (preg_match('/^Step\s+(\d+)\s*[.\x{2014}\x{2013}:\-]+\s*(.+)$/u', $text, $step)) {
+                    $html .= '<h' . $level . ' id="' . esc($id, 'attr') . '" class="guide-h guide-step">'
+                        . '<span class="guide-step-num">' . (int) $step[1] . '</span>'
+                        . '<span class="guide-step-title">' . $this->inline($step[2]) . '</span>'
+                        . '</h' . $level . ">\n";
+                } elseif (preg_match('/^PART\s+([A-Z])\b/u', $text)) {
+                    $html .= '<h' . $level . ' id="' . esc($id, 'attr') . '" class="guide-h guide-part">'
+                        . $this->inline($text) . '</h' . $level . ">\n";
+                } else {
+                    $html .= '<h' . $level . ' id="' . esc($id, 'attr') . '" class="guide-h">'
+                        . $this->inline($text) . '</h' . $level . ">\n";
+                }
                 $i++;
                 continue;
             }

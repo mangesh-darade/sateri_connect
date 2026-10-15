@@ -1,4 +1,4 @@
-<?= $this->extend('layouts/main') ?>
+<?= $this->extend(! empty($platformGuide) ? 'layouts/platform' : 'layouts/main') ?>
 
 <?= $this->section('styles') ?>
 <style>
@@ -46,9 +46,42 @@
     box-shadow: var(--shadow-sm);
 }
 .guide-body .guide-h { scroll-margin-top: 80px; color: var(--wa-ink); font-family: var(--font-display); letter-spacing: -0.03em; }
-.guide-body h1.guide-h { font-size: 1.55rem; border-bottom: 2px solid var(--wa-green); padding-bottom: .45rem; }
-.guide-body h2.guide-h { font-size: 1.2rem; margin-top: 1.75rem; }
-.guide-body h3.guide-h { font-size: 1.05rem; margin-top: 1.25rem; }
+.guide-body h1.guide-h { font-size: 1.4rem; border-bottom: 1px solid var(--border); padding-bottom: .55rem; margin-bottom: 1rem; }
+.guide-body h2.guide-h { font-size: 1.12rem; margin-top: 1.5rem; }
+.guide-body h3.guide-h { font-size: 0.95rem; margin-top: 1.15rem; color: var(--text-muted); font-weight: 600; }
+.guide-body .guide-part {
+    margin-top: 2rem;
+    padding: .55rem .8rem;
+    background: #f6f8f7;
+    border-radius: 10px;
+    font-size: 1.02rem;
+    border-bottom: 0;
+}
+.guide-body .guide-step {
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    margin-top: 1.45rem;
+    padding-bottom: .35rem;
+    border-bottom: 1px solid var(--border);
+}
+.guide-step-num {
+    flex: 0 0 auto;
+    width: 1.65rem;
+    height: 1.65rem;
+    border-radius: 999px;
+    background: #152029;
+    color: #fff;
+    font-size: .78rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.guide-step-title { line-height: 1.3; }
+.guide-body ol { margin: .4rem 0 .8rem; padding-left: 1.35rem; }
+.guide-body ol li { margin: .28rem 0; padding-left: .15rem; }
+.guide-body ol li::marker { font-weight: 700; color: #152029; }
 .guide-figure {
     margin: 1rem 0 1.25rem;
     background: var(--surface-2);
@@ -77,11 +110,12 @@
     overflow-x: auto;
 }
 .guide-callout {
-    background: var(--wa-mist);
-    border-left: 4px solid var(--wa-green);
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-    padding: .75rem 1.1rem;
-    margin: 1rem 0;
+    background: #f7faf8;
+    border: 1px solid var(--border);
+    border-left: 3px solid #0f766e;
+    border-radius: 10px;
+    padding: .7rem .95rem;
+    margin: .85rem 0;
 }
 .guide-callout p { margin: 0; }
 .guide-checklist { list-style: none; padding-left: 0; }
@@ -119,26 +153,10 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('header_actions') ?>
-<?php
-$guideType = $guideType ?? 'local';
-$guideNav = $guideNav ?? [
-    ['type' => 'local', 'label' => 'Local'],
-    ['type' => 'production', 'label' => 'Production'],
-];
-?>
-<div class="guide-switch guide-switch-header">
-    <?php foreach ($guideNav as $nav): ?>
-        <?php $navType = (string) ($nav['type'] ?? 'local'); ?>
-        <a href="<?= site_url('guide/' . $navType) ?>" class="<?= $guideType === $navType ? 'active' : '' ?>">
-            <?= esc($nav['label'] ?? $navType) ?>
-        </a>
-    <?php endforeach; ?>
-</div>
 <div class="guide-export-actions">
     <button type="button" class="btn btn-sm btn-outline-secondary" id="guideDownloadPdf">Download PDF</button>
     <button type="button" class="btn btn-sm btn-outline-secondary" id="guideDownloadDoc">Download DOC</button>
 </div>
-<a href="<?= site_url('guide/automations') ?>" class="btn btn-sm btn-outline-secondary">Automations guide</a>
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
@@ -148,6 +166,7 @@ $guideHtml = $guideHtml ?? '';
 $guideType = $guideType ?? 'local';
 ?>
 <div class="page-list">
+<?= view('guide/_tabs', ['guideType' => $guideType, 'guideBase' => $guideBase ?? 'guide/', 'guideNav' => $guideNav ?? []]) ?>
 <div class="guide-layout">
     <aside class="guide-toc d-none d-md-block">
         <h6>On this page</h6>

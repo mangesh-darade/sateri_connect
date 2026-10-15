@@ -18,7 +18,7 @@ What to confirm:
 
 - local site opens
 - `public/` path is correct
-- you can reach Settings and Chat screens
+- you can reach Chat. Settings is in the profile menu, not the left sidebar
 
 ---
 
@@ -35,34 +35,29 @@ Why this matters:
 
 ---
 
-## 3. Meta Connect WhatsApp Panel
+## 3. Platform Connect WhatsApp
 
-This is the current in-app Meta onboarding screen inside Sateri Connect.
+Connect WhatsApp is only on the platform admin page **Embedded Signup**. The client workspace does not show this button, and **Settings** is not in the client sidebar.
 
 ![Meta Connect WhatsApp](images/03-meta-api-setup.png)
 
-Use this screen to validate that the app is ready to connect Meta:
+On **Platform → Embedded Signup**:
 
-- Embedded Signup readiness
-- connected status
-- WABA / Phone Number ID visibility
-- Meta credentials health
-
-Use this stage to:
-
-1. connect WhatsApp through Meta
-2. confirm WABA and phone mapping
-3. verify the app has the current Meta configuration
+1. Save the shared Tech Provider App ID, Embedded Signup Config ID, and App Secret.
+2. Run **Test Meta API**. A green result means Meta recognized the app. It does not connect a phone number.
+3. In **Connect a client**, press **Connect WhatsApp** on that client's row.
+4. The Meta popup must open from an **https://** page (or it shows "isn't using a secure connection").
+5. After the popup, the token, WABA ID, and Phone Number ID are saved on that client.
 
 ---
 
-## 4. Save Meta Credentials in Sateri Connect
+## 4. Client Meta fields
 
-Open app settings and configure the Meta provider.
+The client can still paste a token by hand. Open **Settings** from the profile menu, not the left sidebar. Email transport is **Email Manager → Email Settings**.
 
 ![Meta Settings](images/04-settings-meta.png)
 
-Fill:
+Manual Meta fields:
 
 - Provider = `Meta`
 - Meta Access Token
@@ -71,9 +66,7 @@ Fill:
 - API Version
 - Webhook Verify Token
 
-Then run:
-
-- `Test Meta Connection`
+Then run **Test connection**. Do not look for **Connect WhatsApp** on this screen.
 
 Expected result:
 
