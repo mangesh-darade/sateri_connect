@@ -177,7 +177,7 @@ $importView = file_get_contents(dirname(__DIR__) . '/app/Views/contacts/import.p
 $contactsJs = file_get_contents(dirname(__DIR__) . '/public/assets/js/contacts.js');
 $contactsCtrl = file_get_contents(dirname(__DIR__) . '/app/Controllers/Contacts.php');
 $createView = file_get_contents(dirname(__DIR__) . '/app/Views/templates/create.php');
-$reportsView = file_get_contents(dirname(__DIR__) . '/app/Views/reports/index.php');
+$reportsView = file_get_contents(dirname(__DIR__) . '/app/Views/analytics/index.php');
 
 check('exportExcel no longer dumps findAll for campaigns', ! preg_match('/type === \'campaigns\'[\s\S]{0,200}findAll\(\)/', $reports));
 check('exportExcel writes campaign_breakdown section', str_contains($reports, 'campaign_breakdown'));

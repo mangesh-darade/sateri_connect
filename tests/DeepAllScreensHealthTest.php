@@ -323,7 +323,6 @@ $viewScreens = [
     'campaigns/_wizard.php' => 'Campaign wizard',
     'campaigns/form.php' => 'Campaign form',
     'analytics/index.php' => 'Analytics',
-    'reports/index.php' => 'Reports',
     'settings/index.php' => 'Settings',
     'users/index.php' => 'Users',
     'queue/index.php' => 'Queue',

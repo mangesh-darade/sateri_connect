@@ -19,7 +19,7 @@ $channelCards = [
         'key'     => 'whatsapp',
         'title'   => 'WhatsApp',
         'icon'    => 'fab fa-whatsapp',
-        'url'     => site_url('reports/delivery'),
+        'url'     => site_url('analytics?tab=whatsapp'),
         'today'   => (int) ($channels['whatsapp']['today']['sent'] ?? 0),
         'month'   => (int) ($channels['whatsapp']['month']['sent'] ?? 0),
         'metrics' => [

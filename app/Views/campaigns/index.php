@@ -8,7 +8,7 @@ $canCreateEmail = ! empty($canCreateEmail);
 <button type="button" class="btn btn-outline-secondary btn-sm btn-icon" id="campaignRefreshBtn" title="Refresh list" aria-label="Refresh list">
     <i class="fas fa-sync-alt"></i>
 </button>
-<a href="<?= site_url('reports/campaigns') ?>" class="btn btn-outline-secondary btn-sm">
+<a href="<?= site_url('analytics?tab=whatsapp') ?>" class="btn btn-outline-secondary btn-sm">
     <i class="fas fa-file-export me-1"></i> Export Report
 </a>
 <?php if ($canCreateWa || $canCreateEmail): ?>
