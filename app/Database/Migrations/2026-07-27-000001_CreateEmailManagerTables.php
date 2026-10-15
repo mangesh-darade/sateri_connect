@@ -258,7 +258,7 @@ class CreateEmailManagerTables extends Migration
                 'type'       => 'VARCHAR',
                 'constraint' => 191,
                 'null'       => true,
-                'comment'    => 'External Cheerio Sender/Domain ID',
+                'comment'    => 'External Sender/Domain ID',
             ],
             'status' => [
                 'type'       => 'ENUM',

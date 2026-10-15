@@ -547,7 +547,7 @@ return array (
       'email' => 'varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL',
       'domain' => 'varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL',
       'mail_from_domain' => 'varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL',
-      'cheerio_id' => 'varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT \'External Cheerio Sender/Domain ID\'',
+      'cheerio_id' => 'varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT \'External Sender/Domain ID\'',
       'status' => 'enum(\'pending\',\'verified\',\'failed\',\'disabled\') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT \'pending\'',
       'dns_records' => 'text COLLATE utf8mb4_unicode_ci COMMENT \'JSON SPF/DKIM/DMARC notes\'',
       'notes' => 'text COLLATE utf8mb4_unicode_ci',
