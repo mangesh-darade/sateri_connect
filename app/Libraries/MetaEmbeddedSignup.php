@@ -117,6 +117,8 @@ class MetaEmbeddedSignup
     /**
      * Exchange Embedded Signup code, persist token + IDs, register phone, subscribe webhooks.
      *
+     * @param array{app_id?: string, app_secret?: string, api_version?: string, config_id?: string}|null $providerCreds
+     *
      * @return array<string, mixed>
      */
     public function complete(
@@ -125,7 +127,8 @@ class MetaEmbeddedSignup
         string $phoneNumberId,
         ?string $businessId = null,
         ?string $pin = null,
-        ?string $redirectUri = null
+        ?string $redirectUri = null,
+        ?array $providerCreds = null
     ): array {
         $code          = trim($code);
         $wabaId        = trim($wabaId);
@@ -144,7 +147,7 @@ class MetaEmbeddedSignup
             );
         }
 
-        $tokenResult = $this->exchangeCodeForToken($code, (string) $redirectUri);
+        $tokenResult = $this->exchangeCodeForToken($code, (string) $redirectUri, $providerCreds);
         $accessToken = trim((string) ($tokenResult['access_token'] ?? ''));
         if ($accessToken === '') {
             throw new RuntimeException('Meta did not return an access token for the Embedded Signup code.');
@@ -160,6 +163,24 @@ class MetaEmbeddedSignup
         }
         if ($pin !== null && preg_match('/^\d{6}$/', $pin) === 1) {
             $metaUpdate['two_step_pin'] = $pin;
+        }
+        if (is_array($providerCreds)) {
+            $providerAppId = trim((string) ($providerCreds['app_id'] ?? ''));
+            $providerSecret = trim((string) ($providerCreds['app_secret'] ?? ''));
+            $providerVersion = trim((string) ($providerCreds['api_version'] ?? ''));
+            $providerConfig = trim((string) ($providerCreds['config_id'] ?? ''));
+            if ($providerAppId !== '') {
+                $metaUpdate['app_id'] = $providerAppId;
+            }
+            if ($providerSecret !== '') {
+                $metaUpdate['app_secret'] = $providerSecret;
+            }
+            if ($providerVersion !== '') {
+                $metaUpdate['api_version'] = $providerVersion;
+            }
+            if ($providerConfig !== '') {
+                $metaUpdate['embedded_config_id'] = $providerConfig;
+            }
         }
 
         $this->settings->setMetaConfig($metaUpdate);
@@ -264,17 +285,31 @@ class MetaEmbeddedSignup
     /**
      * GET /oauth/access_token — exchange Embedded Signup code (TTL ~30s) for business token.
      *
-     * FB.login's OAuth dialog binds the code to its redirect_uri (the JS SDK xd_arbiter URL).
-     * That same URI has to be sent here or Meta rejects the code.
+     * FB.login binds the code to the dialog redirect_uri. Send that URI only when it was
+     * captured from the popup. A guessed URI is rejected with the same error as a missing one.
+     *
+     * @param array{app_id?: string, app_secret?: string, api_version?: string, config_id?: string}|null $providerCreds
      *
      * @return array<string, mixed>
      */
-    public function exchangeCodeForToken(string $code, string $redirectUri = ''): array
+    public function exchangeCodeForToken(string $code, string $redirectUri = '', ?array $providerCreds = null): array
     {
         $creds      = $this->resolveLaunchCredentials();
         $appId      = $creds['app_id'];
         $appSecret  = $creds['app_secret'];
         $apiVersion = $creds['api_version'];
+        if (is_array($providerCreds)) {
+            $overrideId = trim((string) ($providerCreds['app_id'] ?? ''));
+            $overrideSecret = trim((string) ($providerCreds['app_secret'] ?? ''));
+            $overrideVersion = trim((string) ($providerCreds['api_version'] ?? ''));
+            if ($overrideId !== '' && $overrideSecret !== '') {
+                $appId = $overrideId;
+                $appSecret = $overrideSecret;
+                if ($overrideVersion !== '') {
+                    $apiVersion = $overrideVersion;
+                }
+            }
+        }
         $meta       = $this->settings->getMetaConfig();
 
         if ($appId === '' || $appSecret === '') {
@@ -303,9 +338,9 @@ class MetaEmbeddedSignup
             $query['redirect_uri'] = $redirectUri;
         }
 
-        $response = $client->request('GET', $url, [
-            'headers' => ['Accept' => 'application/json'],
-            'query'   => $query,
+        $response = $client->request('POST', $url, [
+            'headers'     => ['Accept' => 'application/json'],
+            'form_params' => $query,
         ]);
 
         $status  = $response->getStatusCode();

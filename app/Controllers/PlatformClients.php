@@ -129,6 +129,14 @@ class PlatformClients extends BaseController
             return $this->jsonResponse(false, null, 'Missing Embedded Signup auth code.', [], 422);
         }
 
+        $tech = (new MasterTenantRepository())->getPlatformMetaTechProvider($this->platformAdminId());
+        $providerCreds = [
+            'app_id'      => trim((string) ($tech['app_id'] ?? '')),
+            'app_secret'  => trim((string) ($tech['app_secret'] ?? '')),
+            'api_version' => trim((string) ($tech['api_version'] ?? '')),
+            'config_id'   => trim((string) ($tech['config_id'] ?? '')),
+        ];
+
         $switched = $this->switchToClient($key);
         if ($switched instanceof ResponseInterface) {
             return $switched;
@@ -143,7 +151,8 @@ class PlatformClients extends BaseController
                 $phoneNumberId,
                 $businessId !== '' ? $businessId : null,
                 preg_match('/^\d{6}$/', $pin) === 1 ? $pin : null,
-                $redirectUri !== '' ? $redirectUri : null
+                $redirectUri !== '' ? $redirectUri : null,
+                $providerCreds
             );
 
             log_activity('update', 'platform', 'WhatsApp connected via Platform Embedded Signup for ' . $key, [
