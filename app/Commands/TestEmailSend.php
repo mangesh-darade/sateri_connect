@@ -40,7 +40,7 @@ class TestEmailSend extends BaseCommand
         $body    = "Hello {{name}},\n\nThis is a functional test from the new Emails screen verifying that {{name}} gets replaced with your actual contact name!\n\nProvider: {$provider}\nTime: " . date('c');
 
         $options = [
-            'campaign_name' => 'Cheerio Test Campaign 1',
+            'campaign_name' => 'External Test Campaign 1',
         ];
 
         if (CLI::getOption('attach') !== null) {
@@ -70,7 +70,7 @@ class TestEmailSend extends BaseCommand
                 'subject'       => 'Emails bulk test — ' . date('Y-m-d H:i:s'),
                 'plain_text'    => "Bulk smoke test via {$provider}.",
                 'recipients'    => [$to],
-                'campaign_name' => 'Cheerio Test Campaign 2',
+                'campaign_name' => 'External Test Campaign 2',
             ]);
             CLI::write(json_encode($bulk, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), $bulk['ok'] ? 'green' : 'red');
         }

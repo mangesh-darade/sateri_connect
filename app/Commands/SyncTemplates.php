@@ -11,7 +11,7 @@ class SyncTemplates extends BaseCommand
 {
     protected $group       = 'WhatsApp';
     protected $name        = 'templates:sync';
-    protected $description = 'Sync message templates from the active WhatsApp provider (Cheerio or Meta) into the local database.';
+    protected $description = 'Sync message templates from the active WhatsApp provider (External or Meta) into the local database.';
     protected $usage       = 'templates:sync';
 
     public function run(array $params)

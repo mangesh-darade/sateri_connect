@@ -10,9 +10,9 @@ use Throwable;
 
 class TestTemplateSend extends BaseCommand
 {
-    protected $group       = 'Cheerio';
+    protected $group       = 'External';
     protected $name        = 'cheerio:test-template';
-    protected $description = 'Test sending a WhatsApp template via Cheerio.';
+    protected $description = 'Test sending a WhatsApp template via External.';
     protected $usage       = 'cheerio:test-template [name] [language] [to]';
 
     public function run(array $params)

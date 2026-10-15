@@ -33,7 +33,7 @@ class SeedAutomationCatalogFlows extends BaseCommand
     protected $usage       = 'automations:seed-catalog [--test] [--meta-send] [--deactivate]';
     protected $options     = [
         '--test'       => 'Fire processTrigger for each seeded flow and verify queue.',
-        '--meta-send'  => 'After enqueue, process one pending queue item via active WA provider (Meta/Cheerio).',
+        '--meta-send'  => 'After enqueue, process one pending queue item via active WA provider (Meta/External).',
         '--deactivate' => 'Deactivate existing non-catalog automations first.',
     ];
 

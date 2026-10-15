@@ -18,9 +18,9 @@ use Throwable;
  */
 class CheerioSync extends BaseCommand
 {
-    protected $group       = 'Cheerio';
+    protected $group       = 'External';
     protected $name        = 'cheerio:sync';
-    protected $description = 'Sync contacts and/or workflows from Cheerio Direct API.';
+    protected $description = 'Sync contacts and/or workflows from External Direct API.';
     protected $usage       = 'cheerio:sync [contacts|workflows|all]';
 
     public function run(array $params)
@@ -36,7 +36,7 @@ class CheerioSync extends BaseCommand
         $service = new CheerioSyncService();
 
         if ($target === 'all' || $target === 'contacts') {
-            CLI::write('Syncing Cheerio contacts…', 'yellow');
+            CLI::write('Syncing External contacts…', 'yellow');
             try {
                 $stats = $service->syncContacts();
                 CLI::write(sprintf(
@@ -52,7 +52,7 @@ class CheerioSync extends BaseCommand
         }
 
         if ($target === 'all' || $target === 'workflows') {
-            CLI::write('Syncing Cheerio workflows…', 'yellow');
+            CLI::write('Syncing External workflows…', 'yellow');
             try {
                 $stats = $service->syncWorkflows();
                 CLI::write(sprintf(

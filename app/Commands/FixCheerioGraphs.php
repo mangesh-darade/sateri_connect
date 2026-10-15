@@ -14,9 +14,9 @@ use CodeIgniter\CLI\CLI;
  */
 class FixCheerioGraphs extends BaseCommand
 {
-    protected $group       = 'Cheerio';
+    protected $group       = 'External';
     protected $name        = 'cheerio:fix-graphs';
-    protected $description = 'Re-normalize Cheerio workflow graphs for the local builder.';
+    protected $description = 'Re-normalize External workflow graphs for the local builder.';
 
     public function run(array $params)
     {
