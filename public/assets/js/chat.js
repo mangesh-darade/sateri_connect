@@ -141,13 +141,41 @@
         } else {
             body = escapeHtml(body).replace(/\n/g, '<br>');
         }
+        var plain = String(msg.content || msg.body || msg.message || '');
+        var type = (msg.message_type || msg.type || 'text').toLowerCase();
+        var waId = String(msg.wa_message_id || msg.wamid || msg.external_message_id || '');
+        var canRevise = dir === 'outbound'
+            && (msg.channel || 'whatsapp') !== 'instagram'
+            && (msg.channel || 'whatsapp') !== 'messenger'
+            && (type === 'text' || type === '')
+            && !msg.media_url
+            && plain.trim() !== '';
+        var editBtn = canRevise
+            ? '<button type="button" class="msg-edit" title="Edit or resend" data-text="' + escapeHtml(plain) + '" data-created="' + escapeHtml(msg.created_at || msg.timestamp || '') + '" data-waid="' + escapeHtml(waId.indexOf('import:') === 0 ? '' : waId) + '"><i class="fas fa-pen"></i></button>'
+            : '';
+        var edited = msg.edited_at ? '<span class="msg-edited">Edited</span>' : '';
         return (
             '<div class="msg-row ' + dir + '" data-id="' + escapeHtml(msg.id) + '" data-status="' + escapeHtml(msg.status || '') + '">' +
-            '<div class="msg-bubble">' + body +
-            '<span class="msg-time" title="' + escapeHtml(fmtInTz(msg.created_at || msg.timestamp, { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })) + '">' + escapeHtml(formatTime(msg.created_at || msg.timestamp)) +
+            '<div class="msg-bubble">' + editBtn + body +
+            '<span class="msg-time" title="' + escapeHtml(fmtInTz(msg.created_at || msg.timestamp, { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })) + '">' +
+            edited + escapeHtml(formatTime(msg.created_at || msg.timestamp)) +
             (dir === 'outbound' ? statusIcon(msg.status) : '') +
             '</span></div></div>'
         );
+    }
+
+    function messageAgeMs(created) {
+        var ts = Date.parse(String(created || '').replace(' ', 'T'));
+        if (!ts) return Number.POSITIVE_INFINITY;
+        return Date.now() - ts;
+    }
+
+    function clearMessageEdit() {
+        Chat.editingId = 0;
+        Chat.editMode = '';
+        $('#chatEditBar').addClass('d-none');
+        $('#chatInput').val('');
+        setWindowState(Chat.within24h !== false);
     }
 
     function scrollBottom() {
@@ -157,6 +185,7 @@
     }
 
     function setComposerLocked(locked) {
+        if (Chat.editingId) locked = false;
         var $composer = $('#chatComposer');
         if (!$composer.length) return;
         $composer.toggleClass('is-locked', !!locked);
@@ -778,8 +807,64 @@
         $('#chatLayout').removeClass('chat-thread-open');
     };
 
+    Chat.beginRevise = function ($btn) {
+        var id = parseInt($btn.closest('.msg-row').attr('data-id'), 10) || 0;
+        var text = $btn.attr('data-text') || '';
+        var created = $btn.attr('data-created') || '';
+        var waId = $btn.attr('data-waid') || '';
+        if (!id || !text) return;
+        var withinEdit = waId !== '' && messageAgeMs(created) <= (15 * 60 * 1000);
+        if (!withinEdit && !Chat.within24h) {
+            APP.toast('WhatsApp only lets you edit a message for 15 minutes. The 24-hour window is closed, so send a template.', 'warning');
+            return;
+        }
+        Chat.editingId = id;
+        Chat.editMode = withinEdit ? 'edit' : 'resend';
+        $('#chatEditTitle').text(withinEdit ? 'Edit message' : 'Send again');
+        $('#chatEditHint').text(withinEdit
+            ? 'WhatsApp updates this same message.'
+            : 'This is older than 15 minutes, so it will be sent as a new message.');
+        $('#chatEditBar').removeClass('d-none');
+        setComposerLocked(false);
+        $('#chatInput').val(text).trigger('focus');
+    };
+
     Chat.send = function () {
         if (Chat.sending || !Chat.contactId) return;
+        if (Chat.editingId) {
+            var editText = ($('#chatInput').val() || '').trim();
+            if (!editText) return;
+            Chat.sending = true;
+            $('#btnChatSend').prop('disabled', true);
+            APP.post(base() + '/chat/messages/' + Chat.editingId + '/edit', { message: editText })
+                .done(function (res) {
+                    var data = (res && res.data) ? res.data : {};
+                    var msg = data.message || data;
+                    var mode = data.mode || Chat.editMode;
+                    if (mode === 'edited' && msg && msg.id) {
+                        var $row = $('.msg-row[data-id="' + msg.id + '"]');
+                        var html = renderMessage(msg);
+                        if ($row.length) $row.replaceWith(html);
+                    } else if (msg && msg.id) {
+                        $('#chatMessages').append(renderWithDay(msg));
+                        Chat.lastMessageId = Math.max(Chat.lastMessageId, parseInt(msg.id, 10) || 0);
+                        scrollBottom();
+                    }
+                    clearMessageEdit();
+                    APP.toast((res && res.message) || 'Sent', 'success');
+                })
+                .fail(function (xhr) {
+                    var msg = (xhr.responseJSON && (xhr.responseJSON.message || xhr.responseJSON.error)) || 'Could not update the message';
+                    APP.toast(msg, 'error');
+                })
+                .always(function () {
+                    Chat.sending = false;
+                    if (Chat.within24h || Chat.editingId) {
+                        $('#btnChatSend').prop('disabled', false);
+                    }
+                });
+            return;
+        }
         if (!Chat.within24h) {
             if ((Chat.contactChannel || 'whatsapp') === 'whatsapp') {
                 APP.toast('Outside 24h window — use Template', 'warning');
@@ -1136,6 +1221,12 @@
         });
 
         $('#btnChatSend').on('click', function () { Chat.send(); });
+        $(document).on('click', '.msg-edit', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            Chat.beginRevise($(this));
+        });
+        $('#btnCancelEdit').on('click', function () { clearMessageEdit(); });
         $('#chatInput').on('keydown', function (e) {
             if (window.ChatQuickReplies && ChatQuickReplies.handleKey(e)) {
                 return;

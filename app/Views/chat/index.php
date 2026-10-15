@@ -24,7 +24,7 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
     <?php if (empty($webhookReady)): ?>
     <div class="alert alert-warning border-0 rounded-0 mb-0 py-2 px-3 small chat-webhook-banner">
         <strong>Not seeing inbound messages?</strong>
-        Complete Settings → Webhooks (Verify Token + public URL + <?= esc(function_exists('whatsapp_provider_short') ? whatsapp_provider_short() : (($whatsappProvider ?? 'cheerio') === 'meta' ? 'Meta' : 'Cheerio')) ?>).
+        Complete Settings → Webhooks (Verify Token + public URL + <?= esc(function_exists('whatsapp_provider_short') ? whatsapp_provider_short() : (($whatsappProvider ?? 'cheerio') === 'meta' ? 'Meta' : 'External')) ?>).
         <a href="<?= site_url('settings') ?>#tabWebhooks" class="alert-link ms-1">Open webhook setup</a>
     </div>
     <?php endif; ?>
@@ -198,6 +198,14 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
                 </div>
                 <?php if ($canSend): ?>
                 <div class="chat-composer" id="chatComposer">
+                    <div class="chat-edit-bar d-none" id="chatEditBar">
+                        <i class="fas fa-pen" aria-hidden="true"></i>
+                        <div>
+                            <strong id="chatEditTitle">Edit message</strong>
+                            <span id="chatEditHint">WhatsApp updates this same message.</span>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btnCancelEdit">Cancel</button>
+                    </div>
                     <div class="chat-composer-free" id="chatComposerFree">
                         <button type="button" class="btn btn-light rounded-circle" id="btnEmoji" title="Emoji"><i class="far fa-smile"></i></button>
                         <button type="button" class="btn btn-light rounded-circle" id="btnAttach" title="Attach"><i class="fas fa-paperclip"></i></button>

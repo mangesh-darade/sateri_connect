@@ -754,6 +754,7 @@ return array (
       'channel' => 'varchar(20) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'whatsapp\'',
       'created_at' => 'datetime DEFAULT NULL',
       'updated_at' => 'datetime DEFAULT NULL',
+      'edited_at' => 'datetime DEFAULT NULL',
       'wa_inbound_id' => 'varchar(191) COLLATE utf8mb4_general_ci GENERATED ALWAYS AS (if((`direction` = \'inbound\'),`wa_message_id`,NULL)) VIRTUAL',
     ),
     'indexes' => 

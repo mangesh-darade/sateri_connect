@@ -15,6 +15,7 @@ use Config\WhatsApp as WhatsAppConfig;
  *   - meta    → MetaCloudAPI
  *
  * @method array sendText(string $to, string $text, bool $previewUrl = false)
+ * @method array editText(string $to, string $messageId, string $text)
  * @method array sendTemplate(string $to, string $templateName, string $language, array $components = [])
  * @method array sendBulkCampaign(string $campaignName, string $templateName, string $language, array $recipients, int $batchSize = 100)
  * @method array getCampaignSummary(string $id)

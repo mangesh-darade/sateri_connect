@@ -72,7 +72,7 @@
             <div class="modal-body">
                 <div data-import-step="upload">
                     <p class="small text-muted mb-2">
-                        Upload a chat export (CSV or Excel), for example from Cheerio. Each row is one message with the customer's phone number,
+                        Upload a chat export (CSV or Excel), for example from External. Each row is one message with the customer's phone number,
                         date &amp; time, who sent it (customer / agent) and the text.
                         <a href="<?= site_url('chat/transfer/sample') ?>">Download sample file</a>
                     </p>

@@ -35,6 +35,7 @@ class MessageModel extends Model
         'is_read',
         'conversation_id',
         'channel',
+        'edited_at',
     ];
 
     protected bool $allowEmptyInserts = false;

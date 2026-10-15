@@ -408,7 +408,7 @@ class Chat extends BaseController
 
             $statusUpdates = [];
             if ($afterId > 0) {
-                // Silent poll: refresh delivery ticks (Cheerio often skips status webhooks)
+                // Silent poll: refresh delivery ticks (External often skips status webhooks)
                 $this->refreshCheerioOutboundStatuses($contactId, 10);
                 $statusUpdates = model(MessageModel::class)
                     ->select('id, status')
@@ -584,7 +584,7 @@ class Chat extends BaseController
                 $language   = (string) ($input['language'] ?? 'en_US');
                 $components = is_array($input['components'] ?? null) ? $input['components'] : [];
 
-                // Meta free-form only works on Meta's number session. Cheerio-inbound chats
+                // Meta free-form only works on Meta's number session. External-inbound chats
                 // look "open" locally but Meta returns 131047 Re-engagement.
                 if ($messageType !== 'template') {
                     $activeProvider = service('settingsService')->getWhatsAppProvider();
@@ -608,7 +608,7 @@ class Chat extends BaseController
                         return $this->jsonResponse(
                             false,
                             null,
-                            'This chat arrived on the Cheerio number, so Meta free-text fails (131047). '
+                            'This chat arrived on the External number, so Meta free-text fails (131047). '
                             . 'Click Template to send a Meta template, or ask the customer to WhatsApp '
                             . $metaHint . ' first.',
                             [],
@@ -647,7 +647,7 @@ class Chat extends BaseController
                         $components = $this->variablesToComponents((array) $input['variables'], $contact);
                     }
 
-                    // IMAGE/VIDEO/DOCUMENT templates need real header media (Cheerio/Meta).
+                    // IMAGE/VIDEO/DOCUMENT templates need real header media (External/Meta).
                     // Meta approval CDN samples are not reusable at send time.
                     if (is_array($tpl)) {
                         try {
@@ -793,6 +793,151 @@ class Chat extends BaseController
         }
     }
 
+    /**
+     * WhatsApp edit: update the same sent text within 15 minutes.
+     * After that, the inbox resends it as a new message when the 24h window is open.
+     */
+    public function edit(int $id): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('chat.send')) {
+            return $denied;
+        }
+
+        $input   = $this->requestInput();
+        $content = trim((string) ($input['content'] ?? $input['text'] ?? $input['message'] ?? ''));
+        if ($content === '') {
+            return $this->jsonResponse(false, null, 'Message text is required.', [], 422);
+        }
+
+        $message = model(MessageModel::class)->find($id);
+        if ($message === null) {
+            return $this->jsonResponse(false, null, 'Message not found.', [], 404);
+        }
+
+        $channel = strtolower((string) ($message['channel'] ?? 'whatsapp'));
+        $type    = strtolower((string) ($message['message_type'] ?? 'text'));
+        if (($message['direction'] ?? '') !== 'outbound' || $channel !== 'whatsapp' || ! in_array($type, ['text', ''], true) || ! empty($message['media_url'])) {
+            return $this->jsonResponse(false, null, 'Only sent WhatsApp text can be edited.', [], 422);
+        }
+
+        if (trim($content) === trim((string) ($message['content'] ?? ''))) {
+            return $this->jsonResponse(false, null, 'Change the text before sending.', [], 422);
+        }
+
+        $contact = model(ContactModel::class)->find((int) ($message['contact_id'] ?? 0));
+        if ($contact === null) {
+            return $this->jsonResponse(false, null, 'Contact not found.', [], 404);
+        }
+
+        $waId = trim((string) ($message['wa_message_id'] ?: $message['wamid'] ?: $message['external_message_id'] ?: ''));
+        $sentAt = strtotime((string) ($message['created_at'] ?? ''));
+        $canEditInPlace = $waId !== ''
+            && ! str_starts_with($waId, 'import:')
+            && $sentAt !== false
+            && (time() - $sentAt) <= (15 * 60);
+
+        if ($canEditInPlace) {
+            try {
+                $api = service('whatsApp');
+                $to  = $api->normalizePhone((string) ($contact['mobile'] ?? $contact['external_id'] ?? ''));
+                $result = $api->editText($to, $waId, $content);
+                $returnedId = trim((string) ($result['messages'][0]['id'] ?? $result['message_id'] ?? $result['id'] ?? ''));
+                $replaced = $returnedId !== '' && $returnedId !== $waId;
+
+                if ($replaced) {
+                    return $this->storeResentMessage($contact, $content, $returnedId, $result);
+                }
+
+                model(MessageModel::class)->update($id, [
+                    'content'   => $content,
+                    'edited_at' => date('Y-m-d H:i:s'),
+                ]);
+
+                log_activity('update', 'chat', 'WhatsApp message edited', [
+                    'message_id' => $id,
+                    'contact_id' => (int) $contact['id'],
+                ]);
+
+                $fresh = model(MessageModel::class)->find($id);
+
+                return $this->jsonResponse(true, [
+                    'mode'    => 'edited',
+                    'message' => $fresh,
+                ], 'Message updated on WhatsApp.');
+            } catch (Throwable $e) {
+                log_message('error', 'Chat edit failed: {msg}', ['msg' => $e->getMessage()]);
+
+                return $this->jsonResponse(false, null, $e->getMessage(), [], 500);
+            }
+        }
+
+        if (! contact_within_24h_window($contact, true)) {
+            return $this->jsonResponse(
+                false,
+                null,
+                'WhatsApp only lets you edit a message for 15 minutes. The 24-hour window is closed, so it cannot be sent again. Use a template.',
+                [],
+                422
+            );
+        }
+
+        try {
+            $api = service('whatsApp');
+            $to  = $api->normalizePhone((string) ($contact['mobile'] ?? $contact['external_id'] ?? ''));
+            $result = $api->sendText($to, $content);
+            $externalId = trim((string) ($result['messages'][0]['id'] ?? $result['message_id'] ?? ''));
+
+            return $this->storeResentMessage($contact, $content, $externalId, $result);
+        } catch (Throwable $e) {
+            log_message('error', 'Chat resend failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return $this->jsonResponse(false, null, $e->getMessage(), [], 500);
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $contact
+     * @param array<string, mixed> $result
+     */
+    protected function storeResentMessage(array $contact, string $content, string $externalId, array $result): ResponseInterface
+    {
+        $contactId = (int) ($contact['id'] ?? 0);
+        $conversation = model(ConversationModel::class)->findOrCreateForContact($contactId, 'whatsapp');
+        $messageId = model(MessageModel::class)->insert([
+            'contact_id'          => $contactId,
+            'conversation_id'     => (int) $conversation['id'],
+            'channel'             => 'whatsapp',
+            'direction'           => 'outbound',
+            'message_type'        => 'text',
+            'wa_message_id'       => $externalId !== '' ? $externalId : null,
+            'wamid'               => $externalId !== '' ? $externalId : null,
+            'external_message_id' => $externalId !== '' ? $externalId : null,
+            'content'             => $content,
+            'payload'             => $result,
+            'status'              => 'sent',
+            'is_read'             => 1,
+        ]);
+
+        model(ConversationModel::class)->update((int) $conversation['id'], [
+            'last_message_id' => $messageId,
+            'last_message_at' => date('Y-m-d H:i:s'),
+            'status'          => 'open',
+        ]);
+        model(ContactModel::class)->update($contactId, [
+            'last_message_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        log_activity('send', 'chat', 'WhatsApp message resent', [
+            'contact_id' => $contactId,
+            'message_id' => $messageId,
+        ]);
+
+        return $this->jsonResponse(true, [
+            'mode'    => 'resent',
+            'message' => model(MessageModel::class)->find((int) $messageId),
+        ], 'Sent again as a new message.');
+    }
+
     public function markRead(): ResponseInterface
     {
         if ($denied = $this->requirePermission('chat.view')) {
@@ -818,7 +963,7 @@ class Chat extends BaseController
             ->set(['is_read' => 1])
             ->update();
 
-        // Optionally mark last inbound as read via Cheerio
+        // Optionally mark last inbound as read via External
         $lastInbound = model(MessageModel::class)
             ->where('contact_id', $contactId)
             ->where('direction', 'inbound')
@@ -998,7 +1143,7 @@ class Chat extends BaseController
     /**
      * Build HEADER media component for IMAGE/VIDEO/DOCUMENT templates.
      *
-     * Both Cheerio and Meta accept Meta-style header components (id or public link).
+     * Both External and Meta accept Meta-style header components (id or public link).
      * Sample CDN URLs (scontent.whatsapp.net) are not reusable at send time.
      *
      * @param array<string, mixed> $template
@@ -1111,7 +1256,7 @@ class Chat extends BaseController
     }
 
     /**
-     * Cheerio often does not push delivered/read webhooks. Poll status API and upgrade ticks.
+     * External often does not push delivered/read webhooks. Poll status API and upgrade ticks.
      * Never downgrades (sent → delivered → read). Meta keeps using webhooks only.
      */
     protected function refreshCheerioOutboundStatuses(int $contactId, int $limit = 8): void
@@ -1153,7 +1298,7 @@ class Chat extends BaseController
                     continue;
                 }
 
-                // Skip Meta-era outbound rows — Cheerio status API 404s on foreign wamids.
+                // Skip Meta-era outbound rows — External status API 404s on foreign wamids.
                 $payload = $row['payload'] ?? null;
                 if (is_string($payload)) {
                     $decoded = json_decode($payload, true);
@@ -1170,7 +1315,7 @@ class Chat extends BaseController
                     }
                     $newStatus = $api->resolveDeliveryStatus($wamid);
                 } catch (Throwable $e) {
-                    log_message('debug', 'Cheerio status poll failed for {id}: {msg}', [
+                    log_message('debug', 'External status poll failed for {id}: {msg}', [
                         'id'  => $row['id'] ?? 0,
                         'msg' => $e->getMessage(),
                     ]);
@@ -1185,7 +1330,7 @@ class Chat extends BaseController
                 $oldRank = $rank[$old] ?? 0;
                 $newRank = $rank[$newStatus] ?? 0;
 
-                // Only upgrade ticks (sent → delivered → read). Never apply Cheerio "failed"
+                // Only upgrade ticks (sent → delivered → read). Never apply External "failed"
                 // from status poll when the message was already accepted (false failedAt races).
                 // Real delivery failures still arrive via webhook with error details.
                 if ($newStatus === 'failed') {
@@ -1198,7 +1343,7 @@ class Chat extends BaseController
                 model(MessageModel::class)->update((int) $row['id'], ['status' => $newStatus]);
             }
         } catch (Throwable $e) {
-            log_message('debug', 'Cheerio status poll aborted: {msg}', ['msg' => $e->getMessage()]);
+            log_message('debug', 'External status poll aborted: {msg}', ['msg' => $e->getMessage()]);
         }
     }
 
