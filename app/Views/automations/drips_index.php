@@ -180,61 +180,60 @@ $totalSteps = array_sum(array_map(fn($d) => is_array($d['steps'] ?? null) ? coun
 
 <!-- Create / Edit Drip Modal -->
 <div class="modal fade" id="dripModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable drip-workflow-dialog">
         <div class="modal-content">
-            <form id="dripModalForm">
+            <form id="dripModalForm" class="drip-workflow-form">
                 <?= csrf_field() ?>
                 <input type="hidden" name="id" id="drip_id" value="">
                 <div class="modal-header border-bottom py-2 bg-light">
                     <h6 class="modal-title fw-bold" id="dripModalTitle"><i class="fas fa-stream text-primary me-2"></i>Email Drip Workflow</h6>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body p-3">
-                    <div class="row g-2 mb-3">
-                        <div class="col-md-7">
-                            <label class="form-label small fw-semibold mb-1">Workflow Name <span class="text-danger">*</span></label>
-                            <input type="text" name="name" id="drip_name" class="form-control form-control-sm" placeholder="e.g. 7-Day Customer Onboarding Drip" required maxlength="191">
+                <div class="modal-body drip-workflow-body">
+                    <section class="drip-section">
+                        <h6 class="drip-section-title">Workflow</h6>
+                        <div class="row g-2">
+                            <div class="col-md-8">
+                                <label class="form-label small fw-semibold mb-1">Workflow Name <span class="text-danger">*</span></label>
+                                <input type="text" name="name" id="drip_name" class="form-control form-control-sm" placeholder="e.g. 7-Day Customer Onboarding Drip" required maxlength="191">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold mb-1">Status</label>
+                                <select name="status" id="drip_status" class="form-select form-select-sm">
+                                    <option value="active">Active</option>
+                                    <option value="draft">Draft</option>
+                                    <option value="paused">Paused</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold mb-1">Trigger Event</label>
+                                <select name="trigger_type" id="drip_trigger_type" class="form-select form-select-sm">
+                                    <option value="on_tag">When Contact is Tagged</option>
+                                    <option value="on_subscribe">When New Contact is Added</option>
+                                    <option value="manual">Manual Trigger Only</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6" id="dripTriggerValueWrap">
+                                <label class="form-label small fw-semibold mb-1">Tag Name</label>
+                                <input type="text" name="trigger_value" id="drip_trigger_value" class="form-control form-control-sm" placeholder="e.g. VIP, Customer, New Lead">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small fw-semibold mb-1">Description <span class="text-muted">(Optional)</span></label>
+                                <input type="text" name="description" id="drip_description" class="form-control form-control-sm" placeholder="Brief note on what this journey achieves">
+                            </div>
                         </div>
-                        <div class="col-md-5">
-                            <label class="form-label small fw-semibold mb-1">Status</label>
-                            <select name="status" id="drip_status" class="form-select form-select-sm">
-                                <option value="active">Active (Automations Running)</option>
-                                <option value="draft">Draft (Work in progress)</option>
-                                <option value="paused">Paused</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="row g-2 mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label small fw-semibold mb-1">Trigger Event</label>
-                            <select name="trigger_type" id="drip_trigger_type" class="form-select form-select-sm">
-                                <option value="on_tag">When Contact is Tagged</option>
-                                <option value="on_subscribe">When New Contact is Added</option>
-                                <option value="manual">Manual Trigger Only</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6" id="dripTriggerValueWrap">
-                            <label class="form-label small fw-semibold mb-1">Tag Name</label>
-                            <input type="text" name="trigger_value" id="drip_trigger_value" class="form-control form-control-sm" placeholder="e.g. VIP, Customer, New Lead">
-                        </div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label small fw-semibold mb-1">Description <span class="text-muted">(Optional)</span></label>
-                        <input type="text" name="description" id="drip_description" class="form-control form-control-sm" placeholder="Brief note on what this journey achieves">
-                    </div>
+                    </section>
 
                     <!-- Steps Timeline -->
-                    <div class="border rounded-3 p-3 bg-light">
+                    <section class="drip-section drip-steps-section">
                         <div class="d-flex align-items-center justify-content-between mb-2">
-                            <h6 class="mb-0 fw-bold small text-dark"><i class="fas fa-list-ol me-1 text-primary"></i> Sequence Steps</h6>
+                            <h6 class="drip-section-title mb-0"><i class="fas fa-list-ol me-1"></i> Sequence Steps</h6>
                             <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2" id="btnAddDripStep">
                                 <i class="fas fa-plus me-1"></i> Add Step
                             </button>
                         </div>
                         <div id="dripStepsContainer" class="d-flex flex-column gap-2"></div>
-                    </div>
+                    </section>
 
                     <div class="alert alert-danger py-2 small d-none mt-2 mb-0" id="dripModalError"></div>
                 </div>
@@ -258,6 +257,54 @@ $totalSteps = array_sum(array_map(fn($d) => is_array($d['steps'] ?? null) ? coun
 </template>
 <?= $this->endSection() ?>
 
+<?= $this->section('styles') ?>
+<style>
+.drip-workflow-dialog {
+    max-width: 760px;
+    height: calc(100% - 2rem);
+    margin: 1rem auto;
+}
+.drip-workflow-dialog .modal-content,
+.drip-workflow-form {
+    height: 100%;
+    max-height: calc(100vh - 2rem);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+.drip-workflow-form { flex: 1 1 auto; }
+.drip-workflow-dialog .modal-header,
+.drip-workflow-dialog .modal-footer { flex: 0 0 auto; }
+.drip-workflow-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    min-height: 0;
+    padding: 0.9rem 1rem 1rem;
+}
+.drip-section + .drip-section { margin-top: 0.85rem; }
+.drip-section-title {
+    margin: 0 0 0.55rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted, #64748b);
+}
+.drip-steps-section {
+    padding: 0.75rem;
+    border: 1px solid var(--border, #e6ebe8);
+    border-radius: 12px;
+    background: #f8faf9;
+}
+.drip-step-card .note-editor,
+.drip-step-card .note-toolbar {
+    max-width: 100%;
+}
+.drip-step-card .note-toolbar { flex-wrap: wrap; }
+</style>
+<?= $this->endSection() ?>
+
 <?= $this->section('scripts') ?>
 <?= $this->include('partials/email_editor_assets') ?>
 <script>
@@ -277,22 +324,20 @@ $(function () {
             '</div>' +
             '<div class="row g-2 mb-2">' +
                 '<div class="col-md-4">' +
-                    '<label class="form-label small mb-1 fw-semibold">Delay (Hours after previous)</label>' +
+                    '<label class="form-label small mb-1 fw-semibold">Delay (hours after previous)</label>' +
                     '<input type="number" min="0" class="form-control form-control-sm step-delay" value="' + (step.delay_hours || 0) + '">' +
                 '</div>' +
                 '<div class="col-md-8">' +
                     '<label class="form-label small mb-1 fw-semibold">Email Subject <span class="text-danger">*</span></label>' +
                     '<input type="text" class="form-control form-control-sm step-subject" value="' + (escapeHtml(step.subject || '')) + '" placeholder="e.g. Day 1: Welcome to the family!">' +
                 '</div>' +
-            '</div>' +
-            '<div class="row g-2">' +
-                '<div class="col-md-5">' +
-                    '<label class="form-label small mb-1 fw-semibold">Use Reusable Template</label>' +
+                '<div class="col-12">' +
+                    '<label class="form-label small mb-1 fw-semibold">Template</label>' +
                     '<select class="form-select form-select-sm step-builder">' + builderOpts + '</select>' +
                 '</div>' +
-                '<div class="col-md-7">' +
-                    '<label class="form-label small mb-1 fw-semibold">Or Custom Email Content</label>' +
-                    '<textarea class="form-control form-control-sm font-monospace step-html" rows="2" placeholder="<p>Hello {{name}}, welcome!</p>">' + (escapeHtml(step.html_content || '')) + '</textarea>' +
+                '<div class="col-12">' +
+                    '<label class="form-label small mb-1 fw-semibold">Email content</label>' +
+                    '<textarea class="form-control form-control-sm step-html" rows="3" placeholder="Hello {{name}}, welcome!">' + (escapeHtml(step.html_content || '')) + '</textarea>' +
                 '</div>' +
             '</div>' +
         '</div>';
