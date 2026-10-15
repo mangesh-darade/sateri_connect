@@ -356,6 +356,7 @@ class Automations extends BaseController
             'attributeDefs' => service('contactAttributes')->definitions(),
             'fbAppId'    => $facebook->appId(),
             'fbVersion'  => $facebook->apiVersion(),
+            'fbConfigId' => $facebook->leadConfigId(),
             'fullBleed'  => true,
         ]);
     }
@@ -367,17 +368,24 @@ class Automations extends BaseController
         }
 
         $token = trim((string) $this->request->getPost('access_token'));
-        if ($token === '') {
+        $code = trim((string) $this->request->getPost('code'));
+        if ($token === '' && $code === '') {
             return $this->jsonResponse(false, null, 'Facebook login did not return a token.', [], 422);
         }
 
         try {
-            $data = (new \App\Libraries\FacebookLeadConnectService())->start($token);
+            $data = (new \App\Libraries\FacebookLeadConnectService())->start($token, $code);
         } catch (\Throwable $e) {
             return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
         }
 
-        return $this->jsonResponse(true, $data, $data['user_name'] !== '' ? ('Logged in as ' . $data['user_name'] . '.') : 'Facebook profile connected.');
+        $message = $data['user_name'] !== '' ? ('Logged in as ' . $data['user_name'] . '.') : 'Facebook profile connected.';
+        $missing = is_array($data['missing_permissions'] ?? null) ? $data['missing_permissions'] : [];
+        if ($missing !== []) {
+            $message = 'This Facebook login is still missing pages_manage_ads. Click Login with Facebook, choose Edit settings, then Save.';
+        }
+
+        return $this->jsonResponse(true, $data, $message);
     }
 
     public function facebookAccounts(): ResponseInterface

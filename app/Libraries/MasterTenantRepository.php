@@ -907,12 +907,13 @@ class MasterTenantRepository
      * Meta Tech Provider app for one platform super admin.
      * Each admin has their own App ID, Config ID, and secret.
      *
-     * @return array{app_id: string, config_id: string, app_secret: string, api_version: string, webhook_verify_token: string, ready: bool, source: string}
+     * @return array{app_id: string, config_id: string, lead_config_id: string, app_secret: string, api_version: string, webhook_verify_token: string, ready: bool, source: string}
      */
     public function getPlatformMetaTechProvider(?int $platformAdminId = null): array
     {
         $appId      = '';
         $configId   = '';
+        $leadConfigId = '';
         $appSecret  = '';
         $apiVersion = 'v25.0';
         $source     = 'none';
@@ -926,6 +927,7 @@ class MasterTenantRepository
                 if ($own !== null) {
                     $appId              = trim((string) ($own['app_id'] ?? ''));
                     $configId           = trim((string) ($own['config_id'] ?? ''));
+                    $leadConfigId       = trim((string) ($own['lead_config_id'] ?? ''));
                     $appSecret          = trim($this->decryptSecret((string) ($own['app_secret'] ?? '')));
                     $apiVersion         = trim((string) ($own['api_version'] ?? '')) ?: 'v25.0';
                     $webhookVerifyToken = trim((string) ($own['webhook_verify_token'] ?? ''));
@@ -936,6 +938,7 @@ class MasterTenantRepository
             } else {
                 $appId              = trim($this->getPlatformSetting('meta_tech_app_id'));
                 $configId           = trim($this->getPlatformSetting('meta_tech_config_id'));
+                $leadConfigId       = trim($this->getPlatformSetting('meta_tech_lead_config_id'));
                 $appSecret          = trim($this->decryptSecret($this->getPlatformSetting('meta_tech_app_secret')));
                 $apiVersion         = trim($this->getPlatformSetting('meta_tech_api_version', 'v25.0')) ?: 'v25.0';
                 $webhookVerifyToken = trim($this->getPlatformSetting('webhook_verify_token'));
@@ -974,6 +977,7 @@ class MasterTenantRepository
         return [
             'app_id'               => $appId,
             'config_id'            => $configId,
+            'lead_config_id'       => $leadConfigId,
             'app_secret'           => $appSecret,
             'api_version'          => $apiVersion,
             'webhook_verify_token' => $webhookVerifyToken,
@@ -983,7 +987,7 @@ class MasterTenantRepository
     }
 
     /**
-     * @param array{app_id?: string, config_id?: string, app_secret?: string, api_version?: string, webhook_verify_token?: string} $data
+     * @param array{app_id?: string, config_id?: string, lead_config_id?: string, app_secret?: string, api_version?: string, webhook_verify_token?: string} $data
      */
     public function setPlatformMetaTechProvider(array $data, ?int $platformAdminId = null): void
     {
@@ -1010,6 +1014,7 @@ class MasterTenantRepository
             'platform_admin_id'    => $adminId,
             'app_id'               => array_key_exists('app_id', $data) ? trim((string) $data['app_id']) : (string) ($current['app_id'] ?? ''),
             'config_id'            => array_key_exists('config_id', $data) ? trim((string) $data['config_id']) : (string) ($current['config_id'] ?? ''),
+            'lead_config_id'       => array_key_exists('lead_config_id', $data) ? trim((string) $data['lead_config_id']) : (string) ($current['lead_config_id'] ?? ''),
             'app_secret'           => $secret,
             'api_version'          => array_key_exists('api_version', $data) ? (trim((string) $data['api_version']) ?: 'v25.0') : ((string) ($current['api_version'] ?? '') ?: 'v25.0'),
             'webhook_verify_token' => array_key_exists('webhook_verify_token', $data) ? trim((string) $data['webhook_verify_token']) : (string) ($current['webhook_verify_token'] ?? ''),
@@ -1027,6 +1032,7 @@ class MasterTenantRepository
         if ($this->isPrimaryPlatformAdmin($adminId)) {
             $this->setPlatformSetting('meta_tech_app_id', $row['app_id']);
             $this->setPlatformSetting('meta_tech_config_id', $row['config_id']);
+            $this->setPlatformSetting('meta_tech_lead_config_id', $row['lead_config_id']);
             $this->setPlatformSetting('meta_tech_api_version', $row['api_version']);
             $this->setPlatformSetting('webhook_verify_token', $row['webhook_verify_token']);
             if ($row['app_secret'] !== '') {
@@ -1049,6 +1055,7 @@ class MasterTenantRepository
                         `platform_admin_id` INT UNSIGNED NOT NULL,
                         `app_id` VARCHAR(64) NOT NULL DEFAULT \'\',
                         `config_id` VARCHAR(64) NOT NULL DEFAULT \'\',
+                        `lead_config_id` VARCHAR(64) NOT NULL DEFAULT \'\',
                         `app_secret` TEXT NULL,
                         `api_version` VARCHAR(20) NOT NULL DEFAULT \'v25.0\',
                         `webhook_verify_token` VARCHAR(191) NOT NULL DEFAULT \'\',
@@ -1057,6 +1064,9 @@ class MasterTenantRepository
                         PRIMARY KEY (`platform_admin_id`)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
                 );
+            }
+            if ($db->tableExists('platform_admin_meta') && ! $db->fieldExists('lead_config_id', 'platform_admin_meta')) {
+                $db->query('ALTER TABLE `platform_admin_meta` ADD `lead_config_id` VARCHAR(64) NOT NULL DEFAULT \'\' AFTER `config_id`');
             }
             $this->seedPrimaryAdminMeta();
             self::$adminMetaReady = true;
@@ -1118,6 +1128,7 @@ class MasterTenantRepository
             'platform_admin_id'    => $primaryId,
             'app_id'               => $appId,
             'config_id'            => $configId,
+            'lead_config_id'       => trim($this->getPlatformSetting('meta_tech_lead_config_id')),
             'app_secret'           => $secret,
             'api_version'          => trim($this->getPlatformSetting('meta_tech_api_version', 'v25.0')) ?: 'v25.0',
             'webhook_verify_token' => trim($this->getPlatformSetting('webhook_verify_token')),

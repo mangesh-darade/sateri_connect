@@ -180,6 +180,7 @@ class TenantEnsureMaster extends BaseCommand
             'platform_admin_id' => ['type' => 'INT', 'unsigned' => true],
             'app_id' => ['type' => 'VARCHAR', 'constraint' => 64, 'default' => ''],
             'config_id' => ['type' => 'VARCHAR', 'constraint' => 64, 'default' => ''],
+            'lead_config_id' => ['type' => 'VARCHAR', 'constraint' => 64, 'default' => ''],
             'app_secret' => ['type' => 'TEXT', 'null' => true],
             'api_version' => ['type' => 'VARCHAR', 'constraint' => 20, 'default' => 'v25.0'],
             'webhook_verify_token' => ['type' => 'VARCHAR', 'constraint' => 191, 'default' => ''],

@@ -884,6 +884,8 @@
             html += '<div class="js-fb-status small text-muted mt-1">' + (d.page_name ? ('Connected page: ' + esc(d.page_name)) : 'Login, then choose portfolio, ad account, and lead page.') + '</div>';
             if (!Flow.meta.fb_app_id) {
                 html += inspHint('Add the Meta App ID and App Secret in Settings before Facebook login can open.');
+            } else if (!Flow.meta.fb_config_id) {
+                html += inspHint('Save the Lead Login Config ID on Platform → Your Meta app, then refresh this page before logging in.');
             }
             html += '<label>1. Portfolio</label><select class="form-select insp js-fb-portfolio" data-k="business_id"' + (d.business_id ? '' : ' disabled') + '>';
             html += '<option value="">' + (d.business_id ? 'Change portfolio' : 'Login, then choose a portfolio') + '</option>';
@@ -1706,15 +1708,23 @@
                 prepareFacebookSdk();
                 return;
             }
+            var configId = String((Flow.meta && Flow.meta.fb_config_id) || '');
+            var loginOptions = configId
+                ? { config_id: configId, response_type: 'code', override_default_response_type: true }
+                : {
+                    scope: 'pages_show_list,pages_read_engagement,pages_manage_metadata,pages_manage_ads,leads_retrieval,business_management,ads_read',
+                    auth_type: 'rerequest',
+                    return_scopes: true
+                };
             FB.login(function (response) {
-                if (!response || !response.authResponse || !response.authResponse.accessToken) {
+                var auth = response && response.authResponse;
+                if (!auth || (!auth.code && !auth.accessToken)) {
                     $('.js-fb-status').text('Facebook login was cancelled.');
                     return;
                 }
                 $('.js-fb-status').text('Loading portfolios…');
-                APP.post(fbLeadUrl('/automations/facebook/login'), {
-                    access_token: response.authResponse.accessToken
-                }).done(function (res) {
+                var payload = auth.code ? { code: auth.code } : { access_token: auth.accessToken };
+                APP.post(fbLeadUrl('/automations/facebook/login'), payload).done(function (res) {
                     var data = (res && res.data) || {};
                     var businesses = data.businesses || [];
                     if (!businesses.length && data.profile_pages > 0) {
@@ -1729,10 +1739,7 @@
                 }).fail(function (xhr) {
                     fbLeadFail(xhr, 'Facebook login failed.');
                 });
-            }, {
-                scope: 'pages_show_list,pages_read_engagement,pages_manage_metadata,leads_retrieval,business_management,ads_read',
-                return_scopes: true
-            });
+            }, loginOptions);
         });
         $('#inspectorBody').on('change', '.js-fb-portfolio', function () {
             var businessId = String($(this).val() || '');

@@ -192,9 +192,15 @@ class PlatformClients extends BaseController
         $repo = new MasterTenantRepository();
         $adminId = $this->platformAdminId();
         try {
+            $leadConfigId = trim((string) $this->request->getPost('lead_config_id'));
+            if ($leadConfigId !== '' && preg_match('/^\d{5,32}$/', $leadConfigId) !== 1) {
+                return redirect()->back()->withInput()->with('error', 'Lead Login Config ID must be the numeric Facebook configuration ID.');
+            }
+
             $repo->setPlatformMetaTechProvider([
                 'app_id'               => (string) $this->request->getPost('app_id'),
                 'config_id'            => (string) $this->request->getPost('config_id'),
+                'lead_config_id'       => $leadConfigId,
                 'app_secret'           => (string) $this->request->getPost('app_secret'),
                 'api_version'          => (string) ($this->request->getPost('api_version') ?: 'v25.0'),
                 'webhook_verify_token' => (string) $this->request->getPost('webhook_verify_token'),
@@ -205,6 +211,7 @@ class PlatformClients extends BaseController
 
         log_activity('update', 'platform', 'Saved this super admin Meta App ID and Embedded Signup Config ID', [
             'platform_admin_id' => $adminId,
+            'has_lead_config'   => $leadConfigId !== '',
         ]);
 
         return redirect()->to('/platform/meta-tech')->with('success', 'Your Meta App ID and Embedded Signup Config ID are saved. Connect your clients from the list below.');

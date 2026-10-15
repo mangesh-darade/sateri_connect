@@ -412,6 +412,17 @@ class Settings extends BaseController
                     static fn ($v) => $v !== null && $v !== ''
                 ));
 
+                if ($this->request->getPost('meta_lead_config_id') !== null) {
+                    $leadConfigId = trim((string) $this->request->getPost('meta_lead_config_id'));
+                    if ($leadConfigId !== '' && preg_match('/^\d{5,32}$/', $leadConfigId) !== 1) {
+                        return $this->jsonResponse(false, null, 'Lead Login Config ID must be the numeric Facebook configuration ID.', [], 422);
+                    }
+                    $settings->setMetaConfig(['lead_config_id' => $leadConfigId]);
+                    log_activity('update', 'settings', 'Updated Facebook lead login configuration', [
+                        'has_config' => $leadConfigId !== '',
+                    ]);
+                }
+
                 if (trim((string) ($meta['page_id'] ?? '')) !== '') {
                     try {
                         $pageApi = new \App\Libraries\MetaPageMessagingAPI();

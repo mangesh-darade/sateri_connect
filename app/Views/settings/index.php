@@ -329,6 +329,11 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                             <p>Uses Meta Page Access Token. The same Page token receives Facebook Lead Ads for workflows. Subscribe the Page webhook field <code>leadgen</code> to this app's webhook URL.</p>
                                         </div>
                                     </div>
+                                    <div class="wp-field">
+                                        <label class="form-label">Lead Login Config ID</label>
+                                        <input type="text" name="meta_lead_config_id" class="form-control" value="<?= $val($meta, 'lead_config_id') ?>" placeholder="Facebook Login for Business → Configurations" inputmode="numeric">
+                                        <div class="form-text">Optional. Leave this blank to use the Lead Login Config ID saved on Platform → Your Meta app. Fill it only when this client needs a different Facebook configuration.</div>
+                                    </div>
                                     <div class="wp-field-grid">
                                         <div class="wp-field">
                                             <label class="form-label">Facebook Page ID</label>

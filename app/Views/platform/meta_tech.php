@@ -79,6 +79,14 @@ $ownsAllClients = ! empty($ownsAllClients);
 
                 <div>
                     <label class="platform-label" style="display:flex;justify-content:space-between">
+                        <span>Lead Login Config ID</span>
+                        <small style="color:var(--pf-muted)">New General configuration, not the WhatsApp one</small>
+                    </label>
+                    <input class="platform-input" type="text" name="lead_config_id" value="<?= esc((string) ($tech['lead_config_id'] ?? '')) ?>" placeholder="e.g. 27628410963477907" inputmode="numeric">
+                </div>
+
+                <div>
+                    <label class="platform-label" style="display:flex;justify-content:space-between">
                         <span>Meta App Secret <span class="text-danger">*</span></span>
                         <small style="color:var(--pf-muted)">App Settings &rarr; Basic</small>
                     </label>

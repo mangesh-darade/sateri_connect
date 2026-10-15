@@ -28,13 +28,37 @@ class FacebookLeadConnectService
         return $this->credentials()['version'];
     }
 
+    public function leadConfigId(): string
+    {
+        $id = trim((string) ((new SettingsService())->getMetaConfig()['lead_config_id'] ?? ''));
+        if (preg_match('/^\d{5,32}$/', $id) === 1) {
+            return $id;
+        }
+
+        if (! MasterTenantRepository::masterConfigured()) {
+            return '';
+        }
+
+        try {
+            $tech = (new MasterTenantRepository())->getPlatformMetaTechProvider();
+            $id = trim((string) ($tech['lead_config_id'] ?? ''));
+        } catch (Throwable) {
+            return '';
+        }
+
+        return preg_match('/^\d{5,32}$/', $id) === 1 ? $id : '';
+    }
+
     /**
      * Exchange the browser login token and list business portfolios.
      *
-     * @return array{user_name: string, businesses: list<array{id: string, name: string}>, profile_pages: int}
+     * @return array{user_name: string, businesses: list<array{id: string, name: string}>, profile_pages: int, missing_permissions: list<string>}
      */
-    public function start(string $userToken): array
+    public function start(string $userToken, string $code = ''): array
     {
+        if (trim($code) !== '') {
+            $userToken = $this->exchangeAuthorizationCode($code);
+        }
         $userToken = $this->assertUserToken($userToken);
 
         $long  = $this->exchangeToken($userToken, $this->requireCredentials());
@@ -46,9 +70,10 @@ class FacebookLeadConnectService
         session()->set(self::SESSION_PAGES, $profilePages);
 
         return [
-            'user_name'     => trim((string) ($me['name'] ?? '')),
-            'businesses'    => $businesses,
-            'profile_pages' => count($profilePages),
+            'user_name'           => trim((string) ($me['name'] ?? '')),
+            'businesses'          => $businesses,
+            'profile_pages'       => count($profilePages),
+            'missing_permissions' => $this->missingLeadPermissions($this->permissionStatus($long)),
         ];
     }
 
@@ -138,6 +163,16 @@ class FacebookLeadConnectService
             throw new RuntimeException('Facebook did not give a Page token. Login again and allow access to this Page.');
         }
 
+        $pageRow = $this->resolvePage($pageId, $businessId, $token);
+        $tasks   = $this->taskNames($pageRow['tasks'] ?? []);
+        $resolvedToken = trim((string) ($pageRow['access_token'] ?? ''));
+        if ($resolvedToken !== '') {
+            $pageToken = $resolvedToken;
+        }
+        if (trim((string) ($pageRow['name'] ?? '')) !== '') {
+            $pageName = $this->safeLabel((string) $pageRow['name'], $pageId);
+        }
+
         $settings = new SettingsService();
         $payload  = [
             'page_id'           => $pageId,
@@ -158,29 +193,37 @@ class FacebookLeadConnectService
         }
 
         $forms = [];
-        try {
-            $rows = $this->collect($pageId . '/leadgen_forms', ['fields' => 'id,name,status', 'limit' => '100'], $pageToken);
-            foreach ($rows as $row) {
-                $status = strtoupper(trim((string) ($row['status'] ?? 'ACTIVE')));
-                if ($status !== '' && $status !== 'ACTIVE') {
-                    continue;
-                }
-                $id = trim((string) ($row['id'] ?? ''));
-                if ($id === '') {
-                    continue;
-                }
-                if (preg_match('/^\d+$/', $id) !== 1) {
-                    continue;
-                }
-                $forms[] = [
-                    'id'   => $id,
-                    'name' => $this->safeLabel((string) ($row['name'] ?? ''), $id),
-                ];
+        $lastError = '';
+        $tokens = array_values(array_unique(array_filter([$pageToken, $token])));
+        foreach ($tokens as $tryToken) {
+            try {
+                $forms = $this->leadForms($pageId . '/leadgen_forms', $tryToken);
+                $lastError = '';
+                break;
+            } catch (Throwable $e) {
+                $lastError = $e->getMessage();
             }
-        } catch (Throwable $e) {
-            if ($warning === '') {
-                $warning = 'Page connected. Lead forms could not be listed yet. ' . $e->getMessage();
+        }
+        if ($forms === [] && $lastError !== '' && $adAccountId !== '' && $adAccountId !== 'none') {
+            try {
+                $act = $this->assertAdAccount($adAccountId);
+            } catch (Throwable) {
+                $act = '';
             }
+            if ($act !== '') {
+                foreach ($tokens as $tryToken) {
+                    try {
+                        $forms = $this->leadForms($act . '/leadgen_forms', $tryToken);
+                        $lastError = '';
+                        break;
+                    } catch (Throwable $e) {
+                        $lastError = $e->getMessage();
+                    }
+                }
+            }
+        }
+        if ($lastError !== '' && $warning === '') {
+            $warning = $this->leadFormsWarning($lastError, $this->permissionStatus($token), $tasks);
         }
 
         log_activity('update', 'automations', 'Connected Facebook lead page ' . $pageName, [
@@ -196,6 +239,201 @@ class FacebookLeadConnectService
             'forms'     => $forms,
             'warning'   => $warning,
         ];
+    }
+
+    /**
+     * Prefer a Page token that includes the Advertise task. Business pages often
+     * omit that token on the plain Page node.
+     *
+     * @return array{id?: string, name?: string, access_token?: string, tasks?: list<string>}
+     */
+    protected function resolvePage(string $pageId, string $businessId, string $userToken): array
+    {
+        $fallback = null;
+        foreach ($this->pageCandidates($pageId, $businessId, $userToken) as $row) {
+            if (trim((string) ($row['id'] ?? '')) !== $pageId) {
+                continue;
+            }
+            $access = trim((string) ($row['access_token'] ?? ''));
+            if ($access === '') {
+                continue;
+            }
+            $tasks = $this->taskNames($row['tasks'] ?? []);
+            $row['access_token'] = $access;
+            $row['tasks'] = $tasks;
+            if (in_array('ADVERTISE', $tasks, true) || in_array('MANAGE', $tasks, true)) {
+                return $row;
+            }
+            $fallback ??= $row;
+        }
+
+        return $fallback ?? ['id' => $pageId, 'access_token' => '', 'tasks' => []];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    protected function pageCandidates(string $pageId, string $businessId, string $userToken): array
+    {
+        $rows = [];
+        try {
+            $rows = $this->collect('me/accounts', ['fields' => 'id,name,access_token,tasks', 'limit' => '100'], $userToken);
+        } catch (Throwable) {
+            $rows = [];
+        }
+
+        if ($businessId !== '' && $businessId !== 'profile' && preg_match('/^\d{5,32}$/', $businessId) === 1) {
+            foreach (['owned_pages', 'client_pages'] as $edge) {
+                try {
+                    $rows = array_merge($rows, $this->collect($businessId . '/' . $edge, ['fields' => 'id,name,access_token,tasks', 'limit' => '100'], $userToken));
+                } catch (Throwable) {
+                    try {
+                        $rows = array_merge($rows, $this->collect($businessId . '/' . $edge, ['fields' => 'id,name,access_token', 'limit' => '100'], $userToken));
+                    } catch (Throwable) {
+                    }
+                }
+            }
+        }
+
+        try {
+            $rows[] = $this->graph($pageId, ['fields' => 'id,name,access_token,tasks'], $userToken);
+        } catch (Throwable) {
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @return list<array{id: string, name: string}>
+     */
+    protected function leadForms(string $path, string $token): array
+    {
+        $forms = [];
+        foreach ($this->collect($path, ['fields' => 'id,name,status', 'limit' => '100'], $token) as $row) {
+            $status = strtoupper(trim((string) ($row['status'] ?? 'ACTIVE')));
+            if ($status !== '' && $status !== 'ACTIVE') {
+                continue;
+            }
+            $id = trim((string) ($row['id'] ?? ''));
+            if ($id === '' || preg_match('/^\d+$/', $id) !== 1) {
+                continue;
+            }
+            $forms[] = [
+                'id'   => $id,
+                'name' => $this->safeLabel((string) ($row['name'] ?? ''), $id),
+            ];
+        }
+
+        return $forms;
+    }
+
+    /**
+     * @param array<string, string> $permissions
+     * @param list<string> $tasks
+     */
+    protected function leadFormsWarning(string $graphMessage, array $permissions, array $tasks): string
+    {
+        if ($this->missingLeadPermissions($permissions) !== []) {
+            return 'This Facebook login is still missing pages_manage_ads. Click Login with Facebook, choose Edit settings, then Save. The Lead configuration already includes that permission.';
+        }
+        if ($tasks !== [] && ! in_array('ADVERTISE', $tasks, true) && ! in_array('MANAGE', $tasks, true)) {
+            return 'This Facebook user can see the Page, but does not have the Advertise task. In Meta Business Settings, assign the Advertise task on this Page, then log in again.';
+        }
+
+        return 'Page connected. Lead forms could not be listed yet. ' . $graphMessage;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function permissionStatus(string $token): array
+    {
+        $status = [];
+        try {
+            $rows = $this->collect('me/permissions', ['limit' => '200'], $token);
+            foreach ($rows as $row) {
+                $name = trim((string) ($row['permission'] ?? ''));
+                if ($name === '') {
+                    continue;
+                }
+                $status[$name] = trim((string) ($row['status'] ?? ''));
+            }
+        } catch (Throwable) {
+            $status = [];
+        }
+
+        foreach ($this->tokenScopes($token) as $scope) {
+            $status[$scope] = 'granted';
+        }
+
+        return $status;
+    }
+
+    /**
+     * Business Login often omits pages_manage_ads from /me/permissions and puts it on the token scopes.
+     *
+     * @return list<string>
+     */
+    protected function tokenScopes(string $token): array
+    {
+        try {
+            $creds = $this->requireCredentials();
+            $decoded = $this->graph('debug_token', ['input_token' => $token], $creds['app_id'] . '|' . $creds['secret']);
+        } catch (Throwable) {
+            return [];
+        }
+
+        $data = is_array($decoded['data'] ?? null) ? $decoded['data'] : [];
+        $names = [];
+        foreach (is_array($data['scopes'] ?? null) ? $data['scopes'] : [] as $scope) {
+            if (is_string($scope) && $scope !== '') {
+                $names[] = $scope;
+            }
+        }
+        foreach (is_array($data['granular_scopes'] ?? null) ? $data['granular_scopes'] : [] as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $scope = trim((string) ($row['scope'] ?? ''));
+            if ($scope !== '') {
+                $names[] = $scope;
+            }
+        }
+
+        return array_values(array_unique($names));
+    }
+
+    /**
+     * @param array<string, string> $status
+     *
+     * @return list<string>
+     */
+    protected function missingLeadPermissions(array $status): array
+    {
+        if ($status === [] || ($status['pages_manage_ads'] ?? '') === 'granted') {
+            return [];
+        }
+
+        return ['pages_manage_ads'];
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function taskNames(mixed $tasks): array
+    {
+        if (! is_array($tasks)) {
+            return [];
+        }
+
+        $names = [];
+        foreach ($tasks as $task) {
+            if (is_string($task) && $task !== '') {
+                $names[] = strtoupper($task);
+            }
+        }
+
+        return $names;
     }
 
     /**
@@ -243,6 +481,43 @@ class FacebookLeadConnectService
         }
 
         return $creds;
+    }
+
+    protected function exchangeAuthorizationCode(string $code): string
+    {
+        $code = trim($code);
+        $length = strlen($code);
+        if ($length < 20 || $length > 2048 || preg_match('/^[A-Za-z0-9_\-\.]+$/', $code) !== 1) {
+            throw new RuntimeException('Facebook login code is not valid. Login again.');
+        }
+
+        $creds = $this->requireCredentials();
+        $url = 'https://graph.facebook.com/' . $creds['version'] . '/oauth/access_token';
+
+        try {
+            $client = Services::curlrequest([
+                'timeout'     => 20,
+                'http_errors' => false,
+            ], null, null, false);
+            $response = $client->get($url, [
+                'query' => [
+                    'client_id'     => $creds['app_id'],
+                    'client_secret' => $creds['secret'],
+                    'code'          => $code,
+                ],
+            ]);
+        } catch (Throwable) {
+            throw new RuntimeException('Facebook could not be reached. Try again.');
+        }
+
+        $decoded = json_decode((string) $response->getBody(), true);
+        $token = is_array($decoded) ? trim((string) ($decoded['access_token'] ?? '')) : '';
+        if ($token !== '') {
+            return $token;
+        }
+
+        $message = is_array($decoded['error'] ?? null) ? (string) ($decoded['error']['message'] ?? '') : '';
+        throw new RuntimeException($message !== '' ? mb_substr($message, 0, 300) : 'Facebook login could not be completed. Login again.');
     }
 
     protected function exchangeToken(string $userToken, array $creds): string

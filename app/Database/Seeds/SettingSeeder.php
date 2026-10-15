@@ -68,6 +68,12 @@ class SettingSeeder extends Seeder
                 'is_encrypted' => 0,
             ],
             [
+                'key'          => 'meta_lead_config_id',
+                'value'        => '',
+                'group'        => 'meta',
+                'is_encrypted' => 0,
+            ],
+            [
                 'key'          => 'meta_business_id',
                 'value'        => '',
                 'group'        => 'meta',
