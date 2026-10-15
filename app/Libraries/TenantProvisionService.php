@@ -153,14 +153,22 @@ class TenantProvisionService
         TenantContext::set($tenantKey, 'platform');
 
         try {
-            $users = model(UserModel::class);
-            $existing = $users->findByEmail($email);
-            if ($password === '' && $existing === null) {
-                // Maybe same tenant, different email — still need a password for brand-new user.
+            $users   = model(UserModel::class);
+            $current = $this->currentAdminUser($users, $tenantKey);
+            if ($current === null) {
+                $current = $users->findByEmail($email);
+            }
+
+            if ($current === null && $password === '') {
                 return ['ok' => false, 'message' => 'Password is required when creating a new admin user.'];
             }
 
-            $this->ensureAdminUser($email, $password, $name !== '' ? $name : 'Admin', $password !== '');
+            $taken = $users->findByEmail($email);
+            if ($taken !== null && ($current === null || (int) $taken['id'] !== (int) $current['id'])) {
+                return ['ok' => false, 'message' => 'The email field must contain a unique value.'];
+            }
+
+            $this->ensureAdminUser($email, $password, $name !== '' ? $name : 'Admin', $password !== '', $current);
             $this->master->upsertLoginIndex($email, $tenantKey);
         } catch (Throwable $e) {
             return ['ok' => false, 'message' => $e->getMessage()];
@@ -213,7 +221,10 @@ class TenantProvisionService
         return ['ok' => true, 'message' => 'Meta settings saved for client.'];
     }
 
-    protected function ensureAdminUser(string $email, string $password, string $name, bool $updatePassword = true): void
+    /**
+     * @param array<string, mixed>|null $existing Current admin row to update. Null inserts a new user.
+     */
+    protected function ensureAdminUser(string $email, string $password, string $name, bool $updatePassword = true, ?array $existing = null): void
     {
         $role = model(RoleModel::class)->findBySlug('super-admin')
             ?? model(RoleModel::class)->findBySlug('super_admin')
@@ -224,7 +235,9 @@ class TenantProvisionService
         }
 
         $users = model(UserModel::class);
-        $existing = $users->findByEmail($email);
+        if ($existing === null) {
+            $existing = $users->findByEmail($email);
+        }
         $data = [
             'name'              => $name,
             'email'             => $email,
@@ -239,12 +252,46 @@ class TenantProvisionService
             $data['password'] = $password;
         }
         if ($existing !== null) {
-            if (! $users->update((int) $existing['id'], $data)) {
-                throw new RuntimeException(implode(' ', $users->errors() ?: ['Update failed']));
+            $id = (int) $existing['id'];
+            // {id} is not in the update payload, so the model rule treats this user's own email as a duplicate.
+            $users->setValidationRule('email', 'required|valid_email|max_length[191]|is_unique[users.email,id,' . $id . ']');
+            try {
+                if (! $users->update($id, $data)) {
+                    throw new RuntimeException(implode(' ', $users->errors() ?: ['Update failed']));
+                }
+            } finally {
+                $users->setValidationRule('email', 'required|valid_email|max_length[191]|is_unique[users.email,id,{id}]');
             }
         } elseif (! $users->insert($data)) {
             throw new RuntimeException(implode(' ', $users->errors() ?: ['Insert failed']));
         }
+    }
+
+    /**
+     * Admin shown on the client screen: first login-index email for this tenant.
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function currentAdminUser(UserModel $users, string $tenantKey): ?array
+    {
+        $email = '';
+        try {
+            $idx = MasterTenantRepository::masterConnection()
+                ->table('tenant_login_index')
+                ->where('tenant_key', $tenantKey)
+                ->orderBy('id', 'ASC')
+                ->get()
+                ->getRowArray();
+            $email = is_array($idx) ? strtolower(trim((string) ($idx['email'] ?? ''))) : '';
+        } catch (Throwable) {
+            $email = '';
+        }
+
+        if ($email === '') {
+            return null;
+        }
+
+        return $users->findByEmail($email);
     }
 
     protected function createDatabase(

@@ -31,6 +31,7 @@ class Users extends BaseController
         return $this->render('users/index', [
             'pageTitle' => 'Users',
             'users'     => $users,
+            'seats'     => (new \App\Libraries\TenantPlanLimits())->snapshot(),
         ]);
     }
 
@@ -38,6 +39,10 @@ class Users extends BaseController
     {
         if ($denied = $this->requirePermission('users.create')) {
             return $denied;
+        }
+
+        if ($block = (new \App\Libraries\TenantPlanLimits())->userCreateBlock()) {
+            return redirect()->to('/users')->with('error', $block);
         }
 
         return $this->render('users/form', [
@@ -69,6 +74,10 @@ class Users extends BaseController
         $roleId = (int) $this->request->getPost('role_id');
         if ($err = $this->assertAssignableRole($roleId)) {
             return redirect()->back()->withInput()->with('error', $err);
+        }
+
+        if ($block = (new \App\Libraries\TenantPlanLimits())->userCreateBlock()) {
+            return redirect()->back()->withInput()->with('error', $block);
         }
 
         $id = model(UserModel::class)->insert([

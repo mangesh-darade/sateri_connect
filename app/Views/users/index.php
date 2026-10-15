@@ -1,7 +1,12 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('header_actions') ?>
-<?php if (function_exists('can') && can('users.create')): ?>
+<?php
+$seats = $seats ?? [];
+$canAddUser = ! empty($seats['can_add_user']);
+$maxUsers = $seats['max_users'] ?? null;
+?>
+<?php if (function_exists('can') && can('users.create') && $canAddUser): ?>
     <a href="<?= site_url('users/create') ?>" class="btn btn-wa btn-sm"><i class="fas fa-plus me-1"></i> Add user</a>
 <?php endif; ?>
 <?= $this->endSection() ?>
@@ -10,8 +15,18 @@
 <div class="page-list">
 
 <div class="card">
-    <div class="card-header">
+    <div class="card-header d-flex align-items-center justify-content-between gap-2">
         <h2 class="card-title mb-0">Team users</h2>
+        <span class="small text-muted">
+            <?= (int) ($seats['users'] ?? count($users ?? [])) ?>
+            <?php if ($maxUsers !== null): ?>
+                of <?= (int) $maxUsers ?>
+            <?php endif; ?>
+            users
+            <?php if (! $canAddUser): ?>
+                · limit reached
+            <?php endif; ?>
+        </span>
     </div>
     <div class="card-body py-3">
         <table class="table table-sm table-hover align-middle w-100" id="usersTable">

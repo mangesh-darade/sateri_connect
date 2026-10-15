@@ -21,7 +21,10 @@ class Roles extends BaseController
             return $denied;
         }
 
-        $roles       = model(RoleModel::class)->orderBy('name', 'ASC')->findAll();
+        $roles = array_values(array_filter(
+            model(RoleModel::class)->orderBy('name', 'ASC')->findAll(),
+            static fn (array $role): bool => ! in_array($role['slug'] ?? '', ['super-admin', 'super_admin'], true)
+        ));
         $permissions = model(PermissionModel::class)->getGroupedByModule();
         $matrix      = [];
 
@@ -38,6 +41,7 @@ class Roles extends BaseController
             'roles'       => $roles,
             'permissions' => $permissions,
             'matrix'      => $matrix,
+            'seats'       => (new \App\Libraries\TenantPlanLimits())->snapshot(),
         ]);
     }
 
@@ -104,6 +108,10 @@ class Roles extends BaseController
 
         if (! $this->validate($rules)) {
             return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
+        }
+
+        if ($block = (new \App\Libraries\TenantPlanLimits())->roleCreateBlock()) {
+            return redirect()->back()->withInput()->with('error', $block);
         }
 
         $id = model(RoleModel::class)->insert([

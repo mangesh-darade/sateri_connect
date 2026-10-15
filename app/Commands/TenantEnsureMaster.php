@@ -94,6 +94,8 @@ class TenantEnsureMaster extends BaseCommand
             'db_database' => ['type' => 'VARCHAR', 'constraint' => 191],
             'db_port' => ['type' => 'INT', 'unsigned' => true, 'default' => 3306],
             'status' => ['type' => 'VARCHAR', 'constraint' => 20, 'default' => 'active'],
+            'max_users' => ['type' => 'INT', 'unsigned' => true, 'null' => true],
+            'max_roles' => ['type' => 'INT', 'unsigned' => true, 'null' => true],
             'created_at' => ['type' => 'DATETIME', 'null' => true],
             'updated_at' => ['type' => 'DATETIME', 'null' => true],
         ]);

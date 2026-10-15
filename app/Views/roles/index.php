@@ -22,8 +22,49 @@ if (is_array($first) && array_is_list($permissions) && isset($first['slug'])) {
     $grouped = $permissions;
 }
 ?>
+<?php
+$seats = $seats ?? [];
+$canAddRole = ! empty($seats['can_add_role']);
+$maxRoles = $seats['max_roles'] ?? null;
+?>
 <div class="page-list">
-<div class="page-hint"><i class="fas fa-info-circle"></i><span>System roles stay locked. Toggle module permissions for custom and editable roles, then save.</span></div>
+<div class="page-hint"><i class="fas fa-info-circle"></i><span>System roles stay locked. Toggle module permissions for custom and editable roles, then save. New roles are allowed only up to the platform limit<?php if ($maxRoles !== null): ?> (<?= (int) ($seats['roles'] ?? count($rolesList)) ?> of <?= (int) $maxRoles ?>)<?php endif; ?>.</span></div>
+<?php if (function_exists('can') && can('roles.create')): ?>
+<div class="card">
+    <div class="card-header d-flex align-items-center justify-content-between gap-2">
+        <h2 class="card-title mb-0">New role</h2>
+        <span class="small text-muted">
+            <?= (int) ($seats['roles'] ?? count($rolesList)) ?>
+            <?php if ($maxRoles !== null): ?>of <?= (int) $maxRoles ?><?php endif; ?>
+            roles<?= $canAddRole ? '' : ' · limit reached' ?>
+        </span>
+    </div>
+    <div class="card-body">
+        <?php if ($canAddRole): ?>
+        <form action="<?= site_url('roles') ?>" method="post" class="row g-2 align-items-end">
+            <?= csrf_field() ?>
+            <div class="col-md-4">
+                <label class="form-label" for="roleName">Name</label>
+                <input class="form-control" id="roleName" name="name" required maxlength="100" value="<?= esc(old('name') ?? '') ?>">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" for="roleSlug">Slug</label>
+                <input class="form-control" id="roleSlug" name="slug" required maxlength="100" pattern="[A-Za-z0-9_-]+" value="<?= esc(old('slug') ?? '') ?>" placeholder="agent">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" for="roleDescription">Description</label>
+                <input class="form-control" id="roleDescription" name="description" maxlength="255" value="<?= esc(old('description') ?? '') ?>">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-wa w-100">Create role</button>
+            </div>
+        </form>
+        <?php else: ?>
+        <p class="text-muted mb-0">This workspace has reached its role limit. A platform admin can raise it on the client page.</p>
+        <?php endif; ?>
+    </div>
+</div>
+<?php endif; ?>
 <div class="card">
     <div class="card-header"><h2 class="card-title mb-0">Permission matrix</h2></div>
     <form id="rolesMatrixForm" action="<?= site_url('roles/update') ?>" method="post">
