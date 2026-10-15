@@ -80,14 +80,15 @@ class TenantProvisionService
         }
 
         if (! $this->master->upsertTenant([
-            'key'         => $key,
-            'name'        => $name !== '' ? $name : $key,
-            'db_hostname' => $hostname,
-            'db_username' => $username,
-            'db_password' => $password,
-            'db_database' => $database,
-            'db_port'     => $port,
-            'status'      => 'active',
+            'key'                => $key,
+            'name'               => $name !== '' ? $name : $key,
+            'db_hostname'        => $hostname,
+            'db_username'        => $username,
+            'db_password'        => $password,
+            'db_database'        => $database,
+            'db_port'            => $port,
+            'status'             => 'active',
+            'platform_admin_id'  => (int) ($input['platform_admin_id'] ?? 0),
         ])) {
             return ['ok' => false, 'message' => 'Failed to register client in master.'];
         }

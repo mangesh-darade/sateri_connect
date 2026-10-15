@@ -68,6 +68,8 @@ $routes->group('platform', ['filter' => 'platformAuth'], static function ($route
     $routes->post('meta-tech/test', 'PlatformClients::testMetaTech', ['filter' => 'csrf']);
     $routes->get('meta-tech/client/(:segment)', 'PlatformClients::clientWhatsAppStatus/$1');
     $routes->post('meta-tech/connect', 'PlatformClients::connectEmbeddedSignup', ['filter' => 'csrf']);
+    $routes->get('admins', 'PlatformAdmins::index');
+    $routes->post('admins', 'PlatformAdmins::store', ['filter' => 'csrf']);
     $routes->get('settings', 'PlatformClients::settings');
     $routes->post('settings', 'PlatformClients::saveSettings', ['filter' => 'csrf']);
     $routes->get('guide', 'Guide::index');

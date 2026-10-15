@@ -20,7 +20,7 @@ class PlatformClients extends BaseController
 {
     public function index(): string|ResponseInterface
     {
-        $dash = (new PlatformStatsService())->dashboard();
+        $dash = (new PlatformStatsService())->dashboard($this->platformAdminId());
 
         return view('platform/clients/index', [
             'pageTitle'    => 'Platform dashboard',
@@ -36,7 +36,7 @@ class PlatformClients extends BaseController
 
     public function all(): string
     {
-        $dash = (new PlatformStatsService())->dashboard();
+        $dash = (new PlatformStatsService())->dashboard($this->platformAdminId());
 
         return view('platform/clients/all', [
             'pageTitle'    => 'All clients',
@@ -63,7 +63,7 @@ class PlatformClients extends BaseController
 
         $baseUrl = rtrim(site_url(), '/');
         $clients = [];
-        foreach ($repo->listActiveTenants() as $row) {
+        foreach ($repo->listActiveTenants($this->platformAdminId()) as $row) {
             $clients[] = [
                 'key'  => (string) ($row['key'] ?? ''),
                 'name' => (string) (($row['name'] ?? '') !== '' ? $row['name'] : ($row['key'] ?? '')),
@@ -170,7 +170,8 @@ class PlatformClients extends BaseController
             return $this->jsonResponse(false, null, 'Choose a client before connecting WhatsApp.', [], 422);
         }
 
-        if ((new MasterTenantRepository())->findActiveTenant($key) === null) {
+        $repo = new MasterTenantRepository();
+        if ($repo->findActiveTenant($key) === null || ! $repo->platformAdminOwnsTenant($this->platformAdminId(), $key)) {
             return $this->jsonResponse(false, null, 'Client not found.', [], 404);
         }
 
@@ -279,7 +280,8 @@ class PlatformClients extends BaseController
             'port'           => (int) ($this->request->getPost('port') ?: 3306),
             'admin_email'    => (string) $this->request->getPost('admin_email'),
             'admin_password' => (string) $this->request->getPost('admin_password'),
-            'admin_name'     => (string) ($this->request->getPost('admin_name') ?: 'Admin'),
+            'admin_name'         => (string) ($this->request->getPost('admin_name') ?: 'Admin'),
+            'platform_admin_id'  => $this->platformAdminId(),
         ]);
 
         if (! ($result['ok'] ?? false)) {
@@ -303,7 +305,7 @@ class PlatformClients extends BaseController
         $key = strtolower(trim($key));
         $repo = new MasterTenantRepository();
         $tenant = $repo->findActiveTenant($key);
-        if ($tenant === null) {
+        if ($tenant === null || ! $repo->platformAdminOwnsTenant($this->platformAdminId(), $key)) {
             return redirect()->to('/platform/clients')->with('error', 'Client not found.');
         }
 
@@ -361,6 +363,9 @@ class PlatformClients extends BaseController
     public function saveMeta(string $key): ResponseInterface
     {
         $key = strtolower(trim($key));
+        if (! (new MasterTenantRepository())->platformAdminOwnsTenant($this->platformAdminId(), $key)) {
+            return redirect()->to('/platform/clients')->with('error', 'Client not found.');
+        }
         $meta = [
             'app_name'        => trim((string) $this->request->getPost('app_name')),
             'app_id'          => trim((string) $this->request->getPost('app_id')),
@@ -391,6 +396,9 @@ class PlatformClients extends BaseController
     public function saveLogin(string $key): ResponseInterface
     {
         $key = strtolower(trim($key));
+        if (! (new MasterTenantRepository())->platformAdminOwnsTenant($this->platformAdminId(), $key)) {
+            return redirect()->to('/platform/clients')->with('error', 'Client not found.');
+        }
         $password = trim((string) $this->request->getPost('admin_password'));
         $result = (new TenantProvisionService())->setClientLogin(
             $key,
@@ -417,7 +425,8 @@ class PlatformClients extends BaseController
     {
         $key = strtolower(trim($key));
         $limits = new \App\Libraries\TenantPlanLimits();
-        if ((new MasterTenantRepository())->findActiveTenant($key) === null) {
+        $repo = new MasterTenantRepository();
+        if ($repo->findActiveTenant($key) === null || ! $repo->platformAdminOwnsTenant($this->platformAdminId(), $key)) {
             return redirect()->to('/platform/clients')->with('error', 'Client not found.');
         }
 
@@ -462,7 +471,7 @@ class PlatformClients extends BaseController
     {
         $key = strtolower(trim($key));
         $repo = new MasterTenantRepository();
-        if ($repo->findActiveTenant($key) === null) {
+        if ($repo->findActiveTenant($key) === null || ! $repo->platformAdminOwnsTenant($this->platformAdminId(), $key)) {
             return redirect()->to('/platform/clients')->with('error', 'Client not found.');
         }
 
@@ -532,7 +541,7 @@ class PlatformClients extends BaseController
             'navActive'        => 'settings',
             'branding'         => $branding,
             'platformName'     => (string) session('platform_admin_name'),
-            'schemaClients'    => $repo->listActiveTenants(),
+            'schemaClients'    => $repo->listActiveTenants($this->platformAdminId()),
             'schemaTableCount' => count(SchemaRepairService::snapshot()),
             'schemaSnapshotAt' => is_file($snapshotFile) ? date('d M Y, h:i A', (int) filemtime($snapshotFile)) : null,
         ]);
@@ -734,8 +743,9 @@ class PlatformClients extends BaseController
     private function runClientSettings(string $key, string $method, array $args = []): string|ResponseInterface
     {
         $key = strtolower(trim($key));
-        $tenant = (new MasterTenantRepository())->findActiveTenant($key);
-        if ($tenant === null) {
+        $repo = new MasterTenantRepository();
+        $tenant = $repo->findActiveTenant($key);
+        if ($tenant === null || ! $repo->platformAdminOwnsTenant($this->platformAdminId(), $key)) {
             if ($this->request->isAJAX()) {
                 return $this->jsonResponse(false, null, 'Client not found.', [], 404);
             }
@@ -763,6 +773,11 @@ class PlatformClients extends BaseController
         return $result instanceof ResponseInterface || is_string($result)
             ? $result
             : $this->response->setStatusCode(500)->setJSON(['success' => false, 'message' => 'Settings action failed.']);
+    }
+
+    protected function platformAdminId(): int
+    {
+        return (int) session('platform_admin_id');
     }
 
     protected function maskSecret(string $value): string

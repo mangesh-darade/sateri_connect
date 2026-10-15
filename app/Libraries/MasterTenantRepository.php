@@ -13,6 +13,9 @@ use Throwable;
  */
 class MasterTenantRepository
 {
+    protected static bool $tenantOwnerReady = false;
+
+    protected static bool $primaryAdminReady = false;
     public function updateTenantName(string $key, string $name): bool
     {
         $key  = strtolower(trim($key));
@@ -54,6 +57,63 @@ class MasterTenantRepository
         return is_array($row) ? $row : null;
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function listPlatformAdmins(): array
+    {
+        try {
+            $this->ensurePrimaryAdminColumn();
+            $rows = $this->db()->table('platform_admins')
+                ->select('id, email, name, status, is_primary, created_at')
+                ->orderBy('is_primary', 'DESC')
+                ->orderBy('name', 'ASC')
+                ->get()
+                ->getResultArray();
+        } catch (Throwable $e) {
+            log_message('error', 'MasterTenantRepository::listPlatformAdmins failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return [];
+        }
+
+        return is_array($rows) ? $rows : [];
+    }
+
+    public function createPlatformAdmin(string $email, string $password, string $name): bool
+    {
+        $email = strtolower(trim($email));
+        $name  = trim($name);
+        if ($email === '' || $password === '' || $name === '') {
+            return false;
+        }
+
+        try {
+            $db = $this->db();
+            $existing = $db->table('platform_admins')->where('email', $email)->get()->getRowArray();
+            if (is_array($existing)) {
+                return false;
+            }
+
+            $now = date('Y-m-d H:i:s');
+
+            $this->ensurePrimaryAdminColumn();
+
+            return (bool) $db->table('platform_admins')->insert([
+                'email'      => $email,
+                'password'   => password_hash($password, PASSWORD_DEFAULT),
+                'name'       => $name,
+                'status'     => 'active',
+                'is_primary' => 0,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        } catch (Throwable $e) {
+            log_message('error', 'MasterTenantRepository::createPlatformAdmin failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return false;
+        }
+    }
+
     public function ensurePlatformAdmin(string $email, string $password, string $name = 'Platform Super Admin'): bool
     {
         $email = strtolower(trim($email));
@@ -75,11 +135,14 @@ class MasterTenantRepository
                 ]);
             }
 
+            $this->ensurePrimaryAdminColumn();
+
             return (bool) $db->table('platform_admins')->insert([
                 'email'      => $email,
                 'password'   => $hash,
                 'name'       => $name,
                 'status'     => 'active',
+                'is_primary' => 0,
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);
@@ -127,14 +190,17 @@ class MasterTenantRepository
     /**
      * @return list<array<string, mixed>>
      */
-    public function listActiveTenants(): array
+    public function listActiveTenants(?int $platformAdminId = null): array
     {
         try {
-            $rows = $this->db()->table('tenants')
-                ->where('status', 'active')
-                ->orderBy('name', 'ASC')
-                ->get()
-                ->getResultArray();
+            $this->ensureTenantOwnerColumn();
+            $builder = $this->db()->table('tenants')
+                ->where('status', 'active');
+            if ($platformAdminId !== null && $platformAdminId > 0 && ! $this->isPrimaryPlatformAdmin($platformAdminId)) {
+                $builder->where('platform_admin_id', $platformAdminId);
+            }
+
+            $rows = $builder->orderBy('name', 'ASC')->get()->getResultArray();
 
             return is_array($rows) ? $rows : [];
         } catch (Throwable $e) {
@@ -142,6 +208,138 @@ class MasterTenantRepository
 
             return [];
         }
+    }
+
+    public function platformAdminOwnsTenant(int $platformAdminId, string $key): bool
+    {
+        if ($platformAdminId < 1) {
+            return false;
+        }
+
+        $this->ensureTenantOwnerColumn();
+        $row = $this->findTenant($key);
+        if (! is_array($row)) {
+            return false;
+        }
+        if ($this->isPrimaryPlatformAdmin($platformAdminId)) {
+            return true;
+        }
+
+        return (int) ($row['platform_admin_id'] ?? 0) === $platformAdminId;
+    }
+
+    public function isPrimaryPlatformAdmin(int $platformAdminId): bool
+    {
+        if ($platformAdminId < 1) {
+            return false;
+        }
+
+        $this->ensurePrimaryAdminColumn();
+
+        try {
+            $row = $this->db()->table('platform_admins')
+                ->select('is_primary')
+                ->where('id', $platformAdminId)
+                ->get()
+                ->getRowArray();
+        } catch (Throwable $e) {
+            log_message('error', 'MasterTenantRepository::isPrimaryPlatformAdmin failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return false;
+        }
+
+        return (int) ($row['is_primary'] ?? 0) === 1;
+    }
+
+    public function ensurePrimaryAdminColumn(): void
+    {
+        if (self::$primaryAdminReady) {
+            return;
+        }
+
+        try {
+            $db = $this->db();
+            if (! $db->tableExists('platform_admins')) {
+                return;
+            }
+            if (! $db->fieldExists('is_primary', 'platform_admins')) {
+                $db->query('ALTER TABLE `platform_admins` ADD `is_primary` TINYINT UNSIGNED NOT NULL DEFAULT 0');
+            }
+            $this->keepSinglePrimaryAdmin();
+            self::$primaryAdminReady = true;
+        } catch (Throwable $e) {
+            log_message('error', 'MasterTenantRepository::ensurePrimaryAdminColumn failed: {msg}', ['msg' => $e->getMessage()]);
+        }
+    }
+
+    protected function keepSinglePrimaryAdmin(): void
+    {
+        $db = $this->db();
+        $primaries = $db->table('platform_admins')
+            ->select('id')
+            ->where('is_primary', 1)
+            ->orderBy('id', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        if ($primaries === []) {
+            $first = $db->table('platform_admins')->select('id')->orderBy('id', 'ASC')->get(1)->getRowArray();
+            $adminId = (int) ($first['id'] ?? 0);
+            if ($adminId > 0) {
+                $db->table('platform_admins')->where('id', $adminId)->update([
+                    'is_primary' => 1,
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+            }
+
+            return;
+        }
+
+        $keepId = (int) ($primaries[0]['id'] ?? 0);
+        if (count($primaries) > 1 && $keepId > 0) {
+            $db->table('platform_admins')->where('id !=', $keepId)->update([
+                'is_primary' => 0,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+        }
+    }
+
+    public function ensureTenantOwnerColumn(): void
+    {
+        if (self::$tenantOwnerReady) {
+            return;
+        }
+
+        try {
+            $db = $this->db();
+            if (! $db->tableExists('tenants')) {
+                return;
+            }
+            if (! $db->fieldExists('platform_admin_id', 'tenants')) {
+                $db->query('ALTER TABLE `tenants` ADD `platform_admin_id` INT UNSIGNED NULL DEFAULT NULL');
+                $db->query('ALTER TABLE `tenants` ADD KEY `platform_admin_id` (`platform_admin_id`)');
+                $this->assignUnownedTenantsToFirstAdmin();
+            }
+            self::$tenantOwnerReady = true;
+        } catch (Throwable $e) {
+            log_message('error', 'MasterTenantRepository::ensureTenantOwnerColumn failed: {msg}', ['msg' => $e->getMessage()]);
+        }
+    }
+
+    protected function assignUnownedTenantsToFirstAdmin(): void
+    {
+        $first = $this->db()->table('platform_admins')->orderBy('id', 'ASC')->get(1)->getRowArray();
+        $adminId = (int) ($first['id'] ?? 0);
+        if ($adminId < 1) {
+            return;
+        }
+
+        $this->db()->table('tenants')
+            ->where('platform_admin_id IS NULL', null, false)
+            ->update([
+                'platform_admin_id' => $adminId,
+                'updated_at'        => date('Y-m-d H:i:s'),
+            ]);
     }
 
     public function countActiveTenants(): int
@@ -462,6 +660,7 @@ class MasterTenantRepository
                 $password = (new EncryptionService())->encryptIfNeeded($password);
             }
 
+            $this->ensureTenantOwnerColumn();
             $row = [
                 'key'         => $key,
                 'name'        => (string) ($data['name'] ?? $key),
@@ -483,6 +682,14 @@ class MasterTenantRepository
                 return (bool) $db->table('tenants')->where('key', $key)->update($row);
             }
 
+            $ownerId = (int) ($data['platform_admin_id'] ?? 0);
+            if ($ownerId < 1) {
+                $first = $db->table('platform_admins')->orderBy('id', 'ASC')->get(1)->getRowArray();
+                $ownerId = (int) ($first['id'] ?? 0);
+            }
+            if ($ownerId > 0) {
+                $row['platform_admin_id'] = $ownerId;
+            }
             $row['created_at'] = $now;
 
             return (bool) $db->table('tenants')->insert($row);

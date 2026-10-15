@@ -3826,24 +3826,170 @@ table.dataTable tbody td { vertical-align: middle; }
 /* Roles matrix */
 .roles-matrix-wrap {
     overflow: auto;
-    max-height: calc(100dvh - 220px);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    max-height: calc(100dvh - 16.5rem);
+    scroll-behavior: smooth;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(159, 18, 57, 0.35) transparent;
+}
+.roles-matrix-wrap::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+.roles-matrix-wrap::-webkit-scrollbar-track {
+    background: transparent;
+}
+.roles-matrix-wrap::-webkit-scrollbar-thumb {
+    background: rgba(159, 18, 57, 0.28);
+    border-radius: 99px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+.roles-matrix-wrap::-webkit-scrollbar-thumb:hover {
+    background: rgba(225, 29, 72, 0.55);
+    background-clip: padding-box;
+}
+.roles-matrix {
+    width: max-content;
+    min-width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    --bs-table-hover-bg: transparent;
 }
 .roles-matrix thead th {
     position: sticky;
     top: 0;
+    z-index: 4;
+    height: 68px;
+    background: var(--surface-2);
+    box-shadow: inset 0 -1px 0 var(--border);
+    vertical-align: middle;
+}
+.roles-col-head {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+    line-height: 1.15;
+}
+.roles-matrix th,
+.roles-matrix td {
+    border-bottom: 1px solid var(--border);
+    background-clip: padding-box;
+}
+.roles-matrix .perm-col {
+    position: sticky;
+    left: 0;
     z-index: 2;
+    min-width: 240px;
+    width: 280px;
+    background: var(--surface);
+    box-shadow: inset -1px 0 0 var(--border);
+}
+.roles-matrix thead th.perm-col {
+    z-index: 5;
+    background: var(--surface-2);
+}
+.roles-matrix .role-col,
+.roles-matrix .roles-matrix-check {
+    width: 128px;
+    min-width: 128px;
+    text-align: center;
+    padding-left: 0.35rem;
+    padding-right: 0.35rem;
+}
+.roles-matrix tbody tr:not(.module-row):hover td {
+    background: #fff7f8;
+}
+.roles-matrix tbody tr:not(.module-row):hover td.perm-col {
+    background: #fff7f8;
+}
+.roles-matrix .roles-perm-name {
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--text);
+}
+.roles-matrix .roles-perm-slug {
+    margin-top: 0.1rem;
+    font-size: 0.72rem;
+    line-height: 1.2;
+    color: var(--text-muted);
 }
 .roles-matrix .module-row td {
+    position: sticky;
+    top: 68px;
+    z-index: 3;
     background: var(--wa-mist) !important;
     font-family: var(--font-display);
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: 650;
     color: var(--wa-ink);
-    letter-spacing: 0.04em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    border-color: var(--border);
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+    box-shadow: inset 0 -1px 0 var(--border);
+}
+.roles-matrix-check {
+    vertical-align: middle;
+}
+.roles-check {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin: 0;
+    cursor: pointer;
+}
+.roles-check input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+.roles-check-ui {
+    width: 18px;
+    height: 18px;
+    border: 1.5px solid rgba(159, 18, 57, 0.28);
+    border-radius: 5px;
+    background: #fff;
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+}
+.roles-check:hover .roles-check-ui {
+    border-color: var(--brand-400);
+}
+.roles-check input:indeterminate + .roles-check-ui {
+    background-color: var(--brand-500);
+    border-color: var(--brand-500);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round' d='M3.5 8h9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 12px 12px;
+}
+.roles-check input:checked + .roles-check-ui {
+    background-color: var(--brand-500);
+    border-color: var(--brand-500);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' d='M3.2 8.2 6.4 11.4 12.8 4.6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 12px 12px;
+}
+.roles-check input:focus-visible + .roles-check-ui {
+    box-shadow: var(--focus-ring);
+}
+.roles-check input:active + .roles-check-ui {
+    transform: scale(0.94);
+}
+.roles-check input:disabled {
+    cursor: not-allowed;
+}
+.roles-check input:disabled + .roles-check-ui {
+    opacity: 0.55;
 }
 
 /* DataTables compact */

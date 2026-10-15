@@ -37,7 +37,8 @@ class PlatformSchema extends BaseController
 
     protected function inspect(string $key, bool $repair): ResponseInterface
     {
-        if ((new MasterTenantRepository())->findActiveTenant($key) === null) {
+        $repo = new MasterTenantRepository();
+        if ($repo->findActiveTenant($key) === null || ! $repo->platformAdminOwnsTenant((int) session('platform_admin_id'), $key)) {
             return $this->response->setStatusCode(404)->setJSON(['success' => false, 'message' => 'Client not found or inactive.']);
         }
 

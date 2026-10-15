@@ -48,7 +48,7 @@ class Users extends BaseController
         return $this->render('users/form', [
             'pageTitle' => 'Create User',
             'editUser'  => null,
-            'roles'     => model(RoleModel::class)->orderBy('name', 'ASC')->findAll(),
+            'roles'     => $this->rolesForAssignment(),
         ]);
     }
 
@@ -115,7 +115,7 @@ class Users extends BaseController
         return $this->render('users/form', [
             'pageTitle' => 'Edit User',
             'editUser'  => $user,
-            'roles'     => model(RoleModel::class)->orderBy('name', 'ASC')->findAll(),
+            'roles'     => $this->rolesForAssignment($user),
         ]);
     }
 
@@ -153,7 +153,7 @@ class Users extends BaseController
         }
 
         $roleId = (int) $this->request->getPost('role_id');
-        if ($err = $this->assertAssignableRole($roleId)) {
+        if ($err = $this->assertAssignableRole($roleId, (int) ($user['role_id'] ?? 0))) {
             return redirect()->back()->withInput()->with('error', $err);
         }
 
@@ -228,9 +228,34 @@ class Users extends BaseController
     }
 
     /**
-     * Non–super-admins cannot assign super-admin (or missing) roles.
+     * Roles offered on create/edit. Super Admin is never a choice for a new user.
+     * An existing Super Admin keeps that option so their account can still be saved.
+     *
+     * @param array<string, mixed>|null $currentUser
+     * @return list<array<string, mixed>>
      */
-    protected function assertAssignableRole(int $roleId): ?string
+    protected function rolesForAssignment(?array $currentUser = null): array
+    {
+        $keepId = (int) ($currentUser['role_id'] ?? 0);
+        $roles  = model(RoleModel::class)->orderBy('name', 'ASC')->findAll();
+
+        return array_values(array_filter(
+            $roles,
+            static function (array $role) use ($keepId): bool {
+                $slug = (string) ($role['slug'] ?? '');
+                if (! in_array($slug, ['super-admin', 'super_admin'], true)) {
+                    return true;
+                }
+
+                return $keepId > 0 && (int) ($role['id'] ?? 0) === $keepId;
+            }
+        ));
+    }
+
+    /**
+     * Super Admin cannot be assigned when creating a user or changing someone into that role.
+     */
+    protected function assertAssignableRole(int $roleId, ?int $currentRoleId = null): ?string
     {
         $role = model(RoleModel::class)->find($roleId);
         if ($role === null) {
@@ -239,8 +264,8 @@ class Users extends BaseController
 
         $slug = (string) ($role['slug'] ?? '');
 
-        if (in_array($slug, ['super-admin', 'super_admin'], true) && ! $this->actorIsSuperAdmin()) {
-            return 'Only a super admin can assign the super-admin role.';
+        if (in_array($slug, ['super-admin', 'super_admin'], true) && $currentRoleId !== $roleId) {
+            return 'Super Admin cannot be assigned from this screen.';
         }
 
         return null;

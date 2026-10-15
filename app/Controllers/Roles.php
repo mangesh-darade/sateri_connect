@@ -51,7 +51,7 @@ class Roles extends BaseController
             return $denied;
         }
 
-        $input = $this->request->getJSON(true) ?: $this->request->getPost();
+        $input = $this->requestInput();
         $rolePermissions = $input['role_permissions'] ?? null;
 
         // Also support form: permissions[role_id][] = permission_id
@@ -61,6 +61,20 @@ class Roles extends BaseController
 
         if (! is_array($rolePermissions)) {
             return redirect()->back()->with('error', 'Invalid permissions payload.');
+        }
+
+        $known = [];
+        foreach (array_keys($rolePermissions) as $key) {
+            $known[(int) $key] = true;
+        }
+        $postedRoles = $input['matrix_roles'] ?? [];
+        if (is_array($postedRoles)) {
+            foreach ($postedRoles as $roleId) {
+                $roleId = (int) $roleId;
+                if ($roleId > 0 && ! isset($known[$roleId])) {
+                    $rolePermissions[$roleId] = [];
+                }
+            }
         }
 
         $roleModel = model(RoleModel::class);
@@ -82,7 +96,7 @@ class Roles extends BaseController
                 $permissionIds = [];
             }
 
-            $ids = array_values(array_unique(array_map('intval', $permissionIds)));
+            $ids = array_values(array_unique(array_filter(array_map('intval', $permissionIds))));
             $roleModel->syncPermissions($roleId, $ids);
         }
 
@@ -110,13 +124,18 @@ class Roles extends BaseController
             return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
         }
 
+        $slug = strtolower(trim((string) $this->request->getPost('slug')));
+        if (in_array($slug, ['super-admin', 'super_admin'], true)) {
+            return redirect()->back()->withInput()->with('error', 'That role slug is reserved.');
+        }
+
         if ($block = (new \App\Libraries\TenantPlanLimits())->roleCreateBlock()) {
             return redirect()->back()->withInput()->with('error', $block);
         }
 
         $id = model(RoleModel::class)->insert([
             'name'        => $this->request->getPost('name'),
-            'slug'        => $this->request->getPost('slug'),
+            'slug'        => $slug,
             'description' => $this->request->getPost('description'),
         ]);
 

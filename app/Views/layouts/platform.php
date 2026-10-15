@@ -59,6 +59,12 @@ $brandInitial = mb_strtoupper(mb_substr($platformSiteName !== '' ? $platformSite
                 <i class="fas fa-plug" aria-hidden="true"></i>
                 <span>API Usage</span>
             </a>
+            <?php if ($masterRepo->isPrimaryPlatformAdmin((int) session('platform_admin_id'))): ?>
+            <a href="<?= site_url('platform/admins') ?>" class="platform-side-link<?= $navActive === 'admins' ? ' is-active' : '' ?>">
+                <i class="fas fa-user-shield" aria-hidden="true"></i>
+                <span>Super admins</span>
+            </a>
+            <?php endif; ?>
 
             <div class="platform-side-label">Guides</div>
             <a href="<?= site_url('platform/guide') ?>" class="platform-side-link<?= $navActive === 'guide' ? ' is-active' : '' ?>">

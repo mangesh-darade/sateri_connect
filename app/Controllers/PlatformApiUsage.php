@@ -22,7 +22,7 @@ class PlatformApiUsage extends BaseController
             'pageTitle'    => 'API Usage',
             'navActive'    => 'api-usage',
             'platformName' => (string) session('platform_admin_name'),
-            'clients'      => (new MasterTenantRepository())->listActiveTenants(),
+            'clients'      => (new MasterTenantRepository())->listActiveTenants((int) session('platform_admin_id')),
         ]);
     }
 
@@ -31,7 +31,9 @@ class PlatformApiUsage extends BaseController
      */
     public function client(string $key): ResponseInterface
     {
-        if ((new MasterTenantRepository())->findActiveTenant($key) === null
+        $repo = new MasterTenantRepository();
+        if ($repo->findActiveTenant($key) === null
+            || ! $repo->platformAdminOwnsTenant((int) session('platform_admin_id'), $key)
             || ! (new TenantConnection())->apply($key, 'platform')) {
             return $this->response->setStatusCode(404)->setJSON(['success' => false, 'message' => 'Client not found or inactive.']);
         }
@@ -86,7 +88,9 @@ class PlatformApiUsage extends BaseController
      */
     public function calls(string $key): ResponseInterface
     {
-        if ((new MasterTenantRepository())->findActiveTenant($key) === null
+        $repo = new MasterTenantRepository();
+        if ($repo->findActiveTenant($key) === null
+            || ! $repo->platformAdminOwnsTenant((int) session('platform_admin_id'), $key)
             || ! (new TenantConnection())->apply($key, 'platform')) {
             return $this->response->setStatusCode(404)->setJSON(['success' => false, 'message' => 'Client not found or inactive.']);
         }

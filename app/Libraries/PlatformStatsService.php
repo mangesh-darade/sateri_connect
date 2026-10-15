@@ -24,9 +24,9 @@ class PlatformStatsService
      *   clients: list<array<string, mixed>>
      * }
      */
-    public function dashboard(): array
+    public function dashboard(?int $platformAdminId = null): array
     {
-        $tenants = $this->master->listActiveTenants();
+        $tenants = $this->master->listActiveTenants($platformAdminId);
         $clients = [];
         $totals  = [
             'clients'      => 0,

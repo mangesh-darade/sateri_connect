@@ -96,11 +96,13 @@ class TenantEnsureMaster extends BaseCommand
             'status' => ['type' => 'VARCHAR', 'constraint' => 20, 'default' => 'active'],
             'max_users' => ['type' => 'INT', 'unsigned' => true, 'null' => true],
             'max_roles' => ['type' => 'INT', 'unsigned' => true, 'null' => true],
+            'platform_admin_id' => ['type' => 'INT', 'unsigned' => true, 'null' => true],
             'created_at' => ['type' => 'DATETIME', 'null' => true],
             'updated_at' => ['type' => 'DATETIME', 'null' => true],
         ]);
         $forge->addKey('id', true);
         $forge->addUniqueKey('key');
+        $forge->addKey('platform_admin_id');
         $forge->createTable('tenants', true);
     }
 
@@ -158,6 +160,7 @@ class TenantEnsureMaster extends BaseCommand
             'password' => ['type' => 'VARCHAR', 'constraint' => 255],
             'name' => ['type' => 'VARCHAR', 'constraint' => 150, 'null' => true],
             'status' => ['type' => 'VARCHAR', 'constraint' => 20, 'default' => 'active'],
+            'is_primary' => ['type' => 'TINYINT', 'unsigned' => true, 'default' => 0],
             'created_at' => ['type' => 'DATETIME', 'null' => true],
             'updated_at' => ['type' => 'DATETIME', 'null' => true],
         ]);
