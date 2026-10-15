@@ -16,6 +16,8 @@ class MasterTenantRepository
     protected static bool $tenantOwnerReady = false;
 
     protected static bool $primaryAdminReady = false;
+
+    protected static bool $adminMetaReady = false;
     public function updateTenantName(string $key, string $name): bool
     {
         $key  = strtolower(trim($key));
@@ -208,6 +210,54 @@ class MasterTenantRepository
 
             return [];
         }
+    }
+
+    public function assignTenantOwner(string $key, int $platformAdminId): bool
+    {
+        $key = strtolower(trim($key));
+        $owner = $this->findPlatformAdminById($platformAdminId);
+        if ($key === '' || $owner === null || strtolower((string) ($owner['status'] ?? '')) !== 'active') {
+            return false;
+        }
+
+        $this->ensureTenantOwnerColumn();
+
+        try {
+            return $this->db()->table('tenants')->where('key', $key)->update([
+                'platform_admin_id' => $platformAdminId,
+                'updated_at'        => date('Y-m-d H:i:s'),
+            ]) !== false;
+        } catch (Throwable $e) {
+            log_message('error', 'MasterTenantRepository::assignTenantOwner failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return false;
+        }
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function findPlatformAdminById(int $id): ?array
+    {
+        if ($id < 1) {
+            return null;
+        }
+
+        $this->ensurePrimaryAdminColumn();
+
+        try {
+            $row = $this->db()->table('platform_admins')
+                ->select('id, email, name, status, is_primary')
+                ->where('id', $id)
+                ->get()
+                ->getRowArray();
+        } catch (Throwable $e) {
+            log_message('error', 'MasterTenantRepository::findPlatformAdminById failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return null;
+        }
+
+        return is_array($row) ? $row : null;
     }
 
     public function platformAdminOwnsTenant(int $platformAdminId, string $key): bool
@@ -420,6 +470,19 @@ class MasterTenantRepository
                 }
             }
 
+            if ($this->db()->tableExists('platform_admin_meta')) {
+                $adminTokens = $this->db()->table('platform_admin_meta')
+                    ->select('webhook_verify_token')
+                    ->get()
+                    ->getResultArray();
+                foreach ($adminTokens as $adminToken) {
+                    $t = trim((string) ($adminToken['webhook_verify_token'] ?? ''));
+                    if ($t !== '') {
+                        $tokens[] = $t;
+                    }
+                }
+            }
+
             $platform = $this->db()->table('platform_settings')
                 ->where('key', 'webhook_verify_token')
                 ->get()
@@ -462,6 +525,19 @@ class MasterTenantRepository
                 $s = $this->decryptSecret((string) ($row['app_secret'] ?? ''));
                 if ($s !== '') {
                     $secrets[] = $s;
+                }
+            }
+
+            if ($this->db()->tableExists('platform_admin_meta')) {
+                $adminSecrets = $this->db()->table('platform_admin_meta')
+                    ->select('app_secret')
+                    ->get()
+                    ->getResultArray();
+                foreach ($adminSecrets as $adminSecret) {
+                    $s = $this->decryptSecret((string) ($adminSecret['app_secret'] ?? ''));
+                    if ($s !== '') {
+                        $secrets[] = $s;
+                    }
                 }
             }
 
@@ -828,51 +904,71 @@ class MasterTenantRepository
     }
 
     /**
-     * Shared Meta Tech Provider app used for Embedded Signup across all tenants.
+     * Meta Tech Provider app for one platform super admin.
+     * Each admin has their own App ID, Config ID, and secret.
      *
-     * @return array{app_id: string, config_id: string, app_secret: string, api_version: string, ready: bool, source: string}
+     * @return array{app_id: string, config_id: string, app_secret: string, api_version: string, webhook_verify_token: string, ready: bool, source: string}
      */
-    public function getPlatformMetaTechProvider(): array
+    public function getPlatformMetaTechProvider(?int $platformAdminId = null): array
     {
         $appId      = '';
         $configId   = '';
         $appSecret  = '';
         $apiVersion = 'v25.0';
         $source     = 'none';
-
         $webhookVerifyToken = '';
+
         if (self::masterConfigured()) {
-            $appId              = trim($this->getPlatformSetting('meta_tech_app_id'));
-            $configId           = trim($this->getPlatformSetting('meta_tech_config_id'));
-            $appSecret          = trim($this->decryptSecret($this->getPlatformSetting('meta_tech_app_secret')));
-            $apiVersion         = trim($this->getPlatformSetting('meta_tech_api_version', 'v25.0')) ?: 'v25.0';
-            $webhookVerifyToken = trim($this->getPlatformSetting('webhook_verify_token'));
-            if ($appId !== '' || $configId !== '') {
-                $source = 'platform';
+            $this->ensureAdminMetaTable();
+            $adminId = $platformAdminId ?? $this->resolveMetaAdminId();
+            if ($adminId > 0) {
+                $own = $this->adminMetaRow($adminId);
+                if ($own !== null) {
+                    $appId              = trim((string) ($own['app_id'] ?? ''));
+                    $configId           = trim((string) ($own['config_id'] ?? ''));
+                    $appSecret          = trim($this->decryptSecret((string) ($own['app_secret'] ?? '')));
+                    $apiVersion         = trim((string) ($own['api_version'] ?? '')) ?: 'v25.0';
+                    $webhookVerifyToken = trim((string) ($own['webhook_verify_token'] ?? ''));
+                    if ($appId !== '' || $configId !== '') {
+                        $source = 'platform-admin';
+                    }
+                }
+            } else {
+                $appId              = trim($this->getPlatformSetting('meta_tech_app_id'));
+                $configId           = trim($this->getPlatformSetting('meta_tech_config_id'));
+                $appSecret          = trim($this->decryptSecret($this->getPlatformSetting('meta_tech_app_secret')));
+                $apiVersion         = trim($this->getPlatformSetting('meta_tech_api_version', 'v25.0')) ?: 'v25.0';
+                $webhookVerifyToken = trim($this->getPlatformSetting('webhook_verify_token'));
+                if ($appId !== '' || $configId !== '') {
+                    $source = 'platform';
+                }
             }
         }
 
-        if ($appId === '') {
-            $appId = trim((string) env('meta.techAppId', env('META_TECH_APP_ID', '')));
-            if ($appId !== '') {
-                $source = 'env';
+        $adminId = $platformAdminId ?? $this->resolveMetaAdminId();
+        if ($adminId < 1) {
+            if ($appId === '') {
+                $appId = trim((string) env('meta.techAppId', env('META_TECH_APP_ID', '')));
+                if ($appId !== '') {
+                    $source = 'env';
+                }
             }
-        }
-        if ($configId === '') {
-            $configId = trim((string) env('meta.techConfigId', env('META_TECH_CONFIG_ID', '')));
-            if ($configId !== '') {
-                $source = $source === 'none' ? 'env' : $source;
+            if ($configId === '') {
+                $configId = trim((string) env('meta.techConfigId', env('META_TECH_CONFIG_ID', '')));
+                if ($configId !== '') {
+                    $source = $source === 'none' ? 'env' : $source;
+                }
             }
-        }
-        if ($appSecret === '') {
-            $appSecret = trim((string) env('meta.techAppSecret', env('META_TECH_APP_SECRET', '')));
-        }
-        $envVer = trim((string) env('meta.techApiVersion', env('META_TECH_API_VERSION', '')));
-        if ($envVer !== '') {
-            $apiVersion = $envVer;
-        }
-        if ($webhookVerifyToken === '') {
-            $webhookVerifyToken = trim((string) env('meta.webhookVerifyToken', env('META_WEBHOOK_VERIFY_TOKEN', '')));
+            if ($appSecret === '') {
+                $appSecret = trim((string) env('meta.techAppSecret', env('META_TECH_APP_SECRET', '')));
+            }
+            $envVer = trim((string) env('meta.techApiVersion', env('META_TECH_API_VERSION', '')));
+            if ($envVer !== '') {
+                $apiVersion = $envVer;
+            }
+            if ($webhookVerifyToken === '') {
+                $webhookVerifyToken = trim((string) env('meta.webhookVerifyToken', env('META_WEBHOOK_VERIFY_TOKEN', '')));
+            }
         }
 
         return [
@@ -889,31 +985,164 @@ class MasterTenantRepository
     /**
      * @param array{app_id?: string, config_id?: string, app_secret?: string, api_version?: string, webhook_verify_token?: string} $data
      */
-    public function setPlatformMetaTechProvider(array $data): void
+    public function setPlatformMetaTechProvider(array $data, ?int $platformAdminId = null): void
     {
         if (! self::masterConfigured()) {
             throw new \RuntimeException('Master database is not configured.');
         }
 
-        if (array_key_exists('app_id', $data)) {
-            $this->setPlatformSetting('meta_tech_app_id', trim((string) $data['app_id']));
+        $this->ensureAdminMetaTable();
+        $adminId = $platformAdminId ?? $this->resolveMetaAdminId();
+        if ($adminId < 1) {
+            throw new \RuntimeException('Sign in as a platform super admin before saving Meta credentials.');
         }
-        if (array_key_exists('config_id', $data)) {
-            $this->setPlatformSetting('meta_tech_config_id', trim((string) $data['config_id']));
+
+        $current = $this->adminMetaRow($adminId) ?? [];
+        $secret = array_key_exists('app_secret', $data) ? trim((string) $data['app_secret']) : '';
+        if ($secret === '' || str_contains($secret, '•')) {
+            $secret = (string) ($current['app_secret'] ?? '');
+        } else {
+            $secret = $this->encryptSecret($secret);
         }
-        if (array_key_exists('api_version', $data)) {
-            $ver = trim((string) $data['api_version']);
-            $this->setPlatformSetting('meta_tech_api_version', $ver !== '' ? $ver : 'v25.0');
+
+        $now = date('Y-m-d H:i:s');
+        $row = [
+            'platform_admin_id'    => $adminId,
+            'app_id'               => array_key_exists('app_id', $data) ? trim((string) $data['app_id']) : (string) ($current['app_id'] ?? ''),
+            'config_id'            => array_key_exists('config_id', $data) ? trim((string) $data['config_id']) : (string) ($current['config_id'] ?? ''),
+            'app_secret'           => $secret,
+            'api_version'          => array_key_exists('api_version', $data) ? (trim((string) $data['api_version']) ?: 'v25.0') : ((string) ($current['api_version'] ?? '') ?: 'v25.0'),
+            'webhook_verify_token' => array_key_exists('webhook_verify_token', $data) ? trim((string) $data['webhook_verify_token']) : (string) ($current['webhook_verify_token'] ?? ''),
+            'updated_at'           => $now,
+        ];
+
+        $db = $this->db();
+        if ($current === []) {
+            $row['created_at'] = $now;
+            $db->table('platform_admin_meta')->insert($row);
+        } else {
+            $db->table('platform_admin_meta')->where('platform_admin_id', $adminId)->update($row);
         }
-        if (array_key_exists('webhook_verify_token', $data)) {
-            $this->setPlatformSetting('webhook_verify_token', trim((string) $data['webhook_verify_token']));
-        }
-        if (array_key_exists('app_secret', $data)) {
-            $secret = trim((string) $data['app_secret']);
-            if ($secret !== '' && ! str_contains($secret, '•')) {
-                $this->setPlatformSetting('meta_tech_app_secret', $secret, true);
+
+        if ($this->isPrimaryPlatformAdmin($adminId)) {
+            $this->setPlatformSetting('meta_tech_app_id', $row['app_id']);
+            $this->setPlatformSetting('meta_tech_config_id', $row['config_id']);
+            $this->setPlatformSetting('meta_tech_api_version', $row['api_version']);
+            $this->setPlatformSetting('webhook_verify_token', $row['webhook_verify_token']);
+            if ($row['app_secret'] !== '') {
+                $this->setPlatformSetting('meta_tech_app_secret', $this->decryptSecret($row['app_secret']), true);
             }
         }
+    }
+
+    public function ensureAdminMetaTable(): void
+    {
+        if (self::$adminMetaReady || ! self::masterConfigured()) {
+            return;
+        }
+
+        try {
+            $db = $this->db();
+            if (! $db->tableExists('platform_admin_meta')) {
+                $db->query(
+                    'CREATE TABLE `platform_admin_meta` (
+                        `platform_admin_id` INT UNSIGNED NOT NULL,
+                        `app_id` VARCHAR(64) NOT NULL DEFAULT \'\',
+                        `config_id` VARCHAR(64) NOT NULL DEFAULT \'\',
+                        `app_secret` TEXT NULL,
+                        `api_version` VARCHAR(20) NOT NULL DEFAULT \'v25.0\',
+                        `webhook_verify_token` VARCHAR(191) NOT NULL DEFAULT \'\',
+                        `created_at` DATETIME NULL,
+                        `updated_at` DATETIME NULL,
+                        PRIMARY KEY (`platform_admin_id`)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
+                );
+            }
+            $this->seedPrimaryAdminMeta();
+            self::$adminMetaReady = true;
+        } catch (Throwable $e) {
+            log_message('error', 'MasterTenantRepository::ensureAdminMetaTable failed: {msg}', ['msg' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    protected function adminMetaRow(int $platformAdminId): ?array
+    {
+        if ($platformAdminId < 1) {
+            return null;
+        }
+
+        try {
+            $row = $this->db()->table('platform_admin_meta')
+                ->where('platform_admin_id', $platformAdminId)
+                ->get()
+                ->getRowArray();
+        } catch (Throwable $e) {
+            log_message('error', 'MasterTenantRepository::adminMetaRow failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return null;
+        }
+
+        return is_array($row) ? $row : null;
+    }
+
+    protected function seedPrimaryAdminMeta(): void
+    {
+        $primaryId = 0;
+        try {
+            $primary = $this->db()->table('platform_admins')
+                ->select('id')
+                ->where('is_primary', 1)
+                ->orderBy('id', 'ASC')
+                ->get(1)
+                ->getRowArray();
+            $primaryId = (int) ($primary['id'] ?? 0);
+        } catch (Throwable) {
+            $primaryId = 0;
+        }
+        if ($primaryId < 1 || $this->adminMetaRow($primaryId) !== null) {
+            return;
+        }
+
+        $appId = trim($this->getPlatformSetting('meta_tech_app_id'));
+        $configId = trim($this->getPlatformSetting('meta_tech_config_id'));
+        $secret = trim($this->getPlatformSetting('meta_tech_app_secret'));
+        if ($appId === '' && $configId === '' && $secret === '') {
+            return;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $this->db()->table('platform_admin_meta')->insert([
+            'platform_admin_id'    => $primaryId,
+            'app_id'               => $appId,
+            'config_id'            => $configId,
+            'app_secret'           => $secret,
+            'api_version'          => trim($this->getPlatformSetting('meta_tech_api_version', 'v25.0')) ?: 'v25.0',
+            'webhook_verify_token' => trim($this->getPlatformSetting('webhook_verify_token')),
+            'created_at'           => $now,
+            'updated_at'           => $now,
+        ]);
+    }
+
+    protected function resolveMetaAdminId(): int
+    {
+        $sessionId = (int) (session('platform_admin_id') ?: 0);
+        if ($sessionId > 0) {
+            return $sessionId;
+        }
+
+        $key = (string) (TenantContext::get() ?: '');
+        if ($key !== '') {
+            $tenant = $this->findTenant($key);
+            $ownerId = (int) ($tenant['platform_admin_id'] ?? 0);
+            if ($ownerId > 0) {
+                return $ownerId;
+            }
+        }
+
+        return 0;
     }
 
     /**

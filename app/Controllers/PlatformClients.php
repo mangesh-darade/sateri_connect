@@ -58,7 +58,8 @@ class PlatformClients extends BaseController
     public function metaTech(): string|ResponseInterface
     {
         $repo = new MasterTenantRepository();
-        $tech = $repo->getPlatformMetaTechProvider();
+        $tech = $repo->getPlatformMetaTechProvider($this->platformAdminId());
+        $webhookTokenSet = trim((string) ($tech['webhook_verify_token'] ?? '')) !== '';
         $tech['app_secret'] = $this->maskSecret((string) ($tech['app_secret'] ?? ''));
 
         $baseUrl = rtrim(site_url(), '/');
@@ -73,12 +74,15 @@ class PlatformClients extends BaseController
         return view('platform/meta_tech', [
             'pageTitle'          => 'Embedded Signup (Tech Provider)',
             'navActive'          => 'meta-tech',
+            'canEditTech'        => true,
+            'ownsAllClients'     => $repo->isPrimaryPlatformAdmin($this->platformAdminId()),
             'tech'               => $tech,
             'clients'            => $clients,
             'platformName'       => (string) session('platform_admin_name'),
             'sdkOrigin'          => $baseUrl,
             'webhookUrl'         => site_url('webhooks'),
             'webhookVerifyToken' => (string) ($tech['webhook_verify_token'] ?? ''),
+            'webhookTokenSet'    => $webhookTokenSet,
             'privacyUrl'         => site_url('privacy-policy'),
             'termsUrl'           => site_url('terms'),
             'dataDeletionUrl'    => site_url('data-deletion'),
@@ -186,6 +190,7 @@ class PlatformClients extends BaseController
     public function saveMetaTech(): ResponseInterface
     {
         $repo = new MasterTenantRepository();
+        $adminId = $this->platformAdminId();
         try {
             $repo->setPlatformMetaTechProvider([
                 'app_id'               => (string) $this->request->getPost('app_id'),
@@ -193,12 +198,16 @@ class PlatformClients extends BaseController
                 'app_secret'           => (string) $this->request->getPost('app_secret'),
                 'api_version'          => (string) ($this->request->getPost('api_version') ?: 'v25.0'),
                 'webhook_verify_token' => (string) $this->request->getPost('webhook_verify_token'),
-            ]);
+            ], $adminId);
         } catch (\Throwable $e) {
             return redirect()->back()->withInput()->with('error', $e->getMessage());
         }
 
-        return redirect()->to('/platform/meta-tech')->with('success', 'Tech Provider credentials saved. Connect each client from the list on this page.');
+        log_activity('update', 'platform', 'Saved this super admin Meta App ID and Embedded Signup Config ID', [
+            'platform_admin_id' => $adminId,
+        ]);
+
+        return redirect()->to('/platform/meta-tech')->with('success', 'Your Meta App ID and Embedded Signup Config ID are saved. Connect your clients from the list below.');
     }
 
     /**
@@ -207,7 +216,7 @@ class PlatformClients extends BaseController
     public function testMetaTech(): ResponseInterface
     {
         $repo = new MasterTenantRepository();
-        $tech = $repo->getPlatformMetaTechProvider();
+        $tech = $repo->getPlatformMetaTechProvider($this->platformAdminId());
 
         $appId      = trim((string) ($this->request->getPost('app_id') ?: ($tech['app_id'] ?? '')));
         $appSecret  = trim((string) ($this->request->getPost('app_secret') ?: ''));
@@ -348,6 +357,8 @@ class PlatformClients extends BaseController
 
         return view('platform/clients/show', [
             'pageTitle'    => (string) ($tenant['name'] ?? $key),
+            'canAssignOwner' => $repo->isPrimaryPlatformAdmin($this->platformAdminId()),
+            'platformAdmins' => $repo->listPlatformAdmins(),
             'navActive'    => 'clients',
             'tenant'       => $tenant,
             'stats'        => $stats,
@@ -419,6 +430,31 @@ class PlatformClients extends BaseController
         ]);
 
         return redirect()->to('/platform/clients/' . rawurlencode($key))->with('success', (string) $result['message']);
+    }
+
+    public function saveOwner(string $key): ResponseInterface
+    {
+        $key = strtolower(trim($key));
+        $repo = new MasterTenantRepository();
+        if (! $repo->isPrimaryPlatformAdmin($this->platformAdminId())) {
+            return redirect()->to('/platform/clients')->with('error', 'Only the main platform super admin can move a client.');
+        }
+        if ($repo->findActiveTenant($key) === null) {
+            return redirect()->to('/platform/clients')->with('error', 'Client not found.');
+        }
+
+        $ownerId = (int) $this->request->getPost('platform_admin_id');
+        if (! $repo->assignTenantOwner($key, $ownerId)) {
+            return redirect()->back()->with('error', 'Could not assign this client.');
+        }
+
+        log_activity('update', 'platform', 'Platform admin assigned client owner: ' . $key, [
+            'tenant_key'        => $key,
+            'platform_admin_id' => $ownerId,
+        ]);
+
+        return redirect()->to('/platform/clients/' . rawurlencode($key))
+            ->with('success', 'Client owner updated. That super admin can now see and connect this client.');
     }
 
     public function saveLimits(string $key): ResponseInterface
@@ -532,7 +568,10 @@ class PlatformClients extends BaseController
 
     public function settings(): string|ResponseInterface
     {
-        $repo         = new MasterTenantRepository();
+        $repo = new MasterTenantRepository();
+        if ($denied = $this->denyUnlessPrimary($repo)) {
+            return $denied;
+        }
         $branding     = $repo->getPlatformBranding();
         $snapshotFile = SchemaRepairService::SNAPSHOT_FILE;
 
@@ -550,6 +589,9 @@ class PlatformClients extends BaseController
     public function saveSettings(): ResponseInterface
     {
         $repo = new MasterTenantRepository();
+        if ($denied = $this->denyUnlessPrimary($repo)) {
+            return $denied;
+        }
         $ajax = $this->request->isAJAX();
 
         $name    = trim((string) $this->request->getPost('site_name'));
@@ -778,6 +820,15 @@ class PlatformClients extends BaseController
     protected function platformAdminId(): int
     {
         return (int) session('platform_admin_id');
+    }
+
+    protected function denyUnlessPrimary(MasterTenantRepository $repo): ?ResponseInterface
+    {
+        if ($repo->isPrimaryPlatformAdmin($this->platformAdminId())) {
+            return null;
+        }
+
+        return redirect()->to('/platform/clients')->with('error', 'Only the main platform super admin can change platform settings.');
     }
 
     protected function maskSecret(string $value): string

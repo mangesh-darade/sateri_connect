@@ -5,6 +5,8 @@
 $tech = $tech ?? [];
 $clients = $clients ?? [];
 $ready = ! empty($tech['app_id']) && ! empty($tech['config_id']) && ! empty($tech['app_secret']);
+$canEditTech = ! empty($canEditTech);
+$ownsAllClients = ! empty($ownsAllClients);
 ?>
 
 <div style="display:flex;flex-direction:column;gap:1.5rem">
@@ -13,14 +15,14 @@ $ready = ! empty($tech['app_id']) && ! empty($tech['config_id']) && ! empty($tec
         <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:0.75rem;background:var(--pf-paper-2,#fafbf8);border:1px solid var(--pf-line);border-radius:10px;padding:1rem">
             <div>
                 <div style="font-size:0.75rem;text-transform:uppercase;color:var(--pf-muted);font-weight:600">App ID</div>
-                <div style="font-weight:700;font-size:0.95rem;color:<?= !empty($tech['app_id']) ? 'var(--pf-ok)' : 'var(--pf-down)' ?>">
-                    <?= !empty($tech['app_id']) ? '<i class="fas fa-check"></i> Configured' : '<i class="fas fa-times"></i> Missing' ?>
+                <div style="font-weight:700;font-size:0.95rem;color:<?= !empty($tech['app_id']) ? 'var(--pf-ok)' : 'var(--pf-down)' ?>;word-break:break-all">
+                    <?= !empty($tech['app_id']) ? esc((string) $tech['app_id']) : '<i class="fas fa-times"></i> Missing' ?>
                 </div>
             </div>
             <div>
                 <div style="font-size:0.75rem;text-transform:uppercase;color:var(--pf-muted);font-weight:600">Config ID</div>
-                <div style="font-weight:700;font-size:0.95rem;color:<?= !empty($tech['config_id']) ? 'var(--pf-ok)' : 'var(--pf-down)' ?>">
-                    <?= !empty($tech['config_id']) ? '<i class="fas fa-check"></i> Configured' : '<i class="fas fa-times"></i> Missing' ?>
+                <div style="font-weight:700;font-size:0.95rem;color:<?= !empty($tech['config_id']) ? 'var(--pf-ok)' : 'var(--pf-down)' ?>;word-break:break-all">
+                    <?= !empty($tech['config_id']) ? esc((string) $tech['config_id']) : '<i class="fas fa-times"></i> Missing' ?>
                 </div>
             </div>
             <div>
@@ -37,8 +39,8 @@ $ready = ! empty($tech['app_id']) && ! empty($tech['config_id']) && ! empty($tec
             </div>
             <div>
                 <div style="font-size:0.75rem;text-transform:uppercase;color:var(--pf-muted);font-weight:600">Webhook Token</div>
-                <div style="font-weight:700;font-size:0.95rem;color:<?= !empty($webhookVerifyToken) ? 'var(--pf-ok)' : 'var(--pf-warn)' ?>">
-                    <?= !empty($webhookVerifyToken) ? '<i class="fas fa-check"></i> Set' : '<i class="fas fa-info-circle"></i> Default' ?>
+                <div style="font-weight:700;font-size:0.95rem;color:<?= !empty($webhookTokenSet) || !empty($webhookVerifyToken) ? 'var(--pf-ok)' : 'var(--pf-warn)' ?>">
+                    <?= !empty($webhookTokenSet) || !empty($webhookVerifyToken) ? '<i class="fas fa-check"></i> Set' : '<i class="fas fa-info-circle"></i> Default' ?>
                 </div>
             </div>
         </div>
@@ -49,8 +51,12 @@ $ready = ! empty($tech['app_id']) && ! empty($tech['config_id']) && ! empty($tec
 
         <!-- Column 1: Configuration Form -->
         <section class="platform-card" style="padding:1.5rem">
-            <h3 style="font-size:1.1rem;font-weight:700;margin:0 0 0.35rem"><i class="fas fa-sliders-h me-1"></i> Tech Provider Credentials</h3>
-            <p style="margin:0 0 1rem;color:var(--pf-muted);font-size:0.88rem">One Meta app for the whole platform. Clients never see Connect WhatsApp. You connect each number from the list below.</p>
+            <?php if (! $canEditTech): ?>
+            <h3 style="font-size:1.1rem;font-weight:700;margin:0 0 0.35rem"><i class="fab fa-whatsapp me-1"></i> Your clients</h3>
+            <p style="margin:0;color:var(--pf-muted);font-size:0.88rem">Connect WhatsApp for the clients you created. The shared Meta app stays with the main platform super admin.</p>
+            <?php else: ?>
+            <h3 style="font-size:1.1rem;font-weight:700;margin:0 0 0.35rem"><i class="fas fa-sliders-h me-1"></i> Your Meta app</h3>
+            <p style="margin:0 0 1rem;color:var(--pf-muted);font-size:0.88rem">This App ID and Embedded Signup Config ID belong to your super admin login. Other super admins use their own. Connect WhatsApp below only for your clients.</p>
 
             <form method="post" action="<?= site_url('platform/meta-tech') ?>" style="display:flex;flex-direction:column;gap:1rem">
                 <?= csrf_field() ?>
@@ -103,8 +109,10 @@ $ready = ! empty($tech['app_id']) && ! empty($tech['config_id']) && ! empty($tec
                 </div>
                 <div id="metaTestResult" style="display:none;margin-top:1rem;padding:0.75rem 1rem;border-radius:8px;font-size:0.85rem"></div>
             </form>
+            <?php endif; ?>
         </section>
 
+        <?php if ($canEditTech): ?>
         <!-- Column 2: Meta Developer Copyable URLs (Mandatory for Meta Review) -->
         <section class="platform-card" style="padding:1.5rem">
             <h3 style="font-size:1.1rem;font-weight:700;margin:0 0 0.5rem"><i class="fas fa-copy me-1"></i> Meta Console Configuration</h3>
@@ -183,6 +191,7 @@ $ready = ! empty($tech['app_id']) && ! empty($tech['config_id']) && ! empty($tec
                 </div>
             </div>
         </section>
+        <?php endif; ?>
     </div>
 
     <section class="platform-card" style="padding:1.5rem" id="platformEmbeddedSignup"
@@ -195,10 +204,10 @@ $ready = ! empty($tech['app_id']) && ! empty($tech['config_id']) && ! empty($tec
              data-connect-url="<?= esc(site_url('platform/meta-tech/connect')) ?>"
              data-status-url="<?= esc(site_url('platform/meta-tech/client')) ?>">
         <h3 style="font-size:1.1rem;font-weight:700;margin:0 0 0.35rem"><i class="fab fa-whatsapp me-1"></i> Connect a client</h3>
-        <p style="margin:0 0 1rem;color:var(--pf-muted);font-size:0.88rem">Platform only. The Meta popup opens here, and the number is saved on that client. The client does not see this button.</p>
+        <p style="margin:0 0 1rem;color:var(--pf-muted);font-size:0.88rem"><?= $ownsAllClients ? 'Every client is listed. Connect opens the Meta popup with your App ID and Config ID.' : 'Only your clients are listed. Connect opens the Meta popup with your App ID and Config ID, then saves the number on that client.' ?></p>
         <?php if (! $ready): ?>
             <div style="background:#fff7e8;color:#7a4b00;border:1px solid #f0d7a2;border-radius:8px;padding:0.65rem 0.85rem;font-size:0.85rem;margin-bottom:0.85rem">
-                Save App ID, Config ID, and App Secret above before connecting a client.
+                Save your App ID, Config ID, and App Secret above before connecting a client.
             </div>
         <?php endif; ?>
         <?php if ($clients === []): ?>
@@ -231,6 +240,7 @@ $ready = ! empty($tech['app_id']) && ! empty($tech['config_id']) && ! empty($tec
         <div id="metaEmbedResult" style="display:none;margin-top:0.85rem;padding:0.65rem 0.85rem;border-radius:8px;font-size:0.85rem"></div>
     </section>
 
+    <?php if ($canEditTech): ?>
     <!-- Meta Tech Provider Policy & Go-Live Checklist -->
     <section class="platform-card" style="padding:1.5rem">
         <h3 style="font-size:1.15rem;font-weight:700;margin:0 0 0.5rem"><i class="fas fa-clipboard-check me-1"></i> Meta Policy &amp; Go-Live Checklist</h3>
@@ -309,6 +319,7 @@ $ready = ! empty($tech['app_id']) && ! empty($tech['config_id']) && ! empty($tec
 
         </div>
     </section>
+    <?php endif; ?>
 
 </div>
 <?= $this->endSection() ?>
@@ -332,7 +343,8 @@ function copyValue(elementId, btn) {
     });
 }
 
-document.getElementById('btnTestMetaTech').addEventListener('click', function() {
+var metaTestBtn = document.getElementById('btnTestMetaTech');
+if (metaTestBtn) metaTestBtn.addEventListener('click', function() {
     var btn = this;
     var originalHtml = btn.innerHTML;
     var resultBox = document.getElementById('metaTestResult');

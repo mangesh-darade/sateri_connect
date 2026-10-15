@@ -7,7 +7,7 @@ Sateri Connect can host many clients on **one hostname** without per-client DNS 
 | Layer | Role |
 |-------|------|
 | Portal host | e.g. `connect.example.com` or `localhost` (see `tenancy.portalHosts`) |
-| `sateri_master` | `tenants`, `tenant_login_index`, `tenant_phone_routes` |
+| `sateri_master` | `tenants`, `tenant_login_index`, `tenant_phone_routes`, `platform_admins`, `platform_settings`, `platform_admin_meta` |
 | `sateri_{client}` | Full app schema (users, contacts, chat, settings, …) |
 
 **Legacy subdomain tenants** (e.g. `demoelintommetaapi.elintpos.in`) still work via [`app/Config/Database.php`](../app/Config/Database.php) `applyBySubdomain()`.

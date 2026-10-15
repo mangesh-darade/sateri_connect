@@ -50,6 +50,7 @@ $brandInitial = mb_strtoupper(mb_substr($platformSiteName !== '' ? $platformSite
                 <span>All clients</span>
             </a>
 
+            <?php $isMainPlatformAdmin = $masterRepo->isPrimaryPlatformAdmin((int) session('platform_admin_id')); ?>
             <div class="platform-side-label">Manage</div>
             <a href="<?= site_url('platform/meta-tech') ?>" class="platform-side-link<?= $navActive === 'meta-tech' ? ' is-active' : '' ?>">
                 <i class="fab fa-meta" aria-hidden="true"></i>
@@ -59,7 +60,7 @@ $brandInitial = mb_strtoupper(mb_substr($platformSiteName !== '' ? $platformSite
                 <i class="fas fa-plug" aria-hidden="true"></i>
                 <span>API Usage</span>
             </a>
-            <?php if ($masterRepo->isPrimaryPlatformAdmin((int) session('platform_admin_id'))): ?>
+            <?php if ($isMainPlatformAdmin): ?>
             <a href="<?= site_url('platform/admins') ?>" class="platform-side-link<?= $navActive === 'admins' ? ' is-active' : '' ?>">
                 <i class="fas fa-user-shield" aria-hidden="true"></i>
                 <span>Super admins</span>
@@ -73,10 +74,12 @@ $brandInitial = mb_strtoupper(mb_substr($platformSiteName !== '' ? $platformSite
             </a>
 
             <div class="platform-side-footer">
+                <?php if ($isMainPlatformAdmin): ?>
                 <a href="<?= site_url('platform/settings') ?>" class="platform-side-link<?= $navActive === 'settings' ? ' is-active' : '' ?>">
                     <i class="fas fa-sliders-h" aria-hidden="true"></i>
                     <span>Settings &amp; Branding</span>
                 </a>
+                <?php endif; ?>
                 <form action="<?= site_url('logout') ?>" method="post" style="margin:0">
                     <?= csrf_field() ?>
                     <button type="submit" class="platform-side-link is-danger">

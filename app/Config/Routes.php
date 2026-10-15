@@ -99,6 +99,7 @@ $routes->group('platform', ['filter' => 'platformAuth'], static function ($route
     $routes->post('clients/(:segment)/meta', 'PlatformClients::saveMeta/$1', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/login', 'PlatformClients::saveLogin/$1', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/limits', 'PlatformClients::saveLimits/$1', ['filter' => 'csrf']);
+    $routes->post('clients/(:segment)/owner', 'PlatformClients::saveOwner/$1', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/enter', 'PlatformClients::enter/$1', ['filter' => 'csrf']);
 });
 

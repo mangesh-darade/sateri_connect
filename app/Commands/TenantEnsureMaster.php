@@ -62,6 +62,7 @@ class TenantEnsureMaster extends BaseCommand
                 $this->createPhoneRoutes($forge);
                 $this->createPlatformSettings($forge);
                 $this->createPlatformAdmins($forge);
+                $this->createPlatformAdminMeta($forge);
                 CLI::write('Master tenancy tables created.', 'green');
             } else {
                 CLI::write('Master tenancy tables already present.', 'green');
@@ -70,6 +71,10 @@ class TenantEnsureMaster extends BaseCommand
             (new \App\Libraries\MetaDataDeletionService())->ensureTable();
 
             $repo = new \App\Libraries\MasterTenantRepository();
+            $repo->ensureTenantOwnerColumn();
+            $repo->ensurePrimaryAdminColumn();
+            $repo->ensureAdminMetaTable();
+            CLI::write('Master columns synced: tenants.platform_admin_id, platform_admins.is_primary, platform_admin_meta.', 'green');
             if ($repo->findPlatformAdminByEmail('platform@sateri.local') === null) {
                 $repo->ensurePlatformAdmin('platform@sateri.local', 'Platform@123', 'Platform Super Admin');
                 CLI::write('Platform admin: platform@sateri.local / Platform@123', 'yellow');
@@ -167,5 +172,21 @@ class TenantEnsureMaster extends BaseCommand
         $forge->addKey('id', true);
         $forge->addUniqueKey('email');
         $forge->createTable('platform_admins', true);
+    }
+
+    protected function createPlatformAdminMeta($forge): void
+    {
+        $forge->addField([
+            'platform_admin_id' => ['type' => 'INT', 'unsigned' => true],
+            'app_id' => ['type' => 'VARCHAR', 'constraint' => 64, 'default' => ''],
+            'config_id' => ['type' => 'VARCHAR', 'constraint' => 64, 'default' => ''],
+            'app_secret' => ['type' => 'TEXT', 'null' => true],
+            'api_version' => ['type' => 'VARCHAR', 'constraint' => 20, 'default' => 'v25.0'],
+            'webhook_verify_token' => ['type' => 'VARCHAR', 'constraint' => 191, 'default' => ''],
+            'created_at' => ['type' => 'DATETIME', 'null' => true],
+            'updated_at' => ['type' => 'DATETIME', 'null' => true],
+        ]);
+        $forge->addKey('platform_admin_id', true);
+        $forge->createTable('platform_admin_meta', true);
     }
 }

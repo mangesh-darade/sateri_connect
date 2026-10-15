@@ -63,6 +63,34 @@ $waTip    = static fn (array $d): string => ($d['date'] ?? '') . ': ' . (int) ($
 $emailTip = static fn (array $d): string => ($d['date'] ?? '') . ': ' . (int) ($d['sent'] ?? 0) . ' sent · ' . (int) ($d['opened'] ?? 0) . ' opened';
 ?>
 
+<?php if (! empty($canAssignOwner)): ?>
+<section class="platform-card" style="margin-bottom:1rem">
+    <div class="platform-card-head">
+        <div>
+            <h2>Super admin</h2>
+            <p>This client shows on that super admin’s dashboard and Embedded Signup.</p>
+        </div>
+    </div>
+    <form method="post" action="<?= site_url($clientUrl . '/owner') ?>" class="platform-form-grid">
+        <?= csrf_field() ?>
+        <div>
+            <label class="platform-label" for="clientOwner">Owner</label>
+            <select class="platform-input" id="clientOwner" name="platform_admin_id" required>
+                <?php foreach (($platformAdmins ?? []) as $admin): ?>
+                    <?php if (strtolower((string) ($admin['status'] ?? '')) !== 'active') { continue; } ?>
+                    <option value="<?= (int) $admin['id'] ?>" <?= (int) ($tenant['platform_admin_id'] ?? 0) === (int) $admin['id'] ? 'selected' : '' ?>>
+                        <?= esc((string) ($admin['name'] ?? $admin['email'] ?? '')) ?><?= (int) ($admin['is_primary'] ?? 0) === 1 ? ' (Main)' : '' ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="full platform-actions">
+            <button type="submit" class="btn-pf btn-pf-accent">Save owner</button>
+        </div>
+    </form>
+</section>
+<?php endif; ?>
+
 <nav class="platform-tabs" role="tablist">
     <button type="button" class="platform-tab is-active" role="tab" data-tab="all" aria-selected="true">
         <i class="fas fa-border-all" aria-hidden="true"></i>
