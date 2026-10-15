@@ -1,10 +1,10 @@
 # Production Guide — Live server setup
 
 **Who this is for:** Putting the app online for real customers  
-**What you will do:** Deploy on a real server with HTTPS, Cheerio API key, live phone number, and workers  
-**Time:** Half day to a few days (depends on hosting and Cheerio / WABA review)  
+**What you will do:** Deploy on a real server with HTTPS, External API key, live phone number, and workers  
+**Time:** Half day to a few days (depends on hosting and External / WABA review)  
 
-> **Messaging provider:** **Cheerio Direct APIs only**. See [CHEERIO_FLOW.md](CHEERIO_FLOW.md) and [CHEERIO_CONFIGURATION.md](CHEERIO_CONFIGURATION.md).
+> **Messaging provider:** **External Direct APIs only**. See [CHEERIO_FLOW.md](CHEERIO_FLOW.md) and [CHEERIO_CONFIGURATION.md](CHEERIO_CONFIGURATION.md).
 
 > **Tip:** Finish the **Local** guide first so you understand the app.  
 > Then follow this Production guide step by step.
@@ -24,8 +24,8 @@
 | 2 | Upload code + `.env` | Site opens on your domain |
 | 3 | Install / migrate / seed perms | Login works on HTTPS |
 | 4 | Harden security | `CI_ENVIRONMENT=production` |
-| 5 | Cheerio live setup | Live number + permanent token |
-| 6 | Webhook on HTTPS | Cheerio webhook verified |
+| 5 | External live setup | Live number + permanent token |
+| 6 | Webhook on HTTPS | External webhook verified |
 | 7 | Sync templates | Approved templates show |
 | 8 | Cron / workers | Queue + delays + sequences send |
 | 9 | Smoke test | Real send + receive + inbox statuses work |
@@ -38,9 +38,9 @@
 |-------|-------|------------|
 | URL | `http://localhost/...` | `https://your-domain.com/` |
 | Webhook | Cloudflare tunnel / ngrok | Real HTTPS domain |
-| Token | Cheerio API key OK | Permanent Cheerio API key |
-| Phone | Cheerio test number | Live WhatsApp Business number |
-| Recipients | Only verified test phones | Real customers (after WhatsApp / Cheerio rules) |
+| Token | External API key OK | Permanent External API key |
+| Phone | External test number | Live WhatsApp Business number |
+| Recipients | Only verified test phones | Real customers (after WhatsApp / External rules) |
 | Workers | Run by hand | Cron / Supervisor every minute |
 | Debug | Development OK | Must be production (no toolbar) |
 
@@ -53,7 +53,7 @@
 | VPS or shared hosting | Runs PHP + MySQL |
 | Domain name | Public URL for users and webhooks |
 | SSL certificate | HTTPS (Let's Encrypt is fine) |
-| Cheerio Dashboard + live WhatsApp number | Real messaging |
+| External Dashboard + live WhatsApp number | Real messaging |
 | SSH or cPanel access | Upload files, run commands |
 | Backup plan | Protect data |
 
@@ -183,7 +183,7 @@ More detail: [DEPLOYMENT.md](DEPLOYMENT.md)
 
 ---
 
-# PART B — Cheerio for live WhatsApp
+# PART B — External for live WhatsApp
 
 ## Step 6 — Live WhatsApp number + permanent token
 
@@ -192,7 +192,7 @@ More detail: [DEPLOYMENT.md](DEPLOYMENT.md)
 3. Create a **System User** token with WhatsApp permissions (permanent / long-lived).  
 4. Copy:
    - Access Token (System User)
-   - \(Cheerio live number\) (live)
+   - \(External live number\) (live)
    - WhatsApp Business Account ID
    - Webhook Secret  
 5. Make a strong **Webhook Verify Token** and save it.
@@ -201,22 +201,22 @@ More detail: [DEPLOYMENT.md](DEPLOYMENT.md)
 
 - Sandbox / development: only test phones.  
 - Production messaging to customers may need **Business verification** and **App Review**.  
-- Follow Cheerio Dashboard go-live steps for your WABA.
+- Follow External Dashboard go-live steps for your WABA.
 
 ### Checklist
 
-- [ ] Live \(Cheerio live number\) ready  
+- [ ] Live \(External live number\) ready  
 - [ ] Permanent (System User) token ready  
 - [ ] Webhook Secret ready  
 - [ ] Business verification status understood  
 
 ---
 
-## Step 7 — Save Cheerio settings in the app
+## Step 7 — Save External settings in the app
 
-1. Login, then open **Settings** from the profile menu (not the left sidebar) → **Cheerio API**.  
-2. Paste token, \(Cheerio live number\), WABA \(in Cheerio\), Webhook Secret, Verify Token.  
-3. API base: Cheerio Direct APIs (configured in app).  
+1. Login, then open **Settings** from the profile menu (not the left sidebar) → **External API**.  
+2. Paste token, \(External live number\), WABA \(in External\), Webhook Secret, Verify Token.  
+3. API base: External Direct APIs (configured in app).  
 4. **Save Settings**.  
 5. Email sending is under **Email Manager → Email Settings**, not under the Settings menu.
 
@@ -247,7 +247,7 @@ If the app is in a subfolder and DocumentRoot is **not** `public/`:
 https://your-domain.com/sateri_connect/public/webhooks
 ```
 
-In Cheerio / WABA webhook settings:
+In External / WABA webhook settings:
 
 1. Callback URL = your HTTPS `/webhooks` URL  
 2. Verify token = same as Settings  
@@ -256,7 +256,7 @@ In Cheerio / WABA webhook settings:
 
 ### Checklist
 
-- [ ] Cheerio shows webhook verified  
+- [ ] External shows webhook verified  
 - [ ] `messages` subscribed  
 - [ ] No ngrok/cloudflared needed in production  
 
@@ -404,7 +404,7 @@ writable/logs/
 - [ ] HTTPS site opens  
 - [ ] Production `.env` set  
 - [ ] Login works  
-- [ ] Live Cheerio number + API key saved  
+- [ ] Live External number + API key saved  
 - [ ] Webhook verified + `messages`  
 - [ ] Templates synced  
 - [ ] Cron workers running (`queue`, `campaigns`, `automations`)  
@@ -414,7 +414,7 @@ writable/logs/
 - [ ] Backups enabled  
 - [ ] Strong passwords / roles reviewed  
 
-When all boxes are checked, you are ready for live use (within WhatsApp / Cheerio policy and access levels).
+When all boxes are checked, you are ready for live use (within WhatsApp / External policy and access levels).
 
 ---
 
@@ -425,7 +425,7 @@ When all boxes are checked, you are ready for live use (within WhatsApp / Cheeri
 | [GUIDE_LOCAL.md](GUIDE_LOCAL.md) | Local WAMP testing |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Full hardening checklist |
 | [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md) | Webhook details |
-| [CHEERIO_CONFIGURATION.md](CHEERIO_CONFIGURATION.md) | Cheerio API key & live setup |
+| [CHEERIO_CONFIGURATION.md](CHEERIO_CONFIGURATION.md) | External API key & live setup |
 | [CRON_SETUP.md](CRON_SETUP.md) | Workers |
 | [SETTINGS.md](SETTINGS.md) | Settings fields |
 

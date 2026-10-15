@@ -1,12 +1,12 @@
 # Local Guide � Test on your PC (WAMP)
 
 **Who this is for:** Beginners testing on a local computer  
-**What you will do:** Run the app on WAMP, connect Cheerio WhatsApp, send and receive test messages  
+**What you will do:** Run the app on WAMP, connect External WhatsApp, send and receive test messages  
 **Time:** About 1�2 hours (first time)  
 **Computer:** Windows with WAMP64  
 
-> **Messaging provider:** This app uses **Cheerio Direct APIs only** � not Meta Graph API.  
-> Primary Cheerio docs: [CHEERIO_FLOW.md](CHEERIO_FLOW.md) � [CHEERIO_CONFIGURATION.md](CHEERIO_CONFIGURATION.md) � [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md)  
+> **Messaging provider:** This app uses **External Direct APIs only** � not Meta Graph API.  
+> Primary External docs: [CHEERIO_FLOW.md](CHEERIO_FLOW.md) � [CHEERIO_CONFIGURATION.md](CHEERIO_CONFIGURATION.md) � [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md)  
 > API key: [https://app.cheerio.in/settings/apikey](https://app.cheerio.in/settings/apikey)
 
 > **Tip:** Finish one step fully. Then go to the next step. Use the checklists.  
@@ -25,10 +25,10 @@
 |-----:|---------|---------------------|
 | 1 | Start WAMP | Icon is green |
 | 2 | Install app and login | Dashboard opens |
-| 3 | Make a Cheerio WhatsApp app | https://app.cheerio.in |
+| 3 | Make a External WhatsApp app | https://app.cheerio.in |
 | 4 | Copy token and IDs | You wrote 5 values in Notepad |
 | 5 | Paste into Settings | Save works |
-| 6 | Tunnel + webhook | Cheerio / WABA webhook verified |
+| 6 | Tunnel + webhook | External / WABA webhook verified |
 | 7 | Sync templates | You see `hello_world` |
 | 8 | Send and chat | Phone and Live Chat both work |
 
@@ -40,9 +40,9 @@
 |------|-----|
 | WAMP64 | Runs the website (Apache + MySQL + PHP) |
 | This project in `c:\wamp64\www\sateri_connect` | The app files |
-| Cheerio account | To use Cheerio live WhatsApp |
+| External account | To use External live WhatsApp |
 | Your phone number | For test messages (OTP) |
-| Internet | To talk to Cheerio |
+| Internet | To talk to External |
 | PowerShell or CMD | To run commands |
 
 **You do not need:** paid hosting, Twilio, or a paid ngrok plan.  
@@ -115,7 +115,7 @@ Follow each screen:
 | Database | Host `localhost`, user `root`, password empty (often), database name `sateri_connect` |
 | App | Base URL: `http://localhost/sateri_connect/public/` |
 | Admin | Your name, email, password � **save these** |
-| Cheerio | You can skip this and fill Settings later |
+| External | You can skip this and fill Settings later |
 | Finish | Click Finish |
 
 ### Make the database in phpMyAdmin (if needed)
@@ -163,7 +163,7 @@ Change the password later. Do not share it.
 
 ## Step 5 � Fix PHP SSL on Windows (important)
 
-Without this, Cheerio calls fail with an SSL error.
+Without this, External calls fail with an SSL error.
 
 ### 5.1 Download the certificate file
 
@@ -206,9 +206,9 @@ WAMP tray ? **Restart All Services**.
 
 ---
 
-# PART B � Cheerio setup
+# PART B � External setup
 
-## Step 6 � Cheerio account + API key
+## Step 6 � External account + API key
 
 1. Open https://app.cheerio.in/  
 2. Log in.  
@@ -218,20 +218,20 @@ WAMP tray ? **Restart All Services**.
 ### Checklist
 
 - [ ] You can open WhatsApp API Setup  
-- [ ] You can see \(Cheerio live number\) and Access token  
+- [ ] You can see \(External live number\) and Access token  
 
 ---
 
 ## Step 7 � Copy these values
 
-![Cheerio WhatsApp API Setup](images/03-meta-api-setup.png)
+![External WhatsApp API Setup](images/03-meta-api-setup.png)
 
-Copy from Cheerio and keep them in Notepad:
+Copy from External and keep them in Notepad:
 
-| # | From Cheerio | Paste into this app |
+| # | From External | Paste into this app |
 |---|-----------|---------------------|
 | 1 | Temporary access token | Access Token |
-| 2 | \(Cheerio live number\) | \(Cheerio live number\) |
+| 2 | \(External live number\) | \(External live number\) |
 | 3 | WhatsApp Business Account ID | WhatsApp Business Account ID |
 | 4 | App settings ? Basic ? Webhook Secret | Webhook Secret (signature) |
 | 5 | Make your own secret string | Webhook Verify Token |
@@ -242,7 +242,7 @@ Copy from Cheerio and keep them in Notepad:
 my_local_verify_token_9f3a2c
 ```
 
-Use the **same** string later in Cheerio webhook settings.
+Use the **same** string later in External webhook settings.
 
 ### API version
 
@@ -265,22 +265,22 @@ v21.0
 ### Checklist
 
 - [ ] Token copied  
-- [ ] \(Cheerio live number\) copied  
-- [ ] WABA \(in Cheerio\) copied  
+- [ ] \(External live number\) copied  
+- [ ] WABA \(in External\) copied  
 - [ ] Webhook Secret copied  
 - [ ] Verify token written down  
-- [ ] Your phone is verified in Cheerio  
+- [ ] Your phone is verified in External  
 
 ---
 
 # PART C � Save settings in the app
 
-## Step 8 � Settings ? Cheerio API
+## Step 8 � Settings ? External API
 
 1. Open **Settings** from the profile menu. It is not in the left sidebar.  
-2. Open the **Cheerio API** tab.
+2. Open the **External API** tab.
 
-![Settings Cheerio API](images/04-settings-meta.png)
+![Settings External API](images/04-settings-meta.png)
 
 3. Paste all values.  
 4. Set API Version to `v21.0`.  
@@ -308,12 +308,12 @@ php spark templates:sync
 Good result:
 
 ```text
-Syncing templates from Cheerio Direct API...
+Syncing templates from External Direct API...
 Synced 5 template(s).
 ```
 
 - SSL error ? go back to Step 5.  
-- Auth error ? get a new API key in Cheerio, Save again, sync again.
+- Auth error ? get a new API key in External, Save again, sync again.
 
 Then open:
 
@@ -334,7 +334,7 @@ You should see **`hello_world`** with status **APPROVED**.
 
 # PART D � Webhooks (so replies show in Live Chat)
 
-Cheerio cannot reach `localhost`. You need a public HTTPS link (tunnel).
+External cannot reach `localhost`. You need a public HTTPS link (tunnel).
 
 ## Step 10 � Start Cloudflare tunnel
 
@@ -366,7 +366,7 @@ https://something.trycloudflare.com
 https://something.trycloudflare.com/sateri_connect/public/webhooks
 ```
 
-If you restart the tunnel, the link changes. Update Cheerio webhook URL again.
+If you restart the tunnel, the link changes. Update External webhook URL again.
 
 ### Optional: ngrok
 
@@ -389,9 +389,9 @@ https://YOUR-ID.ngrok-free.app/sateri_connect/public/webhooks
 
 ---
 
-## Step 11 � Set webhook in Cheerio / WABA
+## Step 11 � Set webhook in External / WABA
 
-1. Cheerio Dashboard / WABA webhook settings.  
+1. External Dashboard / WABA webhook settings.  
 2. Edit:
    - **Callback URL** = URL from Step 10  
    - **Verify token** = same as Settings ? Webhook Verify Token  
@@ -408,7 +408,7 @@ You should see `12345`.
 
 ### Checklist
 
-- [ ] Webhook verified in Cheerio  
+- [ ] Webhook verified in External  
 - [ ] `messages` is subscribed  
 - [ ] Tunnel is still open  
 
@@ -433,7 +433,7 @@ Example (India):
 ### Checklist
 
 - [ ] Contact saved  
-- [ ] Number matches your Cheerio test phone  
+- [ ] Number matches your External test phone  
 
 ---
 
@@ -670,7 +670,7 @@ More detail: [USER_GUIDE.md](USER_GUIDE.md)
 
 ---
 
-# PART K � WhatsApp / Cheerio rules (simple)
+# PART K � WhatsApp / External rules (simple)
 
 1. First message to a new user ? **template only**.  
 2. After they reply ? free text for about **24 hours**.  
@@ -714,7 +714,7 @@ php spark permissions:audit
 | Install keeps opening | Finish install; app must be marked installed |
 | Sync SSL error | Step 5 + restart WAMP |
 | Sync auth error | New token ? Save ? sync again |
-| Webhook verify fails | Same verify token in app and Cheerio |
+| Webhook verify fails | Same verify token in app and External |
 | No inbound chat | Tunnel closed, wrong URL, or `messages` not subscribed |
 | Chat click issues | Ctrl+F5, click the conversation again |
 | Sequence / Delay SQL error | Run `php spark migrate` |
@@ -735,13 +735,13 @@ c:\wamp64\www\sateri_connect\writable\logs\
 - [ ] WAMP is green  
 - [ ] Login works  
 - [ ] SSL fix done + WAMP restarted  
-- [ ] Cheerio WhatsApp app ready  
+- [ ] External WhatsApp app ready  
 - [ ] Test phone verified  
-- [ ] Settings Cheerio values saved  
+- [ ] Settings External values saved  
 - [ ] `php spark templates:sync` works  
 - [ ] `hello_world` is in Templates  
 - [ ] Tunnel running  
-- [ ] Cheerio webhook OK + `messages`  
+- [ ] External webhook OK + `messages`  
 - [ ] Contact added  
 - [ ] Template received on phone  
 - [ ] Phone reply shows in Live Chat  
