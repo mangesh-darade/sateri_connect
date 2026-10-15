@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Libraries\MasterTenantRepository;
 use App\Libraries\PlatformStatsService;
+use App\Libraries\SchemaRepairService;
 use App\Libraries\TenantConnection;
 use App\Libraries\TenantContext;
 use App\Libraries\TenantProvisionService;
@@ -33,6 +34,18 @@ class PlatformClients extends BaseController
         ]);
     }
 
+    public function all(): string
+    {
+        $dash = (new PlatformStatsService())->dashboard();
+
+        return view('platform/clients/all', [
+            'pageTitle'    => 'All clients',
+            'navActive'    => 'clients',
+            'clients'      => $dash['clients'],
+            'platformName' => (string) session('platform_admin_name'),
+        ]);
+    }
+
     public function create(): string|ResponseInterface
     {
         return view('platform/clients/create', [
@@ -49,11 +62,19 @@ class PlatformClients extends BaseController
         $tech['app_secret'] = $this->maskSecret((string) ($tech['app_secret'] ?? ''));
 
         $baseUrl = rtrim(site_url(), '/');
+        $clients = [];
+        foreach ($repo->listActiveTenants() as $row) {
+            $clients[] = [
+                'key'  => (string) ($row['key'] ?? ''),
+                'name' => (string) (($row['name'] ?? '') !== '' ? $row['name'] : ($row['key'] ?? '')),
+            ];
+        }
 
         return view('platform/meta_tech', [
             'pageTitle'          => 'Embedded Signup (Tech Provider)',
             'navActive'          => 'meta-tech',
             'tech'               => $tech,
+            'clients'            => $clients,
             'platformName'       => (string) session('platform_admin_name'),
             'sdkOrigin'          => $baseUrl,
             'webhookUrl'         => site_url('webhooks'),
@@ -62,6 +83,103 @@ class PlatformClients extends BaseController
             'termsUrl'           => site_url('terms'),
             'dataDeletionUrl'    => site_url('data-deletion'),
         ]);
+    }
+
+    /**
+     * Whether a client already has WhatsApp token + WABA + phone number ID.
+     */
+    public function clientWhatsAppStatus(string $key): ResponseInterface
+    {
+        $switched = $this->switchToClient($key);
+        if ($switched instanceof ResponseInterface) {
+            return $switched;
+        }
+
+        $meta  = (new \App\Libraries\SettingsService(new \App\Models\SettingModel()))->getMetaConfig();
+        $token = trim((string) ($meta['access_token'] ?? ''));
+        $waba  = trim((string) ($meta['waba_id'] ?? ''));
+        $phone = trim((string) ($meta['phone_number_id'] ?? ''));
+
+        return $this->jsonResponse(true, [
+            'tenant_key'      => strtolower(trim($key)),
+            'connected'       => $token !== '' && $waba !== '' && $phone !== '',
+            'waba_id'         => $waba,
+            'phone_number_id' => $phone,
+        ]);
+    }
+
+    /**
+     * Finish Embedded Signup for one client: exchange code and store token, WABA ID, phone number ID.
+     */
+    public function connectEmbeddedSignup(): ResponseInterface
+    {
+        $key  = strtolower(trim((string) $this->request->getPost('tenant_key')));
+        $code = trim((string) $this->request->getPost('code'));
+        $wabaId = trim((string) $this->request->getPost('waba_id'));
+        $phoneNumberId = trim((string) $this->request->getPost('phone_number_id'));
+        $businessId = trim((string) $this->request->getPost('business_id'));
+        $pin = trim((string) $this->request->getPost('pin'));
+
+        if ($code === '') {
+            return $this->jsonResponse(false, null, 'Missing Embedded Signup auth code.', [], 422);
+        }
+
+        $switched = $this->switchToClient($key);
+        if ($switched instanceof ResponseInterface) {
+            return $switched;
+        }
+
+        try {
+            $result = (new \App\Libraries\MetaEmbeddedSignup(
+                new \App\Libraries\SettingsService(new \App\Models\SettingModel())
+            ))->complete(
+                $code,
+                $wabaId,
+                $phoneNumberId,
+                $businessId !== '' ? $businessId : null,
+                preg_match('/^\d{6}$/', $pin) === 1 ? $pin : null
+            );
+
+            log_activity('update', 'platform', 'WhatsApp connected via Platform Embedded Signup for ' . $key, [
+                'tenant_key'        => $key,
+                'waba_id'           => $result['waba_id'] ?? '',
+                'phone_number_id'   => $result['phone_number_id'] ?? '',
+                'warnings'          => $result['warnings'] ?? [],
+                'platform_admin_id' => (int) session('platform_admin_id'),
+            ]);
+
+            $msg = 'WhatsApp connected for ' . $key . '. Access token, WABA ID, and Phone Number ID saved.';
+            $warnings = $result['warnings'] ?? [];
+            if (is_array($warnings) && $warnings !== []) {
+                $msg .= ' Notes: ' . implode(' · ', $warnings);
+            }
+
+            return $this->jsonResponse(true, $result, $msg);
+        } catch (\Throwable $e) {
+            return $this->jsonResponse(false, null, $e->getMessage(), [], 500);
+        }
+    }
+
+    /**
+     * Point the request at one client database. Returns an error response when that fails.
+     */
+    protected function switchToClient(string $key): ?ResponseInterface
+    {
+        $key = strtolower(trim($key));
+        if ($key === '') {
+            return $this->jsonResponse(false, null, 'Choose a client before connecting WhatsApp.', [], 422);
+        }
+
+        if ((new MasterTenantRepository())->findActiveTenant($key) === null) {
+            return $this->jsonResponse(false, null, 'Client not found.', [], 404);
+        }
+
+        if (! (new TenantConnection())->apply($key, 'platform')) {
+            return $this->jsonResponse(false, null, 'Cannot connect to client database.', [], 500);
+        }
+        TenantContext::set($key, 'platform');
+
+        return null;
     }
 
     public function saveMetaTech(): ResponseInterface
@@ -79,7 +197,7 @@ class PlatformClients extends BaseController
             return redirect()->back()->withInput()->with('error', $e->getMessage());
         }
 
-        return redirect()->to('/platform/meta-tech')->with('success', 'Tech Provider Embedded Signup credentials saved. Clients can Connect WhatsApp without creating their own Meta app.');
+        return redirect()->to('/platform/meta-tech')->with('success', 'Tech Provider credentials saved. Connect each client from the list on this page.');
     }
 
     /**
@@ -206,6 +324,14 @@ class PlatformClients extends BaseController
             'business_id'     => '',
         ];
         $appName = (string) ($tenant['name'] ?? $key);
+        $plan = new \App\Libraries\TenantPlanLimits();
+        $caps = $plan->limitsFor($key);
+        $seats = [
+            'users'     => (int) ($stats['users'] ?? 0),
+            'roles'     => 0,
+            'max_users' => $caps['max_users'],
+            'max_roles' => $caps['max_roles'],
+        ];
 
         if ($connected) {
             $settings = new \App\Libraries\SettingsService();
@@ -214,6 +340,8 @@ class PlatformClients extends BaseController
             $metaDisplay['access_token'] = $this->maskSecret((string) ($meta['access_token'] ?? ''));
             $metaDisplay['app_secret']   = $this->maskSecret((string) ($meta['app_secret'] ?? ''));
             $appName = (string) $settings->get('app_name', $tenant['name'] ?? $key);
+            $seats['users'] = $plan->userCount();
+            $seats['roles'] = $plan->roleCount();
         }
 
         return view('platform/clients/show', [
@@ -226,6 +354,7 @@ class PlatformClients extends BaseController
             'adminName'    => (string) ($stats['admin_name'] ?? ''),
             'appName'      => $appName,
             'platformName' => (string) session('platform_admin_name'),
+            'seats'        => $seats,
         ]);
     }
 
@@ -284,6 +413,51 @@ class PlatformClients extends BaseController
         return redirect()->to('/platform/clients/' . rawurlencode($key))->with('success', (string) $result['message']);
     }
 
+    public function saveLimits(string $key): ResponseInterface
+    {
+        $key = strtolower(trim($key));
+        $limits = new \App\Libraries\TenantPlanLimits();
+        if ((new MasterTenantRepository())->findActiveTenant($key) === null) {
+            return redirect()->to('/platform/clients')->with('error', 'Client not found.');
+        }
+
+        $maxUsers = $this->optionalLimit('max_users');
+        $maxRoles = $this->optionalLimit('max_roles');
+        if ($maxUsers === false || $maxRoles === false) {
+            return redirect()->back()->withInput()->with('error', 'User and role limits must be a number of at least 1, or left empty for no limit.');
+        }
+
+        if (! $limits->save($key, $maxUsers, $maxRoles)) {
+            return redirect()->back()->withInput()->with('error', 'Could not save workspace limits.');
+        }
+
+        log_activity('update', 'platform', 'Platform admin set workspace limits: ' . $key, [
+            'tenant_key'        => $key,
+            'max_users'         => $maxUsers,
+            'max_roles'         => $maxRoles,
+            'platform_admin_id' => (int) session('platform_admin_id'),
+        ]);
+
+        return redirect()->to('/platform/clients/' . rawurlencode($key) . '#limits')
+            ->with('success', 'Workspace limits saved.');
+    }
+
+    /**
+     * @return int|null|false null = unlimited, false = invalid
+     */
+    protected function optionalLimit(string $field): int|null|false
+    {
+        $raw = trim((string) $this->request->getPost($field));
+        if ($raw === '') {
+            return null;
+        }
+        if (! ctype_digit($raw) || (int) $raw < 1) {
+            return false;
+        }
+
+        return (int) $raw;
+    }
+
     public function enter(string $key): ResponseInterface
     {
         $key = strtolower(trim($key));
@@ -334,6 +508,7 @@ class PlatformClients extends BaseController
             'role_slug'   => $role['slug'] ?? 'super-admin',
             'permissions' => ['*'],
             'logged_in'   => true,
+            'login_at'    => time(),
             'tenant_key'  => $key,
             'platform_impersonating' => true,
         ]);
@@ -348,27 +523,38 @@ class PlatformClients extends BaseController
 
     public function settings(): string|ResponseInterface
     {
-        $repo     = new MasterTenantRepository();
-        $branding = $repo->getPlatformBranding();
+        $repo         = new MasterTenantRepository();
+        $branding     = $repo->getPlatformBranding();
+        $snapshotFile = SchemaRepairService::SNAPSHOT_FILE;
 
         return view('platform/settings', [
-            'pageTitle'    => 'Platform Settings',
-            'navActive'    => 'settings',
-            'branding'     => $branding,
-            'platformName' => (string) session('platform_admin_name'),
+            'pageTitle'        => 'Platform Settings',
+            'navActive'        => 'settings',
+            'branding'         => $branding,
+            'platformName'     => (string) session('platform_admin_name'),
+            'schemaClients'    => $repo->listActiveTenants(),
+            'schemaTableCount' => count(SchemaRepairService::snapshot()),
+            'schemaSnapshotAt' => is_file($snapshotFile) ? date('d M Y, h:i A', (int) filemtime($snapshotFile)) : null,
         ]);
     }
 
     public function saveSettings(): ResponseInterface
     {
         $repo = new MasterTenantRepository();
+        $ajax = $this->request->isAJAX();
 
         $name    = trim((string) $this->request->getPost('site_name'));
         $tagline = trim((string) $this->request->getPost('site_tagline'));
 
-        if ($name !== '') {
-            $repo->setPlatformSetting('platform_site_name', $name);
+        if ($name === '') {
+            if ($ajax) {
+                return $this->jsonResponse(false, null, 'Platform name is required.', [], 422);
+            }
+
+            return redirect()->to('/platform/settings')->with('error', 'Platform name is required.');
         }
+
+        $repo->setPlatformSetting('platform_site_name', $name);
         $repo->setPlatformSetting('platform_site_tagline', $tagline);
 
         // Powered by attribution settings
@@ -398,40 +584,64 @@ class PlatformClients extends BaseController
             $repo->setPlatformSetting('platform_powered_by_logo', '');
         }
 
-        // Upload new Logo / App Icon
-        $logoFile = $this->request->getFile('site_logo');
-        if ($logoFile !== null && $logoFile->isValid() && $logoFile->getError() !== UPLOAD_ERR_NO_FILE) {
-            $newPath = $this->handlePlatformUpload($logoFile, 'platform_logo', 2 * 1024 * 1024);
-            if ($newPath !== '') {
-                $currentLogo = $repo->getPlatformSetting('platform_logo');
-                $this->deletePlatformUpload($currentLogo);
-                $repo->setPlatformSetting('platform_logo', $newPath);
+        $warnings = [];
+        $uploads  = [
+            ['site_logo', 'platform_logo', 2 * 1024 * 1024, 'Logo'],
+            ['site_favicon', 'platform_favicon', 512 * 1024, 'Favicon'],
+            ['powered_by_logo', 'platform_powered_by', 1024 * 1024, 'Provider icon'],
+        ];
+        foreach ($uploads as [$field, $settingKey, $maxBytes, $label]) {
+            $stored = $this->takePlatformUpload($this->request->getFile($field), $settingKey, $maxBytes, $label);
+            if ($stored['error'] !== '') {
+                $warnings[] = $stored['error'];
+                continue;
             }
+            if ($stored['path'] === '') {
+                continue;
+            }
+            $this->deletePlatformUpload((string) $repo->getPlatformSetting($settingKey));
+            $repo->setPlatformSetting($settingKey, $stored['path']);
         }
 
-        // Upload new Favicon
-        $favFile = $this->request->getFile('site_favicon');
-        if ($favFile !== null && $favFile->isValid() && $favFile->getError() !== UPLOAD_ERR_NO_FILE) {
-            $newPath = $this->handlePlatformUpload($favFile, 'platform_favicon', 512 * 1024);
-            if ($newPath !== '') {
-                $currentFav = $repo->getPlatformSetting('platform_favicon');
-                $this->deletePlatformUpload($currentFav);
-                $repo->setPlatformSetting('platform_favicon', $newPath);
-            }
+        $branding = $repo->getPlatformBranding();
+        log_activity('update', 'platform', 'Updated platform branding and settings', [
+            'site_name'          => $branding['site_name'],
+            'platform_admin_id'  => (int) session('platform_admin_id'),
+        ]);
+
+        $message = $warnings === []
+            ? 'Settings saved.'
+            : 'Settings saved. ' . implode(' ', $warnings);
+
+        if ($ajax) {
+            return $this->jsonResponse(true, ['branding' => $branding], $message);
         }
 
-        // Upload new Powered By Logo
-        $pLogoFile = $this->request->getFile('powered_by_logo');
-        if ($pLogoFile !== null && $pLogoFile->isValid() && $pLogoFile->getError() !== UPLOAD_ERR_NO_FILE) {
-            $newPPath = $this->handlePlatformUpload($pLogoFile, 'platform_powered_by', 1024 * 1024);
-            if ($newPPath !== '') {
-                $currentPLogo = $repo->getPlatformSetting('platform_powered_by_logo');
-                $this->deletePlatformUpload($currentPLogo);
-                $repo->setPlatformSetting('platform_powered_by_logo', $newPPath);
-            }
+        return redirect()->to('/platform/settings')->with($warnings === [] ? 'success' : 'error', $message);
+    }
+
+    /**
+     * @return array{path: string, error: string}
+     */
+    protected function takePlatformUpload($file, string $prefix, int $maxBytes, string $label): array
+    {
+        if ($file === null || $file->getError() === UPLOAD_ERR_NO_FILE) {
+            return ['path' => '', 'error' => ''];
+        }
+        if (! $file->isValid()) {
+            return ['path' => '', 'error' => $label . ' could not be uploaded.'];
         }
 
-        return redirect()->to('/platform/settings')->with('success', 'Platform branding and settings updated.');
+        $path = $this->handlePlatformUpload($file, $prefix, $maxBytes);
+        if ($path !== '') {
+            return ['path' => $path, 'error' => ''];
+        }
+
+        $limit = $maxBytes >= 1048576
+            ? (string) (int) round($maxBytes / 1048576) . 'MB'
+            : (string) (int) round($maxBytes / 1024) . 'KB';
+
+        return ['path' => '', 'error' => $label . ' must be PNG, JPG, WEBP, GIF, or ICO, under ' . $limit . '.'];
     }
 
     protected function handlePlatformUpload($file, string $prefix, int $maxBytes): string
@@ -471,6 +681,88 @@ class PlatformClients extends BaseController
         if (is_file($full)) {
             @unlink($full);
         }
+    }
+
+    public function clientSettings(string $key): string|ResponseInterface
+    {
+        return $this->runClientSettings($key, 'index');
+    }
+
+    public function clientSettingsAction(string $key, string $action): string|ResponseInterface
+    {
+        $map = [
+            'save'                  => 'save',
+            'test-smtp'             => 'testSmtp',
+            'test-email'            => 'testEmail',
+            'test-cheerio'          => 'testCheerio',
+            'test-meta'             => 'testMeta',
+            'embedded-signup'       => 'embeddedSignup',
+            'test-page-messaging'   => 'testPageMessaging',
+            'test-elintom'          => 'testElintOm',
+            'sync-elintom'          => 'syncElintOm',
+            'test-whatsapp'         => 'testCheerio',
+            'setup-webhook'         => 'setupWebhook',
+            'test-ai'               => 'testAi',
+            'api-tokens-generate'   => 'generateApiToken',
+        ];
+
+        $method = $map[$action] ?? '';
+        if ($method === '') {
+            if ($this->request->isAJAX()) {
+                return $this->jsonResponse(false, null, 'Unknown settings action.', [], 404);
+            }
+
+            return redirect()->to('/platform/clients/' . rawurlencode(strtolower(trim($key))))
+                ->with('error', 'Unknown settings action.');
+        }
+
+        return $this->runClientSettings($key, $method);
+    }
+
+    public function clientSettingsDeleteToken(string $key, int $id): ResponseInterface
+    {
+        $result = $this->runClientSettings($key, 'deleteApiToken', [$id]);
+
+        return $result instanceof ResponseInterface
+            ? $result
+            : $this->response->setStatusCode(500)->setJSON(['success' => false, 'message' => 'Could not revoke API key.']);
+    }
+
+    /**
+     * @param list<mixed> $args
+     */
+    private function runClientSettings(string $key, string $method, array $args = []): string|ResponseInterface
+    {
+        $key = strtolower(trim($key));
+        $tenant = (new MasterTenantRepository())->findActiveTenant($key);
+        if ($tenant === null) {
+            if ($this->request->isAJAX()) {
+                return $this->jsonResponse(false, null, 'Client not found.', [], 404);
+            }
+
+            return redirect()->to('/platform/clients')->with('error', 'Client not found.');
+        }
+
+        if (! (new TenantConnection())->apply($key, 'platform')) {
+            if ($this->request->isAJAX()) {
+                return $this->jsonResponse(false, null, 'Cannot connect to this client database.', [], 503);
+            }
+
+            return redirect()->to('/platform/clients/' . rawurlencode($key))
+                ->with('error', 'Cannot connect to this client database.');
+        }
+        TenantContext::set($key, 'platform');
+        \Config\Services::injectMock('settingsService', new \App\Libraries\SettingsService());
+
+        $settings = new Settings();
+        $settings->initController($this->request, $this->response, service('logger'));
+        $settings->enablePlatformClientMode($key, (string) ($tenant['name'] ?? $key));
+
+        $result = $settings->{$method}(...$args);
+
+        return $result instanceof ResponseInterface || is_string($result)
+            ? $result
+            : $this->response->setStatusCode(500)->setJSON(['success' => false, 'message' => 'Settings action failed.']);
     }
 
     protected function maskSecret(string $value): string

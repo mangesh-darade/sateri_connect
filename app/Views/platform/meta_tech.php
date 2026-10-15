@@ -3,33 +3,14 @@
 <?= $this->section('content') ?>
 <?php
 $tech = $tech ?? [];
-$ready = ! empty($tech['ready']);
-$source = (string) ($tech['source'] ?? 'none');
+$clients = $clients ?? [];
+$ready = ! empty($tech['app_id']) && ! empty($tech['config_id']) && ! empty($tech['app_secret']);
 ?>
 
 <div style="display:flex;flex-direction:column;gap:1.5rem">
 
-    <!-- Top Status Banner -->
     <section class="platform-card" style="padding:1.5rem">
-        <div class="platform-card-head" style="margin-bottom:0.75rem">
-            <div>
-                <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.25rem">
-                    <h2 style="margin:0;font-size:1.35rem;font-weight:700">Meta Tech Provider &amp; Embedded Signup</h2>
-                    <span class="platform-badge <?= $ready ? 'platform-badge-ok' : 'platform-badge-warn' ?>">
-                        <?= $ready ? '<i class="fas fa-check-circle me-1"></i> Ready for Embedded Signup' : '<i class="fas fa-exclamation-triangle me-1"></i> Setup Required' ?>
-                    </span>
-                </div>
-                <p style="margin:0;color:var(--pf-muted);font-size:0.92rem">
-                    Configure one centralized Meta Developer App for your entire SaaS platform.
-                    Clients connect their WhatsApp Business Account via popup in 1-click without creating their own Meta app.
-                </p>
-            </div>
-            <?php if ($source !== 'none'): ?>
-                <div class="platform-stat-chip" style="font-size:0.8rem">Source: <?= esc(strtoupper($source)) ?></div>
-            <?php endif; ?>
-        </div>
-
-        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:0.75rem;margin-top:1rem;background:var(--pf-paper-2,#fafbf8);border:1px solid var(--pf-line);border-radius:10px;padding:1rem">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:0.75rem;background:var(--pf-paper-2,#fafbf8);border:1px solid var(--pf-line);border-radius:10px;padding:1rem">
             <div>
                 <div style="font-size:0.75rem;text-transform:uppercase;color:var(--pf-muted);font-weight:600">App ID</div>
                 <div style="font-weight:700;font-size:0.95rem;color:<?= !empty($tech['app_id']) ? 'var(--pf-ok)' : 'var(--pf-down)' ?>">
@@ -68,7 +49,8 @@ $source = (string) ($tech['source'] ?? 'none');
 
         <!-- Column 1: Configuration Form -->
         <section class="platform-card" style="padding:1.5rem">
-            <h3 style="font-size:1.1rem;font-weight:700;margin:0 0 1rem"><i class="fas fa-sliders-h me-1"></i> Tech Provider Credentials</h3>
+            <h3 style="font-size:1.1rem;font-weight:700;margin:0 0 0.35rem"><i class="fas fa-sliders-h me-1"></i> Tech Provider Credentials</h3>
+            <p style="margin:0 0 1rem;color:var(--pf-muted);font-size:0.88rem">One Meta app for the whole platform. Clients never see Connect WhatsApp. You connect each number from the list below.</p>
 
             <form method="post" action="<?= site_url('platform/meta-tech') ?>" style="display:flex;flex-direction:column;gap:1rem">
                 <?= csrf_field() ?>
@@ -203,6 +185,52 @@ $source = (string) ($tech['source'] ?? 'none');
         </section>
     </div>
 
+    <section class="platform-card" style="padding:1.5rem" id="platformEmbeddedSignup"
+             data-app-id="<?= esc((string) ($tech['app_id'] ?? '')) ?>"
+             data-config-id="<?= esc((string) ($tech['config_id'] ?? '')) ?>"
+             data-api-version="<?= esc((string) ($tech['api_version'] ?? 'v25.0')) ?>"
+             data-ready="<?= $ready ? '1' : '0' ?>"
+             data-csrf-name="<?= esc(csrf_token()) ?>"
+             data-csrf-hash="<?= esc(csrf_hash()) ?>"
+             data-connect-url="<?= esc(site_url('platform/meta-tech/connect')) ?>"
+             data-status-url="<?= esc(site_url('platform/meta-tech/client')) ?>">
+        <h3 style="font-size:1.1rem;font-weight:700;margin:0 0 0.35rem"><i class="fab fa-whatsapp me-1"></i> Connect a client</h3>
+        <p style="margin:0 0 1rem;color:var(--pf-muted);font-size:0.88rem">Platform only. The Meta popup opens here, and the number is saved on that client. The client does not see this button.</p>
+        <?php if (! $ready): ?>
+            <div style="background:#fff7e8;color:#7a4b00;border:1px solid #f0d7a2;border-radius:8px;padding:0.65rem 0.85rem;font-size:0.85rem;margin-bottom:0.85rem">
+                Save App ID, Config ID, and App Secret above before connecting a client.
+            </div>
+        <?php endif; ?>
+        <?php if ($clients === []): ?>
+            <p style="margin:0;color:var(--pf-muted)">No clients yet. Create a client first.</p>
+        <?php else: ?>
+            <div class="platform-table-wrap">
+                <table class="platform-table">
+                    <thead>
+                    <tr><th>Client</th><th>WhatsApp</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($clients as $client): ?>
+                        <tr data-client-row="<?= esc($client['key']) ?>">
+                            <td>
+                                <div class="platform-client-name"><?= esc($client['name']) ?></div>
+                                <div class="platform-client-meta"><?= esc($client['key']) ?></div>
+                            </td>
+                            <td><span class="platform-badge platform-badge-warn js-wa-status">Not connected</span></td>
+                            <td style="text-align:right">
+                                <button type="button" class="btn-pf btn-pf-primary js-connect-wa" data-tenant-key="<?= esc($client['key']) ?>" <?= $ready ? '' : 'disabled' ?> style="padding:0.45rem 0.9rem">
+                                    <i class="fab fa-whatsapp me-1"></i> Connect WhatsApp
+                                </button>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+        <div id="metaEmbedResult" style="display:none;margin-top:0.85rem;padding:0.65rem 0.85rem;border-radius:8px;font-size:0.85rem"></div>
+    </section>
+
     <!-- Meta Tech Provider Policy & Go-Live Checklist -->
     <section class="platform-card" style="padding:1.5rem">
         <h3 style="font-size:1.15rem;font-weight:700;margin:0 0 0.5rem"><i class="fas fa-clipboard-check me-1"></i> Meta Policy &amp; Go-Live Checklist</h3>
@@ -286,6 +314,7 @@ $source = (string) ($tech['source'] ?? 'none');
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
+<script src="<?= asset_url('assets/js/meta-embedded-signup.js') ?>"></script>
 <script>
 function copyValue(elementId, btn) {
     var el = document.getElementById(elementId);
@@ -353,5 +382,139 @@ document.getElementById('btnTestMetaTech').addEventListener('click', function() 
         btn.innerHTML = originalHtml;
     });
 });
+
+(function () {
+    var box = document.getElementById('platformEmbeddedSignup');
+    if (!box) return;
+    var appId = (box.getAttribute('data-app-id') || '').trim();
+    var configId = (box.getAttribute('data-config-id') || '').trim();
+    var apiVersion = (box.getAttribute('data-api-version') || 'v25.0').trim() || 'v25.0';
+    var ready = box.getAttribute('data-ready') === '1';
+    var csrfName = box.getAttribute('data-csrf-name') || '';
+    var csrfHash = box.getAttribute('data-csrf-hash') || '';
+    var connectUrl = box.getAttribute('data-connect-url') || '';
+    var statusUrl = (box.getAttribute('data-status-url') || '').replace(/\/$/, '');
+    var resultBox = document.getElementById('metaEmbedResult');
+    var activeKey = '';
+    var pendingCode = null;
+    var pendingSession = null;
+    var completing = false;
+    var localHost = /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
+    var httpsOk = window.location.protocol === 'https:' || localHost;
+
+    function setResult(text, ok) {
+        if (!resultBox) return;
+        resultBox.style.display = 'block';
+        resultBox.style.background = ok ? '#e8f6ef' : '#fdecea';
+        resultBox.style.color = ok ? '#0d5c40' : '#8f1f16';
+        resultBox.style.border = ok ? '1px solid #b9dfcb' : '1px solid #f0bfb8';
+        resultBox.textContent = text;
+    }
+
+    function markRow(key) {
+        var row = document.querySelector('[data-client-row="' + key + '"] .js-wa-status');
+        if (!row) return;
+        row.textContent = 'Connected';
+        row.className = 'platform-badge platform-badge-ok js-wa-status';
+    }
+
+    function tryComplete() {
+        if (completing || !pendingCode || !pendingSession || !activeKey) return;
+        completing = true;
+        var code = pendingCode;
+        var session = pendingSession;
+        pendingCode = null;
+        pendingSession = null;
+        setResult('Saving WhatsApp on ' + activeKey + '…', true);
+        var body = new FormData();
+        body.append(csrfName, csrfHash);
+        body.append('tenant_key', activeKey);
+        body.append('code', code);
+        body.append('waba_id', session.waba_id || '');
+        body.append('phone_number_id', session.phone_number_id || '');
+        body.append('business_id', session.business_id || '');
+        fetch(connectUrl, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': csrfHash },
+            body: body
+        }).then(function (res) {
+            return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+        }).then(function (res) {
+            var payload = res.data || {};
+            setResult(payload.message || (res.ok ? 'WhatsApp connected' : 'Embedded Signup failed'), !!(res.ok && payload.success));
+            if (res.ok && payload.success) markRow(activeKey);
+        }).catch(function (err) {
+            setResult(err.message || 'Embedded Signup failed', false);
+        }).finally(function () { completing = false; });
+    }
+
+    function onSession(data) {
+        var ev = String((data && data.event) || '');
+        var finish = { FINISH: 1, FINISH_ONLY_WABA: 1, FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING: 1, FINISH_OBO_MIGRATION: 1, FINISH_GRANT_ONLY_API_ACCESS: 1 };
+        if (finish[ev]) {
+            var d = data.data || {};
+            pendingSession = {
+                phone_number_id: String(d.phone_number_id || ''),
+                waba_id: String(d.waba_id || ''),
+                business_id: String(d.business_id || '')
+            };
+            tryComplete();
+        }
+    }
+
+    if (ready && appId && window.APP && APP.MetaEmbeddedSignup) {
+        APP.MetaEmbeddedSignup.preload({ appId: appId, apiVersion: apiVersion }).catch(function () {});
+    }
+
+    document.querySelectorAll('[data-client-row]').forEach(function (row) {
+        var key = row.getAttribute('data-client-row') || '';
+        var badge = row.querySelector('.js-wa-status');
+        if (!key || !badge || !statusUrl) return;
+        fetch(statusUrl + '/' + encodeURIComponent(key), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function (res) {
+            return res.json();
+        }).then(function (payload) {
+            var data = (payload && payload.data) || {};
+            if (!data.connected) return;
+            badge.textContent = data.phone_number_id ? ('Connected · ' + data.phone_number_id) : 'Connected';
+            badge.className = 'platform-badge platform-badge-ok js-wa-status';
+        }).catch(function () {});
+    });
+
+    document.querySelectorAll('.js-connect-wa').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            activeKey = btn.getAttribute('data-tenant-key') || '';
+            if (!ready || !appId || !configId) {
+                setResult('Save App ID, Config ID, and App Secret first.', false);
+                return;
+            }
+            if (!httpsOk) {
+                setResult('Open this platform page over HTTPS or localhost before connecting.', false);
+                return;
+            }
+            if (!window.APP || !APP.MetaEmbeddedSignup) {
+                setResult('Facebook SDK failed to load.', false);
+                return;
+            }
+            setResult('Opening Meta for ' + activeKey + '…', true);
+            APP.MetaEmbeddedSignup.launch({
+                appId: appId,
+                configId: configId,
+                apiVersion: apiVersion,
+                onSession: onSession,
+                onCode: function (code) {
+                    pendingCode = code;
+                    tryComplete();
+                },
+                onCancel: function () {
+                    if (!pendingSession) setResult('Meta login did not return an auth code.', false);
+                }
+            }).catch(function (err) {
+                setResult((err && err.message) || 'Could not launch Embedded Signup', false);
+            });
+        });
+    });
+})();
 </script>
 <?= $this->endSection() ?>

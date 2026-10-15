@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Libraries\MasterTenantRepository;
 use App\Libraries\SchemaRepairService;
+use CodeIgniter\HTTP\RedirectResponse;
 use CodeIgniter\HTTP\ResponseInterface;
 
 /**
@@ -13,18 +14,9 @@ use CodeIgniter\HTTP\ResponseInterface;
  */
 class PlatformSchema extends BaseController
 {
-    public function index(): string
+    public function index(): RedirectResponse
     {
-        $snapshotFile = SchemaRepairService::SNAPSHOT_FILE;
-
-        return view('platform/schema', [
-            'pageTitle'     => 'Database Health',
-            'navActive'     => 'schema',
-            'platformName'  => (string) session('platform_admin_name'),
-            'clients'       => (new MasterTenantRepository())->listActiveTenants(),
-            'tableCount'    => count(SchemaRepairService::snapshot()),
-            'snapshotAt'    => is_file($snapshotFile) ? date('d M Y, h:i A', (int) filemtime($snapshotFile)) : null,
-        ]);
+        return redirect()->to('/platform/settings#database-health');
     }
 
     /**

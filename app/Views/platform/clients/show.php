@@ -1,5 +1,14 @@
 <?= $this->extend('layouts/platform') ?>
 
+<?= $this->section('header_actions') ?>
+<a class="btn-pf" href="<?= site_url('platform/clients/all') ?>">← All clients</a>
+<a class="btn-pf btn-pf-primary" href="<?= site_url('platform/clients/' . rawurlencode((string) ($tenant['key'] ?? '')) . '/settings') ?>">Settings</a>
+<form action="<?= site_url('platform/clients/' . rawurlencode((string) ($tenant['key'] ?? '')) . '/enter') ?>" method="post" style="margin:0">
+    <?= csrf_field() ?>
+    <button type="submit" class="btn-pf btn-pf-primary">Open workspace</button>
+</form>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 <?php
 $tenant = $tenant ?? [];
@@ -11,8 +20,6 @@ $emailTrend = $stats['email_trend'] ?? [];
 $fmt = static function ($n): string {
     return number_format((int) $n);
 };
-$health = (string) ($stats['health'] ?? 'down');
-$badgeClass = $health === 'ok' ? 'platform-badge-ok' : ($health === 'warn' ? 'platform-badge-warn' : 'platform-badge-down');
 $waReady    = ! empty($stats['meta_ready']);
 $emailReady = ! empty($stats['email_ready']);
 $emailProvider = (string) ($stats['email_provider_label'] ?? '—');
@@ -37,10 +44,12 @@ $bars = static function (array $rows, string $caption, callable $tip): string {
     foreach ($rows as $day) {
         $max = max($max, (int) ($day['sent'] ?? 0));
     }
+    $plot = 88;
     $html = '<div class="platform-bars">';
     foreach ($rows as $day) {
-        $h = max(4, (int) round(((int) ($day['sent'] ?? 0) / $max) * 100));
-        $html .= '<div class="platform-bar" style="height:' . $h . '%" title="' . esc($tip($day)) . '"></div>';
+        $sent = (int) ($day['sent'] ?? 0);
+        $h = $sent === 0 ? 3 : max(10, (int) round(($sent / $max) * $plot));
+        $html .= '<div class="platform-bar" style="height:' . $h . 'px" title="' . esc($tip($day)) . '"></div>';
     }
     $html .= '</div><div class="platform-bar-label"><span>' . esc((string) ($rows[0]['date'] ?? ''))
         . '</span><span>' . esc($caption) . '</span><span>' . esc((string) ($rows[count($rows) - 1]['date'] ?? '')) . '</span></div>';
@@ -54,42 +63,22 @@ $waTip    = static fn (array $d): string => ($d['date'] ?? '') . ': ' . (int) ($
 $emailTip = static fn (array $d): string => ($d['date'] ?? '') . ': ' . (int) ($d['sent'] ?? 0) . ' sent · ' . (int) ($d['opened'] ?? 0) . ' opened';
 ?>
 
-<section class="platform-card">
-    <div class="platform-card-head">
-        <div>
-            <h2><?= esc((string) ($tenant['name'] ?? $key)) ?></h2>
-            <p><?= esc($key) ?> · DB <?= esc((string) ($tenant['db_database'] ?? '')) ?></p>
-            <div class="platform-health-row">
-                <span class="platform-badge <?= $badgeClass ?>">
-                    <i class="fas fa-circle" style="font-size:0.45rem"></i>
-                    <?= esc((string) ($stats['health_label'] ?? $health)) ?>
-                </span>
-                <span class="platform-badge <?= $waReady ? 'platform-badge-ok' : 'platform-badge-warn' ?>">WhatsApp <?= $waReady ? 'ready' : 'setup' ?></span>
-                <span class="platform-badge <?= $emailReady ? 'platform-badge-ok' : 'platform-badge-warn' ?>">Email <?= $emailReady ? 'ready' : 'setup' ?> · <?= esc($emailProvider) ?></span>
-                <?php if (! empty($stats['last_message_at'])): ?>
-                    <span class="platform-client-meta">Last message · <?= esc((string) $stats['last_message_at']) ?></span>
-                <?php endif; ?>
-            </div>
-        </div>
-        <div class="platform-actions">
-            <a class="btn-pf" href="<?= site_url('platform/clients') ?>">← All clients</a>
-            <form action="<?= site_url($clientUrl . '/enter') ?>" method="post">
-                <?= csrf_field() ?>
-                <button type="submit" class="btn-pf btn-pf-primary">Open workspace</button>
-            </form>
-        </div>
-    </div>
-
-    <nav class="platform-tabs" role="tablist">
-        <button type="button" class="platform-tab is-active" role="tab" data-tab="all">All</button>
-        <button type="button" class="platform-tab" role="tab" data-tab="whatsapp">
-            <span class="platform-tab-dot <?= $waReady ? 'is-ok' : '' ?>"></span>WhatsApp
-        </button>
-        <button type="button" class="platform-tab" role="tab" data-tab="email">
-            <span class="platform-tab-dot <?= $emailReady ? 'is-ok' : '' ?>"></span>Email
-        </button>
-    </nav>
-</section>
+<nav class="platform-tabs" role="tablist">
+    <button type="button" class="platform-tab is-active" role="tab" data-tab="all" aria-selected="true">
+        <i class="fas fa-border-all" aria-hidden="true"></i>
+        All
+    </button>
+    <button type="button" class="platform-tab" role="tab" data-tab="whatsapp" aria-selected="false">
+        <i class="fab fa-whatsapp" aria-hidden="true"></i>
+        WhatsApp
+        <span class="platform-tab-dot <?= $waReady ? 'is-ok' : '' ?>"></span>
+    </button>
+    <button type="button" class="platform-tab" role="tab" data-tab="email" aria-selected="false">
+        <i class="fas fa-envelope" aria-hidden="true"></i>
+        Email
+        <span class="platform-tab-dot <?= $emailReady ? 'is-ok' : '' ?>"></span>
+    </button>
+</nav>
 
 <?php /* ---------------- ALL ---------------- */ ?>
 <div class="platform-tab-panel" data-panel="all">
@@ -109,6 +98,28 @@ $emailTip = static fn (array $d): string => ($d['date'] ?? '') . ': ' . (int) ($
             <div class="platform-mini-kpi"><span>Open chats</span><strong><?= $fmt($stats['open_chats'] ?? 0) ?></strong></div>
             <div class="platform-mini-kpi"><span>Unsubscribed</span><strong><?= $fmt($stats['email_unsubscribed'] ?? 0) ?></strong></div>
         </div>
+    </section>
+
+    <section class="platform-card" id="limits">
+        <h3 class="platform-section-title">Users and roles limit</h3>
+        <p class="platform-help">This client can create users and roles only up to these numbers. Existing ones stay. Leave a field empty for no limit.</p>
+        <?php $seats = $seats ?? []; ?>
+        <form method="post" action="<?= site_url($clientUrl . '/limits') ?>" class="platform-form-grid">
+            <?= csrf_field() ?>
+            <div>
+                <label class="platform-label" for="maxUsers">Max users</label>
+                <input class="platform-input" type="number" min="1" id="maxUsers" name="max_users" value="<?= esc((string) ($seats['max_users'] ?? '')) ?>" placeholder="No limit">
+                <div class="platform-help">Now: <?= (int) ($seats['users'] ?? 0) ?> user<?= (int) ($seats['users'] ?? 0) === 1 ? '' : 's' ?></div>
+            </div>
+            <div>
+                <label class="platform-label" for="maxRoles">Max roles</label>
+                <input class="platform-input" type="number" min="1" id="maxRoles" name="max_roles" value="<?= esc((string) ($seats['max_roles'] ?? '')) ?>" placeholder="No limit">
+                <div class="platform-help">Now: <?= (int) ($seats['roles'] ?? 0) ?> role<?= (int) ($seats['roles'] ?? 0) === 1 ? '' : 's' ?></div>
+            </div>
+            <div class="full">
+                <button type="submit" class="btn-pf btn-pf-primary">Save limits</button>
+            </div>
+        </form>
     </section>
 
     <section class="platform-split">
@@ -141,7 +152,7 @@ $emailTip = static fn (array $d): string => ($d['date'] ?? '') . ': ' . (int) ($
                     <div class="platform-help">Only fill when creating or resetting the password.</div>
                 </div>
                 <div class="full">
-                    <button type="submit" class="btn-pf">Save login</button>
+                    <button type="submit" class="btn-pf btn-pf-primary">Save login</button>
                 </div>
             </form>
         </div>
@@ -177,7 +188,7 @@ $emailTip = static fn (array $d): string => ($d['date'] ?? '') . ': ' . (int) ($
                 <div class="platform-mini-kpi"><span>Fail %</span><strong><?= esc((string) ($stats['fail_rate'] ?? 0)) ?>%</strong></div>
             </div>
             <?php if (! $waReady): ?>
-                <div class="platform-help" style="margin-top:0.75rem">Phone number ID and access token are required. Fill Meta settings below or let the client use Connect WhatsApp.</div>
+                <div class="platform-help" style="margin-top:0.75rem">Phone number ID and access token are required. Connect this client from Platform → Embedded Signup, or paste the token below.</div>
             <?php endif; ?>
         </div>
 
@@ -283,7 +294,7 @@ $emailTip = static fn (array $d): string => ($d['date'] ?? '') . ': ' . (int) ($
                 <div class="platform-mini-kpi"><span>Senders</span><strong><?= $fmt($stats['email_senders_verified'] ?? 0) ?>/<?= $fmt($stats['email_senders_total'] ?? 0) ?></strong></div>
             </div>
             <?php if (empty($stats['email_configured'])): ?>
-                <div class="platform-help" style="margin-top:0.75rem">Email provider credentials are not set. Open the workspace → Settings → Email to configure.</div>
+                <div class="platform-help" style="margin-top:0.75rem">Email provider credentials are not set. <a href="<?= site_url($clientUrl . '/settings') ?>#tabEmail">Open this client's Email settings</a>.</div>
             <?php elseif (! $emailReady): ?>
                 <div class="platform-help" style="margin-top:0.75rem">Provider is configured but no verified sender yet. Verify a sender/domain in Email Manager → Senders.</div>
             <?php endif; ?>

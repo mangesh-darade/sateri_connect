@@ -11,345 +11,539 @@ $poweredByEnabled = ! empty($branding['powered_by_enabled']);
 $poweredByName    = (string) ($branding['powered_by_name'] ?? 'Sateri Technologies');
 $poweredByUrl     = (string) ($branding['powered_by_url'] ?? 'https://sateritechnologies.com');
 $poweredByLogoUrl = (string) ($branding['powered_by_logo_url'] ?? '');
+$schemaClients    = $schemaClients ?? [];
+$schemaTableCount = (int) ($schemaTableCount ?? 0);
+$schemaSnapshotAt = $schemaSnapshotAt ?? null;
+$brandInitial     = mb_strtoupper(mb_substr($siteName !== '' ? $siteName : 'S', 0, 1));
 ?>
 
-<div style="max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:1.75rem">
+<nav class="platform-tabs" role="tablist" aria-label="Platform settings">
+    <button type="button" class="platform-tab is-active" role="tab" data-tab="identity" aria-selected="true">
+        <i class="fas fa-globe" aria-hidden="true"></i> Identity
+    </button>
+    <button type="button" class="platform-tab" role="tab" data-tab="branding" aria-selected="false">
+        <i class="fas fa-image" aria-hidden="true"></i> Branding
+    </button>
+    <button type="button" class="platform-tab" role="tab" data-tab="powered" aria-selected="false">
+        <i class="fas fa-copyright" aria-hidden="true"></i> Powered by
+    </button>
+    <button type="button" class="platform-tab" role="tab" data-tab="database-health" aria-selected="false">
+        <i class="fas fa-database" aria-hidden="true"></i> Database
+    </button>
+</nav>
 
-    <!-- Header Banner -->
-    <div style="background:var(--pf-card);border:1px solid var(--pf-line);border-radius:14px;padding:1.5rem 1.75rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.02)">
-        <div style="display:flex;align-items:center;gap:1rem">
-            <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#e11d48,#fb7185);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.35rem;box-shadow:0 4px 12px rgba(225,29,72,0.25)">
-                <i class="fas fa-sliders-h"></i>
+<form method="post" action="<?= site_url('platform/settings') ?>" enctype="multipart/form-data" id="platformSettingsForm">
+    <?= csrf_field() ?>
+
+    <section class="platform-card platform-tab-panel" data-panel="identity">
+        <h3 class="platform-section-title">Site identity</h3>
+        <p class="platform-settings-lead">Name and subtitle shown in the browser tab and the sidebar.</p>
+        <div class="platform-form-grid">
+            <div>
+                <label class="platform-label" for="inputSiteName">Platform name <span class="req">*</span></label>
+                <input class="platform-input" type="text" name="site_name" id="inputSiteName" value="<?= esc($siteName) ?>" placeholder="Sateri Platform" required>
             </div>
             <div>
-                <h2 style="margin:0;font-size:1.25rem;font-weight:800;color:var(--pf-ink);letter-spacing:-0.01em">Platform Settings &amp; Branding</h2>
-                <p style="margin:0.25rem 0 0;color:var(--pf-muted);font-size:0.85rem">
-                    Manage global site identity, logos, browser favicon, and "Powered by" white-label attribution.
-                </p>
+                <label class="platform-label" for="inputSiteTagline">Console tagline</label>
+                <input class="platform-input" type="text" name="site_tagline" id="inputSiteTagline" value="<?= esc($siteTagline) ?>" placeholder="Super Admin Console">
+                <div class="platform-help">Shown under the name in the dark sidebar.</div>
             </div>
         </div>
-        <div style="display:flex;align-items:center;gap:0.5rem">
-            <span style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;background:#e8f6ef;color:#0d5c40;font-size:0.75rem;font-weight:700">
-                <i class="fas fa-shield-alt"></i> Super Admin Only
-            </span>
-        </div>
-    </div>
+    </section>
 
-    <!-- Main Settings Form -->
-    <form method="post" action="<?= site_url('platform/settings') ?>" enctype="multipart/form-data" style="display:flex;flex-direction:column;gap:1.5rem">
-        <?= csrf_field() ?>
-
-        <!-- SECTION 1: Site Identity -->
-        <section class="platform-card" style="padding:1.75rem;border-radius:14px">
-            <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1.25rem;padding-bottom:1rem;border-bottom:1px solid var(--pf-line)">
-                <div style="width:34px;height:34px;border-radius:8px;background:rgba(225,29,72,0.1);color:var(--pf-teal);display:flex;align-items:center;justify-content:center;font-size:0.95rem">
-                    <i class="fas fa-globe"></i>
+    <section class="platform-card platform-tab-panel" data-panel="branding" hidden>
+        <h3 class="platform-section-title">Logo and favicon</h3>
+        <p class="platform-settings-lead">Logo replaces the letter mark in the sidebar. Favicon is the browser-tab icon.</p>
+        <div class="platform-settings-assets">
+            <div class="platform-asset">
+                <div class="platform-asset-head">
+                    <label class="platform-label" for="inputSiteLogo">Platform logo</label>
+                    <span class="platform-asset-limit">Max 2MB</span>
                 </div>
-                <div>
-                    <h3 style="margin:0;font-size:1rem;font-weight:750;color:var(--pf-ink)">General Identity</h3>
-                    <p style="margin:0;font-size:0.8rem;color:var(--pf-muted)">Platform titles displayed in browser tabs and console navigation</p>
-                </div>
-            </div>
-
-            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));gap:1.25rem">
-                <div>
-                    <label class="platform-label" for="inputSiteName" style="font-weight:700">
-                        Platform / Site Name <span class="text-danger" style="color:var(--pf-down)">*</span>
-                    </label>
-                    <input class="platform-input" type="text" name="site_name" id="inputSiteName" value="<?= esc($siteName) ?>" placeholder="e.g. Sateri Platform" required style="font-size:0.9rem;padding:0.65rem 0.85rem">
-                    <small style="color:var(--pf-muted);font-size:0.78rem;margin-top:0.35rem;display:block">
-                        Used in page <code>&lt;title&gt;</code> tags and sidebar header title.
-                    </small>
-                </div>
-                <div>
-                    <label class="platform-label" for="inputSiteTagline" style="font-weight:700">
-                        Console Tagline / Subtitle
-                    </label>
-                    <input class="platform-input" type="text" name="site_tagline" id="inputSiteTagline" value="<?= esc($siteTagline) ?>" placeholder="e.g. Super Admin Console" style="font-size:0.9rem;padding:0.65rem 0.85rem">
-                    <small style="color:var(--pf-muted);font-size:0.78rem;margin-top:0.35rem;display:block">
-                        Appears beneath the site name in the dark sidebar menu.
-                    </small>
-                </div>
-            </div>
-        </section>
-
-        <!-- SECTION 2: Visual Assets (Logo & Favicon) -->
-        <section class="platform-card" style="padding:1.75rem;border-radius:14px">
-            <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1.25rem;padding-bottom:1rem;border-bottom:1px solid var(--pf-line)">
-                <div style="width:34px;height:34px;border-radius:8px;background:rgba(196,92,18,0.1);color:var(--pf-coral);display:flex;align-items:center;justify-content:center;font-size:0.95rem">
-                    <i class="fas fa-palette"></i>
-                </div>
-                <div>
-                    <h3 style="margin:0;font-size:1rem;font-weight:750;color:var(--pf-ink)">Visual Branding Assets</h3>
-                    <p style="margin:0;font-size:0.8rem;color:var(--pf-muted)">Upload official platform logo and browser tab favicon</p>
-                </div>
-            </div>
-
-            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(360px, 1fr));gap:1.5rem">
-                <!-- Platform Logo Card -->
-                <div style="border:1px solid var(--pf-line);border-radius:10px;padding:1.25rem;background:#fafbf8;display:flex;flex-direction:column;gap:1rem">
-                    <div style="display:flex;align-items:center;justify-content:space-between">
-                        <label class="platform-label" style="font-weight:700;margin:0">
-                            <i class="fas fa-image me-1" style="color:var(--pf-teal)"></i> Platform Logo
-                        </label>
-                        <span style="font-size:0.72rem;background:#e2e8f0;padding:2px 8px;border-radius:6px;font-weight:600;color:#475569">Max 2MB</span>
+                <div class="platform-asset-preview is-dark">
+                    <div id="logoDefaultPlaceholder" class="platform-asset-fallback"<?= $logoUrl !== '' ? ' hidden' : '' ?>>
+                        <div class="platform-rail-mark"><?= esc($brandInitial) ?></div>
+                        <div>
+                            <strong><?= esc($siteName) ?></strong>
+                            <span><?= esc($siteTagline) ?></span>
+                        </div>
                     </div>
+                    <img src="<?= esc($logoUrl) ?>" alt="Platform logo" id="logoPreviewImg"<?= $logoUrl === '' ? ' hidden' : '' ?>>
+                </div>
+                <input class="platform-input" type="file" name="site_logo" id="inputSiteLogo" accept=".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif">
+                <div class="platform-asset-foot">
+                    <span class="platform-help">PNG, JPG, or WEBP</span>
+                    <?php if ($logoUrl !== ''): ?>
+                        <label class="platform-remove"><input type="checkbox" name="remove_logo" value="1"> Remove</label>
+                    <?php endif; ?>
+                </div>
+            </div>
 
-                    <!-- Current Logo Viewport -->
-                    <div style="background:#121c22;border:1px dashed rgba(255,255,255,0.15);border-radius:8px;padding:1.25rem;display:flex;align-items:center;justify-content:center;min-height:90px">
-                        <?php if ($logoUrl !== ''): ?>
-                            <img src="<?= esc($logoUrl) ?>" alt="Platform Logo" id="logoPreviewImg" style="max-height:48px;max-width:200px;object-fit:contain">
-                        <?php else: ?>
-                            <div id="logoDefaultPlaceholder" style="display:flex;align-items:center;gap:0.6rem;color:#f8fafc">
-                                <div class="platform-rail-mark" style="width:34px;height:34px;font-size:0.95rem">S</div>
-                                <div>
-                                    <div style="font-weight:800;font-size:0.92rem"><?= esc($siteName) ?></div>
-                                    <div style="font-size:0.65rem;color:rgba(255,255,255,0.5);text-transform:uppercase"><?= esc($siteTagline) ?></div>
-                                </div>
-                            </div>
-                            <img src="" alt="Preview" id="logoPreviewImg" style="max-height:48px;max-width:200px;object-fit:contain;display:none">
+            <div class="platform-asset">
+                <div class="platform-asset-head">
+                    <label class="platform-label" for="inputSiteFavicon">Browser favicon</label>
+                    <span class="platform-asset-limit">Max 512KB</span>
+                </div>
+                <div class="platform-asset-preview is-dark">
+                    <div class="platform-asset-tab">
+                        <span id="favDefaultBadge" class="platform-asset-badge"<?= $faviconUrl !== '' ? ' hidden' : '' ?>><?= esc($brandInitial) ?></span>
+                        <img src="<?= esc($faviconUrl) ?>" alt="Favicon" id="favPreviewImg"<?= $faviconUrl === '' ? ' hidden' : '' ?>>
+                        <span>Browser tab</span>
+                    </div>
+                </div>
+                <input class="platform-input" type="file" name="site_favicon" id="inputSiteFavicon" accept=".ico,.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp,image/x-icon">
+                <div class="platform-asset-foot">
+                    <span class="platform-help">Square PNG or ICO, about 32×32</span>
+                    <?php if ($faviconUrl !== ''): ?>
+                        <label class="platform-remove"><input type="checkbox" name="remove_favicon" value="1"> Remove</label>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="platform-card platform-tab-panel" data-panel="powered" hidden>
+        <div class="platform-settings-head">
+            <div>
+                <h3 class="platform-section-title">Powered by</h3>
+                <p class="platform-settings-lead">Footer credit in the sidebar and at the bottom of every console page.</p>
+            </div>
+            <label class="platform-switch">
+                <input type="checkbox" name="powered_by_enabled" id="togglePoweredBy" value="1" <?= $poweredByEnabled ? 'checked' : '' ?>>
+                <span>Show credit</span>
+            </label>
+        </div>
+        <div id="poweredByFields" class="platform-settings-powered<?= $poweredByEnabled ? '' : ' is-off' ?>">
+            <div class="platform-form-grid">
+                <div>
+                    <label class="platform-label" for="inputPoweredByName">Provider name</label>
+                    <input class="platform-input" type="text" name="powered_by_name" id="inputPoweredByName" value="<?= esc($poweredByName) ?>" placeholder="Sateri Technologies">
+                </div>
+                <div>
+                    <label class="platform-label" for="inputPoweredByUrl">Website</label>
+                    <input class="platform-input" type="url" name="powered_by_url" id="inputPoweredByUrl" value="<?= esc($poweredByUrl) ?>" placeholder="https://example.com">
+                </div>
+            </div>
+            <div class="platform-settings-assets" style="margin-top:0.85rem">
+                <div class="platform-asset">
+                    <div class="platform-asset-head">
+                        <label class="platform-label" for="inputPoweredByLogo">Provider icon</label>
+                        <span class="platform-asset-limit">Max 1MB</span>
+                    </div>
+                    <input class="platform-input" type="file" name="powered_by_logo" id="inputPoweredByLogo" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp,image/gif">
+                    <div class="platform-asset-foot">
+                        <span class="platform-help">Small mark, about 16–24px tall</span>
+                        <?php if ($poweredByLogoUrl !== ''): ?>
+                            <label class="platform-remove"><input type="checkbox" name="remove_powered_by_logo" value="1"> Remove</label>
                         <?php endif; ?>
                     </div>
-
-                    <div>
-                        <input class="platform-input" type="file" name="site_logo" id="inputSiteLogo" accept=".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif" style="font-size:0.82rem;padding:0.45rem">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.4rem;font-size:0.78rem">
-                            <span style="color:var(--pf-muted)">SVG, PNG or WEBP (transparent)</span>
-                            <?php if ($logoUrl !== ''): ?>
-                                <label style="color:var(--pf-down);display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer;font-weight:600">
-                                    <input type="checkbox" name="remove_logo" value="1">
-                                    <i class="fas fa-trash-alt"></i> Remove
-                                </label>
-                            <?php endif; ?>
-                        </div>
-                    </div>
                 </div>
-
-                <!-- Favicon Card -->
-                <div style="border:1px solid var(--pf-line);border-radius:10px;padding:1.25rem;background:#fafbf8;display:flex;flex-direction:column;gap:1rem">
-                    <div style="display:flex;align-items:center;justify-content:space-between">
-                        <label class="platform-label" style="font-weight:700;margin:0">
-                            <i class="fas fa-bookmark me-1" style="color:var(--pf-coral)"></i> Browser Tab Favicon
-                        </label>
-                        <span style="font-size:0.72rem;background:#e2e8f0;padding:2px 8px;border-radius:6px;font-weight:600;color:#475569">Max 512KB</span>
+                <div class="platform-asset">
+                    <div class="platform-asset-head">
+                        <span class="platform-label">Preview</span>
                     </div>
-
-                    <!-- Current Favicon Viewport -->
-                    <div style="background:#0f172a;border:1px dashed rgba(255,255,255,0.15);border-radius:8px;padding:1.25rem;display:flex;align-items:center;justify-content:center;gap:1.5rem;min-height:90px">
-                        <div style="display:flex;align-items:center;gap:0.75rem;background:rgba(255,255,255,0.06);padding:6px 14px;border-radius:8px">
-                            <?php if ($faviconUrl !== ''): ?>
-                                <img src="<?= esc($faviconUrl) ?>" alt="Favicon" id="favPreviewImg" style="width:24px;height:24px;object-fit:contain;border-radius:3px">
-                            <?php else: ?>
-                                <span id="favDefaultBadge" style="background:var(--pf-teal);color:#fff;width:24px;height:24px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">S</span>
-                                <img src="" alt="Preview" id="favPreviewImg" style="width:24px;height:24px;object-fit:contain;border-radius:3px;display:none">
-                            <?php endif; ?>
-                            <span style="color:#f8fafc;font-size:0.85rem;font-weight:600">Browser Tab Icon</span>
-                        </div>
-                    </div>
-
-                    <div>
-                        <input class="platform-input" type="file" name="site_favicon" id="inputSiteFavicon" accept=".ico,.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp,image/gif" style="font-size:0.82rem;padding:0.45rem">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.4rem;font-size:0.78rem">
-                            <span style="color:var(--pf-muted)">Square PNG, ICO or SVG (32x32)</span>
-                            <?php if ($faviconUrl !== ''): ?>
-                                <label style="color:var(--pf-down);display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer;font-weight:600">
-                                    <input type="checkbox" name="remove_favicon" value="1">
-                                    <i class="fas fa-trash-alt"></i> Remove
-                                </label>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- SECTION 3: "Powered By" Attribution & White-Labeling -->
-        <section class="platform-card" style="padding:1.75rem;border-radius:14px">
-            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1.25rem;padding-bottom:1rem;border-bottom:1px solid var(--pf-line)">
-                <div style="display:flex;align-items:center;gap:0.75rem">
-                    <div style="width:34px;height:34px;border-radius:8px;background:rgba(56,189,248,0.12);color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:0.95rem">
-                        <i class="fas fa-copyright"></i>
-                    </div>
-                    <div>
-                        <h3 style="margin:0;font-size:1rem;font-weight:750;color:var(--pf-ink)">&quot;Powered By&quot; Attribution</h3>
-                        <p style="margin:0;font-size:0.8rem;color:var(--pf-muted)">Configure the developer / provider badge shown in sidebar footer and layout bottom</p>
-                    </div>
-                </div>
-
-                <!-- Enable / Disable Switch -->
-                <label style="display:inline-flex;align-items:center;gap:0.6rem;cursor:pointer;background:#f1f5f9;padding:6px 14px;border-radius:20px;font-size:0.82rem;font-weight:700;color:var(--pf-ink)">
-                    <input type="checkbox" name="powered_by_enabled" id="togglePoweredBy" value="1" <?= $poweredByEnabled ? 'checked' : '' ?> style="accent-color:var(--pf-teal);width:16px;height:16px;cursor:pointer">
-                    <span>Show &quot;Powered by&quot;</span>
-                </label>
-            </div>
-
-            <!-- Powered By Configuration Fields -->
-            <div id="poweredByFields" style="display:flex;flex-direction:column;gap:1.25rem;<?= $poweredByEnabled ? '' : 'opacity:0.6;' ?>">
-                <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:1.25rem">
-                    <div>
-                        <label class="platform-label" for="inputPoweredByName" style="font-weight:700">
-                            Provider / Brand Name
-                        </label>
-                        <input class="platform-input" type="text" name="powered_by_name" id="inputPoweredByName" value="<?= esc($poweredByName) ?>" placeholder="e.g. Sateri Technologies" style="font-size:0.9rem;padding:0.65rem 0.85rem">
-                        <small style="color:var(--pf-muted);font-size:0.78rem;margin-top:0.35rem;display:block">
-                            Company or product name displayed after &quot;Powered by&quot;.
-                        </small>
-                    </div>
-                    <div>
-                        <label class="platform-label" for="inputPoweredByUrl" style="font-weight:700">
-                            Website / Link URL
-                        </label>
-                        <input class="platform-input" type="url" name="powered_by_url" id="inputPoweredByUrl" value="<?= esc($poweredByUrl) ?>" placeholder="https://example.com" style="font-size:0.9rem;padding:0.65rem 0.85rem">
-                        <small style="color:var(--pf-muted);font-size:0.78rem;margin-top:0.35rem;display:block">
-                            Destination link when users click on the Powered By attribution.
-                        </small>
-                    </div>
-                </div>
-
-                <!-- Powered By Logo Upload & Live Preview -->
-                <div style="border:1px solid var(--pf-line);border-radius:10px;padding:1.25rem;background:#fafbf8;display:grid;grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));gap:1.25rem;align-items:center">
-                    <div>
-                        <label class="platform-label" style="font-weight:700">
-                            <i class="fas fa-file-image me-1" style="color:#0284c7"></i> Provider Micro-Logo / Icon (Optional)
-                        </label>
-                        <input class="platform-input" type="file" name="powered_by_logo" id="inputPoweredByLogo" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp,image/gif" style="font-size:0.82rem;padding:0.45rem">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.4rem;font-size:0.78rem">
-                            <span style="color:var(--pf-muted)">Small logo or icon (Max 1MB, approx 16x16 or 24x24)</span>
+                    <div class="platform-powered-preview">
+                        <span>Powered by</span>
+                        <a href="<?= esc($poweredByUrl) ?>" id="previewPoweredByLink" target="_blank" rel="noopener noreferrer">
                             <?php if ($poweredByLogoUrl !== ''): ?>
-                                <label style="color:var(--pf-down);display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer;font-weight:600">
-                                    <input type="checkbox" name="remove_powered_by_logo" value="1">
-                                    <i class="fas fa-trash-alt"></i> Remove
-                                </label>
+                                <img src="<?= esc($poweredByLogoUrl) ?>" alt="" id="previewPoweredByLogo">
+                            <?php else: ?>
+                                <img src="" alt="" id="previewPoweredByLogo" hidden>
                             <?php endif; ?>
-                        </div>
-                    </div>
-
-                    <!-- Live Attribution Preview Card -->
-                    <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:1rem 1.25rem;box-shadow:0 2px 6px rgba(0,0,0,0.02)">
-                        <div style="font-size:0.72rem;font-weight:700;color:var(--pf-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.6rem">
-                            <i class="fas fa-eye me-1"></i> Live Attribution Preview
-                        </div>
-                        <div style="display:flex;align-items:center;gap:8px;font-size:0.86rem;color:#475569;background:#f8fafc;padding:8px 12px;border-radius:6px;border:1px solid #e2e8f0">
-                            <span>Powered by</span>
-                            <a href="<?= esc($poweredByUrl) ?>" id="previewPoweredByLink" target="_blank" rel="noopener noreferrer" style="color:var(--pf-teal);font-weight:700;display:inline-flex;align-items:center;gap:5px;text-decoration:none">
-                                <?php if ($poweredByLogoUrl !== ''): ?>
-                                    <img src="<?= esc($poweredByLogoUrl) ?>" alt="Logo" id="previewPoweredByLogo" style="height:15px;width:auto;vertical-align:middle;border-radius:2px">
-                                <?php else: ?>
-                                    <img src="" alt="Logo" id="previewPoweredByLogo" style="height:15px;width:auto;vertical-align:middle;border-radius:2px;display:none">
-                                <?php endif; ?>
-                                <span id="previewPoweredByName"><?= esc($poweredByName) ?></span>
-                                <i class="fas fa-arrow-up-right-from-square" style="font-size:9px"></i>
-                            </a>
-                        </div>
+                            <span id="previewPoweredByName"><?= esc($poweredByName) ?></span>
+                            <i class="fas fa-arrow-up-right-from-square" aria-hidden="true"></i>
+                        </a>
                     </div>
                 </div>
-            </div>
-        </section>
-
-        <!-- Sticky Action Bar -->
-        <div style="background:var(--pf-card);border:1px solid var(--pf-line);border-radius:12px;padding:1rem 1.5rem;display:flex;align-items:center;justify-content:space-between;box-shadow:0 4px 12px rgba(0,0,0,0.03)">
-            <span style="font-size:0.82rem;color:var(--pf-muted)">
-                <i class="fas fa-info-circle me-1"></i> Changes take effect immediately across all console screens.
-            </span>
-            <div style="display:flex;align-items:center;gap:0.75rem">
-                <a href="<?= site_url('platform/clients') ?>" class="btn-pf" style="padding:0.65rem 1.25rem">
-                    Cancel
-                </a>
-                <button type="submit" class="btn-pf btn-pf-primary" style="padding:0.65rem 1.75rem;font-size:0.88rem;box-shadow:0 2px 6px rgba(225,29,72,0.25)">
-                    <i class="fas fa-save me-1"></i> Save Platform Settings
-                </button>
             </div>
         </div>
-    </form>
-</div>
+    </section>
 
+    <div class="platform-settings-save" data-settings-save>
+        <span id="settingsSaveStatus">Save keeps you on this page.</span>
+        <button type="submit" class="btn-pf btn-pf-primary" id="settingsSaveBtn"><i class="fas fa-save"></i> Save settings</button>
+    </div>
+</form>
+
+<section class="platform-card platform-tab-panel" id="database-health" data-panel="database-health" hidden>
+    <div class="platform-card-head">
+        <div>
+            <h3 class="platform-section-title">Database health</h3>
+            <p class="platform-settings-lead">
+                <?= $schemaTableCount ?> schema tables<?= $schemaSnapshotAt ? ' · snapshot ' . esc($schemaSnapshotAt) : '' ?>.
+                Repair only adds missing tables, columns, and indexes.
+            </p>
+        </div>
+        <div class="platform-settings-actions">
+            <button type="button" class="btn-pf" id="schemaCheckAll"><i class="fas fa-stethoscope"></i> Check all</button>
+            <button type="button" class="btn-pf btn-pf-primary" id="schemaRepairAll"><i class="fas fa-wrench"></i> Repair all</button>
+        </div>
+    </div>
+    <div class="platform-settings-summary" id="schemaSummary"></div>
+    <?php if ($schemaTableCount === 0): ?>
+        <div class="platform-empty">
+            <strong>Schema snapshot missing</strong>
+            <p>Deploy <code>app/Database/Schema/tables.php</code> from <code>php spark schema:snapshot</code>.</p>
+        </div>
+    <?php elseif ($schemaClients === []): ?>
+        <div class="platform-empty">
+            <strong>No active clients</strong>
+            <p>Create a client first.</p>
+        </div>
+    <?php else: ?>
+        <div class="platform-table-wrap">
+            <table class="platform-table">
+                <thead>
+                <tr>
+                    <th>Client</th>
+                    <th>Status</th>
+                    <th>Details</th>
+                    <th>Last checked</th>
+                    <th class="is-actions">Actions</th>
+                </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($schemaClients as $c): ?>
+                    <?php $key = (string) ($c['key'] ?? ''); ?>
+                    <tr data-schema-row="<?= esc($key, 'attr') ?>">
+                        <td>
+                            <div class="platform-client-name"><?= esc((string) ($c['name'] ?? $key)) ?></div>
+                            <div class="platform-client-meta"><?= esc($key) ?> · <?= esc((string) ($c['db_database'] ?? '')) ?></div>
+                        </td>
+                        <td class="js-schema-status"><span class="platform-badge">Not checked</span></td>
+                        <td class="js-schema-detail">—</td>
+                        <td class="js-schema-time">—</td>
+                        <td class="is-actions">
+                            <button type="button" class="btn-pf js-schema-action" data-action="check" data-key="<?= esc($key, 'attr') ?>"><i class="fas fa-stethoscope"></i> Check</button>
+                            <button type="button" class="btn-pf btn-pf-primary js-schema-action" data-action="repair" data-key="<?= esc($key, 'attr') ?>"><i class="fas fa-wrench"></i> Repair</button>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+</section>
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
 <script>
-// Dynamic update of Live Powered By preview
-var pNameInput = document.getElementById('inputPoweredByName');
-var pUrlInput = document.getElementById('inputPoweredByUrl');
-var pPreviewName = document.getElementById('previewPoweredByName');
-var pPreviewLink = document.getElementById('previewPoweredByLink');
-var pLogoInput = document.getElementById('inputPoweredByLogo');
-var pPreviewLogo = document.getElementById('previewPoweredByLogo');
+(function () {
+    var tabs = document.querySelectorAll('.platform-tab[data-tab]');
+    var panels = document.querySelectorAll('.platform-tab-panel[data-panel]');
+    var saveBar = document.querySelector('[data-settings-save]');
+    var schemaStarted = false;
 
-if (pNameInput && pPreviewName) {
-    pNameInput.addEventListener('input', function() {
-        pPreviewName.textContent = this.value.trim() || 'Sateri Technologies';
+    function show(name, push) {
+        var found = false;
+        tabs.forEach(function (t) {
+            var on = t.getAttribute('data-tab') === name;
+            if (on) found = true;
+            t.classList.toggle('is-active', on);
+            t.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        if (!found) return show('identity', push);
+        panels.forEach(function (p) {
+            p.hidden = p.getAttribute('data-panel') !== name;
+        });
+        if (saveBar) saveBar.hidden = name === 'database-health';
+        if (push) history.replaceState(null, '', name === 'identity' ? location.pathname + location.search : '#' + name);
+        if (name === 'database-health') startSchemaCheck();
+    }
+
+    tabs.forEach(function (t) {
+        t.addEventListener('click', function () { show(t.getAttribute('data-tab'), true); });
     });
-}
 
-if (pUrlInput && pPreviewLink) {
-    pUrlInput.addEventListener('input', function() {
-        pPreviewLink.href = this.value.trim() || '#';
-    });
-}
+    function cacheBust(url) {
+        if (!url) return '';
+        return url + (url.indexOf('?') === -1 ? '?' : '&') + 'v=' + Date.now();
+    }
 
-if (pLogoInput && pPreviewLogo) {
-    pLogoInput.addEventListener('change', function(e) {
-        if (e.target.files && e.target.files[0]) {
+    function applyBranding(b) {
+        var name = b.site_name || 'Sateri Platform';
+        var tag = b.site_tagline || '';
+        var initial = (name.charAt(0) || 'S').toUpperCase();
+        document.title = 'Platform Settings | ' + name;
+
+        var footerName = document.getElementById('platformFooterName');
+        if (footerName) footerName.textContent = name;
+        var brandName = document.getElementById('platformBrandName');
+        var brandTag = document.getElementById('platformBrandTag');
+        var brandMark = document.getElementById('platformBrandMark');
+        var brandText = document.getElementById('platformBrandText');
+        var brandLogo = document.getElementById('platformBrandLogo');
+        if (brandName) brandName.textContent = name;
+        if (brandTag) brandTag.textContent = tag;
+        if (brandMark) brandMark.textContent = initial;
+        if (brandLogo) {
+            var hasLogo = !!b.logo_url;
+            brandLogo.hidden = !hasLogo;
+            brandLogo.alt = name;
+            if (hasLogo) brandLogo.src = cacheBust(b.logo_url);
+            if (brandMark) brandMark.hidden = hasLogo;
+            if (brandText) brandText.hidden = hasLogo;
+        }
+
+        var logoImg = document.getElementById('logoPreviewImg');
+        var logoPh = document.getElementById('logoDefaultPlaceholder');
+        if (logoImg) {
+            logoImg.hidden = !b.logo_url;
+            if (b.logo_url) logoImg.src = cacheBust(b.logo_url);
+            if (logoPh) {
+                logoPh.hidden = !!b.logo_url;
+                var strong = logoPh.querySelector('strong');
+                var sub = logoPh.querySelector('span');
+                if (strong) strong.textContent = name;
+                if (sub) sub.textContent = tag;
+                var mark = logoPh.querySelector('.platform-rail-mark');
+                if (mark) mark.textContent = initial;
+            }
+        }
+        var favImg = document.getElementById('favPreviewImg');
+        var favBadge = document.getElementById('favDefaultBadge');
+        if (favImg) {
+            favImg.hidden = !b.favicon_url;
+            if (b.favicon_url) favImg.src = cacheBust(b.favicon_url);
+        }
+        if (favBadge) {
+            favBadge.hidden = !!b.favicon_url;
+            favBadge.textContent = initial;
+        }
+        if (b.favicon_url) {
+            document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]').forEach(function (link) {
+                link.href = cacheBust(b.favicon_url);
+            });
+        }
+
+        var sideCredit = document.getElementById('platformSidePowered');
+        var pageCredit = document.getElementById('platformPoweredBy');
+        if (sideCredit) sideCredit.hidden = !b.powered_by_enabled;
+        if (pageCredit) pageCredit.hidden = !b.powered_by_enabled;
+        ['platformSidePoweredLink', 'platformPoweredByLink', 'previewPoweredByLink'].forEach(function (id) {
+            var link = document.getElementById(id);
+            if (link) link.href = b.powered_by_url || '#';
+        });
+        ['platformSidePoweredName', 'platformPoweredByName', 'previewPoweredByName'].forEach(function (id) {
+            var node = document.getElementById(id);
+            if (node) node.textContent = b.powered_by_name || '';
+        });
+        ['platformSidePoweredLogo', 'platformPoweredByLogo', 'previewPoweredByLogo'].forEach(function (id) {
+            var img = document.getElementById(id);
+            if (!img) return;
+            img.hidden = !b.powered_by_logo_url;
+            if (b.powered_by_logo_url) img.src = cacheBust(b.powered_by_logo_url);
+        });
+
+        ['inputSiteLogo', 'inputSiteFavicon', 'inputPoweredByLogo'].forEach(function (id) {
+            var input = document.getElementById(id);
+            if (input) input.value = '';
+        });
+        document.querySelectorAll('[name="remove_logo"], [name="remove_favicon"], [name="remove_powered_by_logo"]').forEach(function (box) {
+            box.checked = false;
+        });
+    }
+
+    var settingsForm = document.getElementById('platformSettingsForm');
+    var saveBtn = document.getElementById('settingsSaveBtn');
+    var saveStatus = document.getElementById('settingsSaveStatus');
+    if (settingsForm) {
+        settingsForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            if (saveBtn) saveBtn.disabled = true;
+            if (saveStatus) {
+                saveStatus.className = '';
+                saveStatus.textContent = 'Saving…';
+            }
+            fetch(settingsForm.action, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                body: new FormData(settingsForm)
+            }).then(function (res) {
+                return res.json().catch(function () {
+                    return { success: false, message: 'Could not save settings.' };
+                });
+            }).then(function (json) {
+                if (saveStatus) {
+                    saveStatus.textContent = (json && json.message) || (json && json.success ? 'Settings saved.' : 'Could not save settings.');
+                    saveStatus.className = json && json.success ? 'is-ok' : 'is-err';
+                }
+                if (json && json.success && json.data && json.data.branding) applyBranding(json.data.branding);
+            }).catch(function () {
+                if (saveStatus) {
+                    saveStatus.className = 'is-err';
+                    saveStatus.textContent = 'Network error — please retry.';
+                }
+            }).then(function () {
+                if (saveBtn) saveBtn.disabled = false;
+            });
+        });
+    }
+
+    var pNameInput = document.getElementById('inputPoweredByName');
+    var pUrlInput = document.getElementById('inputPoweredByUrl');
+    var pPreviewName = document.getElementById('previewPoweredByName');
+    var pPreviewLink = document.getElementById('previewPoweredByLink');
+    var pLogoInput = document.getElementById('inputPoweredByLogo');
+    var pPreviewLogo = document.getElementById('previewPoweredByLogo');
+    if (pNameInput && pPreviewName) {
+        pNameInput.addEventListener('input', function () {
+            pPreviewName.textContent = this.value.trim() || 'Sateri Technologies';
+        });
+    }
+    if (pUrlInput && pPreviewLink) {
+        pUrlInput.addEventListener('input', function () {
+            pPreviewLink.href = this.value.trim() || '#';
+        });
+    }
+    if (pLogoInput && pPreviewLogo) {
+        pLogoInput.addEventListener('change', function (e) {
+            if (!e.target.files || !e.target.files[0]) return;
             var reader = new FileReader();
-            reader.onload = function(ev) {
+            reader.onload = function (ev) {
                 pPreviewLogo.src = ev.target.result;
-                pPreviewLogo.style.display = 'inline-block';
+                pPreviewLogo.hidden = false;
             };
             reader.readAsDataURL(e.target.files[0]);
-        }
-    });
-}
+        });
+    }
 
-// Logo preview
-var logoInput = document.getElementById('inputSiteLogo');
-var logoPreview = document.getElementById('logoPreviewImg');
-var logoPlaceholder = document.getElementById('logoDefaultPlaceholder');
-
-if (logoInput && logoPreview) {
-    logoInput.addEventListener('change', function(e) {
-        if (e.target.files && e.target.files[0]) {
+    function previewFile(inputId, imgId, hideId) {
+        var input = document.getElementById(inputId);
+        var img = document.getElementById(imgId);
+        var hide = hideId ? document.getElementById(hideId) : null;
+        if (!input || !img) return;
+        input.addEventListener('change', function (e) {
+            if (!e.target.files || !e.target.files[0]) return;
             var reader = new FileReader();
-            reader.onload = function(ev) {
-                logoPreview.src = ev.target.result;
-                logoPreview.style.display = 'block';
-                if (logoPlaceholder) logoPlaceholder.style.display = 'none';
+            reader.onload = function (ev) {
+                img.src = ev.target.result;
+                img.hidden = false;
+                img.style.display = '';
+                if (hide) hide.hidden = true;
             };
             reader.readAsDataURL(e.target.files[0]);
-        }
-    });
-}
+        });
+    }
+    previewFile('inputSiteLogo', 'logoPreviewImg', 'logoDefaultPlaceholder');
+    previewFile('inputSiteFavicon', 'favPreviewImg', 'favDefaultBadge');
 
-// Favicon preview
-var favInput = document.getElementById('inputSiteFavicon');
-var favPreview = document.getElementById('favPreviewImg');
-var favBadge = document.getElementById('favDefaultBadge');
+    var togglePB = document.getElementById('togglePoweredBy');
+    var pbFields = document.getElementById('poweredByFields');
+    if (togglePB && pbFields) {
+        togglePB.addEventListener('change', function () {
+            pbFields.classList.toggle('is-off', !this.checked);
+        });
+    }
 
-if (favInput && favPreview) {
-    favInput.addEventListener('change', function(e) {
-        if (e.target.files && e.target.files[0]) {
-            var reader = new FileReader();
-            reader.onload = function(ev) {
-                favPreview.src = ev.target.result;
-                favPreview.style.display = 'inline-block';
-                if (favBadge) favBadge.style.display = 'none';
-            };
-            reader.readAsDataURL(e.target.files[0]);
-        }
-    });
-}
+    var section = document.getElementById('database-health');
+    var csrfName = <?= json_encode(csrf_token()) ?>;
+    var csrfHash = <?= json_encode(csrf_hash()) ?>;
+    var baseUrl = <?= json_encode(rtrim(site_url('platform/schema'), '/')) ?>;
+    var results = {};
+    var STATES = {
+        ok: ['Up to date', 'platform-badge-ok'],
+        needs_repair: ['Needs repair', 'platform-badge-warn'],
+        attention: ['Attention', 'platform-badge-down'],
+        error: ['Connect error', 'platform-badge-down'],
+        working: ['Working…', '']
+    };
 
-// Toggle Powered By
-var togglePB = document.getElementById('togglePoweredBy');
-var pbFields = document.getElementById('poweredByFields');
-if (togglePB && pbFields) {
-    togglePB.addEventListener('change', function() {
-        if (this.checked) {
-            pbFields.style.opacity = '1';
-            pbFields.style.pointerEvents = 'auto';
-        } else {
-            pbFields.style.opacity = '0.45';
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+    function row(key) {
+        return section.querySelector('[data-schema-row="' + (window.CSS && CSS.escape ? CSS.escape(key) : key) + '"]');
+    }
+    function badge(state) {
+        var s = STATES[state] || STATES.error;
+        return '<span class="platform-badge ' + s[1] + '">' + (state === 'working' ? '<i class="fas fa-spinner fa-spin"></i> ' : '') + s[0] + '</span>';
+    }
+    function detailHtml(d, message) {
+        var html = '<div style="color:var(--pf-ink)">' + esc(message || d.message || '') + '</div>';
+        [['Repaired now', d.changes || {}], ['Still missing', d.issues || {}]].forEach(function (pair) {
+            var tables = Object.keys(pair[1]);
+            if (!tables.length) return;
+            html += '<details style="margin-top:0.35rem"><summary style="cursor:pointer">' + pair[0] + ' (' + tables.length + ')</summary><ul style="margin:0.3rem 0 0;padding-left:1rem">';
+            tables.forEach(function (t) {
+                html += '<li><code>' + esc(t) + '</code>: ' + esc((pair[1][t] || []).join(', ')) + '</li>';
+            });
+            html += '</ul></details>';
+        });
+        return html;
+    }
+    function render(key, state, d, message) {
+        var r = row(key);
+        if (!r) return;
+        r.querySelector('.js-schema-status').innerHTML = badge(state);
+        if (d) {
+            r.querySelector('.js-schema-detail').innerHTML = detailHtml(d, message);
+            r.querySelector('.js-schema-time').textContent = d.checked_at || '';
+        } else if (message) {
+            r.querySelector('.js-schema-detail').innerHTML = '<span style="color:var(--pf-down)">' + esc(message) + '</span>';
         }
-    });
-}
+        r.querySelectorAll('.js-schema-action').forEach(function (b) { b.disabled = state === 'working'; });
+    }
+    function summary() {
+        var box = document.getElementById('schemaSummary');
+        if (!box) return;
+        var counts = {};
+        Object.keys(results).forEach(function (k) { counts[results[k]] = (counts[results[k]] || 0) + 1; });
+        box.innerHTML = Object.keys(counts).map(function (s) {
+            return badge(s).replace('</span>', ' · ' + counts[s] + '</span>');
+        }).join('');
+    }
+    function run(key, action) {
+        render(key, 'working');
+        var body = new FormData();
+        body.append(csrfName, csrfHash);
+        return fetch(baseUrl + '/' + encodeURIComponent(key) + '/' + action, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: body
+        }).then(function (res) {
+            return res.json().catch(function () { return { success: false, message: 'Unexpected response (HTTP ' + res.status + ').' }; });
+        }).then(function (json) {
+            var d = json.data || null;
+            results[key] = d ? d.state : 'error';
+            render(key, results[key], d, json.message);
+        }).catch(function () {
+            results[key] = 'error';
+            render(key, 'error', null, 'Network error — please retry.');
+        }).then(summary);
+    }
+    function runAll(action) {
+        var keys = Array.prototype.map.call(section.querySelectorAll('[data-schema-row]'), function (r) {
+            return r.getAttribute('data-schema-row');
+        });
+        return keys.reduce(function (p, key) { return p.then(function () { return run(key, action); }); }, Promise.resolve());
+    }
+    function startSchemaCheck() {
+        if (schemaStarted || !section || !section.querySelector('[data-schema-row]')) return;
+        schemaStarted = true;
+        runAll('check');
+    }
+
+    if (section) {
+        section.addEventListener('click', function (e) {
+            var btn = e.target.closest('.js-schema-action');
+            if (!btn) return;
+            var action = btn.getAttribute('data-action');
+            if (action === 'repair' && !window.confirm('Create missing tables and columns for this client? Existing data is not changed.')) return;
+            run(btn.getAttribute('data-key'), action);
+        });
+        var checkAll = document.getElementById('schemaCheckAll');
+        var repairAll = document.getElementById('schemaRepairAll');
+        if (checkAll) checkAll.addEventListener('click', function () { runAll('check'); });
+        if (repairAll) repairAll.addEventListener('click', function () {
+            if (window.confirm('Repair every client database? Only missing tables, columns, and indexes are created.')) runAll('repair');
+        });
+    }
+
+    var initial = (location.hash || '#identity').slice(1);
+    show(initial || 'identity', false);
+})();
 </script>
 <?= $this->endSection() ?>
