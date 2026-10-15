@@ -231,6 +231,8 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
         'label' => $d['label'], 'type' => $d['type'], 'options' => $d['options'],
     ], $attributeDefs ?? []),
     'webhook_base' => rtrim(site_url('webhooks/automation'), '/'),
+    'fb_app_id' => (string) ($fbAppId ?? ''),
+    'fb_version' => (string) ($fbVersion ?? 'v21.0'),
 ], JSON_UNESCAPED_UNICODE) ?></script>
 <?= $this->endSection() ?>
 

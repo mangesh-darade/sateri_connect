@@ -47,6 +47,59 @@ class MetaPageMessagingAPI
     }
 
     /**
+     * Lead Ads form submission. The webhook only sends the lead id.
+     *
+     * @return array<string, mixed>
+     */
+    public function fetchLead(string $leadId): array
+    {
+        $this->ensureConfigured();
+        $leadId = trim($leadId);
+        if (preg_match('/^\d{5,32}$/', $leadId) !== 1) {
+            throw new RuntimeException('Facebook lead id is not valid.');
+        }
+
+        return $this->request('GET', $leadId, [
+            'fields' => 'id,created_time,ad_id,ad_name,form_id,field_data,campaign_id,campaign_name',
+        ]);
+    }
+
+    /**
+     * Keep the Page subscribed to leadgen without dropping Messenger or Instagram fields.
+     */
+    public function ensureLeadgenSubscription(): void
+    {
+        $this->ensureConfigured();
+
+        $fields = ['leadgen'];
+        try {
+            $current = $this->request('GET', $this->pageId . '/subscribed_apps');
+            $rows = is_array($current['data'] ?? null) ? $current['data'] : [];
+            foreach ($rows as $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+                $existing = $row['subscribed_fields'] ?? [];
+                if (! is_array($existing)) {
+                    continue;
+                }
+                foreach ($existing as $field) {
+                    $field = trim((string) $field);
+                    if ($field !== '' && ! in_array($field, $fields, true)) {
+                        $fields[] = $field;
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            log_message('warning', 'Could not read Page webhook fields before leadgen subscribe: {msg}', ['msg' => $e->getMessage()]);
+        }
+
+        $this->request('POST', $this->pageId . '/subscribed_apps', [
+            'subscribed_fields' => implode(',', $fields),
+        ]);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function testConnection(): array

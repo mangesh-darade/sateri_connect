@@ -148,7 +148,7 @@
 
     var TRIGGER_CONFIG_KEYS = [
         'keyword', 'content', 'event_topic', 'event_type', 'shopify_topic',
-        'form_id', 'ad_id', 'page_id', 'token', 'secret', 'campaign_id',
+        'form_id', 'ad_id', 'page_id', 'business_id', 'ad_account_id', 'token', 'secret', 'campaign_id',
         'source', 'object', 'filter', 'tag_id', 'attribute', 'attribute_value', 'match_type'
     ];
 
@@ -280,7 +280,7 @@
             if (d.trigger_type === 'kylas_event_create' || d.trigger_type === 'kylas_event_update') return d.object || d.event_type || 'Any object…';
             if (d.trigger_type === 'pabbly_event') return d.event_type || 'Any event…';
             if (d.trigger_type === 'incoming_webhook') return d.token ? ('Token …' + String(d.token).slice(-6)) : 'Set token…';
-            if (d.trigger_type === 'facebook_lead') return d.form_id || d.ad_id || 'Any lead form…';
+            if (d.trigger_type === 'facebook_lead') return d.form_name || d.page_name || d.form_id || 'Connect Facebook…';
             if (d.trigger_type === 'form_response') return d.form_id || 'Any form…';
             if (d.trigger_type === 'campaign_sent' || d.trigger_type === 'campaign_replied') return d.campaign_id ? ('Campaign #' + d.campaign_id) : 'Any campaign…';
             if (d.trigger_type === 'messenger' || d.trigger_type === 'instagram') return d.page_id || 'Any page…';
@@ -879,9 +879,30 @@
             html += '<label>Or custom topic</label><input class="form-control insp" data-k="event_topic" value="' + esc(d.event_topic || '') + '" placeholder="custom/topic">';
         }
         if (t === 'facebook_lead') {
-            html += '<label>Lead form ID</label><input class="form-control insp" data-k="form_id" value="' + esc(d.form_id || '') + '">';
-            html += '<label>Ad ID (optional)</label><input class="form-control insp" data-k="ad_id" value="' + esc(d.ad_id || '') + '">';
-            html += '<label>Page ID (optional)</label><input class="form-control insp" data-k="page_id" value="' + esc(d.page_id || '') + '">';
+            html += '<div class="fb-lead-wizard">';
+            html += '<button type="button" class="btn btn-sm js-fb-login" style="background:#1877F2;color:#fff;border:0"><i class="fab fa-facebook me-1"></i> Login with Facebook</button>';
+            html += '<div class="js-fb-status small text-muted mt-1">' + (d.page_name ? ('Connected page: ' + esc(d.page_name)) : 'Login, then choose portfolio, ad account, and lead page.') + '</div>';
+            if (!Flow.meta.fb_app_id) {
+                html += inspHint('Add the Meta App ID and App Secret in Settings before Facebook login can open.');
+            }
+            html += '<label>1. Portfolio</label><select class="form-select insp js-fb-portfolio" data-k="business_id"' + (d.business_id ? '' : ' disabled') + '>';
+            html += '<option value="">' + (d.business_id ? 'Change portfolio' : 'Login, then choose a portfolio') + '</option>';
+            if (d.business_id) html += '<option value="' + esc(d.business_id) + '" selected>' + esc(d.business_name || d.business_id) + '</option>';
+            html += '</select>';
+            html += '<label>2. Ad account</label><select class="form-select insp js-fb-account" data-k="ad_account_id"' + (d.ad_account_id ? '' : ' disabled') + '>';
+            html += '<option value="">' + (d.ad_account_id ? 'Change ad account' : 'Choose a portfolio first') + '</option>';
+            if (d.ad_account_id) html += '<option value="' + esc(d.ad_account_id) + '" selected>' + esc(d.ad_account_name || d.ad_account_id) + '</option>';
+            html += '</select>';
+            html += '<label>3. Lead page</label><select class="form-select insp js-fb-page" data-k="page_id"' + (d.page_id ? '' : ' disabled') + '>';
+            html += '<option value="">' + (d.page_id ? 'Change lead page' : 'Choose an ad account first') + '</option>';
+            if (d.page_id) html += '<option value="' + esc(d.page_id) + '" selected>' + esc(d.page_name || d.page_id) + '</option>';
+            html += '</select>';
+            html += '<label>Lead form</label><select class="form-select insp js-fb-form" data-k="form_id">';
+            html += '<option value="">Any form on this page</option>';
+            if (d.form_id) html += '<option value="' + esc(d.form_id) + '" selected>' + esc(d.form_name || d.form_id) + '</option>';
+            html += '</select>';
+            html += inspHint('Login with the Facebook profile that owns the Lead Ads. Pick the business portfolio, then the ad account, then the Page that collects the leads. Leave the form blank to run for every form on that Page.');
+            html += '</div>';
         }
         if (t === 'kylas_event_create' || t === 'kylas_event_update') {
             html += '<label>Object type</label><select class="form-select insp" data-k="object">';
@@ -1167,6 +1188,9 @@
         }
 
         $body.html(html);
+        if (node.type === 'trigger' && d.trigger_type === 'facebook_lead') {
+            prepareFacebookSdk();
+        }
         if (node.data && (node.data.action_type === 'set_attribute' || (node.type === 'trigger' && node.data.trigger_type === 'attribute_updated'))) {
             refreshAttrValueHelp(node.data.attribute);
         }
@@ -1445,6 +1469,52 @@
         });
     }
 
+    var facebookSdkStarted = false;
+
+    function fbLeadUrl(path) {
+        return ((window.APP && APP.baseUrl) ? APP.baseUrl : '') + path;
+    }
+
+    function fbLeadFail(xhr, fallback) {
+        var msg = (xhr && xhr.responseJSON && xhr.responseJSON.message) || fallback;
+        $('.js-fb-status').text(msg);
+        if (window.APP && APP.toast) APP.toast(msg, 'error');
+    }
+
+    function fillFbSelect($sel, rows, placeholder, selected) {
+        var html = '<option value="">' + esc(placeholder) + '</option>';
+        (rows || []).forEach(function (row) {
+            if (!row || row.id === undefined || row.id === null || String(row.id) === '') return;
+            html += '<option value="' + esc(row.id) + '"' + (String(selected || '') === String(row.id) ? ' selected' : '') + '>' + esc(row.name || row.id) + '</option>';
+        });
+        $sel.prop('disabled', false).html(html);
+    }
+
+    function prepareFacebookSdk() {
+        var appId = String((Flow.meta && Flow.meta.fb_app_id) || '');
+        if (!appId) return;
+        var version = String((Flow.meta && Flow.meta.fb_version) || 'v21.0');
+        if (window.FB) return;
+        if (facebookSdkStarted) return;
+        facebookSdkStarted = true;
+        window.fbAsyncInit = function () {
+            FB.init({
+                appId: appId,
+                cookie: true,
+                xfbml: false,
+                version: version
+            });
+        };
+        var script = document.createElement('script');
+        script.async = true;
+        script.src = 'https://connect.facebook.net/en_US/sdk.js';
+        script.onerror = function () {
+            facebookSdkStarted = false;
+            $('.js-fb-status').text('Facebook login could not be loaded.');
+        };
+        document.head.appendChild(script);
+    }
+
     function bind() {
         var $wrap = $('#flowCanvasWrap, .flow-canvas-wrap');
         var wrapEl = document.getElementById('flowCanvasWrap') || document.querySelector('.flow-canvas-wrap');
@@ -1624,6 +1694,120 @@
 
         $('#inspectorBody').on('change input', '.insp', function () {
             applyInspector($(this));
+        });
+        $('#inspectorBody').on('click', '.js-fb-login', function () {
+            var appId = String((Flow.meta && Flow.meta.fb_app_id) || '');
+            if (!appId) {
+                $('.js-fb-status').text('Add the Meta App ID and App Secret in Settings first.');
+                return;
+            }
+            if (!window.FB) {
+                $('.js-fb-status').text('Facebook login is still loading. Click again in a second.');
+                prepareFacebookSdk();
+                return;
+            }
+            FB.login(function (response) {
+                if (!response || !response.authResponse || !response.authResponse.accessToken) {
+                    $('.js-fb-status').text('Facebook login was cancelled.');
+                    return;
+                }
+                $('.js-fb-status').text('Loading portfolios…');
+                APP.post(fbLeadUrl('/automations/facebook/login'), {
+                    access_token: response.authResponse.accessToken
+                }).done(function (res) {
+                    var data = (res && res.data) || {};
+                    var businesses = data.businesses || [];
+                    if (!businesses.length && data.profile_pages > 0) {
+                        businesses = [{ id: 'profile', name: 'Pages on this Facebook profile' }];
+                    }
+                    fillFbSelect($('.js-fb-portfolio'), businesses, businesses.length ? 'Choose a portfolio' : 'No portfolio on this profile', '');
+                    fillFbSelect($('.js-fb-account'), [], 'Choose a portfolio first', '');
+                    $('.js-fb-account').prop('disabled', true);
+                    fillFbSelect($('.js-fb-page'), [], 'Choose an ad account first', '');
+                    $('.js-fb-page').prop('disabled', true);
+                    $('.js-fb-status').text((res && res.message) || 'Choose a portfolio.');
+                }).fail(function (xhr) {
+                    fbLeadFail(xhr, 'Facebook login failed.');
+                });
+            }, {
+                scope: 'pages_show_list,pages_read_engagement,pages_manage_metadata,leads_retrieval,business_management,ads_read',
+                return_scopes: true
+            });
+        });
+        $('#inspectorBody').on('change', '.js-fb-portfolio', function () {
+            var businessId = String($(this).val() || '');
+            var node = findNode(Flow.selectedId);
+            if (node) node.data.business_name = businessId ? $(this).find('option:selected').text() : '';
+            fillFbSelect($('.js-fb-page'), [], 'Choose an ad account first', '');
+            $('.js-fb-page').prop('disabled', true);
+            if (!businessId) {
+                fillFbSelect($('.js-fb-account'), [], 'Choose a portfolio first', '');
+                $('.js-fb-account').prop('disabled', true);
+                return;
+            }
+            $('.js-fb-status').text('Loading ad accounts…');
+            APP.post(fbLeadUrl('/automations/facebook/accounts'), { business_id: businessId }).done(function (res) {
+                var rows = (res.data && res.data.accounts) || [];
+                fillFbSelect($('.js-fb-account'), rows, rows.length ? 'Choose an ad account' : 'No ad account in this portfolio', '');
+                $('.js-fb-status').text(rows.length ? 'Choose an ad account.' : 'No ad account in this portfolio.');
+            }).fail(function (xhr) {
+                fbLeadFail(xhr, 'Could not load ad accounts.');
+            });
+        });
+        $('#inspectorBody').on('change', '.js-fb-account', function () {
+            var accountId = String($(this).val() || '');
+            var node = findNode(Flow.selectedId);
+            if (node) node.data.ad_account_name = accountId && accountId !== 'none' ? $(this).find('option:selected').text() : '';
+            if (node && accountId === 'none') node.data.ad_account_id = '';
+            var businessId = String($('.js-fb-portfolio').val() || (node && node.data.business_id) || '');
+            if (!businessId || !accountId) return;
+            $('.js-fb-status').text('Loading lead pages…');
+            APP.post(fbLeadUrl('/automations/facebook/pages'), {
+                business_id: businessId,
+                ad_account_id: accountId === 'none' ? '' : accountId
+            }).done(function (res) {
+                var rows = (res.data && res.data.pages) || [];
+                fillFbSelect($('.js-fb-page'), rows, rows.length ? 'Choose a lead page' : 'No Page on this account', '');
+                $('.js-fb-status').text(rows.length ? 'Choose the Page that collects leads.' : 'No lead Page found.');
+            }).fail(function (xhr) {
+                fbLeadFail(xhr, 'Could not load lead pages.');
+            });
+        });
+        $('#inspectorBody').on('change', '.js-fb-page', function () {
+            var pageId = String($(this).val() || '');
+            var node = findNode(Flow.selectedId);
+            if (!node || !pageId) return;
+            node.data.page_name = $(this).find('option:selected').text();
+            var accountId = String($('.js-fb-account').val() || '');
+            $('.js-fb-status').text('Connecting ' + node.data.page_name + '…');
+            APP.post(fbLeadUrl('/automations/facebook/connect'), {
+                page_id: pageId,
+                business_id: String($('.js-fb-portfolio').val() || node.data.business_id || ''),
+                ad_account_id: accountId === 'none' ? '' : accountId
+            }).done(function (res) {
+                var data = (res && res.data) || {};
+                node.data.page_name = data.page_name || node.data.page_name;
+                var forms = data.forms || [];
+                var html = '<option value="">Any form on this page</option>';
+                forms.forEach(function (row) {
+                    html += '<option value="' + esc(row.id) + '">' + esc(row.name) + '</option>';
+                });
+                $('.js-fb-form').html(html);
+                node.data.form_id = '';
+                node.data.form_name = '';
+                $('.js-fb-status').text((res && res.message) || ('Connected: ' + node.data.page_name));
+                renderNodes();
+                $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+            }).fail(function (xhr) {
+                fbLeadFail(xhr, 'Could not connect this lead page.');
+            });
+        });
+        $('#inspectorBody').on('change', '.js-fb-form', function () {
+            var node = findNode(Flow.selectedId);
+            if (!node) return;
+            node.data.form_name = $(this).val() ? $(this).find('option:selected').text() : '';
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
         });
         $('#inspectorBody').on('click', '.insp-var-toggle', function () {
             $(this).siblings('.insp-var-menu').toggleClass('d-none');

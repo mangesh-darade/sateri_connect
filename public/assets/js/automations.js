@@ -20,7 +20,7 @@
         campaign_replied: 'Runs when a contact replies to a campaign.',
         schedule: 'Runs on the scheduler. Birthday checks also use this trigger.',
         shopify_event: 'Runs when a Shopify event is posted to the automation API.',
-        facebook_lead: 'Runs when a Facebook lead is posted to the automation API.',
+        facebook_lead: 'Runs when someone submits a Facebook Lead Ad. Needs the Page ID and Page Access Token in Settings → Meta.',
         kylas_event_create: 'Runs when a Kylas create event is posted to the automation API.',
         kylas_event_update: 'Runs when a Kylas update event is posted to the automation API.',
         pabbly_event: 'Runs when a Pabbly event is posted to the automation API.',

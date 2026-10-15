@@ -342,6 +342,8 @@ class Automations extends BaseController
         $automation['rules'] = $rules;
         $graph = $this->applySavedTriggerConfig(is_array($graph) ? $graph : [], $automation['trigger_config'] ?? null);
 
+        $facebook = new \App\Libraries\FacebookLeadConnectService();
+
         return $this->render('automations/builder', [
             'pageTitle'  => 'Workflow Builder',
             'automation' => $automation,
@@ -352,8 +354,84 @@ class Automations extends BaseController
             'agents'     => model(UserModel::class)->where('status', 'active')->orderBy('name', 'ASC')->findAll(200),
             'attributes' => ContactAttributes::knownKeys(),
             'attributeDefs' => service('contactAttributes')->definitions(),
+            'fbAppId'    => $facebook->appId(),
+            'fbVersion'  => $facebook->apiVersion(),
             'fullBleed'  => true,
         ]);
+    }
+
+    public function facebookLogin(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('automations.edit')) {
+            return $denied;
+        }
+
+        $token = trim((string) $this->request->getPost('access_token'));
+        if ($token === '') {
+            return $this->jsonResponse(false, null, 'Facebook login did not return a token.', [], 422);
+        }
+
+        try {
+            $data = (new \App\Libraries\FacebookLeadConnectService())->start($token);
+        } catch (\Throwable $e) {
+            return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
+        }
+
+        return $this->jsonResponse(true, $data, $data['user_name'] !== '' ? ('Logged in as ' . $data['user_name'] . '.') : 'Facebook profile connected.');
+    }
+
+    public function facebookAccounts(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('automations.edit')) {
+            return $denied;
+        }
+
+        try {
+            $rows = (new \App\Libraries\FacebookLeadConnectService())->adAccounts((string) $this->request->getPost('business_id'));
+        } catch (\Throwable $e) {
+            return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
+        }
+
+        return $this->jsonResponse(true, ['accounts' => $rows]);
+    }
+
+    public function facebookPages(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('automations.edit')) {
+            return $denied;
+        }
+
+        try {
+            $rows = (new \App\Libraries\FacebookLeadConnectService())->pages(
+                (string) $this->request->getPost('business_id'),
+                (string) $this->request->getPost('ad_account_id')
+            );
+        } catch (\Throwable $e) {
+            return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
+        }
+
+        return $this->jsonResponse(true, ['pages' => $rows]);
+    }
+
+    public function facebookConnect(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('automations.edit')) {
+            return $denied;
+        }
+
+        try {
+            $data = (new \App\Libraries\FacebookLeadConnectService())->connectPage(
+                (string) $this->request->getPost('page_id'),
+                (string) $this->request->getPost('business_id'),
+                (string) $this->request->getPost('ad_account_id')
+            );
+        } catch (\Throwable $e) {
+            return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
+        }
+
+        $message = $data['warning'] !== '' ? $data['warning'] : ('Lead page connected: ' . $data['page_name'] . '.');
+
+        return $this->jsonResponse(true, $data, $message);
     }
 
     /**

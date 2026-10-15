@@ -310,6 +310,10 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
 
     // Automations
     $routes->get('automations', 'Automations::index');
+    $routes->post('automations/facebook/login', 'Automations::facebookLogin', ['filter' => 'csrf']);
+    $routes->post('automations/facebook/accounts', 'Automations::facebookAccounts', ['filter' => 'csrf']);
+    $routes->post('automations/facebook/pages', 'Automations::facebookPages', ['filter' => 'csrf']);
+    $routes->post('automations/facebook/connect', 'Automations::facebookConnect', ['filter' => 'csrf']);
     $routes->get('automations/create', 'Automations::create');
     $routes->post('automations', 'Automations::store', ['filter' => 'csrf']);
     $routes->get('automations/(:num)/edit', 'Automations::edit/$1');

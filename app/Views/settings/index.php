@@ -326,7 +326,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                     <div class="wp-creds-head">
                                         <div>
                                             <h3>Team Inbox channels (Instagram / Messenger)</h3>
-                                            <p>Uses Meta Page Access Token. Works even when WhatsApp provider is External.</p>
+                                            <p>Uses Meta Page Access Token. The same Page token receives Facebook Lead Ads for workflows. Subscribe the Page webhook field <code>leadgen</code> to this app's webhook URL.</p>
                                         </div>
                                     </div>
                                     <div class="wp-field-grid">

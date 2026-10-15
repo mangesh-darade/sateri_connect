@@ -280,6 +280,8 @@ class Webhooks extends Controller
             }
 
             $pageId = (string) ($entry['id'] ?? '');
+            $this->processFacebookLeadChanges($entry, $pageId);
+
             $events = $entry['messaging'] ?? [];
             if (! is_array($events)) {
                 continue;
@@ -291,6 +293,35 @@ class Webhooks extends Controller
                 }
 
                 $this->handlePageMessagingEvent($event, $pageId, $forcedChannel, $settings);
+            }
+        }
+    }
+
+    /**
+     * Facebook Lead Ads use entry.changes with field "leadgen", not entry.messaging.
+     *
+     * @param array<string, mixed> $entry
+     */
+    protected function processFacebookLeadChanges(array $entry, string $pageId): void
+    {
+        $changes = $entry['changes'] ?? [];
+        if (! is_array($changes)) {
+            return;
+        }
+
+        $leads = new \App\Libraries\FacebookLeadService();
+        foreach ($changes as $change) {
+            if (! is_array($change) || (string) ($change['field'] ?? '') !== 'leadgen') {
+                continue;
+            }
+            $value = is_array($change['value'] ?? null) ? $change['value'] : [];
+            if ($pageId !== '' && trim((string) ($value['page_id'] ?? '')) === '') {
+                $value['page_id'] = $pageId;
+            }
+            try {
+                $leads->ingest($value);
+            } catch (Throwable $e) {
+                log_message('error', 'Facebook lead webhook failed: {msg}', ['msg' => $e->getMessage()]);
             }
         }
     }

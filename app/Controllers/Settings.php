@@ -411,6 +411,17 @@ class Settings extends BaseController
                     $meta,
                     static fn ($v) => $v !== null && $v !== ''
                 ));
+
+                if (trim((string) ($meta['page_id'] ?? '')) !== '') {
+                    try {
+                        $pageApi = new \App\Libraries\MetaPageMessagingAPI();
+                        if ($pageApi->isConfigured()) {
+                            $pageApi->ensureLeadgenSubscription();
+                        }
+                    } catch (\Throwable $e) {
+                        log_message('warning', 'Facebook Lead Ads subscribe skipped: {msg}', ['msg' => $e->getMessage()]);
+                    }
+                }
             }
 
             // Live Chat webhook public HTTPS base (ngrok / production domain)

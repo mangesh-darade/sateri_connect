@@ -42,6 +42,44 @@ class TenantConnection
         return $this->applyLegacySwitch($key, $source);
     }
 
+    /**
+     * Remember the current tenant connection so a page-id search can switch back.
+     *
+     * @return array{config: array<string, mixed>, key: ?string, source: ?string}
+     */
+    public function capture(): array
+    {
+        $config = config(DatabaseConfig::class);
+
+        return [
+            'config' => $config->default,
+            'key'    => TenantContext::get(),
+            'source' => TenantContext::source(),
+        ];
+    }
+
+    /**
+     * @param array{config?: array<string, mixed>, key?: ?string, source?: ?string} $captured
+     */
+    public function restore(array $captured): void
+    {
+        $saved = $captured['config'] ?? null;
+        if (! is_array($saved) || $saved === []) {
+            return;
+        }
+
+        $config = config(DatabaseConfig::class);
+        $config->default = $saved;
+        $this->reconnectDefault();
+
+        $key = trim((string) ($captured['key'] ?? ''));
+        if ($key !== '') {
+            TenantContext::set($key, (string) ($captured['source'] ?? 'webhook'));
+        } else {
+            TenantContext::clear();
+        }
+    }
+
     public function applyFromPhoneNumberId(string $phoneNumberId): bool
     {
         $route = $this->master->findPhoneRoute($phoneNumberId);
