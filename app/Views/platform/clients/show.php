@@ -363,7 +363,13 @@ $emailTip = static fn (array $d): string => ($d['date'] ?? '') . ': ' . (int) ($
                                         <?= esc((string) (($s['type'] ?? '') === 'domain' ? ($s['domain'] ?? '') : ($s['email'] ?? ''))) ?>
                                         <?php if (! empty($s['is_default'])): ?><span class="platform-client-meta">· default</span><?php endif; ?>
                                     </div>
-                                    <div class="platform-client-meta"><?= esc((string) ($s['name'] ?? '')) ?><?= ! empty($s['provider']) ? ' · ' . esc((string) $s['provider']) : '' ?></div>
+                                    <?php
+                                    $senderProvider = (string) ($s['provider'] ?? '');
+                                    if ($senderProvider === 'cheerio') {
+                                        $senderProvider = 'External';
+                                    }
+                                    ?>
+                                    <div class="platform-client-meta"><?= esc((string) ($s['name'] ?? '')) ?><?= $senderProvider !== '' ? ' · ' . esc($senderProvider) : '' ?></div>
                                 </td>
                                 <td><?= esc(ucfirst((string) ($s['type'] ?? 'sender'))) ?></td>
                                 <td><span class="platform-badge <?= $senderBadge($sStatus) ?>"><?= esc(ucfirst($sStatus)) ?></span></td>
