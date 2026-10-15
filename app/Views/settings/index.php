@@ -189,7 +189,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                     <div class="wp-field">
                                         <label class="form-label" for="cheerio_api_key">API Key</label>
                                         <div class="input-group input-secret">
-                                            <input type="password" id="cheerio_api_key" name="cheerio_api_key" class="form-control" value="<?= $val($cheerio, 'api_key') ?>" autocomplete="off" placeholder="x-api-key from app.cheerio.in">
+                                            <input type="password" id="cheerio_api_key" name="cheerio_api_key" class="form-control" value="<?= $val($cheerio, 'api_key') ?>" autocomplete="off" placeholder="x-api-key from External">
                                             <button class="btn btn-outline-secondary toggle-secret" type="button" aria-label="Show API key"><i class="fas fa-eye"></i></button>
                                         </div>
                                     </div>
@@ -1003,7 +1003,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                         <?php else: ?>
                                             <div class="fw-semibold mb-2">External / WABA webhook form:</div>
                                             <ol class="mb-2 ps-3">
-                                                <li>Open <a href="https://app.cheerio.in/login" target="_blank" rel="noopener">app.cheerio.in</a></li>
+                                                <li>Open <a href="https://app.cheerio.in/login" target="_blank" rel="noopener">External Dashboard</a></li>
                                                 <li><strong>Callback / Webhook URL</strong> = Copy URL above</li>
                                                 <li><strong>Verify Token</strong> = Step 1 token</li>
                                                 <li>Subscribe: <code>messages</code></li>
@@ -1602,7 +1602,7 @@ $(function () {
 
         $('#goLiveDetails').text(JSON.stringify({
             ok: !!(data && data.ok),
-            provider: (data && data.provider) || 'cheerio',
+            provider: 'External',
             templates_reachable: data && data.templates_reachable,
             template_count: data && data.template_count,
             approved_templates: data && data.approved_templates,

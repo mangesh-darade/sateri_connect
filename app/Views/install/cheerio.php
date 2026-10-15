@@ -17,7 +17,7 @@
     <div id="installCheerioFields">
         <div class="mb-3">
             <label class="form-label">External API Key</label>
-            <input type="password" name="cheerio_api_key" class="form-control" value="<?= esc(old('cheerio_api_key') ?? '') ?>" autocomplete="off" placeholder="x-api-key from app.cheerio.in">
+            <input type="password" name="cheerio_api_key" class="form-control" value="<?= esc(old('cheerio_api_key') ?? '') ?>" autocomplete="off" placeholder="x-api-key from External">
             <div class="form-text"><a href="https://app.cheerio.in/settings/apikey" target="_blank" rel="noopener">Generate API key</a></div>
         </div>
         <div class="row g-3">

@@ -175,7 +175,7 @@ class SettingsService
     {
         $provider = strtolower(trim($provider));
         if (! in_array($provider, [self::PROVIDER_CHEERIO, self::PROVIDER_META], true)) {
-            throw new RuntimeException('Invalid WhatsApp provider. Use cheerio or meta.');
+            throw new RuntimeException('Invalid WhatsApp provider. Use External or Meta.');
         }
         $this->set('whatsapp_provider', $provider, 'whatsapp', false);
     }
@@ -584,7 +584,7 @@ class SettingsService
             self::EMAIL_PROVIDER_CHEERIO,
             self::EMAIL_PROVIDER_SES,
         ], true)) {
-            throw new RuntimeException('Invalid email provider. Use smtp, sendgrid, cheerio, or ses.');
+            throw new RuntimeException('Invalid email provider. Use SMTP, SendGrid, External, or Amazon SES.');
         }
 
         $this->set('email_provider', $provider, 'email', false);
