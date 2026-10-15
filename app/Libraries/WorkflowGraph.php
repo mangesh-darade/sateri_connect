@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Libraries;
 
 /**
- * Converts Cheerio-style canvas graphs ↔ sequential automation_rules.
+ * Converts External-style canvas graphs ↔ sequential automation_rules.
  *
  * Graph shape:
  * {
@@ -90,7 +90,7 @@ class WorkflowGraph
                     $queue[] = $edges[$id][$port];
                 }
             }
-            // Cheerio multi-option handles (opt_2, opt_3, …)
+            // External multi-option handles (opt_2, opt_3, …)
             foreach ($edges[$id] ?? [] as $port => $target) {
                 if (is_string($port) && str_starts_with($port, 'opt_') && $target) {
                     $queue[] = $target;
@@ -128,7 +128,7 @@ class WorkflowGraph
                 continue;
             }
 
-            // action (may branch like Cheerio webhookTrigger / responseMessage)
+            // action (may branch like External webhookTrigger / responseMessage)
             $trueTo  = $edges[$id]['true'] ?? $edges[$id]['out'] ?? null;
             $falseTo = $edges[$id]['false'] ?? null;
             $config  = $this->actionConfig($data);
@@ -500,7 +500,7 @@ class WorkflowGraph
             'tag_added' => 'Tag added',
             'attribute_updated' => 'Attribute updated',
             'birthday', 'schedule' => 'Birthday / schedule',
-            'cheerio_workflow' => 'Cheerio workflow',
+            'cheerio_workflow' => 'External workflow',
             default => $type,
         };
     }
@@ -511,7 +511,7 @@ class WorkflowGraph
     public const NORMALIZE_VERSION = 6;
 
     /**
-     * Convert Cheerio React Flow graph → local builder shape (x/y, from/to, labels).
+     * Convert External React Flow graph → local builder shape (x/y, from/to, labels).
      *
      * @param array<string, mixed> $graph
      *
@@ -542,7 +542,7 @@ class WorkflowGraph
                 'cheerio_type' => $cheerioType,
                 'label'        => $mapped['label'],
             ]);
-            // Prevent stale Cheerio keys from fighting mapped local types
+            // Prevent stale External keys from fighting mapped local types
             if ($mapped['canvas_type'] === 'action') {
                 unset($merged['trigger_type']);
             }
@@ -571,7 +571,7 @@ class WorkflowGraph
             ];
         }
 
-        // Shift whole graph so min x/y = 60 — keep relative Cheerio layout (don't stack negatives)
+        // Shift whole graph so min x/y = 60 — keep relative External layout (don't stack negatives)
         if ($nodes !== []) {
             $minX = min(array_map(static fn ($n) => (float) $n['x'], $nodes));
             $minY = min(array_map(static fn ($n) => (float) $n['y'], $nodes));
@@ -725,7 +725,7 @@ class WorkflowGraph
     }
 
     /**
-     * Whether graph looks like raw Cheerio React Flow export.
+     * Whether graph looks like raw External React Flow export.
      *
      * @param array<string, mixed> $graph
      */
@@ -820,7 +820,7 @@ class WorkflowGraph
         ];
         $endTypes       = ['endnode', 'end', 'stop'];
 
-        // Outbound webhook / HTTP call nodes (Cheerio names often include "Trigger")
+        // Outbound webhook / HTTP call nodes (External names often include "Trigger")
         if (
             $type === 'webhooktrigger'
             || $type === 'webhook'
@@ -856,7 +856,7 @@ class WorkflowGraph
                     'action_type'     => 'webhook',
                     'url'             => $url,
                     'method'          => $this->stringify($data['method'] ?? 'POST', 'POST'),
-                    // Cheerio webhookTrigger uses success/fail child handles
+                    // External webhookTrigger uses success/fail child handles
                     'branches'        => true,
                     'values'          => $values,
                     'header'          => $header,
@@ -951,7 +951,7 @@ class WorkflowGraph
             $extra = [
                 'action_type' => 'response_message',
                 'text'        => $text,
-                // Interactive replies / buttons use true|false|/opt_* handles in Cheerio
+                // Interactive replies / buttons use true|false|/opt_* handles in External
                 'branches'    => true,
             ];
         } elseif ($type === 'addtolabel' || $type === 'add_to_label') {
@@ -1031,7 +1031,7 @@ class WorkflowGraph
                 'branches'    => ! empty($data['branches']),
             ];
         } else {
-            // Unknown Cheerio type with a message body still becomes a reply action
+            // Unknown External type with a message body still becomes a reply action
             $text = $this->stringify($data['text'] ?? $data['message'] ?? $data['body'] ?? '');
             if ($text !== '') {
                 $label = $this->stringify($data['label'] ?? '', 'Response message');
@@ -1055,7 +1055,7 @@ class WorkflowGraph
     }
 
     /**
-     * Map Cheerio / external trigger node names → local trigger_type keys.
+     * Map External / external trigger node names → local trigger_type keys.
      */
     protected function mapCheerioTriggerType(string $type): string
     {

@@ -62,7 +62,7 @@
                         <td>
                             <div class="fw-semibold"><?= esc($a['name']) ?></div>
                             <?php if (($a['trigger_type'] ?? '') === 'cheerio_workflow'): ?>
-                                <small class="text-muted"><i class="fas fa-cloud"></i> Synced from Cheerio</small>
+                                <small class="text-muted"><i class="fas fa-cloud"></i> Synced from External</small>
                             <?php elseif (! empty($a['flow_graph'])): ?>
                                 <small class="text-wa"><i class="fas fa-project-diagram"></i> Visual workflow</small>
                             <?php endif; ?>

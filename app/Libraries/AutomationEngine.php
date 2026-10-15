@@ -1428,19 +1428,40 @@ class AutomationEngine
             return true;
         }
 
+        $structured = $this->isStructuredTriggerQuery($triggerConfig);
+
+        if (isset($triggerConfig['query']) && is_string($triggerConfig['query']) && trim($triggerConfig['query']) !== '') {
+            $parsed = $this->parseQueryString($triggerConfig['query']);
+            if ($parsed === null || ! $this->evaluateCondition($parsed, $context)) {
+                return false;
+            }
+        }
+
         if (isset($triggerConfig['conditions']) && is_array($triggerConfig['conditions'])) {
-            return $this->evaluateCondition([
+            $passed = $this->evaluateCondition([
                 'operator'   => $triggerConfig['logic'] ?? 'and',
                 'conditions' => $triggerConfig['conditions'],
             ], $context);
+            if (! $passed) {
+                return false;
+            }
+        }
+
+        if (isset($triggerConfig['field']) || isset($triggerConfig['operator'])) {
+            if (! $this->evaluateCondition($triggerConfig, $context)) {
+                return false;
+            }
         }
 
         foreach ($triggerConfig as $key => $value) {
             if (in_array($key, [
-                'logic', 'conditions', '_flow', 'flow_graph',
+                'logic', 'conditions', '_flow', 'flow_graph', 'query',
                 'label', 'prompt', 'description', 'message', 'help', 'help_text',
                 'adName', 'labelName', 'match_type',
             ], true)) {
+                continue;
+            }
+            if ($structured && in_array($key, ['field', 'operator', 'op', 'value'], true)) {
                 continue;
             }
             if ($value === null || $value === '') {
@@ -1478,6 +1499,59 @@ class AutomationEngine
         }
 
         return true;
+    }
+
+    /**
+     * A filter written as a condition, a condition list, or a query string.
+     *
+     * @param array<string, mixed> $triggerConfig
+     */
+    protected function isStructuredTriggerQuery(array $triggerConfig): bool
+    {
+        if (isset($triggerConfig['field']) || isset($triggerConfig['operator']) || isset($triggerConfig['op'])) {
+            return true;
+        }
+
+        return isset($triggerConfig['query']) && is_string($triggerConfig['query']) && trim($triggerConfig['query']) !== '';
+    }
+
+    /**
+     * "content contains hello" or a JSON object string.
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function parseQueryString(string $query): ?array
+    {
+        $query = trim($query);
+        if ($query === '') {
+            return null;
+        }
+
+        if (str_starts_with($query, '{')) {
+            $decoded = json_decode($query, true);
+
+            return is_array($decoded) ? $decoded : null;
+        }
+
+        if (preg_match('/^(\S+)\s+(contains|not_contains|equals|not_equals|starts_with|gt|gte|lt|lte|has_tag|empty|not_empty|=|!=|>=|<=|>|<)\s*(.*)$/u', $query, $match) !== 1) {
+            return null;
+        }
+
+        $operator = match ($match[2]) {
+            '='     => 'equals',
+            '!='    => 'not_equals',
+            '>'     => 'gt',
+            '>='    => 'gte',
+            '<'     => 'lt',
+            '<='    => 'lte',
+            default => $match[2],
+        };
+
+        return [
+            'field'    => $match[1],
+            'operator' => $operator,
+            'value'    => trim($match[3], " \t\"'"),
+        ];
     }
 
     /**

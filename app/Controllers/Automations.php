@@ -90,10 +90,11 @@ class Automations extends BaseController
             return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
         }
 
-        $triggerConfig = $this->request->getPost('trigger_config');
-        if (is_string($triggerConfig) && $triggerConfig !== '') {
-            $decoded = json_decode($triggerConfig, true);
-            $triggerConfig = is_array($decoded) ? $decoded : null;
+        $triggerConfig = $this->postedTriggerConfig();
+        if ($triggerConfig === false) {
+            return redirect()->back()->withInput()->with('errors', [
+                'trigger_config' => 'Filter query must be a JSON object, for example {"query":"content contains hello"}.',
+            ]);
         }
 
         $id = model(AutomationModel::class)->insert([
@@ -158,10 +159,11 @@ class Automations extends BaseController
             return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
         }
 
-        $triggerConfig = $this->request->getPost('trigger_config');
-        if (is_string($triggerConfig) && $triggerConfig !== '') {
-            $decoded = json_decode($triggerConfig, true);
-            $triggerConfig = is_array($decoded) ? $decoded : null;
+        $triggerConfig = $this->postedTriggerConfig();
+        if ($triggerConfig === false) {
+            return redirect()->back()->withInput()->with('errors', [
+                'trigger_config' => 'Filter query must be a JSON object, for example {"query":"content contains hello"}.',
+            ]);
         }
 
         $newValues = [
@@ -253,7 +255,7 @@ class Automations extends BaseController
     }
 
     /**
-     * Render visual automation builder page (Cheerio-style canvas).
+     * Render visual automation builder page (External-style canvas).
      */
     public function builderPage(int $id): string|ResponseInterface
     {
@@ -317,6 +319,7 @@ class Automations extends BaseController
         }
 
         $automation['rules'] = $rules;
+        $graph = $this->applySavedTriggerConfig(is_array($graph) ? $graph : [], $automation['trigger_config'] ?? null);
 
         return $this->render('automations/builder', [
             'pageTitle'  => 'Workflow Builder',
@@ -385,13 +388,13 @@ class Automations extends BaseController
             if (isset($input['priority'])) {
                 $update['priority'] = (int) $input['priority'];
             }
-            if (isset($input['trigger_config'])) {
+            if (array_key_exists('trigger_config', $input)) {
                 $cfg = $input['trigger_config'];
                 if (is_string($cfg)) {
                     $cfg = json_decode($cfg, true);
                 }
                 if (is_array($cfg)) {
-                    $update['trigger_config'] = $cfg;
+                    $update['trigger_config'] = $this->mergeTriggerConfig($existing['trigger_config'] ?? null, $cfg);
                 }
             }
             model(AutomationModel::class)->update($id, $update);
@@ -467,6 +470,81 @@ class Automations extends BaseController
     }
 
     /**
+     * Empty input saves no filter. Invalid JSON is rejected so a query is never dropped.
+     *
+     * @return array<string, mixed>|null|false
+     */
+    protected function postedTriggerConfig(): array|null|false
+    {
+        $raw = $this->request->getPost('trigger_config');
+        if (! is_string($raw) || trim($raw) === '') {
+            return null;
+        }
+
+        $decoded = json_decode($raw, true);
+        if (! is_array($decoded) || array_is_list($decoded)) {
+            return false;
+        }
+
+        return $decoded;
+    }
+
+    /**
+     * Keep a setup-form query when the canvas save only sends its own keys.
+     *
+     * @param array<string, mixed> $incoming
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function mergeTriggerConfig(mixed $existing, array $incoming): ?array
+    {
+        if (is_string($existing) && $existing !== '') {
+            $decoded = json_decode($existing, true);
+            $existing = is_array($decoded) ? $decoded : [];
+        }
+
+        $base = is_array($existing) ? $existing : [];
+        foreach ($incoming as $key => $value) {
+            if ($value === null || $value === '' || $value === []) {
+                continue;
+            }
+            $base[$key] = $value;
+        }
+
+        return $base === [] ? null : $base;
+    }
+
+    /**
+     * Show the saved filter on the trigger node without dropping keys the canvas does not edit.
+     *
+     * @param array<string, mixed> $graph
+     *
+     * @return array<string, mixed>
+     */
+    protected function applySavedTriggerConfig(array $graph, mixed $config): array
+    {
+        if (is_string($config) && $config !== '') {
+            $decoded = json_decode($config, true);
+            $config = is_array($decoded) ? $decoded : null;
+        }
+        if (! is_array($config) || $config === [] || ! isset($graph['nodes']) || ! is_array($graph['nodes'])) {
+            return $graph;
+        }
+
+        foreach ($graph['nodes'] as &$node) {
+            if (! is_array($node) || ($node['type'] ?? '') !== 'trigger') {
+                continue;
+            }
+            $data = is_array($node['data'] ?? null) ? $node['data'] : [];
+            $node['data'] = array_merge($config, $data);
+            break;
+        }
+        unset($node);
+
+        return $graph;
+    }
+
+    /**
      * @param array<string, mixed> $graph
      */
     protected function graphHasUnmappedCheerioNodes(array $graph): bool
@@ -490,7 +568,7 @@ class Automations extends BaseController
 
     /**
      * Import workflows from the active provider into local automations.
-     * Cheerio: Direct API workflows. Meta: uses Cheerio API key if saved (Graph has no workflow directory).
+     * External: Direct API workflows. Meta: uses External API key if saved (Graph has no workflow directory).
      */
     public function syncFromCheerio(): ResponseInterface
     {
@@ -506,7 +584,7 @@ class Automations extends BaseController
             $source = (string) ($stats['source'] ?? $provider);
             $msg    = sprintf(
                 '%s workflows: %d created, %d updated%s. Imported as Off — review before enabling.',
-                $source === 'cheerio' || $source === 'cheerio_directory' ? 'Cheerio' : ucfirst($source),
+                $source === 'cheerio' || $source === 'cheerio_directory' ? 'External' : ucfirst($source),
                 $stats['created'],
                 $stats['updated'],
                 $stats['skipped'] ? ', ' . $stats['skipped'] . ' skipped' : ''

@@ -1,5 +1,5 @@
 /**
-* Cheerio-style visual workflow canvas for Automations.
+* External-style visual workflow canvas for Automations.
 */
 (function (window, $) {
     'use strict';
@@ -44,7 +44,7 @@
         birthday: 'Birthday',
         campaign_replied: 'Campaign reply',
         schedule: 'Schedule',
-        cheerio_workflow: 'Imported Cheerio workflow'
+        cheerio_workflow: 'Imported External workflow'
     };
 
     var ACTION_LABELS = {
@@ -189,7 +189,7 @@
                 var m = String(n.id || '').match(/(\d+)/);
                 if (m) Flow.uid = Math.max(Flow.uid, parseInt(m[1], 10) + 1);
             });
-            // Only shift when Cheerio-style negative coords remain
+            // Only shift when External-style negative coords remain
             if (Flow.nodes.length) {
                 var minX = Math.min.apply(null, Flow.nodes.map(function (n) { return n.x; }));
                 var minY = Math.min.apply(null, Flow.nodes.map(function (n) { return n.y; }));
