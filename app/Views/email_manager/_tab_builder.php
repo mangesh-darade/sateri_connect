@@ -30,8 +30,8 @@ $canSend = ! empty($canSend);
 
                     <?php if (! empty($isCheerio)): ?>
                     <div class="mb-2">
-                        <label class="form-label small fw-semibold mb-1">Cheerio Builder ID <span class="text-muted">(Optional)</span></label>
-                        <input type="text" name="cheerio_builder_id" id="builder_cheerio_id" class="form-control form-control-sm" placeholder="From Cheerio Email Builder">
+                        <label class="form-label small fw-semibold mb-1">External Builder ID <span class="text-muted">(Optional)</span></label>
+                        <input type="text" name="cheerio_builder_id" id="builder_cheerio_id" class="form-control form-control-sm" placeholder="From External Email Builder">
                     </div>
                     <?php endif; ?>
 

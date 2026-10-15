@@ -1,6 +1,31 @@
 /* Email Manager Polish */
-.em-hero-banner {
-    border-color: rgba(15, 23, 42, 0.08) !important;
+.email-transport-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+}
+.email-transport-label {
+    color: var(--text-muted, #64748b);
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+}
+.email-transport-value {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.7rem;
+    border-radius: 999px;
+    background: #e8f1ff;
+    color: #1d4ed8;
+    border: 1px solid #d6e6ff;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.3;
+    text-transform: none;
+    letter-spacing: 0;
 }
 
 .em-nav-pills {

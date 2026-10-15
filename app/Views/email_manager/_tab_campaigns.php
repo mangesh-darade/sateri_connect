@@ -49,7 +49,7 @@ $isCheerio = ! empty($isCheerio);
 
                     <?php if ($isCheerio): ?>
                     <div class="mb-2">
-                        <label class="form-label small fw-semibold mb-1">Cheerio Builder ID</label>
+                        <label class="form-label small fw-semibold mb-1">External Builder ID</label>
                         <input type="text" name="cheerio_builder_id" id="camp_cheerio_id" class="form-control form-control-sm">
                     </div>
                     <?php endif; ?>
@@ -67,7 +67,7 @@ $isCheerio = ! empty($isCheerio);
                         <select name="mode" id="camp_mode" class="form-select form-select-sm">
                             <option value="recipients">Direct Email Recipients List</option>
                             <?php if ($isCheerio): ?>
-                            <option value="label">Cheerio Target Label</option>
+                            <option value="label">External Target Label</option>
                             <?php endif; ?>
                         </select>
                     </div>
@@ -102,7 +102,7 @@ $isCheerio = ! empty($isCheerio);
                     </div>
 
                     <div class="mb-3 d-none" id="campLabelWrap">
-                        <label class="form-label small fw-semibold mb-1">Cheerio Label Name</label>
+                        <label class="form-label small fw-semibold mb-1">External Label Name</label>
                         <input type="text" name="label_name" id="camp_label" class="form-control form-control-sm">
                     </div>
 

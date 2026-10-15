@@ -1,5 +1,12 @@
 <?= $this->extend('layouts/main') ?>
 
+<?= $this->section('header_title_extra') ?>
+<span class="email-transport-chip" title="Active email transport">
+    <span class="email-transport-label">Active Transport:</span>
+    <span class="email-transport-value"><i class="fas fa-check-circle" aria-hidden="true"></i> <?= esc($providerLabel ?? 'SMTP') ?></span>
+</span>
+<?= $this->endSection() ?>
+
 <?= $this->section('header_actions') ?>
 <?php
 $canSend = function_exists('can') && can('emails.send');
@@ -49,25 +56,6 @@ $tabUrl = static fn (string $t): string => site_url('email-manager?tab=' . $t);
      data-can-send="<?= $canSend ? '1' : '0' ?>"
      data-is-cheerio="<?= $isCheerio ? '1' : '0' ?>">
 
-    <!-- Top Compact Status Bar -->
-    <div class="em-hero-banner mb-3 p-3 rounded-3 bg-white border d-flex flex-wrap align-items-center justify-content-between gap-3 shadow-sm">
-        <div class="d-flex align-items-center gap-3">
-            <div class="em-hero-icon bg-primary-subtle text-primary p-2 rounded-3 d-flex align-items-center justify-content-center" style="width: 42px; height: 42px; font-size: 1.15rem;">
-                <i class="fas fa-envelope-open-text"></i>
-            </div>
-            <div>
-                <h6 class="mb-0 fw-bold text-dark">Email Marketing Studio</h6>
-                <p class="mb-0 text-muted small">Design templates, launch marketing campaigns, and monitor open &amp; click engagement.</p>
-            </div>
-        </div>
-        <div class="d-flex align-items-center gap-2">
-            <span class="text-muted small">Active Transport:</span>
-            <span class="badge px-3 py-2 rounded-pill bg-primary-subtle text-primary border border-primary-subtle font-monospace">
-                <i class="fas fa-check-circle me-1"></i> <?= esc($providerLabel) ?>
-            </span>
-        </div>
-    </div>
-
     <?= view('partials/email_compliance_banner', [
         'reputation'     => $reputation ?? null,
         'companyAddress' => $companyAddress ?? '',
@@ -76,7 +64,7 @@ $tabUrl = static fn (string $t): string => site_url('email-manager?tab=' . $t);
     <?php if ($isCheerio): ?>
     <div class="alert alert-light border py-2 small mb-3">
         <i class="fas fa-info-circle text-success me-1"></i>
-        Cheerio mode is active. Sends use <code>single-email/send</code> &amp; <code>label-email/send</code>.
+        External mode is active. Sends use <code>single-email/send</code> &amp; <code>label-email/send</code>.
     </div>
     <?php endif; ?>
 

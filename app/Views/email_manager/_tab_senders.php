@@ -62,7 +62,7 @@ $isSes = ! empty($isSes);
 
                 <?php if ($isCheerio): ?>
                 <div class="alert alert-warning py-2 small mb-3 border-0 bg-warning-subtle text-warning-emphasis">
-                    <i class="fas fa-shield-alt me-1"></i> Cheerio delivery requires a verified <strong>Sender ID</strong> or <strong>Domain</strong> in your Cheerio dashboard.
+                    <i class="fas fa-shield-alt me-1"></i> External delivery requires a verified <strong>Sender ID</strong> or <strong>Domain</strong> in your External dashboard.
                 </div>
                 <?php endif; ?>
 
@@ -97,8 +97,8 @@ $isSes = ! empty($isSes);
 
                     <?php if (! empty($isCheerio)): ?>
                     <div class="mb-2">
-                        <label class="form-label small fw-semibold mb-1">Cheerio External ID <span class="text-muted fw-normal">(Optional)</span></label>
-                        <input type="text" name="cheerio_id" id="sender_cheerio_id" class="form-control form-control-sm" placeholder="Cheerio dashboard identity ID">
+                        <label class="form-label small fw-semibold mb-1">External ID <span class="text-muted fw-normal">(Optional)</span></label>
+                        <input type="text" name="cheerio_id" id="sender_cheerio_id" class="form-control form-control-sm" placeholder="External dashboard identity ID">
                     </div>
                     <?php endif; ?>
 
