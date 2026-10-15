@@ -417,6 +417,7 @@ if (metaTestBtn) metaTestBtn.addEventListener('click', function() {
     var resultBox = document.getElementById('metaEmbedResult');
     var activeKey = '';
     var pendingCode = null;
+    var pendingRedirect = '';
     var pendingSession = null;
     var completing = false;
     var localHost = /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
@@ -442,14 +443,17 @@ if (metaTestBtn) metaTestBtn.addEventListener('click', function() {
         if (completing || !pendingCode || !pendingSession || !activeKey) return;
         completing = true;
         var code = pendingCode;
+        var redirectUri = pendingRedirect;
         var session = pendingSession;
         pendingCode = null;
+        pendingRedirect = '';
         pendingSession = null;
         setResult('Saving WhatsApp on ' + activeKey + '…', true);
         var body = new FormData();
         body.append(csrfName, csrfHash);
         body.append('tenant_key', activeKey);
         body.append('code', code);
+        if (redirectUri) body.append('redirect_uri', redirectUri);
         body.append('waba_id', session.waba_id || '');
         body.append('phone_number_id', session.phone_number_id || '');
         body.append('business_id', session.business_id || '');
@@ -523,8 +527,9 @@ if (metaTestBtn) metaTestBtn.addEventListener('click', function() {
                 configId: configId,
                 apiVersion: apiVersion,
                 onSession: onSession,
-                onCode: function (code) {
+                onCode: function (code, response, redirectUri) {
                     pendingCode = code;
+                    pendingRedirect = String(redirectUri || '');
                     tryComplete();
                 },
                 onCancel: function () {

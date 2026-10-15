@@ -11,6 +11,9 @@
     var sdkScriptPromise = null;
     var messageBound = false;
     var sessionHandler = null;
+    // FB.login dialog (facebook.com/v3.3/dialog/oauth) sends the code to this URI.
+    // The token exchange must repeat it exactly.
+    var SDK_OAUTH_REDIRECT = 'https://staticxx.facebook.com/x/connect/xd_arbiter/?version=46';
 
     function normalizeVersion(v) {
         v = String(v || 'v21.0').trim();
@@ -105,6 +108,19 @@
         });
     }
 
+    function redirectFromDialogUrl(url) {
+        try {
+            var parsed = new URL(String(url || ''), window.location.href);
+            var redir = parsed.searchParams.get('redirect_uri') || '';
+            if (redir.indexOf('facebook.com') === -1 && redir.indexOf('facebook.net') === -1) {
+                return '';
+            }
+            return redir;
+        } catch (e) {
+            return '';
+        }
+    }
+
     function bindSessionListener() {
         if (messageBound) return;
         messageBound = true;
@@ -159,27 +175,40 @@
             }
 
             return new Promise(function (resolve) {
-                window.FB.login(function (response) {
-                    var code = response && response.authResponse && response.authResponse.code
-                        ? String(response.authResponse.code)
-                        : '';
-                    if (code) {
-                        if (typeof opts.onCode === 'function') opts.onCode(code, response);
-                        resolve({ ok: true, code: code, response: response });
-                        return;
-                    }
-                    if (typeof opts.onCancel === 'function') opts.onCancel(response);
-                    resolve({ ok: false, code: '', response: response || null });
-                }, {
-                    config_id: configId,
-                    response_type: 'code',
-                    override_default_response_type: true,
-                    extras: {
-                        setup: {},
-                        featureType: '',
-                        sessionInfoVersion: '3'
-                    }
-                });
+                var capturedRedirect = '';
+                var originalOpen = window.open;
+                window.open = function (url) {
+                    var found = redirectFromDialogUrl(url);
+                    if (found) capturedRedirect = found;
+                    return originalOpen.apply(window, arguments);
+                };
+
+                try {
+                    window.FB.login(function (response) {
+                        var code = response && response.authResponse && response.authResponse.code
+                            ? String(response.authResponse.code)
+                            : '';
+                        var redirectUri = capturedRedirect || SDK_OAUTH_REDIRECT;
+                        if (code) {
+                            if (typeof opts.onCode === 'function') opts.onCode(code, response, redirectUri);
+                            resolve({ ok: true, code: code, redirectUri: redirectUri, response: response });
+                            return;
+                        }
+                        if (typeof opts.onCancel === 'function') opts.onCancel(response);
+                        resolve({ ok: false, code: '', response: response || null });
+                    }, {
+                        config_id: configId,
+                        response_type: 'code',
+                        override_default_response_type: true,
+                        extras: {
+                            setup: {},
+                            featureType: '',
+                            sessionInfoVersion: '3'
+                        }
+                    });
+                } finally {
+                    window.open = originalOpen;
+                }
             });
         });
     }

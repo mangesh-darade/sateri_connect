@@ -379,11 +379,7 @@ class Automations extends BaseController
             return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
         }
 
-        $message = $data['user_name'] !== '' ? ('Logged in as ' . $data['user_name'] . '.') : 'Facebook profile connected.';
-        $missing = is_array($data['missing_permissions'] ?? null) ? $data['missing_permissions'] : [];
-        if ($missing !== []) {
-            $message = 'This Facebook login is still missing pages_manage_ads. Click Login with Facebook, choose Edit settings, then Save.';
-        }
+        $message = $data['user_name'] !== '' ? ('Logged in as ' . $data['user_name'] . '. Choose a portfolio.') : 'Facebook profile connected. Choose a portfolio.';
 
         return $this->jsonResponse(true, $data, $message);
     }

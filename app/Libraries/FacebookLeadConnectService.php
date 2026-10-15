@@ -14,6 +14,8 @@ use Throwable;
  */
 class FacebookLeadConnectService
 {
+    private bool $tokenScopesRead = false;
+
     private const SESSION_TOKEN = 'fb_lead_user_token';
 
     private const SESSION_PAGES = 'fb_lead_profile_pages';
@@ -61,19 +63,20 @@ class FacebookLeadConnectService
         }
         $userToken = $this->assertUserToken($userToken);
 
-        $long  = $this->exchangeToken($userToken, $this->requireCredentials());
-        session()->set(self::SESSION_TOKEN, $long);
+        $long = $this->exchangeToken($userToken, $this->requireCredentials());
+        $sessionToken = $this->tokenForLeadAds($userToken, $long);
+        session()->set(self::SESSION_TOKEN, $sessionToken);
 
-        $me = $this->graph('me', ['fields' => 'id,name'], $long);
-        $businesses = $this->listBusinesses($long);
-        $profilePages = $this->listProfilePages($long);
+        $me = $this->graph('me', ['fields' => 'id,name'], $sessionToken);
+        $businesses = $this->listBusinesses($sessionToken);
+        $profilePages = $this->listProfilePages($sessionToken);
         session()->set(self::SESSION_PAGES, $profilePages);
 
         return [
             'user_name'           => trim((string) ($me['name'] ?? '')),
             'businesses'          => $businesses,
             'profile_pages'       => count($profilePages),
-            'missing_permissions' => $this->missingLeadPermissions($this->permissionStatus($long)),
+            'missing_permissions' => $this->missingLeadPermissions($this->permissionStatus($sessionToken)),
         ];
     }
 
@@ -346,8 +349,32 @@ class FacebookLeadConnectService
     /**
      * @return array<string, string>
      */
+    protected function tokenForLeadAds(string $short, string $long): string
+    {
+        if ($this->hasPagesManageAds($long)) {
+            return $long;
+        }
+        if ($short !== $long && $this->hasPagesManageAds($short)) {
+            return $short;
+        }
+
+        return $long !== '' ? $long : $short;
+    }
+
+    protected function hasPagesManageAds(string $token): bool
+    {
+        if ($token === '') {
+            return false;
+        }
+
+        $status = $this->permissionStatus($token);
+
+        return ($status['pages_manage_ads'] ?? '') === 'granted';
+    }
+
     protected function permissionStatus(string $token): array
     {
+        $this->tokenScopesRead = false;
         $status = [];
         try {
             $rows = $this->collect('me/permissions', ['limit' => '200'], $token);
@@ -362,8 +389,12 @@ class FacebookLeadConnectService
             $status = [];
         }
 
-        foreach ($this->tokenScopes($token) as $scope) {
-            $status[$scope] = 'granted';
+        $scopes = $this->tokenScopes($token);
+        if ($scopes !== null) {
+            $this->tokenScopesRead = true;
+            foreach ($scopes as $scope) {
+                $status[$scope] = 'granted';
+            }
         }
 
         return $status;
@@ -372,15 +403,15 @@ class FacebookLeadConnectService
     /**
      * Business Login often omits pages_manage_ads from /me/permissions and puts it on the token scopes.
      *
-     * @return list<string>
+     * @return list<string>|null Null when Facebook did not return the token scopes.
      */
-    protected function tokenScopes(string $token): array
+    protected function tokenScopes(string $token): ?array
     {
         try {
             $creds = $this->requireCredentials();
             $decoded = $this->graph('debug_token', ['input_token' => $token], $creds['app_id'] . '|' . $creds['secret']);
         } catch (Throwable) {
-            return [];
+            return null;
         }
 
         $data = is_array($decoded['data'] ?? null) ? $decoded['data'] : [];
@@ -410,7 +441,7 @@ class FacebookLeadConnectService
      */
     protected function missingLeadPermissions(array $status): array
     {
-        if ($status === [] || ($status['pages_manage_ads'] ?? '') === 'granted') {
+        if (($status['pages_manage_ads'] ?? '') === 'granted' || ! $this->tokenScopesRead) {
             return [];
         }
 

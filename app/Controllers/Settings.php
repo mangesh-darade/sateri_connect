@@ -840,6 +840,7 @@ class Settings extends BaseController
             $this->request->getPost('business_id') ?? ($json['business_id'] ?? '')
         ));
         $pin = trim((string) ($this->request->getPost('pin') ?? ($json['pin'] ?? '')));
+        $redirectUri = trim((string) ($this->request->getPost('redirect_uri') ?? ($json['redirect_uri'] ?? '')));
 
         if ($code === '') {
             return $this->jsonResponse(false, null, 'Missing Embedded Signup auth code.', [], 422);
@@ -851,7 +852,8 @@ class Settings extends BaseController
                 $wabaId,
                 $phoneNumberId,
                 $businessId !== '' ? $businessId : null,
-                preg_match('/^\d{6}$/', $pin) === 1 ? $pin : null
+                preg_match('/^\d{6}$/', $pin) === 1 ? $pin : null,
+                $redirectUri !== '' ? $redirectUri : null
             );
 
             (new ActivityLogger())->log('update', 'settings', 'WhatsApp connected via Meta Embedded Signup', [

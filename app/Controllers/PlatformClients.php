@@ -123,6 +123,7 @@ class PlatformClients extends BaseController
         $phoneNumberId = trim((string) $this->request->getPost('phone_number_id'));
         $businessId = trim((string) $this->request->getPost('business_id'));
         $pin = trim((string) $this->request->getPost('pin'));
+        $redirectUri = trim((string) $this->request->getPost('redirect_uri'));
 
         if ($code === '') {
             return $this->jsonResponse(false, null, 'Missing Embedded Signup auth code.', [], 422);
@@ -141,7 +142,8 @@ class PlatformClients extends BaseController
                 $wabaId,
                 $phoneNumberId,
                 $businessId !== '' ? $businessId : null,
-                preg_match('/^\d{6}$/', $pin) === 1 ? $pin : null
+                preg_match('/^\d{6}$/', $pin) === 1 ? $pin : null,
+                $redirectUri !== '' ? $redirectUri : null
             );
 
             log_activity('update', 'platform', 'WhatsApp connected via Platform Embedded Signup for ' . $key, [

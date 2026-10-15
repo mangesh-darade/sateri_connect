@@ -124,7 +124,8 @@ class MetaEmbeddedSignup
         string $wabaId,
         string $phoneNumberId,
         ?string $businessId = null,
-        ?string $pin = null
+        ?string $pin = null,
+        ?string $redirectUri = null
     ): array {
         $code          = trim($code);
         $wabaId        = trim($wabaId);
@@ -143,7 +144,7 @@ class MetaEmbeddedSignup
             );
         }
 
-        $tokenResult = $this->exchangeCodeForToken($code);
+        $tokenResult = $this->exchangeCodeForToken($code, (string) $redirectUri);
         $accessToken = trim((string) ($tokenResult['access_token'] ?? ''));
         if ($accessToken === '') {
             throw new RuntimeException('Meta did not return an access token for the Embedded Signup code.');
@@ -263,9 +264,12 @@ class MetaEmbeddedSignup
     /**
      * GET /oauth/access_token — exchange Embedded Signup code (TTL ~30s) for business token.
      *
+     * FB.login's OAuth dialog binds the code to its redirect_uri (the JS SDK xd_arbiter URL).
+     * That same URI has to be sent here or Meta rejects the code.
+     *
      * @return array<string, mixed>
      */
-    public function exchangeCodeForToken(string $code): array
+    public function exchangeCodeForToken(string $code, string $redirectUri = ''): array
     {
         $creds      = $this->resolveLaunchCredentials();
         $appId      = $creds['app_id'];
@@ -289,13 +293,19 @@ class MetaEmbeddedSignup
             'verify'          => $this->resolveSslVerify(),
         ], null, null, false);
 
+        $query = [
+            'client_id'     => $appId,
+            'client_secret' => $appSecret,
+            'code'          => $code,
+        ];
+        $redirectUri = $this->oauthRedirectUri($redirectUri);
+        if ($redirectUri !== '') {
+            $query['redirect_uri'] = $redirectUri;
+        }
+
         $response = $client->request('GET', $url, [
             'headers' => ['Accept' => 'application/json'],
-            'query'   => [
-                'client_id'     => $appId,
-                'client_secret' => $appSecret,
-                'code'          => $code,
-            ],
+            'query'   => $query,
         ]);
 
         $status  = $response->getStatusCode();
@@ -366,6 +376,34 @@ class MetaEmbeddedSignup
         }
 
         return $decoded;
+    }
+
+    /**
+     * Only the Facebook JS SDK redirect is accepted. Anything else is ignored.
+     */
+    protected function oauthRedirectUri(string $redirectUri): string
+    {
+        $redirectUri = trim($redirectUri);
+        if ($redirectUri === '' || strlen($redirectUri) > 2048) {
+            return '';
+        }
+
+        $parts = parse_url($redirectUri);
+        if (! is_array($parts)) {
+            return '';
+        }
+
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+        $host   = strtolower((string) ($parts['host'] ?? ''));
+        $allowedHost = $host === 'facebook.com'
+            || str_ends_with($host, '.facebook.com')
+            || $host === 'facebook.net'
+            || str_ends_with($host, '.facebook.net');
+        if ($scheme !== 'https' || ! $allowedHost) {
+            return '';
+        }
+
+        return $redirectUri;
     }
 
     /**
