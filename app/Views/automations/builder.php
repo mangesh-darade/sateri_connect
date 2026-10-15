@@ -35,6 +35,12 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
                 <i class="fas fa-wand-magic-sparkles text-success"></i> <span>AI Copilot</span>
             </button>
             <?php endif; ?>
+            <?php if ($id > 0 && function_exists('can') && can('automations.create')): ?>
+            <form action="<?= site_url('automations/' . $id . '/duplicate') ?>" method="post" class="d-inline">
+                <?= csrf_field() ?>
+                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Duplicate this workflow"><i class="fas fa-copy me-1"></i> Duplicate</button>
+            </form>
+            <?php endif; ?>
             <button type="button" class="btn btn-sm btn-wa" id="btnFlowSave"><i class="fas fa-save me-1"></i> Save</button>
         </div>
     </header>

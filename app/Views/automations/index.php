@@ -87,6 +87,11 @@
                                 <a href="<?= site_url('automations/' . (int) $a['id'] . '/edit') ?>" class="btn btn-sm btn-outline-secondary" title="Edit"><i class="fas fa-edit"></i></a>
                                 <a href="<?= site_url('automations/' . (int) $a['id'] . '/builder') ?>" class="btn btn-sm btn-outline-secondary" title="Builder"><i class="fas fa-project-diagram"></i></a>
                             <?php endif; ?>
+                            <?php if (function_exists('can') && can('automations.create')): ?>
+                                <form action="<?= site_url('automations/' . (int) $a['id'] . '/duplicate') ?>" method="post" class="d-inline"><?= csrf_field() ?>
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary" title="Duplicate"><i class="fas fa-copy"></i></button>
+                                </form>
+                            <?php endif; ?>
                             <?php if (function_exists('can') && can('automations.delete')): ?>
                                 <button type="button" class="btn btn-sm btn-outline-danger" data-confirm-delete data-url="<?= site_url('automations/' . (int) $a['id'] . '/delete') ?>" title="Delete"><i class="fas fa-trash"></i></button>
                             <?php endif; ?>

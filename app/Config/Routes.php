@@ -203,6 +203,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('email-manager/builders/(:num)/delete', 'EmailManager::deleteBuilder/$1', ['filter' => 'csrf']);
     $routes->post('email-manager/drips', 'EmailManager::saveDrip', ['filter' => 'csrf']);
     $routes->post('email-manager/drips/(:num)/delete', 'EmailManager::deleteDrip/$1', ['filter' => 'csrf']);
+    $routes->post('email-manager/drips/(:num)/duplicate', 'EmailManager::duplicateDrip/$1', ['filter' => 'csrf']);
     $routes->post('email-manager/drips/send-step', 'EmailManager::sendDripStep', ['filter' => 'csrf']);
     $routes->post('email-manager/verify', 'EmailManager::verifyEmails', ['filter' => 'csrf']);
     $routes->post('email-manager/campaigns', 'EmailManager::saveCampaign', ['filter' => 'csrf']);
@@ -314,6 +315,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->get('automations/(:num)/edit', 'Automations::edit/$1');
     $routes->post('automations/(:num)', 'Automations::update/$1', ['filter' => 'csrf']);
     $routes->post('automations/(:num)/delete', 'Automations::delete/$1', ['filter' => 'csrf']);
+    $routes->post('automations/(:num)/duplicate', 'Automations::duplicate/$1', ['filter' => 'csrf']);
     $routes->post('automations/(:num)/toggle', 'Automations::toggle/$1', ['filter' => 'csrf']);
     $routes->post('automations/sync-cheerio', 'Automations::syncFromCheerio', ['filter' => 'csrf']);
     $routes->get('automations/(:num)/builder', 'Automations::builderPage/$1');

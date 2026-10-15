@@ -62,4 +62,75 @@ class EmailDripModel extends Model
 
         return $drips;
     }
+
+    /**
+     * Copy a drip and its steps. The copy is saved as a draft.
+     */
+    public function duplicateRow(int $id, ?int $createdBy): ?int
+    {
+        $source = $this->find($id);
+        if (! is_array($source)) {
+            return null;
+        }
+
+        $steps = model(EmailDripStepModel::class)
+            ->where('drip_id', $id)
+            ->orderBy('step_order', 'ASC')
+            ->findAll();
+
+        $db = $this->db;
+        $db->transStart();
+
+        $newId = $this->insert([
+            'name'          => $this->copyName((string) ($source['name'] ?? 'Email workflow')),
+            'description'   => $source['description'] ?? null,
+            'trigger_type'  => (string) ($source['trigger_type'] ?? 'manual'),
+            'trigger_value' => $source['trigger_value'] ?? null,
+            'status'        => 'draft',
+            'created_by'    => $createdBy,
+        ], true);
+
+        if (! $newId) {
+            $db->transRollback();
+
+            return null;
+        }
+
+        $stepModel = model(EmailDripStepModel::class);
+        foreach ($steps as $step) {
+            if (! is_array($step)) {
+                continue;
+            }
+            $stepModel->insert([
+                'drip_id'      => (int) $newId,
+                'step_order'   => (int) ($step['step_order'] ?? 1),
+                'delay_hours'  => max(0, (int) ($step['delay_hours'] ?? 0)),
+                'subject'      => (string) ($step['subject'] ?? ''),
+                'html_content' => (string) ($step['html_content'] ?? ''),
+                'builder_id'   => ! empty($step['builder_id']) ? (int) $step['builder_id'] : null,
+            ]);
+        }
+
+        $db->transComplete();
+        if (! $db->transStatus()) {
+            return null;
+        }
+
+        return (int) $newId;
+    }
+
+    protected function copyName(string $name): string
+    {
+        $name = trim($name);
+        if ($name === '') {
+            $name = 'Email workflow';
+        }
+        $suffix = ' (copy)';
+        $max    = 191;
+        if (mb_strlen($name . $suffix) > $max) {
+            $name = mb_substr($name, 0, $max - mb_strlen($suffix));
+        }
+
+        return $name . $suffix;
+    }
 }

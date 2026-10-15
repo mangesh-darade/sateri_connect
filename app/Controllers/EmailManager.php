@@ -305,6 +305,26 @@ class EmailManager extends BaseController
         }
     }
 
+    public function duplicateDrip(int $id): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('emails.send')) {
+            return $denied;
+        }
+
+        $newId = model(EmailDripModel::class)->duplicateRow($id, (int) ($this->currentUser['id'] ?? 0) ?: null);
+        if ($newId === null) {
+            return $this->jsonResponse(false, null, 'Drip not found.', [], 404);
+        }
+
+        $copy = model(EmailDripModel::class)->find($newId);
+        log_activity('create', 'emails', 'Duplicated email workflow: ' . (string) ($copy['name'] ?? ('#' . $newId)), [
+            'id'        => $newId,
+            'source_id' => $id,
+        ]);
+
+        return $this->jsonResponse(true, ['id' => $newId], 'Workflow duplicated as a draft.');
+    }
+
     public function deleteDrip(int $id): ResponseInterface
     {
         if ($denied = $this->requirePermission('emails.delete')) {

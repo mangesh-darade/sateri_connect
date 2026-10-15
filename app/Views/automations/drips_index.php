@@ -159,6 +159,11 @@ $totalSteps = array_sum(array_map(fn($d) => is_array($d['steps'] ?? null) ? coun
                                                         title="Edit Drip Workflow">
                                                     <i class="fas fa-pen text-primary"></i>
                                                 </button>
+                                                <button type="button" class="btn btn-sm btn-icon-action js-duplicate-drip"
+                                                        data-id="<?= $dId ?>"
+                                                        title="Duplicate workflow">
+                                                    <i class="fas fa-copy"></i>
+                                                </button>
                                                 <button type="button" class="btn btn-sm btn-icon-action js-delete-drip"
                                                         data-id="<?= $dId ?>"
                                                         data-name="<?= esc($dName) ?>"
@@ -464,6 +469,18 @@ $(function () {
             var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to save workflow';
             $('#dripModalError').removeClass('d-none').text(msg);
             $btn.prop('disabled', false).html(origHtml);
+        });
+    });
+
+    $(document).on('click', '.js-duplicate-drip', function () {
+        var id = $(this).data('id');
+        var $btn = $(this).prop('disabled', true);
+        APP.post(APP.baseUrl + '/email-manager/drips/' + id + '/duplicate', {}).done(function (res) {
+            APP.toast(res.message || 'Workflow duplicated', 'success');
+            setTimeout(function () { window.location.reload(); }, 600);
+        }).fail(function (xhr) {
+            $btn.prop('disabled', false);
+            APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Duplicate failed', 'error');
         });
     });
 

@@ -229,6 +229,27 @@ class Automations extends BaseController
         return redirect()->to('/automations')->with('success', 'Automation deleted.');
     }
 
+    public function duplicate(int $id): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('automations.create')) {
+            return $denied;
+        }
+
+        $newId = model(AutomationModel::class)->duplicateRow($id, $this->userId());
+        if ($newId === null) {
+            return redirect()->to('/automations')->with('error', 'Workflow not found.');
+        }
+
+        $copy = model(AutomationModel::class)->find($newId);
+        log_activity('create', 'automations', 'Duplicated workflow: ' . (string) ($copy['name'] ?? ('#' . $newId)), [
+            'automation_id' => $newId,
+            'source_id'     => $id,
+        ]);
+
+        return redirect()->to('/automations/' . $newId . '/builder')
+            ->with('success', 'Workflow duplicated. It stays off until you turn it on.');
+    }
+
     public function toggle(int $id): ResponseInterface
     {
         if ($denied = $this->requirePermission('automations.edit')) {

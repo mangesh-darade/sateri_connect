@@ -129,4 +129,77 @@ class AutomationModel extends Model
 
         return $automation;
     }
+
+    /**
+     * Copy a workflow and its steps. The copy stays off so it does not run beside the original.
+     */
+    public function duplicateRow(int $id, ?int $createdBy): ?int
+    {
+        $source = $this->getWithRules($id);
+        if ($source === null) {
+            return null;
+        }
+
+        $db = $this->db;
+        $db->transStart();
+
+        $newId = $this->insert([
+            'name'           => $this->copyName((string) ($source['name'] ?? 'Workflow')),
+            'trigger_type'   => (string) ($source['trigger_type'] ?? ''),
+            'trigger_config' => is_array($source['trigger_config'] ?? null) ? $source['trigger_config'] : null,
+            'flow_graph'     => is_array($source['flow_graph'] ?? null) ? $source['flow_graph'] : null,
+            'is_active'      => 0,
+            'priority'       => (int) ($source['priority'] ?? 10),
+            'created_by'     => $createdBy,
+        ], true);
+
+        if (! $newId) {
+            $db->transRollback();
+
+            return null;
+        }
+
+        $ruleModel = model(AutomationRuleModel::class);
+        foreach ($source['rules'] ?? [] as $rule) {
+            if (! is_array($rule)) {
+                continue;
+            }
+            $config = $rule['config'] ?? [];
+            if (is_string($config)) {
+                $decoded = json_decode($config, true);
+                $config  = is_array($decoded) ? $decoded : [];
+            }
+            $ruleModel->insert([
+                'automation_id' => (int) $newId,
+                'step_order'    => (int) ($rule['step_order'] ?? 0),
+                'rule_type'     => (string) ($rule['rule_type'] ?? 'action'),
+                'action_type'   => $rule['action_type'] ?? null,
+                'config'        => is_array($config) ? $config : [],
+                'next_on_true'  => $rule['next_on_true'] ?? null,
+                'next_on_false' => $rule['next_on_false'] ?? null,
+            ]);
+        }
+
+        $db->transComplete();
+        if (! $db->transStatus()) {
+            return null;
+        }
+
+        return (int) $newId;
+    }
+
+    protected function copyName(string $name): string
+    {
+        $name = trim($name);
+        if ($name === '') {
+            $name = 'Workflow';
+        }
+        $suffix = ' (copy)';
+        $max    = 191;
+        if (mb_strlen($name . $suffix) > $max) {
+            $name = mb_substr($name, 0, $max - mb_strlen($suffix));
+        }
+
+        return $name . $suffix;
+    }
 }
