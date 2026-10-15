@@ -1,7 +1,33 @@
-<?= $this->extend('layouts/main') ?>
+<?php
+$platformMode = ! empty($platformMode);
+$settingsBase = rtrim((string) ($settingsBase ?? site_url('settings')), '/');
+$canEditSettings = $platformMode || (function_exists('can') && can('settings.edit'));
+?>
+<?= $this->extend($layout ?? 'layouts/main') ?>
+
+<?php if ($platformMode): ?>
+<?= $this->section('styles') ?>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="<?= asset_url('assets/css/app.css') ?>">
+<style>
+    body.platform-body {
+        font-family: var(--pf-font);
+        background: var(--pf-paper);
+        color: var(--pf-ink);
+    }
+    .platform-sidebar, .platform-topbar, .platform-side-nav, .platform-title, .platform-eyebrow {
+        font-family: var(--pf-font);
+    }
+    .client-settings-host {
+        font-family: "DM Sans", system-ui, sans-serif;
+        color: var(--text, #1a1228);
+    }
+</style>
+<?= $this->endSection() ?>
+<?php endif; ?>
 
 <?= $this->section('header_actions') ?>
-<?php if (function_exists('can') && can('settings.edit')): ?>
+<?php if ($canEditSettings): ?>
 <button type="submit" form="settingsForm" class="btn btn-wa btn-sm"><i class="fas fa-save me-1"></i> Save settings</button>
 <?php endif; ?>
 <?= $this->endSection() ?>
@@ -27,23 +53,11 @@ $timezoneOptions = $timezoneOptions ?? [];
 $val = static function (array $source, string $key, string $default = '') {
     return esc(old($key) ?? ($source[$key] ?? $default));
 };
-$providerLabel = $isMeta ? 'Meta Cloud API' : 'Cheerio Direct API';
-$emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'Cheerio Email API' : 'SMTP'));
+$providerLabel = $isMeta ? 'Meta Cloud API' : 'External Direct API';
+$emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid' : ($isCheerioEmail ? 'External Email API' : 'SMTP'));
 ?>
+<div class="<?= $platformMode ? 'client-settings-host' : '' ?>">
 <div class="settings-shell page-stack">
-    <div class="settings-intro">
-        <div class="settings-intro-meta mb-0">
-            <span class="settings-pill">
-                <span class="settings-pill-dot"></span>
-                WhatsApp: <strong><?= esc($isMeta ? 'Meta' : 'Cheerio') ?></strong>
-            </span>
-            <span class="settings-pill settings-pill-muted">
-                Email: <strong><?= esc($emailProviderLabel) ?></strong>
-            </span>
-            <span class="small text-muted ms-md-1">Pick a section on the left to edit.</span>
-        </div>
-    </div>
-
     <div class="settings-layout">
         <nav class="settings-nav" aria-label="Settings sections">
             <ul class="nav nav-pills" id="settingsTabs" role="tablist">
@@ -52,7 +66,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                         <i class="fas fa-comments" aria-hidden="true"></i>
                         <span>
                             <span class="settings-nav-label">WhatsApp Provider</span>
-                            <span class="settings-nav-hint">Cheerio or Meta API</span>
+                            <span class="settings-nav-hint">External or Meta API</span>
                         </span>
                     </button>
                 </li>
@@ -79,7 +93,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                         <i class="fas fa-envelope" aria-hidden="true"></i>
                         <span>
                             <span class="settings-nav-label">Email Provider</span>
-                            <span class="settings-nav-hint">SMTP · SendGrid · Cheerio</span>
+                            <span class="settings-nav-hint">SMTP · SendGrid · External</span>
                         </span>
                     </button>
                 </li>
@@ -123,50 +137,13 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
         </nav>
 
         <div class="settings-main">
-            <form action="<?= site_url('settings/save') ?>" method="post" id="settingsForm" enctype="multipart/form-data" class="settings-card">
+            <form action="<?= esc($settingsBase) ?>/save" method="post" id="settingsForm" enctype="multipart/form-data" class="settings-card">
                 <?= csrf_field() ?>
                 <input type="hidden" name="section" value="all">
 
                 <div class="settings-body tab-content">
                     <div class="tab-pane fade show active" id="tabProvider" role="tabpanel">
                         <section class="wp-stage" data-provider="<?= esc($provider) ?>" id="wpStage">
-                            <header class="wp-stage-head">
-                                <div class="wp-stage-copy">
-                                    <p class="wp-kicker">Message transport</p>
-                                    <h2 class="wp-title">One pipe. Two providers.</h2>
-                                    <p class="wp-lead">Chat, campaigns, templates, and queue all call the same facade. This flag only switches the HTTP driver — Cheerio Direct or Meta Graph. Both credential sets stay saved.</p>
-                                </div>
-                                <div class="wp-live" id="settingsActivePill" aria-live="polite">
-                                    <span class="wp-live-dot"></span>
-                                    <span class="wp-live-label">Live via</span>
-                                    <strong id="wpLiveName"><?= esc($isMeta ? 'Meta' : 'Cheerio') ?></strong>
-                                    <span class="wp-live-save d-none" id="wpProviderSaveState"></span>
-                                </div>
-                            </header>
-
-                            <div class="wp-route" aria-hidden="true">
-                                <div class="wp-route-node">
-                                    <i class="fas fa-layer-group"></i>
-                                    <span>This app</span>
-                                </div>
-                                <div class="wp-route-wire"><span></span></div>
-                                <div class="wp-route-node is-hub" id="wpRouteHub">
-                                    <i class="<?= $isMeta ? 'fab fa-meta' : 'fas fa-bolt' ?>" id="wpRouteHubIcon"></i>
-                                    <span id="wpRouteHubLabel"><?= esc($isMeta ? 'Meta Graph' : 'Cheerio Direct') ?></span>
-                                </div>
-                                <div class="wp-route-wire"><span></span></div>
-                                <div class="wp-route-node">
-                                    <i class="fab fa-whatsapp"></i>
-                                    <span>Customers</span>
-                                </div>
-                            </div>
-
-                            <div class="alert alert-warning border-0 py-2 px-3 small mb-3" role="note">
-                                <strong>Important:</strong> Keywords &amp; workflows reply <em>only</em> on the provider selected above.
-                                If <strong>Cheerio</strong> is active, message your Cheerio WhatsApp number (not the Meta test number).
-                                If <strong>Meta</strong> is active, use the Meta number. Mixed numbers will be saved in Chat but will not auto-reply.
-                            </div>
-
                             <div class="wp-switch" role="radiogroup" aria-label="WhatsApp provider">
                                 <label class="wp-option <?= ! $isMeta ? 'is-active' : '' ?>" data-tone="cheerio">
                                     <input type="radio" class="visually-hidden" name="whatsapp_provider" value="cheerio" <?= ! $isMeta ? 'checked' : '' ?> data-provider-toggle>
@@ -174,8 +151,8 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                     <span class="wp-option-body">
                                         <span class="wp-option-icon"><i class="fas fa-bolt"></i></span>
                                         <span class="wp-option-text">
-                                            <span class="wp-option-name">Cheerio Direct API</span>
-                                            <span class="wp-option-desc">x-api-key · contact &amp; workflow sync · Cheerio WABA</span>
+                                            <span class="wp-option-name">External Direct API</span>
+                                            <span class="wp-option-desc">x-api-key · contact &amp; workflow sync · External WABA</span>
                                         </span>
                                         <span class="wp-option-meta">
                                             <span class="wp-chip">x-api-key</span>
@@ -204,7 +181,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                 <div class="wp-creds-main">
                                     <div class="wp-creds-head">
                                         <div>
-                                            <h3>Cheerio credentials</h3>
+                                            <h3>External credentials</h3>
                                             <p>Encrypted at rest. Leave masked fields blank to keep the current value.</p>
                                         </div>
                                         <a class="wp-link" href="https://app.cheerio.in/settings/apikey" target="_blank" rel="noopener">Open API keys <i class="fas fa-arrow-up-right-from-square"></i></a>
@@ -217,9 +194,9 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                         </div>
                                     </div>
                                     <div class="wp-field">
-                                        <label class="form-label" for="cheerio_display_phone">Cheerio / Elintom WhatsApp number</label>
+                                        <label class="form-label" for="cheerio_display_phone">External / Elintom WhatsApp number</label>
                                         <input type="text" id="cheerio_display_phone" name="cheerio_display_phone" class="form-control" value="<?= esc($cheerio['display_phone'] ?? '') ?>" placeholder="919243959973" inputmode="tel">
-                                        <div class="form-text">Customer must message this number when Cheerio is active (e.g. +91 92439 59973).</div>
+                                        <div class="form-text">Customer must message this number when External is active (e.g. +91 92439 59973).</div>
                                     </div>
                                     <div class="wp-field-grid">
                                         <div class="wp-field">
@@ -261,79 +238,14 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
 
                             <div id="panelMetaCreds" class="wp-creds <?= $isMeta ? '' : 'd-none' ?>" data-tone="meta">
                                 <div class="wp-creds-main">
-                                    <div class="wp-creds-head">
-                                        <div>
-                                            <h3>Connect WhatsApp</h3>
-                                            <p>Meta Embedded Signup — customer authorizes, we store Access Token, WABA ID, and Phone Number ID.</p>
-                                        </div>
-                                        <a class="wp-link" href="https://developers.facebook.com/docs/whatsapp/embedded-signup/" target="_blank" rel="noopener">Meta docs <i class="fas fa-arrow-up-right-from-square"></i></a>
-                                    </div>
-
                                     <?php
                                     $embedded = $embeddedSignup ?? ['app_id' => '', 'config_id' => '', 'api_version' => 'v21.0', 'ready' => false, 'managed' => false];
-                                    $connected = trim((string) ($meta['phone_number_id'] ?? '')) !== ''
-                                        && trim((string) ($meta['waba_id'] ?? '')) !== ''
-                                        && trim((string) ($meta['access_token'] ?? '')) !== '';
                                     ?>
-                                    <div class="wp-embed-card mb-3" id="metaEmbeddedSignupBox"
-                                         data-app-id="<?= esc($embedded['app_id'] ?? '') ?>"
-                                         data-config-id="<?= esc($embedded['config_id'] ?? '') ?>"
-                                         data-api-version="<?= esc($embedded['api_version'] ?? 'v21.0') ?>"
-                                         data-ready="<?= ! empty($embedded['ready']) ? '1' : '0' ?>"
-                                         data-managed="<?= ! empty($embedded['managed']) ? '1' : '0' ?>">
-                                        <?php if (! empty($embedded['managed']) && ! empty($embedded['ready'])): ?>
-                                            <div class="alert alert-success border py-2 px-3 small mb-2">
-                                                <strong>Auto Embedded Signup ready.</strong>
-                                                Platform Tech Provider credentials are loaded — client only clicks Connect WhatsApp (no Meta app create/publish).
-                                            </div>
-                                        <?php elseif (empty($embedded['ready'])): ?>
-                                            <div class="alert alert-warning border py-2 px-3 small mb-2">
-                                                Platform admin must save <strong>Embedded Signup</strong> App ID + Config ID + App Secret
-                                                (Platform → Embedded Signup), <em>or</em> fill Meta app fields below.
-                                            </div>
-                                        <?php endif; ?>
-                                        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-                                            <span class="badge <?= $connected ? 'text-bg-success' : 'text-bg-secondary' ?>" id="metaConnectStatus">
-                                                <?= $connected ? 'Connected' : 'Not connected' ?>
-                                            </span>
-                                            <span class="badge text-bg-secondary" id="metaSdkStatus" title="Facebook JavaScript SDK">SDK: loading…</span>
-                                            <?php if ($connected): ?>
-                                                <span class="small text-muted" id="metaConnectSummary">
-                                                    WABA <?= esc((string) ($meta['waba_id'] ?? '')) ?> · Phone ID <?= esc((string) ($meta['phone_number_id'] ?? '')) ?>
-                                                </span>
-                                            <?php else: ?>
-                                                <span class="small text-muted" id="metaConnectSummary">
-                                                    <?= ! empty($embedded['ready'])
-                                                        ? 'Click Connect WhatsApp to authorize this business number.'
-                                                        : 'Save Tech Provider credentials (platform) or App ID + Config ID + App Secret, then connect.' ?>
-                                                </span>
-                                            <?php endif; ?>
+                                    <?php if (! empty($embedded['managed'])): ?>
+                                        <div class="alert alert-light border py-2 px-3 small mb-3">
+                                            WhatsApp is connected by the platform admin. This screen does not start Meta signup.
                                         </div>
-                                        <div class="d-flex flex-wrap gap-2">
-                                            <button type="button" class="btn btn-wa" id="btnConnectWhatsApp" <?= empty($embedded['ready']) ? 'disabled' : '' ?>>
-                                                <i class="fab fa-whatsapp me-1"></i> Connect WhatsApp
-                                            </button>
-                                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btnReloadEmbeddedConfig" title="Refresh App ID / Config from saved settings">
-                                                <i class="fas fa-sync"></i>
-                                            </button>
-                                        </div>
-                                        <div id="metaEmbedResult" class="creds-test-result mt-2"></div>
-                                        <div class="alert alert-light border py-2 px-3 small mt-2 mb-0">
-                                            <div class="d-flex flex-wrap align-items-center gap-2">
-                                                <strong>JS SDK host domain:</strong>
-                                                <code id="metaSdkOrigin">—</code>
-                                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" id="btnCopySdkOrigin">Copy</button>
-                                            </div>
-                                            <div class="mt-1" id="metaSdkOriginHint">
-                                                Meta checks this exact value. It must appear in Meta App → Facebook Login for Business → Settings →
-                                                <strong>Allowed Domains for the JavaScript SDK</strong>. Subdomains are not covered by the parent domain.
-                                            </div>
-                                        </div>
-                                        <div class="form-text mt-2">
-                                            Uses Facebook JS SDK + Embedded Signup <code>config_id</code> (not a plain OAuth link).
-                                        </div>
-                                    </div>
-
+                                    <?php endif; ?>
                                     <div class="wp-creds-head <?= ! empty($embedded['managed']) ? 'd-none' : '' ?>" id="metaAppCredsHead">
                                         <div>
                                             <h3>Meta app (for Embedded Signup)</h3>
@@ -414,7 +326,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                     <div class="wp-creds-head">
                                         <div>
                                             <h3>Team Inbox channels (Instagram / Messenger)</h3>
-                                            <p>Uses Meta Page Access Token. Works even when WhatsApp provider is Cheerio.</p>
+                                            <p>Uses Meta Page Access Token. Works even when WhatsApp provider is External.</p>
                                         </div>
                                     </div>
                                     <div class="wp-field-grid">
@@ -448,23 +360,11 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                 </div>
                                 <aside class="wp-creds-aside">
                                     <p class="wp-aside-kicker">Setup path</p>
-                                    <?php if (! empty($embedded['managed']) && ! empty($embedded['ready'])): ?>
                                     <ol class="wp-steps">
-                                        <li>Platform Tech Provider is already configured</li>
-                                        <li>Have a Meta Business Portfolio + WhatsApp number ready</li>
-                                        <li>Click <strong>Connect WhatsApp</strong> and authorize</li>
+                                        <li>The platform admin connects this WhatsApp number</li>
+                                        <li>Or paste a System User token, Phone Number ID, and WABA ID below</li>
                                         <li>Public HTTPS webhook under Webhooks tab</li>
                                     </ol>
-                                    <?php else: ?>
-                                    <ol class="wp-steps">
-                                        <li>Platform admin: <strong>Embedded Signup</strong> (preferred), or</li>
-                                        <li><a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener">Create / open Meta App</a></li>
-                                        <li>Facebook Login for Business → Embedded Signup config</li>
-                                        <li>Save App ID + Config ID + App Secret here</li>
-                                        <li>Click <strong>Connect WhatsApp</strong></li>
-                                        <li>Public HTTPS webhook under Webhooks tab</li>
-                                    </ol>
-                                    <?php endif; ?>
                                     <?php if (function_exists('can') && can('settings.view')): ?>
                                         <button type="button" class="btn btn-wa w-100" id="btnTestMeta">
                                             <i class="fas fa-plug me-1"></i> Test connection
@@ -488,8 +388,8 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                 WABA go-live / template approval Meta Business Manager madhe hote.
                                 Active provider: <strong>Meta Cloud API</strong>.
                             <?php else: ?>
-                                WABA go-live / template approval <strong>Cheerio Dashboard</strong> madhe hote.
-                                Active provider: <strong>Cheerio</strong>.
+                                WABA go-live / template approval <strong>External Dashboard</strong> madhe hote.
+                                Active provider: <strong>External</strong>.
                             <?php endif; ?>
                         </div>
                         <div class="row g-3">
@@ -499,7 +399,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                         <div class="list-group-item d-flex justify-content-between align-items-start">
                                             <div>
                                                 <div class="fw-semibold">1. <?= esc($providerLabel) ?> credentials saved</div>
-                                                <div class="small text-muted"><?= $isMeta ? 'Token + Phone Number ID + WABA ID' : 'x-api-key from Cheerio' ?></div>
+                                                <div class="small text-muted"><?= $isMeta ? 'Token + Phone Number ID + WABA ID' : 'x-api-key from External' ?></div>
                                             </div>
                                             <span class="badge text-bg-secondary" data-check="credentials">Check</span>
                                         </div>
@@ -513,7 +413,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                         <div class="list-group-item d-flex justify-content-between align-items-start">
                                             <div>
                                                 <div class="fw-semibold">3. Live WABA</div>
-                                                <div class="small text-muted"><?= $isMeta ? 'Business verification + live number on Meta' : 'Premium + live number on Cheerio' ?></div>
+                                                <div class="small text-muted"><?= $isMeta ? 'Business verification + live number on Meta' : 'Premium + live number on External' ?></div>
                                             </div>
                                             <span class="badge text-bg-secondary" data-check="production">Check</span>
                                         </div>
@@ -539,7 +439,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                             <?php if ($isMeta): ?>
                                                 <a class="btn btn-sm btn-outline-secondary" href="https://business.facebook.com/" target="_blank" rel="noopener">Open Meta Business</a>
                                             <?php else: ?>
-                                                <a class="btn btn-sm btn-outline-secondary" href="https://app.cheerio.in/" target="_blank" rel="noopener">Open Cheerio</a>
+                                                <a class="btn btn-sm btn-outline-secondary" href="https://app.cheerio.in/" target="_blank" rel="noopener">Open External</a>
                                             <?php endif; ?>
                                         </div>
                                         <div class="list-group-item">
@@ -559,7 +459,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                     <ul class="small mb-0 ps-3">
                                         <li>First message to a new contact must be an <strong>approved template</strong>.</li>
                                         <li>After the customer replies, free text works for ~24 hours.</li>
-                                        <li>Templates: approve on <?= $isMeta ? 'Meta' : 'Cheerio' ?>, then Sync here.</li>
+                                        <li>Templates: approve on <?= $isMeta ? 'Meta' : 'External' ?>, then Sync here.</li>
                                         <li><a href="<?= site_url('templates/create') ?>">Templates → Create</a></li>
                                     </ul>
                                     <pre class="small settings-code-block mt-3 mb-0" id="goLiveDetails">Click Refresh checklist</pre>
@@ -757,7 +657,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                 <div class="wp-stage-copy">
                                     <p class="wp-kicker">Outbound email</p>
                                     <h2 class="wp-title">One pipe. Many providers.</h2>
-                                    <p class="wp-lead">Password resets, automation alerts, and future email campaigns all use <code>service('emailProvider')</code>. Switch SMTP, Cheerio, or Amazon SES without changing app code.</p>
+                                    <p class="wp-lead">Password resets, automation alerts, and future email campaigns all use <code>service('emailProvider')</code>. Switch SMTP, External, or Amazon SES without changing app code.</p>
                                 </div>
                                 <div class="wp-live" aria-live="polite">
                                     <span class="wp-live-dot"></span>
@@ -788,7 +688,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                     <span class="wp-option-body">
                                         <span class="wp-option-icon"><i class="fas fa-bolt"></i></span>
                                         <span class="wp-option-text">
-                                            <span class="wp-option-name">Cheerio Email API</span>
+                                            <span class="wp-option-name">External Email API</span>
                                             <span class="wp-option-desc">Direct API · same x-api-key as WhatsApp</span>
                                         </span>
                                         <span class="wp-option-meta">
@@ -858,11 +758,11 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                             </div>
 
                             <div id="panelEmailCheerio" class="wp-creds mt-3 <?= ! $isCheerioEmail ? 'd-none' : '' ?>">
-                                <h6 class="text-muted text-uppercase small mb-3">Cheerio Email API</h6>
+                                <h6 class="text-muted text-uppercase small mb-3">External Email API</h6>
                                 <div class="alert alert-warning border-0 py-2 px-3 small">
-                                    Uses the same <strong>Cheerio API key</strong> as WhatsApp (Settings → Cheerio credentials).
-                                    Create a verified <strong>Sender ID</strong> in Cheerio Dashboard → Email → Manage Sender ID before sending.
-                                    Bulk marketing in Cheerio works best via <strong>label-based campaigns</strong> (`label-email/send`).
+                                    Uses the same <strong>External API key</strong> as WhatsApp (Settings → External credentials).
+                                    Create a verified <strong>Sender ID</strong> in External Dashboard → Email → Manage Sender ID before sending.
+                                    Bulk marketing in External works best via <strong>label-based campaigns</strong> (`label-email/send`).
                                     <a href="https://www.cheerioai.com/getting-started-and-onboarding/how-to-set-up-email-channel-on-cheerio-ai" target="_blank" rel="noopener">Setup guide</a>
                                 </div>
                                 <div class="row">
@@ -882,7 +782,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                                 </option>
                                             <?php endif; ?>
                                         </select>
-                                        <div class="form-text">Cheerio API send sathi campaign name analytics label mhanun vaparla jato.</div>
+                                        <div class="form-text">External API send sathi campaign name analytics label mhanun vaparla jato.</div>
                                     </div>
                                 </div>
                             </div>
@@ -941,7 +841,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                 </div>
                             </div>
 
-                            <?php if (function_exists('can') && can('settings.edit')): ?>
+                            <?php if ($canEditSettings): ?>
                             <button type="button" class="btn btn-wa mt-2" id="btnTestEmail"><i class="fas fa-paper-plane"></i> Test Email Provider</button>
                             <?php endif; ?>
                         </section>
@@ -964,12 +864,12 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                         </div>
                         <div class="alert alert-success border settings-note">
                             <strong>Live Chat inbound setup (3 steps)</strong><br>
-                            Customer message → <strong><?= $isWhMeta ? 'Meta' : 'Cheerio' ?></strong> → this webhook URL → <a href="<?= site_url('chat') ?>">Live Chat</a>.
+                            Customer message → <strong><?= $isWhMeta ? 'Meta' : 'External' ?></strong> → this webhook URL → <a href="<?= site_url('chat') ?>">Live Chat</a>.
                             Localhost needs ngrok HTTPS. Active provider: <code><?= esc($whProvider) ?></code>
                         </div>
 
                         <div class="settings-steps" id="webhookSetupWizard"
-                             data-setup-url="<?= site_url('settings/setup-webhook') ?>"
+                             data-setup-url="<?= esc($settingsBase) ?>/setup-webhook"
                              data-provider="<?= esc($whProvider) ?>">
                             <div class="settings-step <?= $step1 ? 'is-done' : 'is-pending' ?>">
                                 <div class="settings-step-head">
@@ -986,7 +886,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                         <?php if ($isWhMeta): ?>
                                             This token syncs automatically to your configured Meta App via Graph API when you click Save URL or Save Settings.
                                         <?php else: ?>
-                                            Paste this token into the Cheerio webhook form. It must be <strong>identical</strong> in both your App and provider settings.
+                                            Paste this token into the External webhook form. It must be <strong>identical</strong> in both your App and provider settings.
                                         <?php endif; ?>
                                     </p>
                                     <label class="form-label">Webhook Verify Token</label>
@@ -1101,7 +1001,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                                 <li>Use manual fallback in the <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener">Meta Dashboard</a> only if an API warning appears.</li>
                                             </ol>
                                         <?php else: ?>
-                                            <div class="fw-semibold mb-2">Cheerio / WABA webhook form:</div>
+                                            <div class="fw-semibold mb-2">External / WABA webhook form:</div>
                                             <ol class="mb-2 ps-3">
                                                 <li>Open <a href="https://app.cheerio.in/login" target="_blank" rel="noopener">app.cheerio.in</a></li>
                                                 <li><strong>Callback / Webhook URL</strong> = Copy URL above</li>
@@ -1160,12 +1060,12 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                     <div class="form-text">Leave masked blank to keep the current key.</div>
                                 </div>
                                 <div class="d-flex flex-wrap gap-2">
-                                    <?php if (function_exists('can') && can('settings.edit')): ?>
+                                    <?php if ($canEditSettings): ?>
                                         <button type="button" class="btn btn-outline-secondary" id="btnTestElintOm">
                                             <i class="fas fa-plug me-1"></i> Test connection
                                         </button>
                                     <?php endif; ?>
-                                    <?php if (function_exists('can') && (can('contacts.import') || can('settings.edit'))): ?>
+                                    <?php if ($canEditSettings || (function_exists('can') && can('contacts.import'))): ?>
                                         <button type="button" class="btn btn-wa" id="btnSyncElintOmSettings">
                                             <i class="fas fa-cash-register me-1"></i> Sync customers now
                                         </button>
@@ -1453,7 +1353,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                     </div>
                 </div>
 
-                <?php if (function_exists('can') && can('settings.edit')): ?>
+                <?php if ($canEditSettings): ?>
                 <div class="settings-footer">
                     <div class="settings-footer-copy">
                         <span class="settings-footer-hint">Changes apply after save</span>
@@ -1465,11 +1365,28 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
         </div>
     </div>
 </div>
+</div>
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
-<script src="<?= asset_url('assets/js/meta-embedded-signup.js') ?>"></script>
+<?php if ($platformMode): ?>
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<meta name="csrf-token" content="<?= csrf_hash() ?>">
+<meta name="csrf-header" content="<?= esc(csrf_header()) ?>">
 <script>
+window.APP = window.APP || {
+    baseUrl: <?= json_encode(rtrim(site_url(), '/')) ?>,
+    csrfToken: <?= json_encode(csrf_hash()) ?>,
+    csrfHeader: <?= json_encode(csrf_header()) ?>,
+    csrfName: <?= json_encode(csrf_token()) ?>,
+    liveNotif: false
+};
+</script>
+<script src="<?= asset_url('assets/js/app.js') ?>"></script>
+<?php endif; ?>
+<script>
+var SETTINGS_API = <?= json_encode($settingsBase) ?>;
 $(function () {
     $('.toggle-secret').on('click', function () {
         var $input = $(this).closest('.input-group').find('input');
@@ -1511,7 +1428,7 @@ $(function () {
     }
 
     function webhookSetup(action, extra) {
-        var url = $('#webhookSetupWizard').data('setup-url') || (APP.baseUrl + '/settings/setup-webhook');
+        var url = $('#webhookSetupWizard').data('setup-url') || (SETTINGS_API + '/setup-webhook');
         var payload = Object.assign({ action: action }, extra || {});
         return APP.post(url, payload);
     }
@@ -1644,7 +1561,7 @@ $(function () {
         var to = prompt('Send test email to:');
         if (!to) return;
         var $btn = $(this).prop('disabled', true);
-        APP.post(APP.baseUrl + '/settings/test-email', { to: to })
+        APP.post(SETTINGS_API + '/test-email', { to: to })
             .done(function (res) { APP.toast(res.message || 'Email OK'); })
             .fail(function (xhr) { APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Email test failed', 'error'); })
             .always(function () { $btn.prop('disabled', false); });
@@ -1658,7 +1575,7 @@ $(function () {
         $('#emailStage .wp-option').removeClass('is-active');
         $('input[name="email_provider"]:checked').closest('.wp-option').addClass('is-active');
         $('#emailStage').attr('data-email-provider', provider);
-        var label = provider === 'ses' ? 'Amazon SES' : (provider === 'cheerio' ? 'Cheerio Email API' : 'SMTP');
+        var label = provider === 'ses' ? 'Amazon SES' : (provider === 'cheerio' ? 'External Email API' : 'SMTP');
         $('#emailLiveName').text(label);
     }
 
@@ -1739,16 +1656,16 @@ $(function () {
     function runCheerioTest($btn, toast) {
         if ($btn) $btn.prop('disabled', true);
         $('#cheerioTestResult').text('Testing…');
-        APP.post(APP.baseUrl + '/settings/test-cheerio', {})
+        APP.post(SETTINGS_API + '/test-cheerio', {})
             .done(function (res) {
                 var data = res.data || {};
                 applyCheerioChecklist(data);
-                var msg = res.message || (data.ok ? 'Cheerio OK' : 'Issues found');
+                var msg = res.message || (data.ok ? 'External OK' : 'Issues found');
                 $('#cheerioTestResult').html('<span class="' + (data.ok ? 'text-success' : 'text-warning') + '">' + msg + '</span>');
                 if (toast !== false) APP.toast(msg, data.ok ? 'success' : 'warning');
             })
             .fail(function (xhr) {
-                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Cheerio test failed';
+                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'External test failed';
                 $('#cheerioTestResult').html('<span class="text-danger">' + msg + '</span>');
                 if (toast !== false) APP.toast(msg, 'error');
             })
@@ -1758,7 +1675,7 @@ $(function () {
     function runMetaTest($btn, toast) {
         if ($btn) $btn.prop('disabled', true);
         $('#metaTestResult').text('Testing…');
-        APP.post(APP.baseUrl + '/settings/test-meta', {})
+        APP.post(SETTINGS_API + '/test-meta', {})
             .done(function (res) {
                 var data = res.data || {};
                 applyMetaChecklist(data);
@@ -1782,9 +1699,6 @@ $(function () {
         $('#wpStage .wp-option').removeClass('is-active');
         $('input[name="whatsapp_provider"]:checked').closest('.wp-option').addClass('is-active');
         $('#wpStage').attr('data-provider', provider);
-        $('#wpLiveName').text(isMeta ? 'Meta' : 'Cheerio');
-        $('#wpRouteHubLabel').text(isMeta ? 'Meta Graph' : 'Cheerio Direct');
-        $('#wpRouteHubIcon').attr('class', isMeta ? 'fab fa-meta' : 'fas fa-bolt');
         $('#goLiveChecklist').attr('data-provider', provider);
     }
 
@@ -1792,24 +1706,21 @@ $(function () {
         var isMeta = provider === 'meta';
         if (window.APP) {
             APP.whatsappProvider = provider;
-            APP.whatsappProviderShort = isMeta ? 'Meta' : 'Cheerio';
-            APP.whatsappProviderLabel = isMeta ? 'Meta Cloud API' : 'Cheerio Direct API';
+            APP.whatsappProviderShort = isMeta ? 'Meta' : 'External';
+            APP.whatsappProviderLabel = isMeta ? 'Meta Cloud API' : 'External Direct API';
         }
         var $chip = $('.provider-chip').first();
         if ($chip.length) {
             $chip
                 .toggleClass('is-meta', isMeta)
                 .toggleClass('is-cheerio', !isMeta)
-                .attr('title', isMeta ? 'Meta Cloud API' : 'Cheerio Direct API')
-                .html('<i class="' + (isMeta ? 'fab fa-meta' : 'fas fa-bolt') + '"></i> ' + (isMeta ? 'Meta' : 'Cheerio'));
+                .attr('title', isMeta ? 'Meta Cloud API' : 'External Direct API')
+                .html('<i class="' + (isMeta ? 'fab fa-meta' : 'fas fa-bolt') + '"></i> ' + (isMeta ? 'Meta' : 'External'));
         }
     }
 
-    var providerSaveTimer = null;
     function persistActiveProvider(provider) {
-        var $state = $('#wpProviderSaveState').removeClass('d-none text-success text-danger').text('Saving…');
-        clearTimeout(providerSaveTimer);
-        APP.post(APP.baseUrl + '/settings/save', {
+        APP.post(SETTINGS_API + '/save', {
             section: 'provider',
             whatsapp_provider: provider
         })
@@ -1819,21 +1730,18 @@ $(function () {
                 $('input[name="whatsapp_provider"][value="' + saved + '"]').prop('checked', true);
                 syncProviderPanels();
                 updateProviderChrome(saved);
-                $state.addClass('text-success').text('Saved');
                 if (window.APP && APP.toast) {
                     APP.toast((isMetaLabel(saved)) + ' is now active', 'success');
                 }
-                providerSaveTimer = setTimeout(function () { $state.addClass('d-none'); }, 2500);
             })
             .fail(function (xhr) {
                 var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Could not save provider';
-                $state.addClass('text-danger').text('Save failed');
                 if (window.APP && APP.toast) APP.toast(msg, 'error');
             });
     }
 
     function isMetaLabel(provider) {
-        return provider === 'meta' ? 'Meta Cloud API' : 'Cheerio Direct API';
+        return provider === 'meta' ? 'Meta Cloud API' : 'External Direct API';
     }
 
     $('input[data-provider-toggle]').on('change', function () {
@@ -1844,332 +1752,11 @@ $(function () {
     $('#btnTestCheerio').on('click', function () { runCheerioTest($(this), true); });
     $('#btnTestMeta').on('click', function () { runMetaTest($(this), true); });
 
-    // ── Meta Embedded Signup (Connect WhatsApp) — Facebook JS SDK ────────
-    (function initMetaEmbeddedSignup() {
-        var $box = $('#metaEmbeddedSignupBox');
-        if (!$box.length) return;
-
-        function setResult(html, ok) {
-            $('#metaEmbedResult').html(
-                '<span class="' + (ok ? 'text-success' : 'text-danger') + '">' + html + '</span>'
-            );
-        }
-
-        if (!APP.MetaEmbeddedSignup) {
-            $('#metaSdkStatus').removeClass('text-bg-secondary text-bg-success').addClass('text-bg-danger').text('SDK: missing');
-            setResult('meta-embedded-signup.js failed to load.', false);
-            return;
-        }
-
-        var pendingSession = null;
-        var pendingCode = null;
-        var completing = false;
-
-        // Meta validates the page origin against "Allowed Domains for the JavaScript SDK",
-        // so show the exact string instead of making the admin guess it.
-        (function showSdkOrigin() {
-            var origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
-            $('#metaSdkOrigin').text(origin);
-
-            if (window.location.protocol !== 'https:') {
-                $('#metaSdkOriginHint')
-                    .addClass('text-danger')
-                    .html('<strong>This page is not HTTPS.</strong> Meta only allows the JavaScript SDK login on HTTPS pages. Open Settings over HTTPS before connecting.');
-            }
-
-            $('#btnCopySdkOrigin').on('click', function () {
-                var value = $('#metaSdkOrigin').text();
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                    navigator.clipboard.writeText(value).then(function () {
-                        APP.toast('Host domain copied. Paste it into Meta → Allowed Domains for the JavaScript SDK.', 'success');
-                    });
-                    return;
-                }
-                window.prompt('Copy this host domain into Meta:', value);
-            });
-        })();
-
-        function isManaged() {
-            return $box.attr('data-managed') === '1';
-        }
-
-        function embedCfg() {
-            return {
-                appId: ($('#meta_app_id').val() || $box.attr('data-app-id') || '').toString().trim(),
-                configId: ($('#meta_embedded_config_id').val() || $box.attr('data-config-id') || '').toString().trim(),
-                apiVersion: ($('#meta_api_version').val() || $box.attr('data-api-version') || 'v21.0').toString().trim() || 'v21.0'
-            };
-        }
-
-        function setSdkStatus(state, label) {
-            var $badge = $('#metaSdkStatus');
-            $badge
-                .removeClass('text-bg-secondary text-bg-success text-bg-danger text-bg-warning')
-                .addClass(state)
-                .text(label);
-        }
-
-        function setReady() {
-            var c = embedCfg();
-            var ready = !!(c.appId && c.configId);
-            // Keep server "ready" (includes App Secret) when platform-managed.
-            if (isManaged() && $box.attr('data-ready') === '1') {
-                ready = true;
-            }
-            if (!isManaged()) {
-                $box.attr('data-ready', ready ? '1' : '0');
-            }
-            $('#btnConnectWhatsApp').prop('disabled', !ready || !APP.MetaEmbeddedSignup.isSdkReady());
-            if (!ready && !isManaged()) {
-                $('#metaConnectSummary').text('Save App ID + Config ID + App Secret, then connect.');
-            } else if (!ready && isManaged()) {
-                $('#metaConnectSummary').text('Platform Tech Provider credentials are incomplete.');
-            }
-        }
-
-        function applyConnectedIdentity(data) {
-            if (!data) return;
-            APP.whatsappProvider = 'meta';
-            if (typeof APP.applyWaIdentity === 'function') {
-                APP.applyWaIdentity({
-                    display_name: data.verified_name || data.display_name || '',
-                    phone: data.display_phone || data.phone || '',
-                    profile_picture_url: data.profile_picture_url || ''
-                });
-            }
-            if (typeof APP.refreshWaIdentity === 'function') {
-                APP.refreshWaIdentity(true);
-            }
-        }
-
-        function finishTypes() {
-            return {
-                FINISH: 1,
-                FINISH_ONLY_WABA: 1,
-                FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING: 1,
-                FINISH_OBO_MIGRATION: 1,
-                FINISH_GRANT_ONLY_API_ACCESS: 1
-            };
-        }
-
-        function tryComplete() {
-            if (completing || !pendingCode || !pendingSession) return;
-            completing = true;
-            var code = pendingCode;
-            var session = pendingSession;
-            pendingCode = null;
-            pendingSession = null;
-
-            var pin = ($('#meta_two_step_pin').val() || '').toString().trim();
-            if (pin.indexOf('•') !== -1) pin = '';
-
-            setResult('Exchanging token &amp; saving credentials…', true);
-            $('#btnConnectWhatsApp').prop('disabled', true);
-
-            APP.post(APP.baseUrl + '/settings/embedded-signup', {
-                code: code,
-                waba_id: session.waba_id || '',
-                phone_number_id: session.phone_number_id || '',
-                business_id: session.business_id || '',
-                pin: /^\d{6}$/.test(pin) ? pin : ''
-            }).done(function (res) {
-                var data = (res && res.data) || {};
-                var msg = (res && res.message) || 'WhatsApp connected';
-                setResult($('<div>').text(msg).html(), !!(res && res.success));
-                APP.toast(msg, (res && res.success) ? 'success' : 'warning');
-
-                if (data.waba_id) {
-                    $('#meta_waba_id').val(data.waba_id);
-                }
-                if (data.phone_number_id) {
-                    $('#meta_phone_number_id').val(data.phone_number_id);
-                }
-                $('#metaConnectStatus')
-                    .removeClass('text-bg-secondary text-bg-danger')
-                    .addClass('text-bg-success')
-                    .text('Connected');
-                $('#metaConnectSummary').text(
-                    'WABA ' + (data.waba_id || '') + ' · Phone ID ' + (data.phone_number_id || '')
-                    + (data.display_phone ? (' · ' + data.display_phone) : '')
-                );
-                $('input[name="whatsapp_provider"][value="meta"]').prop('checked', true).trigger('change');
-                applyConnectedIdentity(data);
-                if (typeof runMetaTest === 'function') {
-                    runMetaTest(null, false);
-                }
-            }).fail(function (xhr) {
-                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Embedded Signup failed';
-                setResult($('<div>').text(msg).html(), false);
-                APP.toast(msg, 'error');
-            }).always(function () {
-                completing = false;
-                setReady();
-            });
-        }
-
-        function onEmbeddedSession(data) {
-            var ev = (data.event || '').toString();
-            if (finishTypes()[ev]) {
-                var d = data.data || {};
-                pendingSession = {
-                    phone_number_id: (d.phone_number_id || '').toString(),
-                    waba_id: (d.waba_id || '').toString(),
-                    business_id: (d.business_id || '').toString()
-                };
-                tryComplete();
-                return;
-            }
-            if (ev === 'CANCEL') {
-                var step = (data.data && data.data.current_step) || '';
-                var err = (data.data && data.data.error_message) || '';
-                setResult(
-                    $('<div>').text(err || ('Signup cancelled' + (step ? (' at ' + step) : ''))).html(),
-                    false
-                );
-            }
-        }
-
-        function preloadSdk() {
-            var c = embedCfg();
-            setSdkStatus('text-bg-warning', 'SDK: loading…');
-            APP.MetaEmbeddedSignup.preload({ appId: c.appId, apiVersion: c.apiVersion })
-                .then(function () {
-                    setSdkStatus('text-bg-success', 'SDK: ready');
-                    setReady();
-                })
-                .catch(function (err) {
-                    setSdkStatus('text-bg-danger', 'SDK: failed');
-                    setResult($('<div>').text((err && err.message) || 'Facebook SDK failed to load').html(), false);
-                    setReady();
-                });
-        }
-
-        function launchEmbeddedSignup(c) {
-            setResult('Opening Meta Embedded Signup (Facebook SDK)…', true);
-            APP.MetaEmbeddedSignup.launch({
-                appId: c.appId,
-                configId: c.configId,
-                apiVersion: c.apiVersion,
-                onSession: onEmbeddedSession,
-                onCode: function (code) {
-                    pendingCode = code;
-                    tryComplete();
-                },
-                onCancel: function () {
-                    if (!pendingSession) {
-                        setResult('Meta login did not return an auth code. Check App Review / Advanced Access on Meta.', false);
-                        setReady();
-                    }
-                }
-            }).catch(function (err) {
-                setResult($('<div>').text((err && err.message) || 'Could not launch Embedded Signup').html(), false);
-                APP.toast((err && err.message) || 'Embedded Signup failed', 'error');
-                setReady();
-            });
-        }
-
-        $('#btnConnectWhatsApp').on('click', function () {
-            var c = embedCfg();
-            if (!c.appId || !c.configId) {
-                APP.toast(
-                    isManaged()
-                        ? 'Platform Tech Provider App ID / Config ID missing. Ask platform admin.'
-                        : 'Enter Meta App ID and Embedded Signup Config ID first.',
-                    'warning'
-                );
-                return;
-            }
-            if (!APP.MetaEmbeddedSignup.isSdkReady()) {
-                APP.toast('Facebook SDK is still loading. Wait a second and try again.', 'warning');
-                preloadSdk();
-                return;
-            }
-
-            // Platform-managed: token exchange uses platform App Secret — launch directly.
-            if (isManaged()) {
-                var pinOnly = ($('#meta_two_step_pin').val() || '').toString().trim();
-                if (/^\d{6}$/.test(pinOnly)) {
-                    APP.post(APP.baseUrl + '/settings/save', {
-                        section: 'meta',
-                        meta_two_step_pin: pinOnly,
-                        meta_phone_number_id: ($('#meta_phone_number_id').val() || '').toString(),
-                        meta_waba_id: ($('#meta_waba_id').val() || '').toString(),
-                        meta_api_version: c.apiVersion
-                    }).always(function () {
-                        launchEmbeddedSignup(c);
-                    });
-                    return;
-                }
-                launchEmbeddedSignup(c);
-                return;
-            }
-
-            var $secret = $('input[name="meta_webhook_secret"]');
-            var secretVal = ($secret.val() || '').toString().trim();
-            var hasSecretTyped = secretVal !== '' && secretVal.indexOf('•') === -1;
-            if ($box.attr('data-ready') !== '1' && !hasSecretTyped) {
-                APP.toast('Enter App Secret (or Save Settings once), then Connect WhatsApp.', 'warning');
-                return;
-            }
-
-            setResult('Saving Meta app settings…', true);
-            $('#btnConnectWhatsApp').prop('disabled', true);
-
-            var savePayload = {
-                section: 'meta',
-                meta_app_id: c.appId,
-                meta_embedded_config_id: c.configId,
-                meta_api_version: c.apiVersion,
-                meta_phone_number_id: ($('#meta_phone_number_id').val() || '').toString(),
-                meta_waba_id: ($('#meta_waba_id').val() || '').toString(),
-                meta_webhook_verify_token: ($('input[name="meta_webhook_verify_token"]').val() || '').toString(),
-                meta_page_id: ($('input[name="meta_page_id"]').val() || '').toString(),
-                meta_instagram_account_id: ($('input[name="meta_instagram_account_id"]').val() || '').toString(),
-                inbox_instagram_enabled: $('#inboxInstagramEnabled').is(':checked') ? '1' : '',
-                inbox_messenger_enabled: $('#inboxMessengerEnabled').is(':checked') ? '1' : '',
-                meta_webhook_secret: secretVal
-            };
-            var pin = ($('#meta_two_step_pin').val() || '').toString().trim();
-            if (/^\d{6}$/.test(pin)) {
-                savePayload.meta_two_step_pin = pin;
-            }
-
-            APP.post(APP.baseUrl + '/settings/save', savePayload)
-                .done(function () {
-                    $box.attr('data-app-id', c.appId);
-                    $box.attr('data-config-id', c.configId);
-                    $box.attr('data-api-version', c.apiVersion);
-                    $box.attr('data-ready', '1');
-                    launchEmbeddedSignup(c);
-                })
-                .fail(function (xhr) {
-                    var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Could not save Meta settings';
-                    setResult($('<div>').text(msg).html(), false);
-                    APP.toast(msg, 'error');
-                    setReady();
-                });
-        });
-
-        $('#meta_app_id, #meta_embedded_config_id, #meta_api_version').on('input change', function () {
-            setReady();
-            var c = embedCfg();
-            if (c.appId && APP.MetaEmbeddedSignup.isSdkReady()) {
-                APP.MetaEmbeddedSignup.preload({ appId: c.appId, apiVersion: c.apiVersion }).catch(function () {});
-            }
-        });
-        $('#btnReloadEmbeddedConfig').on('click', function () {
-            setReady();
-            preloadSdk();
-        });
-
-        setReady();
-        preloadSdk();
-    })();
 
     $('#btnTestPageMessaging').on('click', function () {
         var $btn = $(this);
         $btn.prop('disabled', true);
-        APP.post(APP.baseUrl + '/settings/test-page-messaging', {})
+        APP.post(SETTINGS_API + '/test-page-messaging', {})
             .done(function (res) {
                 APP.toast((res && res.message) || 'Page messaging OK', (res && res.success) ? 'success' : 'error');
             })
@@ -2197,7 +1784,7 @@ $(function () {
         var $out = $('#elintomTestResult');
         $btn.prop('disabled', true);
         $out.html('<span class="text-muted">Testing ElintOm…</span>');
-        APP.post(APP.baseUrl + '/settings/test-elintom', elintomPayload())
+        APP.post(SETTINGS_API + '/test-elintom', elintomPayload())
             .done(function (res) {
                 var ok = !!(res && res.success);
                 var msg = (res && res.message) || (ok ? 'OK' : 'Failed');
@@ -2220,9 +1807,9 @@ $(function () {
         $out.html('<span class="text-muted">Saving settings, then syncing…</span>');
 
         var saveData = $.extend({ section: 'elintom' }, elintomPayload());
-        APP.post(APP.baseUrl + '/settings/save', saveData)
+        APP.post(SETTINGS_API + '/save', saveData)
             .done(function () {
-                APP.post(APP.baseUrl + '/settings/sync-elintom', {})
+                APP.post(SETTINGS_API + '/sync-elintom', {})
                     .done(function (res) {
                         var ok = !!(res && res.success);
                         var msg = (res && res.message) || 'Sync complete';
@@ -2253,7 +1840,7 @@ $(function () {
         $btn.prop('disabled', true);
         $out.html('<span class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i> Testing connection to Gemini API…</span>');
 
-        APP.post(APP.baseUrl + '/settings/test-ai', {
+        APP.post(SETTINGS_API + '/test-ai', {
             api_key: apiKey,
             model: model
         })
@@ -2277,7 +1864,7 @@ $(function () {
         var name = $.trim($('#apiKeyNameInput').val()) || 'External API Client';
         $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i> Generating…');
 
-        APP.post(APP.baseUrl + '/settings/api-tokens/generate', { name: name })
+        APP.post(SETTINGS_API + '/api-tokens/generate', { name: name })
             .done(function (res) {
                 if (res && res.data && res.data.plain_text) {
                     var token = res.data.plain_text;
@@ -2340,7 +1927,7 @@ $(function () {
             return;
         }
         var $row = $('#tokenRow_' + id);
-        APP.post(APP.baseUrl + '/settings/api-tokens/' + id + '/delete', {})
+        APP.post(SETTINGS_API + '/api-tokens/' + id + '/delete', {})
             .done(function () {
                 $row.fadeOut(300, function () { $(this).remove(); });
                 APP.toast('API Key revoked', 'success');

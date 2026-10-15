@@ -10,10 +10,29 @@ use CodeIgniter\HTTP\ResponseInterface;
 use Config\Services;
 
 /**
- * Application & WhatsApp provider (Cheerio / Meta) + SMTP settings.
+ * Application & WhatsApp provider (External / Meta) + SMTP settings.
  */
 class Settings extends BaseController
 {
+    private bool $platformMode = false;
+
+    private string $settingsBase = '';
+
+    private string $platformClientKey = '';
+
+    private string $platformClientName = '';
+
+    /**
+     * Platform super-admin is editing this client's tenant database.
+     */
+    public function enablePlatformClientMode(string $key, string $name): void
+    {
+        $this->platformMode         = true;
+        $this->platformClientKey    = strtolower(trim($key));
+        $this->platformClientName   = trim($name);
+        $this->settingsBase         = rtrim(site_url('platform/clients/' . rawurlencode($this->platformClientKey) . '/settings'), '/');
+    }
+
     /**
      * Safe wrapper: returns decoded JSON body or empty array if body is not JSON.
      */
@@ -27,9 +46,42 @@ class Settings extends BaseController
         }
     }
 
+    private function guardSettings(string $permission): ?ResponseInterface
+    {
+        if ($this->platformMode && (int) session('platform_admin_id') > 0) {
+            return null;
+        }
+
+        return $this->requirePermission($permission);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    private function applyPlatformView(array $data): array
+    {
+        if (! $this->platformMode) {
+            return $data;
+        }
+
+        $name = $this->platformClientName !== '' ? $this->platformClientName : $this->platformClientKey;
+        $data['layout']             = 'layouts/platform';
+        $data['settingsBase']       = $this->settingsBase;
+        $data['platformMode']       = true;
+        $data['navActive']          = 'clients';
+        $data['platformName']       = (string) session('platform_admin_name');
+        $data['platformClientKey']  = $this->platformClientKey;
+        $data['platformClientName'] = $name;
+        $data['pageTitle']          = 'Settings · ' . $name;
+        $data['title']              = $data['pageTitle'];
+
+        return $data;
+    }
+
     public function index(): string|ResponseInterface
     {
-        if ($denied = $this->requirePermission('settings.view')) {
+        if ($denied = $this->guardSettings('settings.view')) {
             return $denied;
         }
 
@@ -150,7 +202,7 @@ class Settings extends BaseController
         $data['apiUsage']       = $apiLogModel->usageByToken(30);
         $data['apiRecentCalls'] = $apiLogModel->recent(50);
 
-        return $this->render('settings/index', $data);
+        return $this->render('settings/index', $this->applyPlatformView($data));
     }
 
     /**
@@ -158,7 +210,7 @@ class Settings extends BaseController
      */
     public function email(): string|ResponseInterface
     {
-        if ($denied = $this->requirePermission('settings.view')) {
+        if ($denied = $this->guardSettings('settings.view')) {
             return $denied;
         }
 
@@ -169,11 +221,11 @@ class Settings extends BaseController
 
         $isSesRow = static fn (array $r): bool => ($r['provider'] ?? '') === \App\Libraries\SesIdentityService::PROVIDER;
 
-        return $this->render('settings/email', [
+        return $this->render('settings/email', $this->applyPlatformView([
             'pageTitle'     => 'Email Settings',
             'subtitle'      => 'Connect your sending domain, publish DNS records and manage From addresses.',
             'breadcrumb'    => [
-                ['label' => 'Settings', 'url' => site_url('settings')],
+                ['label' => 'Email Manager', 'url' => site_url('email-manager')],
                 ['label' => 'Email Settings'],
             ],
             'isSes'         => $provider === \App\Libraries\SettingsService::EMAIL_PROVIDER_SES,
@@ -189,12 +241,12 @@ class Settings extends BaseController
             'reputation'    => (new \App\Libraries\EmailReputationGuard())->status(),
             'domains'       => array_values(array_filter($rows, static fn ($r) => ($r['type'] ?? '') === 'domain' && $isSesRow($r))),
             'senders'       => array_values(array_filter($rows, static fn ($r) => ($r['type'] ?? '') === 'sender' && $isSesRow($r))),
-        ]);
+        ]));
     }
 
     public function save(): ResponseInterface
     {
-        if ($denied = $this->requirePermission('settings.edit')) {
+        if ($denied = $this->guardSettings('settings.edit')) {
             return $denied;
         }
 
@@ -214,7 +266,7 @@ class Settings extends BaseController
                 if (in_array($emailProviderPost, ['smtp', 'sendgrid', 'cheerio', 'ses'], true)) {
                     $settings->setEmailProvider($emailProviderPost);
                 } elseif ($section === 'email' && $emailProviderPost !== '') {
-                    return $this->jsonResponse(false, null, 'Choose SMTP, SendGrid, Cheerio, or Amazon SES.', [], 422);
+                    return $this->jsonResponse(false, null, 'Choose SMTP, SendGrid, External, or Amazon SES.', [], 422);
                 }
             }
 
@@ -292,7 +344,7 @@ class Settings extends BaseController
                 if (in_array($providerPost, ['cheerio', 'meta'], true)) {
                     $settings->setWhatsAppProvider($providerPost);
                 } elseif ($section === 'provider') {
-                    return $this->jsonResponse(false, null, 'Choose Cheerio or Meta.', [], 422);
+                    return $this->jsonResponse(false, null, 'Choose External or Meta.', [], 422);
                 }
             }
 
@@ -540,6 +592,8 @@ class Settings extends BaseController
                 'meta_webhook_synced' => is_array($metaWebhookSync)
                     ? ! empty($metaWebhookSync['fully_configured'])
                     : null,
+                'tenant_key'        => $this->platformClientKey !== '' ? $this->platformClientKey : null,
+                'platform_admin_id' => $this->platformMode ? (int) session('platform_admin_id') : null,
             ]);
 
             $saveMessage = 'Settings saved successfully.';
@@ -559,8 +613,8 @@ class Settings extends BaseController
             if ($this->request->isAJAX()) {
                 return $this->jsonResponse(true, [
                     'provider'       => $settings->getWhatsAppProvider(),
-                    'provider_short' => $settings->isMetaProvider() ? 'Meta' : 'Cheerio',
-                    'provider_label' => $settings->isMetaProvider() ? 'Meta Cloud API' : 'Cheerio Direct API',
+                    'provider_short' => $settings->isMetaProvider() ? 'Meta' : 'External',
+                    'provider_label' => $settings->isMetaProvider() ? 'Meta Cloud API' : 'External Direct API',
                     'email_provider' => $settings->getEmailProvider(),
                     'email_provider_label' => $this->emailProviderLabel($settings->getEmailProvider()),
                     'section'        => $section,
@@ -568,7 +622,9 @@ class Settings extends BaseController
                 ], $saveMessage);
             }
 
-            return redirect()->to('/settings')->with('success', $saveMessage);
+            $home = $this->settingsBase !== '' ? $this->settingsBase : '/settings';
+
+            return redirect()->to($home)->with('success', $saveMessage);
         } catch (\Throwable $e) {
             log_message('error', 'Settings save failed: {msg}', ['msg' => $e->getMessage()]);
 
@@ -587,7 +643,7 @@ class Settings extends BaseController
 
     public function testEmail(): ResponseInterface
     {
-        if ($denied = $this->requirePermission('settings.edit')) {
+        if ($denied = $this->guardSettings('settings.edit')) {
             return $denied;
         }
 
@@ -614,7 +670,7 @@ class Settings extends BaseController
 
     public function testAi(): ResponseInterface
     {
-        if ($denied = $this->requirePermission('settings.view')) {
+        if ($denied = $this->guardSettings('settings.view')) {
             return $denied;
         }
 
@@ -631,7 +687,7 @@ class Settings extends BaseController
 
     public function generateApiToken(): ResponseInterface
     {
-        if ($denied = $this->requirePermission('settings.edit')) {
+        if ($denied = $this->guardSettings('settings.edit')) {
             return $denied;
         }
 
@@ -655,7 +711,7 @@ class Settings extends BaseController
 
     public function deleteApiToken(int $id): ResponseInterface
     {
-        if ($denied = $this->requirePermission('settings.edit')) {
+        if ($denied = $this->guardSettings('settings.edit')) {
             return $denied;
         }
 
@@ -671,7 +727,7 @@ class Settings extends BaseController
     {
         return match ($provider) {
             'sendgrid' => 'SendGrid',
-            'cheerio'  => 'Cheerio Email API',
+            'cheerio'  => 'External Email API',
             'ses'      => 'Amazon SES',
             default    => 'SMTP',
         };
@@ -689,13 +745,13 @@ class Settings extends BaseController
 
     public function testElintOm(): ResponseInterface
     {
-        if ($denied = $this->requirePermission('settings.view')) {
+        if ($denied = $this->guardSettings('settings.view')) {
             return $denied;
         }
 
         // Persist posted credentials before testing (optional — same pattern as other tests).
         if ($this->request->getPost('elintom_base_url') !== null || $this->request->getPost('elintom_api_private_key') !== null) {
-            if ($deniedEdit = $this->requirePermission('settings.edit')) {
+            if ($deniedEdit = $this->guardSettings('settings.edit')) {
                 return $deniedEdit;
             }
             $svc = new \App\Libraries\ElintOmCustomerSyncService();
@@ -744,7 +800,11 @@ class Settings extends BaseController
      */
     public function embeddedSignup(): ResponseInterface
     {
-        if ($denied = $this->requirePermission('settings.edit')) {
+        if (! $this->platformMode) {
+            return $this->jsonResponse(false, null, 'WhatsApp signup is handled by the platform admin.', [], 403);
+        }
+
+        if ($denied = $this->guardSettings('settings.edit')) {
             return $denied;
         }
 
@@ -792,7 +852,7 @@ class Settings extends BaseController
 
     public function testPageMessaging(): ResponseInterface
     {
-        if ($denied = $this->requirePermission('settings.view')) {
+        if ($denied = $this->guardSettings('settings.view')) {
             return $denied;
         }
 
@@ -818,7 +878,7 @@ class Settings extends BaseController
      */
     protected function testProviderConnection(string $provider): ResponseInterface
     {
-        if ($denied = $this->requirePermission('settings.view')) {
+        if ($denied = $this->guardSettings('settings.view')) {
             return $denied;
         }
 
@@ -829,7 +889,7 @@ class Settings extends BaseController
                 $label = 'Meta Cloud API';
             } else {
                 $api   = new \App\Libraries\CheerioDirectAPI($settings);
-                $label = 'Cheerio Direct API';
+                $label = 'External Direct API';
             }
 
             $result = $api->testConnection();
@@ -852,14 +912,14 @@ class Settings extends BaseController
      */
     public function setupWebhook(): ResponseInterface
     {
-        if ($denied = $this->requirePermission('settings.edit')) {
+        if ($denied = $this->guardSettings('settings.edit')) {
             return $denied;
         }
 
         $settings = service('settingsService');
         $action   = (string) ($this->request->getPost('action')
             ?? ($this->safeGetJSON()['action'] ?? ''));
-        $providerLabel = $settings->isMetaProvider() ? 'Meta App Dashboard' : 'Cheerio';
+        $providerLabel = $settings->isMetaProvider() ? 'Meta App Dashboard' : 'External';
 
         try {
             if ($action === 'generate_token') {
