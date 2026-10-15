@@ -197,13 +197,26 @@ class Campaigns extends BaseController
             return $denied;
         }
 
-        $campaign = model(EmailHtmlCampaignModel::class)->find($id);
-        if ($campaign === null) {
+        $detail = $this->emailCampaignDetail($id);
+        if ($detail === null) {
             if ($this->request->isAJAX()) {
                 return $this->jsonResponse(false, null, 'Email campaign not found.', [], 404);
             }
 
             return redirect()->to('/campaigns?channel=email')->with('error', 'Email campaign not found.');
+        }
+
+        return $this->render('campaigns/show_email', $detail);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    protected function emailCampaignDetail(int $id): ?array
+    {
+        $campaign = model(EmailHtmlCampaignModel::class)->find($id);
+        if ($campaign === null) {
+            return null;
         }
 
         // Resolve recipients
@@ -273,7 +286,7 @@ class Campaigns extends BaseController
         $settings      = new SettingsService();
         $provider      = $settings->getEmailProvider();
         $providerLabel = match ($provider) {
-            SettingsService::EMAIL_PROVIDER_CHEERIO  => 'Cheerio AI',
+            SettingsService::EMAIL_PROVIDER_CHEERIO  => 'External AI',
             SettingsService::EMAIL_PROVIDER_SENDGRID => 'SendGrid',
             SettingsService::EMAIL_PROVIDER_SES      => 'Amazon SES',
             default                                  => 'SMTP',
@@ -284,7 +297,7 @@ class Campaigns extends BaseController
             $builder = model(EmailBuilderModel::class)->find((int) $campaign['builder_id']);
         }
 
-        return $this->render('campaigns/show_email', [
+        return [
             'pageTitle'      => 'Campaign: ' . ($campaign['name'] ?? ('#' . $id)),
             'campaign'       => $campaign,
             'id'             => $id,
@@ -305,7 +318,7 @@ class Campaigns extends BaseController
             'uniqueClicks'   => $uniqueClicks,
             'clickRate'      => $clickRate,
             'canSend'        => function_exists('can') && can('emails.send'),
-        ]);
+        ];
     }
 
     public function progress(int $id): ResponseInterface
@@ -316,7 +329,7 @@ class Campaigns extends BaseController
 
         $campaign = model(CampaignModel::class)->find($id);
         if ($campaign === null) {
-            return $this->jsonResponse(false, null, 'Campaign not found.', [], 404);
+            return $this->emailProgress($id);
         }
 
         if (($campaign['status'] ?? '') === 'running') {
@@ -341,6 +354,57 @@ class Campaigns extends BaseController
             ->findAll(500);
 
         return $this->progressResponse($campaign, $recipients);
+    }
+
+    protected function emailProgress(int $id): ResponseInterface
+    {
+        $detail = $this->emailCampaignDetail($id);
+        if ($detail === null) {
+            return $this->jsonResponse(false, null, 'Campaign not found.', [], 404);
+        }
+
+        $campaign = $detail['campaign'];
+        $status   = (string) ($campaign['status'] ?? 'draft');
+        $sent     = (int) $detail['sentCount'];
+        $target   = (int) $detail['totalTarget'];
+        $rows     = [];
+        foreach ($detail['recipients'] as $email) {
+            $key = strtolower(trim((string) $email));
+            $log = $detail['logByEmail'][$key] ?? null;
+            $recStatus = $status === 'sent' ? 'sent' : ($status === 'failed' ? 'failed' : 'queued');
+            if (is_array($log) && ! empty($log['status'])) {
+                $recStatus = (string) $log['status'];
+            }
+            $opens  = is_array($log) ? (int) ($log['open_count'] ?? 0) : 0;
+            $clicks = is_array($log) ? (int) ($log['click_count'] ?? 0) : 0;
+            $rows[] = [
+                'email'        => $key,
+                'status_badge' => view('partials/status_badge', ['status' => $recStatus]),
+                'opens'        => $opens,
+                'clicks'       => $clicks,
+            ];
+        }
+
+        return $this->jsonResponse(true, [
+            'channel'       => 'email',
+            'status'        => $status,
+            'status_badge'  => view('partials/status_badge', ['status' => $status]),
+            'is_active'     => in_array($status, ['queued', 'sending', 'running'], true),
+            'can_send'      => ! empty($detail['canSend']) && in_array($status, ['draft', 'failed'], true),
+            'sent_at'       => ! empty($campaign['sent_at']) ? format_app_datetime($campaign['sent_at']) : 'Not dispatched yet',
+            'last_error'    => (string) ($campaign['last_error'] ?? ''),
+            'total_target'  => $target,
+            'sent_count'    => $sent,
+            'sent_rate'     => $target > 0 ? round(($sent / $target) * 100, 1) : 0,
+            'failed_count'  => (int) $detail['failedCount'],
+            'unique_opens'  => (int) $detail['uniqueOpens'],
+            'total_opens'   => (int) $detail['totalOpens'],
+            'open_rate'     => $detail['openRate'],
+            'unique_clicks' => (int) $detail['uniqueClicks'],
+            'total_clicks'  => (int) $detail['totalClicks'],
+            'click_rate'    => $detail['clickRate'],
+            'recipients'    => $rows,
+        ]);
     }
 
     /**
@@ -994,7 +1058,7 @@ class Campaigns extends BaseController
         }
 
         // Only IMAGE/VIDEO/DOCUMENT headers accept a media link at send time.
-        // TEXT/NONE templates must not get a header component (breaks Cheerio/Meta).
+        // TEXT/NONE templates must not get a header component (breaks External/Meta).
         if (($mediaUrl !== '' || $mediaId !== '') && $isMediaHeader) {
             if ($mediaId === '' && $mediaUrl !== '') {
                 $resolved = $this->resolveCampaignHeaderMedia($mediaUrl);
@@ -1161,7 +1225,7 @@ class Campaigns extends BaseController
         $settings = new SettingsService();
         $isCheerio = $settings->getEmailProvider() === SettingsService::EMAIL_PROVIDER_CHEERIO;
 
-        // Prefer recipients list from filtered contacts so SMTP/SendGrid and Cheerio both work.
+        // Prefer recipients list from filtered contacts so SMTP/SendGrid and External both work.
         $row = [
             'name'               => $name,
             'subject'            => $subject,
@@ -1176,7 +1240,7 @@ class Campaigns extends BaseController
             'created_by'         => $this->userId(),
         ];
 
-        // Optional Cheerio label mode when user asks and provider supports it.
+        // Optional External label mode when user asks and provider supports it.
         if ($isCheerio && ! empty($input['use_cheerio_label'])) {
             $row['mode'] = 'label';
             $row['recipients_json'] = [];
@@ -1805,7 +1869,7 @@ class Campaigns extends BaseController
             return false;
         }
 
-        // Meta template example handles expire / are not fetchable by Cheerio send.
+        // Meta template example handles expire / are not fetchable by External send.
         foreach (['whatsapp.net', 'fbcdn.net', 'facebook.com', 'scontent.'] as $blocked) {
             if (str_contains($host, $blocked)) {
                 return false;

@@ -179,9 +179,7 @@ $(function () {
     var progressUrl = '<?= site_url('campaigns/' . $id . '/progress') ?>';
     var isPolling = false;
     var pollTimer = null;
-    var consecutiveErrors = 0;
     var chartInstance = null;
-    window._pollCountCompleted = 0;
 
     var canvas = document.getElementById('campaignAnalyticsChart');
     if (canvas && window.Chart) {
@@ -257,6 +255,7 @@ $(function () {
                     $row.find('.col-delivered').text(r.delivered_at || '—');
                     $row.find('.col-read').text(r.read_at || '—');
                     $row.find('.col-error').text(r.error || '');
+                    if (dt) dt.row($row).invalidate('dom');
                 }
             });
         }
@@ -286,12 +285,9 @@ $(function () {
             dataType: 'json',
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         }).done(function (res) {
-            consecutiveErrors = 0;
-            if (res && res.status === 'success' && res.data) {
+            if (res && res.success && res.data) {
                 updateUI(res.data);
             }
-        }).fail(function () {
-            consecutiveErrors++;
         }).always(function () {
             isPolling = false;
             if (isManual) {
@@ -306,17 +302,6 @@ $(function () {
 
     function scheduleNext() {
         if (pollTimer) clearTimeout(pollTimer);
-        if (consecutiveErrors >= 5) return;
-
-        var isActive = ['running', 'scheduled', 'queued', 'processing'].indexOf(currentStatus) !== -1;
-        var delay = isActive ? 3000 : 15000;
-
-        if (!isActive && window._pollCountCompleted > 6) {
-            return;
-        }
-        if (!isActive) {
-            window._pollCountCompleted = (window._pollCountCompleted || 0) + 1;
-        }
 
         pollTimer = setTimeout(function () {
             if (!document.hidden) {
@@ -324,7 +309,7 @@ $(function () {
             } else {
                 scheduleNext();
             }
-        }, delay);
+        }, 9000);
     }
 
     $('#btnRefreshCampaign').on('click', function () {

@@ -44,12 +44,10 @@ $isActive = in_array($status, ['queued', 'sending', 'running'], true);
                             <span class="badge text-bg-light border px-2 py-1">
                                 <i class="fas fa-at text-muted me-1"></i> Email Campaign
                             </span>
-                            <?= view('partials/status_badge', ['status' => $status]) ?>
-                            <?php if ($isActive): ?>
-                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
-                                    <span class="spinner-grow spinner-grow-sm me-1" role="status" style="width: 0.65rem; height: 0.65rem;"></span> Sending
-                                </span>
-                            <?php endif; ?>
+                            <span id="emailStatusBadge"><?= view('partials/status_badge', ['status' => $status]) ?></span>
+                            <span id="emailSendingBadge" class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1<?= $isActive ? '' : ' d-none' ?>">
+                                <span class="spinner-grow spinner-grow-sm me-1" role="status" style="width: 0.65rem; height: 0.65rem;"></span> Sending
+                            </span>
                         </div>
                         <p class="text-muted small mb-0">
                             Subject: <span class="fw-semibold text-dark"><?= esc($subject) ?></span> · Created on <?= esc($createdAt) ?>
@@ -58,8 +56,8 @@ $isActive = in_array($status, ['queued', 'sending', 'running'], true);
                 </div>
 
                 <div class="d-flex align-items-center gap-2">
-                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.location.reload();">
-                        <i class="fas fa-sync-alt me-1"></i> Refresh
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btnRefreshEmailCampaign">
+                        <i class="fas fa-sync-alt me-1" id="emailRefreshIcon"></i> Refresh
                     </button>
                     <?php if ($canSend && in_array($status, ['draft', 'failed'], true)): ?>
                         <button type="button" class="btn btn-primary btn-sm shadow-sm js-send-camp-btn" data-id="<?= $id ?>">
@@ -70,12 +68,10 @@ $isActive = in_array($status, ['queued', 'sending', 'running'], true);
             </div>
         </div>
 
-        <?php if (! empty($lastError)): ?>
-            <div class="px-4 py-2 bg-danger-subtle border-top border-danger-subtle d-flex align-items-center gap-2 text-danger small">
-                <i class="fas fa-exclamation-triangle flex-shrink-0"></i>
-                <div><strong>Delivery Issue:</strong> <?= esc($lastError) ?></div>
-            </div>
-        <?php endif; ?>
+        <div id="emailLastError" class="px-4 py-2 bg-danger-subtle border-top border-danger-subtle align-items-center gap-2 text-danger small <?= $lastError === '' ? 'd-none' : 'd-flex' ?>">
+            <i class="fas fa-exclamation-triangle flex-shrink-0"></i>
+            <div><strong>Delivery Issue:</strong> <span id="emailLastErrorText"><?= esc($lastError) ?></span></div>
+        </div>
     </div>
 
     <!-- 5 Key Metrics Strip -->
@@ -86,7 +82,7 @@ $isActive = in_array($status, ['queued', 'sending', 'running'], true);
                     <span>Recipients</span>
                     <i class="fas fa-users text-primary opacity-75"></i>
                 </div>
-                <div class="fs-4 fw-bold text-dark"><?= number_format($totalTarget) ?></div>
+                <div class="fs-4 fw-bold text-dark" id="metricRecipients"><?= number_format($totalTarget) ?></div>
                 <div class="text-muted" style="font-size: 0.72rem;">Total target audience</div>
             </div>
         </div>
@@ -97,9 +93,9 @@ $isActive = in_array($status, ['queued', 'sending', 'running'], true);
                     <span>Sent</span>
                     <i class="fas fa-check-circle text-success opacity-75"></i>
                 </div>
-                <div class="fs-4 fw-bold text-success"><?= number_format($sentCount) ?></div>
+                <div class="fs-4 fw-bold text-success" id="metricSent"><?= number_format($sentCount) ?></div>
                 <div class="text-muted" style="font-size: 0.72rem;">
-                    <?= $totalTarget > 0 ? round(($sentCount / $totalTarget) * 100, 1) : 0 ?>% dispatched
+                    <span id="metricSentRate"><?= $totalTarget > 0 ? round(($sentCount / $totalTarget) * 100, 1) : 0 ?></span>% dispatched
                 </div>
             </div>
         </div>
@@ -110,7 +106,7 @@ $isActive = in_array($status, ['queued', 'sending', 'running'], true);
                     <span>Failed</span>
                     <i class="fas fa-times-circle text-danger opacity-75"></i>
                 </div>
-                <div class="fs-4 fw-bold <?= $failedCount > 0 ? 'text-danger' : 'text-secondary' ?>"><?= number_format($failedCount) ?></div>
+                <div class="fs-4 fw-bold <?= $failedCount > 0 ? 'text-danger' : 'text-secondary' ?>" id="metricFailed"><?= number_format($failedCount) ?></div>
                 <div class="text-muted" style="font-size: 0.72rem;">Delivery errors</div>
             </div>
         </div>
@@ -121,9 +117,9 @@ $isActive = in_array($status, ['queued', 'sending', 'running'], true);
                     <span>Opened</span>
                     <i class="fas fa-envelope-open text-info opacity-75"></i>
                 </div>
-                <div class="fs-4 fw-bold text-info"><?= number_format($uniqueOpens) ?></div>
+                <div class="fs-4 fw-bold text-info" id="metricOpens"><?= number_format($uniqueOpens) ?></div>
                 <div class="text-muted" style="font-size: 0.72rem;">
-                    Open rate: <strong><?= $openRate ?>%</strong> (<?= number_format($totalOpens) ?> total)
+                    Open rate: <strong id="metricOpenRate"><?= $openRate ?>%</strong> (<span id="metricTotalOpens"><?= number_format($totalOpens) ?></span> total)
                 </div>
             </div>
         </div>
@@ -134,9 +130,9 @@ $isActive = in_array($status, ['queued', 'sending', 'running'], true);
                     <span>Clicked</span>
                     <i class="fas fa-mouse-pointer text-warning opacity-75"></i>
                 </div>
-                <div class="fs-4 fw-bold text-warning"><?= number_format($uniqueClicks) ?></div>
+                <div class="fs-4 fw-bold text-warning" id="metricClicks"><?= number_format($uniqueClicks) ?></div>
                 <div class="text-muted" style="font-size: 0.72rem;">
-                    Click rate: <strong><?= $clickRate ?>%</strong> (<?= number_format($totalClicks) ?> total)
+                    Click rate: <strong id="metricClickRate"><?= $clickRate ?>%</strong> (<span id="metricTotalClicks"><?= number_format($totalClicks) ?></span> total)
                 </div>
             </div>
         </div>
@@ -172,7 +168,7 @@ $isActive = in_array($status, ['queued', 'sending', 'running'], true);
                         </div>
                         <div class="col-sm-6">
                             <span class="text-muted d-block">Dispatched Time</span>
-                            <span class="fw-semibold text-dark"><?= esc($sentAt) ?></span>
+                            <span class="fw-semibold text-dark" id="emailDispatchedAt"><?= esc($sentAt) ?></span>
                         </div>
                         <div class="col-sm-6">
                             <span class="text-muted d-block">Email Template</span>
@@ -244,7 +240,7 @@ $isActive = in_array($status, ['queued', 'sending', 'running'], true);
                                     $recOpens = $emailLog ? (int) ($emailLog['open_count'] ?? 0) : 0;
                                     $recClicks = $emailLog ? (int) ($emailLog['click_count'] ?? 0) : 0;
                                     ?>
-                                    <tr class="recipient-row" data-search="<?= esc($recEmailLower . ' ' . ($contactName ?? '')) ?>">
+                                    <tr class="recipient-row" data-email="<?= esc($recEmailLower) ?>" data-search="<?= esc($recEmailLower . ' ' . ($contactName ?? '')) ?>">
                                         <td class="ps-3 py-2.5">
                                             <div class="d-flex align-items-center gap-2">
                                                 <div class="rounded-circle bg-light border d-flex align-items-center justify-content-center text-secondary fw-bold"
@@ -264,10 +260,10 @@ $isActive = in_array($status, ['queued', 'sending', 'running'], true);
                                                 </div>
                                             </div>
                                         </td>
-                                        <td>
+                                        <td class="col-status">
                                             <?= view('partials/status_badge', ['status' => $recStatus]) ?>
                                         </td>
-                                        <td class="text-center">
+                                        <td class="text-center col-opens">
                                             <?php if ($recOpens > 0): ?>
                                                 <span class="badge bg-info-subtle text-info border px-2 py-1">
                                                     <i class="fas fa-eye me-1"></i> <?= $recOpens ?>
@@ -276,7 +272,7 @@ $isActive = in_array($status, ['queued', 'sending', 'running'], true);
                                                 <span class="text-muted">—</span>
                                             <?php endif; ?>
                                         </td>
-                                        <td class="text-center">
+                                        <td class="text-center col-clicks">
                                             <?php if ($recClicks > 0): ?>
                                                 <span class="badge bg-warning-subtle text-warning border px-2 py-1">
                                                     <i class="fas fa-mouse-pointer me-1"></i> <?= $recClicks ?>
@@ -342,6 +338,85 @@ $isActive = in_array($status, ['queued', 'sending', 'running'], true);
 <?= $this->section('scripts') ?>
 <script>
 $(function () {
+    var progressUrl = '<?= site_url('campaigns/' . $id . '/progress') ?>';
+    var isPolling = false;
+    var pollTimer = null;
+
+    function countLabel(n) {
+        return Number(n || 0).toLocaleString();
+    }
+
+    function engagementCell(count, kind) {
+        var n = Number(count || 0);
+        if (n <= 0) return '<span class="text-muted">—</span>';
+        if (kind === 'clicks') {
+            return '<span class="badge bg-warning-subtle text-warning border px-2 py-1"><i class="fas fa-mouse-pointer me-1"></i> ' + n + '</span>';
+        }
+        return '<span class="badge bg-info-subtle text-info border px-2 py-1"><i class="fas fa-eye me-1"></i> ' + n + '</span>';
+    }
+
+    function updateEmailUI(data) {
+        if (!data) return;
+        if (data.status_badge) $('#emailStatusBadge').html(data.status_badge);
+        $('#emailSendingBadge').toggleClass('d-none', !data.is_active);
+        $('#metricRecipients').text(countLabel(data.total_target));
+        $('#metricSent').text(countLabel(data.sent_count));
+        $('#metricSentRate').text(data.sent_rate || 0);
+        var failed = Number(data.failed_count || 0);
+        $('#metricFailed').text(countLabel(failed)).toggleClass('text-danger', failed > 0).toggleClass('text-secondary', failed <= 0);
+        $('#metricOpens').text(countLabel(data.unique_opens));
+        $('#metricOpenRate').text((data.open_rate || 0) + '%');
+        $('#metricTotalOpens').text(countLabel(data.total_opens));
+        $('#metricClicks').text(countLabel(data.unique_clicks));
+        $('#metricClickRate').text((data.click_rate || 0) + '%');
+        $('#metricTotalClicks').text(countLabel(data.total_clicks));
+        if (data.sent_at) $('#emailDispatchedAt').text(data.sent_at);
+        var err = data.last_error || '';
+        $('#emailLastErrorText').text(err);
+        $('#emailLastError').toggleClass('d-none', err === '').toggleClass('d-flex', err !== '');
+        $('.js-send-camp-btn').toggleClass('d-none', !data.can_send);
+        if (data.recipients) {
+            $.each(data.recipients, function (_, row) {
+                var $tr = $('#recipientsTableBody tr[data-email="' + row.email + '"]');
+                if (!$tr.length) return;
+                $tr.find('.col-status').html(row.status_badge || '');
+                $tr.find('.col-opens').html(engagementCell(row.opens, 'opens'));
+                $tr.find('.col-clicks').html(engagementCell(row.clicks, 'clicks'));
+            });
+        }
+    }
+
+    function fetchEmailProgress(isManual) {
+        if (isPolling) return;
+        isPolling = true;
+        if (isManual) $('#btnRefreshEmailCampaign').prop('disabled', true);
+        $.ajax({
+            url: progressUrl,
+            method: 'GET',
+            dataType: 'json',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        }).done(function (res) {
+            if (res && res.success && res.data) updateEmailUI(res.data);
+        }).always(function () {
+            isPolling = false;
+            $('#btnRefreshEmailCampaign').prop('disabled', false);
+            scheduleEmailPoll();
+        });
+    }
+
+    function scheduleEmailPoll() {
+        if (pollTimer) clearTimeout(pollTimer);
+        pollTimer = setTimeout(function () {
+            if (!document.hidden) fetchEmailProgress(false);
+            else scheduleEmailPoll();
+        }, 9000);
+    }
+
+    $('#btnRefreshEmailCampaign').on('click', function () {
+        fetchEmailProgress(true);
+    });
+    scheduleEmailPoll();
+
     // ── Live filter for recipients table ─────────────────────
     $('#recipientFilterInput').on('keyup', function () {
         var q = $.trim($(this).val()).toLowerCase();
@@ -382,7 +457,7 @@ $(function () {
                 } else {
                     alert(res.message || 'Campaign broadcast sent!');
                 }
-                setTimeout(function () { window.location.reload(); }, 1200);
+                setTimeout(function () { fetchEmailProgress(true); }, 1200);
             } else {
                 alert((res && res.message) || 'Campaign send failed.');
                 $btn.prop('disabled', false).html(origHtml);
