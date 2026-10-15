@@ -200,10 +200,27 @@ class MetaCloudAPI
     }
 
     /**
+     * Replace a text message already delivered to WhatsApp (15-minute window).
+     *
+     * @return array<string, mixed>
+     */
+    public function editText(string $to, string $messageId, string $text): array
+    {
+        return $this->sendMessage($to, [
+            'type'       => 'text',
+            'message_id' => $messageId,
+            'text'       => [
+                'preview_url' => false,
+                'body'        => $text,
+            ],
+        ]);
+    }
+
+    /**
      * Meta Graph API: POST /{phone-number-id}/messages
      * Body: { messaging_product, to, type: template, template: { name, language, components? } }
      *
-     * No Cheerio auto-fill — caller must supply required header/body/button components.
+     * No External auto-fill — caller must supply required header/body/button components.
      *
      * @param list<array<string, mixed>> $components
      *
@@ -257,7 +274,7 @@ class MetaCloudAPI
     }
 
     /**
-     * Cheerio-only bulk campaign API. Meta campaigns use the local message queue.
+     * External-only bulk campaign API. Meta campaigns use the local message queue.
      *
      * @param list<array{to: string, components?: list<array<string, mixed>>}> $recipients
      *
@@ -275,12 +292,12 @@ class MetaCloudAPI
         unset($campaignName, $templateName, $language, $recipients, $batchSize);
 
         throw new RuntimeException(
-            'Bulk campaign send (/v1/whatsapp/multiple) is Cheerio-only. Use the local queue for Meta campaigns.'
+            'Bulk campaign send (/v1/whatsapp/multiple) is External-only. Use the local queue for Meta campaigns.'
         );
     }
 
     /**
-     * Cheerio-only campaign analytics.
+     * External-only campaign analytics.
      *
      * @return array<string, mixed>
      *
@@ -291,13 +308,13 @@ class MetaCloudAPI
         unset($id);
 
         throw new RuntimeException(
-            'Campaign summary analytics is Cheerio-only (GET /v1/analytics/summary/:id).'
+            'Campaign summary analytics is External-only (GET /v1/analytics/summary/:id).'
         );
     }
 
     /**
      * Meta Graph prepare: rewrite local media URLs → media ids, validate required header.
-     * Does NOT auto-fill body/button/carousel samples (that is Cheerio-only).
+     * Does NOT auto-fill body/button/carousel samples (that is External-only).
      *
      * @param list<array<string, mixed>> $components
      *
@@ -415,7 +432,7 @@ class MetaCloudAPI
     }
 
     /**
-     * Meta requires the caller to supply media headers — no Cheerio-style sample auto-fill.
+     * Meta requires the caller to supply media headers — no External-style sample auto-fill.
      *
      * @param list<array<string, mixed>> $components
      */
@@ -668,7 +685,7 @@ class MetaCloudAPI
             CURLOPT_TIMEOUT        => (int) ($this->config->defaultTimeout ?: 60),
         ];
 
-        // Match request() / Cheerio SSL handling — WAMP often has empty curl.cainfo.
+        // Match request() / External SSL handling — WAMP often has empty curl.cainfo.
         $verify = $this->resolveSslVerify();
         if ($verify === false) {
             $curlOpts[CURLOPT_SSL_VERIFYPEER] = false;
@@ -836,7 +853,7 @@ class MetaCloudAPI
     }
 
     /**
-     * Graph rejects unknown example keys (Cheerio uses `header_url` / `link`),
+     * Graph rejects unknown example keys (External uses `header_url` / `link`),
      * so only Meta's documented example fields are forwarded. Media header samples
      * are also converted to Resumable Upload handles, which Graph requires.
      *
@@ -862,7 +879,7 @@ class MetaCloudAPI
                         ? (string) ($example['header_handle'][0] ?? '')
                         : (string) $example['header_handle'];
 
-                    // Cheerio-only keys are stripped below, but they still point at the
+                    // External-only keys are stripped below, but they still point at the
                     // same upload and make the handle lookup work on localhost.
                     $fallbacks = [];
                     foreach (['header_url', 'link'] as $key) {
@@ -1212,7 +1229,7 @@ class MetaCloudAPI
     }
 
     /**
-     * Meta Graph has no Cheerio-style contact directory.
+     * Meta Graph has no External-style contact directory.
      *
      * @return array{data: list<array<string,mixed>>, provider: string}
      */

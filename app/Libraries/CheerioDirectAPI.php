@@ -8,7 +8,7 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Cheerio Direct API WhatsApp client (newprod.api.cheerio.in/direct-apis).
+ * External Direct API WhatsApp client (newprod.api.cheerio.in/direct-apis).
  *
  * Public method names match the previous Cloud API client so Chat, Queue,
  * Keywords, Templates, and Media keep working without caller changes.
@@ -38,7 +38,7 @@ class CheerioDirectAPI
     }
 
     /**
-     * Low-level Cheerio Direct API request with retries and error parsing.
+     * Low-level External Direct API request with retries and error parsing.
      *
      * @param array<string, mixed>|null $data
      *
@@ -53,7 +53,7 @@ class CheerioDirectAPI
         $method    = strtoupper($method);
         $url       = $this->buildUrl($endpoint);
         $attempts  = 0;
-        $lastError = 'Unknown Cheerio API error';
+        $lastError = 'Unknown External API error';
 
         while ($attempts <= $this->config->maxRetries) {
             $attempts++;
@@ -145,7 +145,7 @@ class CheerioDirectAPI
                 $apiMessage = $this->extractApiError($decoded);
                 $lastError  = sprintf('HTTP %d: %s', $status, $apiMessage);
 
-                // Persist full body for debugging opaque Cheerio/axios 400s.
+                // Persist full body for debugging opaque External/axios 400s.
                 log_message('error', 'CheerioDirectAPI raw error body: {body}', [
                     'body' => mb_substr($body, 0, 4000),
                 ]);
@@ -171,7 +171,7 @@ class CheerioDirectAPI
                     'endpoint' => $endpoint,
                 ]);
 
-                throw new RuntimeException('Cheerio WhatsApp API error: ' . $lastError, $status);
+                throw new RuntimeException('External WhatsApp API error: ' . $lastError, $status);
             } catch (RuntimeException $e) {
                 throw $e;
             } catch (Throwable $e) {
@@ -184,11 +184,11 @@ class CheerioDirectAPI
                     continue;
                 }
 
-                throw new RuntimeException('Cheerio WhatsApp API request failed: ' . $lastError, 0, $e);
+                throw new RuntimeException('External WhatsApp API request failed: ' . $lastError, 0, $e);
             }
         }
 
-        throw new RuntimeException('Cheerio WhatsApp API error after retries: ' . $lastError);
+        throw new RuntimeException('External WhatsApp API error after retries: ' . $lastError);
     }
 
     /**
@@ -208,12 +208,29 @@ class CheerioDirectAPI
     }
 
     /**
+     * Ask the provider to replace a sent text message. WhatsApp keeps the same bubble.
+     *
+     * @return array<string, mixed>
+     */
+    public function editText(string $to, string $messageId, string $text): array
+    {
+        return $this->sendDirect($to, [
+            'type'       => 'text',
+            'message_id' => $messageId,
+            'text'       => [
+                'preview_url' => false,
+                'body'        => $text,
+            ],
+        ]);
+    }
+
+    /**
      * Send a single template message.
      *
-     * Cheerio Direct API: POST /v1/whatsapp/template/send
+     * External Direct API: POST /v1/whatsapp/template/send
      * Body: { to, data: { name, language: { code }, components } }
      *
-     * Always sends a `components` array (Cheerio crashes on undefined.forEach).
+     * Always sends a `components` array (External crashes on undefined.forEach).
      * Auto-fills IMAGE/VIDEO/DOCUMENT header from the local template example when missing.
      *
      * @param list<array<string, mixed>> $components
@@ -240,9 +257,9 @@ class CheerioDirectAPI
     }
 
     /**
-     * Send a bulk template campaign (Cheerio Direct API campaign).
+     * Send a bulk template campaign (External Direct API campaign).
      *
-     * Cheerio Direct API: POST /v1/whatsapp/multiple
+     * External Direct API: POST /v1/whatsapp/multiple
      * Body: {
      *   campaignName,
      *   template: { name, language: { code } },
@@ -269,10 +286,10 @@ class CheerioDirectAPI
         $lang         = $language !== '' ? $language : 'en';
 
         if ($campaignName === '') {
-            throw new RuntimeException('Campaign name is required for Cheerio bulk send.');
+            throw new RuntimeException('Campaign name is required for External bulk send.');
         }
         if ($templateName === '') {
-            throw new RuntimeException('Template name is required for Cheerio bulk send.');
+            throw new RuntimeException('Template name is required for External bulk send.');
         }
 
         $batchSize = max(1, min(200, $batchSize));
@@ -302,7 +319,7 @@ class CheerioDirectAPI
         }
 
         if ($rows === []) {
-            throw new RuntimeException('No valid recipients for Cheerio bulk campaign.');
+            throw new RuntimeException('No valid recipients for External bulk campaign.');
         }
 
         $responses = [];
@@ -329,7 +346,7 @@ class CheerioDirectAPI
     /**
      * Campaign / announcement summary analytics.
      *
-     * Cheerio Direct API: GET /v1/analytics/summary/:id
+     * External Direct API: GET /v1/analytics/summary/:id
      *
      * @return array<string, mixed>
      */
@@ -816,7 +833,7 @@ class CheerioDirectAPI
                     && str_contains($mUrl[1], '{{')
                     && filter_var($example, FILTER_VALIDATE_URL)
                 ) {
-                    // Keep full example URL — Cheerio tracking buttons often expect the destination URL.
+                    // Keep full example URL — External tracking buttons often expect the destination URL.
                     $paramText = $example;
                 }
 
@@ -1133,7 +1150,7 @@ class CheerioDirectAPI
     }
 
     /**
-     * Upload media to Cheerio and return a WhatsApp-compatible { id: ... } payload.
+     * Upload media to External and return a WhatsApp-compatible { id: ... } payload.
      *
      * @return array<string, mixed>
      *
@@ -1151,7 +1168,7 @@ class CheerioDirectAPI
 
         $mediaId = $this->extractMediaId($result);
         if ($mediaId === '') {
-            throw new RuntimeException('Cheerio media upload did not return a media ID.');
+            throw new RuntimeException('External media upload did not return a media ID.');
         }
 
         return array_merge($result, ['id' => $mediaId]);
@@ -1190,7 +1207,7 @@ class CheerioDirectAPI
             ?? 'application/octet-stream');
 
         if ($url === '') {
-            // Some Cheerio responses nest binary or base64; try common keys.
+            // Some External responses nest binary or base64; try common keys.
             $inline = $meta['content'] ?? $meta['data']['content'] ?? null;
             if (is_string($inline) && $inline !== '') {
                 return [
@@ -1200,7 +1217,7 @@ class CheerioDirectAPI
                 ];
             }
 
-            throw new RuntimeException('Media URL missing from Cheerio response for ID: ' . $mediaId);
+            throw new RuntimeException('Media URL missing from External response for ID: ' . $mediaId);
         }
 
         $client = Services::curlrequest($this->baseCurlOptions(), null, null, false);
@@ -1224,13 +1241,13 @@ class CheerioDirectAPI
     }
 
     /**
-     * List message templates from Cheerio.
+     * List message templates from External.
      *
      * @return array<string, mixed>
      */
     public function getTemplates(?string $wabaId = null): array
     {
-        unset($wabaId); // Cheerio scopes templates by API key / account.
+        unset($wabaId); // External scopes templates by API key / account.
 
         $all   = [];
         $after = null;
@@ -1262,7 +1279,7 @@ class CheerioDirectAPI
     }
 
     /**
-     * Submit a new message template via Cheerio.
+     * Submit a new message template via External.
      *
      * @param array{
      *     name: string,
@@ -1292,7 +1309,7 @@ class CheerioDirectAPI
     }
 
     /**
-     * Delete is not exposed on Cheerio Direct APIs.
+     * Delete is not exposed on External Direct APIs.
      *
      * @return array<string, mixed>
      *
@@ -1303,7 +1320,7 @@ class CheerioDirectAPI
         unset($name, $hsmId);
 
         throw new RuntimeException(
-            'Delete template is not available via Cheerio Direct APIs. Remove the template from the Cheerio Dashboard.'
+            'Delete template is not available via External Direct APIs. Remove the template from the External Dashboard.'
         );
     }
 
@@ -1334,9 +1351,9 @@ class CheerioDirectAPI
     }
 
     /**
-     * Map Cheerio status API response → local status (sent|delivered|read|failed).
+     * Map External status API response → local status (sent|delivered|read|failed).
      *
-     * Cheerio sometimes returns a stale failedAt that is earlier than sentAt (race on their side).
+     * External sometimes returns a stale failedAt that is earlier than sentAt (race on their side).
      * Always pick the chronologically latest timestamp; on ties prefer the higher delivery rank.
      */
     public function normalizeMessageStatus(array $response): ?string
@@ -1413,7 +1430,7 @@ class CheerioDirectAPI
     }
 
     /**
-     * List contacts from Cheerio (paginated).
+     * List contacts from External (paginated).
      *
      * @return list<array<string, mixed>>
      */
@@ -1465,7 +1482,7 @@ class CheerioDirectAPI
     }
 
     /**
-     * List Cheerio workflows.
+     * List External workflows.
      *
      * @return list<array<string, mixed>>
      */
@@ -1515,7 +1532,7 @@ class CheerioDirectAPI
     }
 
     /**
-     * Phone metadata is not a Cheerio Direct endpoint — return empty for callers.
+     * Phone metadata is not a External Direct endpoint — return empty for callers.
      *
      * @return array<string, mixed>
      */
@@ -1526,13 +1543,13 @@ class CheerioDirectAPI
         return [
             'id'                   => (string) $this->settings->get('cheerio_phone_number_id', ''),
             'display_phone_number' => (string) $this->settings->get('cheerio_display_phone', ''),
-            'verified_name'        => (string) $this->settings->get('app_name', 'Cheerio Direct API'),
+            'verified_name'        => (string) $this->settings->get('app_name', 'External Direct API'),
             'provider'             => 'cheerio',
         ];
     }
 
     /**
-     * Validate Cheerio API key and return a readiness summary.
+     * Validate External API key and return a readiness summary.
      *
      * @return array{
      *     ok: bool,
@@ -1551,9 +1568,9 @@ class CheerioDirectAPI
 
         $checklist[] = [
             'id'     => 'api_key',
-            'label'  => 'Cheerio API key configured',
+            'label'  => 'External API key configured',
             'ok'     => $this->apiKey !== '',
-            'detail' => $this->apiKey !== '' ? 'API key is set' : 'Add a Cheerio API key in Settings',
+            'detail' => $this->apiKey !== '' ? 'API key is set' : 'Add an External API key in Settings',
         ];
 
         $templatesReachable = false;
@@ -1577,14 +1594,14 @@ class CheerioDirectAPI
 
                 $checklist[] = [
                     'id'     => 'templates_api',
-                    'label'  => 'Templates reachable via Cheerio API',
+                    'label'  => 'Templates reachable via External API',
                     'ok'     => true,
                     'detail' => sprintf('%d template(s) listed (%d approved)', $templateCount, $approvedTemplates),
                 ];
             } catch (Throwable $e) {
                 $checklist[] = [
                     'id'     => 'templates_api',
-                    'label'  => 'Templates reachable via Cheerio API',
+                    'label'  => 'Templates reachable via External API',
                     'ok'     => false,
                     'detail' => $e->getMessage(),
                 ];
@@ -1592,7 +1609,7 @@ class CheerioDirectAPI
         } else {
             $checklist[] = [
                 'id'     => 'templates_api',
-                'label'  => 'Templates reachable via Cheerio API',
+                'label'  => 'Templates reachable via External API',
                 'ok'     => false,
                 'detail' => 'Cannot check templates until API key is set.',
             ];
@@ -1604,7 +1621,7 @@ class CheerioDirectAPI
             'ok'     => $approvedTemplates > 0,
             'detail' => $approvedTemplates > 0
                 ? sprintf('%d approved', $approvedTemplates)
-                : 'Create/submit a template in Cheerio Dashboard (or via Templates → Create) and wait for approval',
+                : 'Create/submit a template in External Dashboard (or via Templates → Create) and wait for approval',
         ];
 
         $ok = true;
@@ -1632,7 +1649,7 @@ class CheerioDirectAPI
     }
 
     /**
-     * Cheerio Direct APIs do not expose mark-as-read — no-op for Chat UX.
+     * External Direct APIs do not expose mark-as-read — no-op for Chat UX.
      *
      * @return array<string, mixed>
      */
@@ -1772,12 +1789,12 @@ class CheerioDirectAPI
         }
 
         if ($this->apiKey === '') {
-            throw new RuntimeException('Cheerio API key is not configured.');
+            throw new RuntimeException('External API key is not configured.');
         }
     }
 
     /**
-     * Unwrap Cheerio { status, flag, data } envelopes so callers always see
+     * Unwrap External { status, flag, data } envelopes so callers always see
      * messaging_product / messages / contacts at the top level when present.
      *
      * @param array<string, mixed> $decoded
@@ -1834,7 +1851,7 @@ class CheerioDirectAPI
             return implode(' | ', $parts) ?: 'API error object';
         }
 
-        // Cheerio sometimes returns WhatsApp Graph errors flattened at the top level.
+        // External sometimes returns WhatsApp Graph errors flattened at the top level.
         $flatParts = array_filter([
             $this->stringifyErrorPart($decoded['message'] ?? null),
             isset($decoded['error_user_title']) && is_string($decoded['error_user_title']) ? $decoded['error_user_title'] : null,
@@ -1866,7 +1883,7 @@ class CheerioDirectAPI
             }
         }
 
-        return json_encode($decoded) ?: 'Unparseable Cheerio error response';
+        return json_encode($decoded) ?: 'Unparseable External error response';
     }
 
     protected function stringifyErrorPart(mixed $value): ?string

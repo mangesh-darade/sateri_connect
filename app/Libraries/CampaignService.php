@@ -121,7 +121,7 @@ class CampaignService
     /**
      * Start a campaign: queue recipients and mark running.
      *
-     * Cheerio + template campaigns use POST /v1/whatsapp/multiple (bulk).
+     * External + template campaigns use POST /v1/whatsapp/multiple (bulk).
      * Meta (and non-template) keep the local queue + per-message send path.
      *
      * @param list<int>|null $contactIds Optional explicit contact IDs
@@ -316,7 +316,7 @@ class CampaignService
     }
 
     /**
-     * Cheerio template campaigns should use the native bulk/campaign API.
+     * External template campaigns should use the native bulk/campaign API.
      *
      * @param array<string, mixed> $campaign
      */
@@ -331,7 +331,7 @@ class CampaignService
     }
 
     /**
-     * Dispatch a template campaign via Cheerio POST /v1/whatsapp/multiple.
+     * Dispatch a template campaign via External POST /v1/whatsapp/multiple.
      *
      * @param list<int>|null $contactIds
      * @param list<int>|null $tagIds
@@ -359,7 +359,7 @@ class CampaignService
         }
 
         if ($templateName === '') {
-            throw new RuntimeException('Cheerio bulk campaign requires an approved template.');
+            throw new RuntimeException('External bulk campaign requires an approved template.');
         }
 
         $templateRow = ! empty($campaign['template_id'])
@@ -369,7 +369,7 @@ class CampaignService
             is_array($templateRow) ? $templateRow : null
         );
 
-        // Dedicated Cheerio client — never mutate the shared Meta/Cheerio facade.
+        // Dedicated External client — never mutate the shared Meta/External facade.
         $api            = new CheerioDirectAPI();
         $recipients     = [];
         $contactByPhone = [];
@@ -441,7 +441,7 @@ class CampaignService
             'excluded' => $excluded,
         ];
 
-        $this->logger->log('start', 'campaigns', 'Campaign started via Cheerio bulk API', [
+        $this->logger->log('start', 'campaigns', 'Campaign started via External bulk API', [
             'campaign_id' => $campaignId,
             'recipients'  => count($recipients),
             'skipped'     => $skippedNoPhone,
@@ -464,7 +464,7 @@ class CampaignService
                 $this->markCampaignContactStatus($campaignId, $contactId, 'sent');
             }
         } catch (\Throwable $e) {
-            log_message('error', 'Campaign #{id} Cheerio bulk send failed: {msg}', [
+            log_message('error', 'Campaign #{id} External bulk send failed: {msg}', [
                 'id'  => $campaignId,
                 'msg' => $e->getMessage(),
             ]);
@@ -1235,7 +1235,7 @@ class CampaignService
      * - {"1":"{{name}}","2":"Hello"}
      * - already-valid template components list
      *
-     * Both Meta Graph and Cheerio Direct use the same component object shape
+     * Both Meta Graph and External Direct use the same component object shape
      * (header / body / button + parameters). Provider envelopes differ only at send time.
      *
      * @param array<string, mixed>      $variableMap

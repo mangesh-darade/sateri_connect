@@ -7,7 +7,7 @@ use Config\WhatsApp as WhatsAppConfig;
 use RuntimeException;
 
 /**
- * Application settings facade with WhatsApp provider (Cheerio | Meta) helpers.
+ * Application settings facade with WhatsApp provider (External | Meta) helpers.
  */
 class SettingsService
 {
@@ -295,7 +295,7 @@ class SettingsService
             return self::PROVIDER_CHEERIO;
         }
 
-        // Unknown pnid that is not Meta's → treat as Cheerio and remember it
+        // Unknown pnid that is not Meta's → treat as External and remember it
         if ($pnid !== '' && $metaPnid !== '' && ! hash_equals($metaPnid, $pnid)) {
             $this->set('cheerio_phone_number_id', $pnid, 'cheerio', false);
             if ($display !== '') {
@@ -323,7 +323,7 @@ class SettingsService
         $waConfig = config(WhatsAppConfig::class);
 
         $apiKey = (string) $this->get('cheerio_api_key', '');
-        // Legacy: some installs stored Cheerio key under meta_access_token before dual-provider.
+        // Legacy: some installs stored External key under meta_access_token before dual-provider.
         if ($apiKey === '' && $this->isCheerioProvider()) {
             $apiKey = (string) $this->get('meta_access_token', '');
         }
@@ -459,7 +459,7 @@ class SettingsService
     }
 
     /**
-     * Persist Meta/Cheerio display identity for chrome UI.
+     * Persist Meta/External display identity for chrome UI.
      *
      * @param array{display_name?: string, verified_name?: string, phone?: string, display_phone?: string, profile_picture_url?: string} $identity
      */
@@ -554,7 +554,7 @@ class SettingsService
     {
         return match ($provider ?? $this->getEmailProvider()) {
             self::EMAIL_PROVIDER_SENDGRID => 'SendGrid',
-            self::EMAIL_PROVIDER_CHEERIO  => 'Cheerio Email API',
+            self::EMAIL_PROVIDER_CHEERIO  => 'External Email API',
             self::EMAIL_PROVIDER_SES      => 'Amazon SES',
             default                       => 'SMTP',
         };
@@ -710,7 +710,7 @@ class SettingsService
     }
 
     /**
-     * Cheerio email uses the same Direct API key as WhatsApp.
+     * External email uses the same Direct API key as WhatsApp.
      *
      * @return array{api_key: string, default_campaign: string}
      */
@@ -822,7 +822,7 @@ class SettingsService
         $hint = match (true) {
             $mode === 'live' && $effectiveBase !== '' => 'Live domain detected — callback auto from HTTPS host. Override only if Meta needs a different URL.',
             $mode === 'live' => 'Live: open Settings on your public HTTPS domain so callback can auto-detect.',
-            $autoBase !== '' && SubdomainDatabase::isLocalTunnelHost((string) (parse_url($autoBase, PHP_URL_HOST) ?: '')) => 'Local tunnel detected from this page — callback auto-filled. Save / Auto to pin Meta/Cheerio.',
+            $autoBase !== '' && SubdomainDatabase::isLocalTunnelHost((string) (parse_url($autoBase, PHP_URL_HOST) ?: '')) => 'Local tunnel detected from this page — callback auto-filled. Save / Auto to pin Meta/External.',
             default => 'Local: start Cloudflare/ngrok, open Settings via that HTTPS URL, click Auto — or paste tunnel URL.',
         };
 

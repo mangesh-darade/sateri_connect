@@ -906,8 +906,8 @@ class Contacts extends BaseController
 
     /**
      * Pull contacts from the active provider into local contacts table.
-     * Cheerio: Direct API contact directory.
-     * Meta: Graph has no directory — uses Cheerio API key (if saved) for CRM sync while messaging stays on Meta.
+     * External: Direct API contact directory.
+     * Meta: Graph has no directory — uses External API key (if saved) for CRM sync while messaging stays on Meta.
      */
     public function syncFromCheerio(): ResponseInterface
     {
@@ -917,14 +917,14 @@ class Contacts extends BaseController
 
         $settings = service('settingsService');
         $provider = $settings->getWhatsAppProvider();
-        $label    = $provider === 'meta' ? 'Meta' : 'Cheerio';
+        $label    = $provider === 'meta' ? 'Meta' : 'External';
 
         try {
             $stats = (new \App\Libraries\CheerioSyncService())->syncContacts();
             $source = (string) ($stats['source'] ?? $provider);
             $msg = sprintf(
                 '%s contacts: %d created, %d updated%s.',
-                $source === 'cheerio' || $source === 'cheerio_directory' ? 'Cheerio' : ucfirst($source),
+                $source === 'cheerio' || $source === 'cheerio_directory' ? 'External' : ucfirst($source),
                 $stats['created'],
                 $stats['updated'],
                 $stats['skipped'] ? ', ' . $stats['skipped'] . ' skipped' : ''

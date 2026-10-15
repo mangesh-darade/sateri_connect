@@ -230,7 +230,7 @@ class Emails extends BaseController
             }
             $provider = (new SettingsService())->getEmailProvider();
             if ($provider !== SettingsService::EMAIL_PROVIDER_CHEERIO) {
-                // For non-Cheerio providers (Amazon SES, SMTP, SendGrid), resolve group contacts directly
+                // For non-External providers (Amazon SES, SMTP, SendGrid), resolve group contacts directly
                 $tagRow = model(TagModel::class)->where('name', $labelName)->first();
                 if ($tagRow) {
                     $groupContacts = model(ContactModel::class)
@@ -436,7 +436,7 @@ class Emails extends BaseController
     protected function providerDetail(SettingsService $settings, string $provider): string
     {
         return match ($provider) {
-            SettingsService::EMAIL_PROVIDER_CHEERIO => 'Uses your Cheerio API key. Sender ID must be verified in Cheerio.',
+            SettingsService::EMAIL_PROVIDER_CHEERIO => 'Uses your External API key. Sender ID must be verified in External.',
             SettingsService::EMAIL_PROVIDER_SENDGRID => trim(
                 'From: ' . ((string) $settings->get('sendgrid_from_email', '') ?: 'not set')
             ),
@@ -476,7 +476,7 @@ class Emails extends BaseController
     {
         return match ($provider) {
             SettingsService::EMAIL_PROVIDER_SENDGRID => 'SendGrid',
-            SettingsService::EMAIL_PROVIDER_CHEERIO  => 'Cheerio Email API',
+            SettingsService::EMAIL_PROVIDER_CHEERIO  => 'External Email API',
             SettingsService::EMAIL_PROVIDER_SES      => 'Amazon SES',
             default                                  => 'SMTP',
         };

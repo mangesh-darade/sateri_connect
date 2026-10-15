@@ -36,7 +36,7 @@ $isCheerio = ! empty($isCheerio);
                         <span class="badge text-bg-light border">Via <?= esc($providerLabel) ?></span>
                     </div>
                     <p class="launch-card-copy">
-                        Send to many recipients<?= $isCheerio ? ', or to a Cheerio contact label' : '' ?>.
+                        Send to many recipients<?= $isCheerio ? ', or to an External contact label' : '' ?>.
                     </p>
                     <a href="<?= site_url('emails/bulk') ?>" class="btn btn-wa btn-sm align-self-start">Open bulk composer</a>
                 </div>

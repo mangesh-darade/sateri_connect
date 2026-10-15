@@ -9,7 +9,7 @@
 <?= $this->section('content') ?>
 <?php
 $provider = function_exists('whatsapp_provider') ? whatsapp_provider() : 'cheerio';
-$providerShort = function_exists('whatsapp_provider_short') ? whatsapp_provider_short() : ($provider === 'meta' ? 'Meta' : 'Cheerio');
+$providerShort = function_exists('whatsapp_provider_short') ? whatsapp_provider_short() : ($provider === 'meta' ? 'Meta' : 'External');
 $cheerioPhone = '';
 try {
     $cfg = (new \App\Libraries\SettingsService())->getCheerioConfig();
@@ -29,11 +29,11 @@ try {
     <span>
         <span class="badge badge-soft me-1">Active: <?= esc($providerShort) ?></span>
         <?php if ($provider === 'cheerio'): ?>
-            Cheerio active — customer must message
+            External active — customer must message
             <?php if ($cheerioPhone !== ''): ?>
                 <strong><?= esc($cheerioPhone) ?></strong>.
             <?php else: ?>
-                your Cheerio number (<a href="<?= site_url('settings') ?>">set display phone in Settings</a>).
+                your External number (<a href="<?= site_url('settings') ?>">set display phone in Settings</a>).
             <?php endif; ?>
             Meta test number will not auto-reply.
         <?php else: ?>

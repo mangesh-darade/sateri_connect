@@ -1,6 +1,6 @@
 /**
  * Keywords create/edit — auto-build response_payload JSON
- * from Response content + type, shaped for active Cheerio / Meta provider.
+ * from Response content + type, shaped for active External / Meta provider.
  * Supports text, template, image/video/document + caption, interactive, workflow.
  */
 (function (window, $) {
@@ -10,7 +10,7 @@
     if (!$card.length) return;
 
     var provider = String($card.data('provider') || (window.APP && APP.whatsappProvider) || 'cheerio').toLowerCase();
-    var providerShort = String($card.data('provider-short') || (provider === 'meta' ? 'Meta' : 'Cheerio'));
+    var providerShort = String($card.data('provider-short') || (provider === 'meta' ? 'Meta' : 'External'));
     var $content = $('#responseContent');
     var $type = $('#responseType');
     var $payload = $('#responsePayload');

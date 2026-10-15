@@ -9,7 +9,7 @@ use App\Libraries\SettingsService;
 use Config\EmailProviders;
 
 /**
- * Cheerio Direct API email transport (single + label/bulk announcements).
+ * External Direct API email transport (single + label/bulk announcements).
  */
 class CheerioEmailDriver extends AbstractEmailDriver
 {
@@ -84,7 +84,7 @@ class CheerioEmailDriver extends AbstractEmailDriver
     {
         $subject = trim((string) ($campaign['subject'] ?? ''));
         if ($subject === '') {
-            return $this->result(false, 'Cheerio campaign subject is required.');
+            return $this->result(false, 'External campaign subject is required.');
         }
 
         $html = (string) ($campaign['html'] ?? '');
@@ -94,7 +94,7 @@ class CheerioEmailDriver extends AbstractEmailDriver
         }
 
         if ($html === '') {
-            return $this->result(false, 'Cheerio campaign body is required.');
+            return $this->result(false, 'External campaign body is required.');
         }
 
         $options = [
@@ -116,7 +116,7 @@ class CheerioEmailDriver extends AbstractEmailDriver
         if ($recipients === []) {
             return $this->result(
                 false,
-                'Cheerio bulk marketing currently needs `label_name` or explicit `recipients`.'
+                'External bulk marketing currently needs `label_name` or explicit `recipients`.'
             );
         }
 
@@ -155,7 +155,7 @@ class CheerioEmailDriver extends AbstractEmailDriver
             $ok       = (bool) ($response['flag'] ?? $response['ok'] ?? true);
 
             if (! $ok) {
-                $msg = (string) ($response['message'] ?? 'Cheerio email API returned an error.');
+                $msg = (string) ($response['message'] ?? 'External email API returned an error.');
 
                 return $this->result(false, $msg, $response);
             }
@@ -166,7 +166,7 @@ class CheerioEmailDriver extends AbstractEmailDriver
             if ($balance !== null) {
                 $msg .= ' Email credits left: ' . (string) $balance . '.';
             }
-            $msg .= ' If it is not in the inbox, check Spam/Promotions and verify Sender ID in Cheerio Dashboard.';
+            $msg .= ' If it is not in the inbox, check Spam/Promotions and verify Sender ID in External Dashboard.';
 
             return $this->result(true, $msg, $response);
         } catch (\Throwable $e) {
@@ -198,7 +198,7 @@ class CheerioEmailDriver extends AbstractEmailDriver
         }
 
         if ($failed === []) {
-            return $this->result(true, sprintf('Sent %d email(s) via Cheerio.', $sent), [
+            return $this->result(true, sprintf('Sent %d email(s) via External.', $sent), [
                 'sent' => $sent,
             ]);
         }
@@ -210,7 +210,7 @@ class CheerioEmailDriver extends AbstractEmailDriver
             ]);
         }
 
-        return $this->result(false, 'All Cheerio email sends failed.', ['failed' => $failed]);
+        return $this->result(false, 'All External email sends failed.', ['failed' => $failed]);
     }
 
     /**
@@ -238,15 +238,15 @@ class CheerioEmailDriver extends AbstractEmailDriver
             $ok       = (bool) ($response['flag'] ?? $response['ok'] ?? true);
 
             if (! $ok) {
-                $msg = (string) ($response['message'] ?? 'Cheerio label email API returned an error.');
+                $msg = (string) ($response['message'] ?? 'External label email API returned an error.');
 
                 return $this->result(false, $msg, $response);
             }
 
             $count = (int) ($response['data']['emailCount'] ?? $response['emailCount'] ?? 0);
             $msg   = $count > 0
-                ? sprintf('Cheerio label campaign queued for %d contact(s).', $count)
-                : 'Cheerio label email campaign accepted.';
+                ? sprintf('External label campaign queued for %d contact(s).', $count)
+                : 'External label email campaign accepted.';
 
             return $this->result(true, $msg, $response);
         } catch (\Throwable $e) {

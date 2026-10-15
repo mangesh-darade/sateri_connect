@@ -586,7 +586,7 @@ $(function () {
     applyFilters();
     syncStatusCardActive();
 
-    // Auto-sync from Meta/Cheerio every time this screen opens.
+    // Auto-sync from Meta/External every time this screen opens.
     (function autoSyncOnOpen() {
         var $root = $('#templatesPageRoot');
         if ($root.data('auto-sync') != 1 && $root.data('auto-sync') !== '1') {

@@ -63,7 +63,7 @@ $emailCampaigns = $emailCampaigns ?? [];
                                id="emailCampaignCustom" 
                                placeholder="Type custom campaign name..."
                                value="<?= (! $isKnownSingle) ? esc($selectedSingleCampaign) : '' ?>">
-                        <div class="form-text">Used as analytics label (Cheerio / SendGrid).</div>
+                        <div class="form-text">Used as analytics label (External / SendGrid).</div>
                     </div>
                     <div class="col-12">
                         <label class="form-label" for="emailSubject">Subject <span class="text-danger">*</span></label>

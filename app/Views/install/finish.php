@@ -11,7 +11,7 @@
         <ul class="mb-0 ps-3">
             <li>Database migrated and seeded</li>
             <li>Admin account created</li>
-            <li>WhatsApp provider (Cheerio / Meta) can be finished later in Settings</li>
+            <li>WhatsApp provider (External / Meta) can be finished later in Settings</li>
         </ul>
     </div>
     <p class="text-muted small mb-4">Remember cron jobs for queue, campaigns, and automations.</p>

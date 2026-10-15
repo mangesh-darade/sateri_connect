@@ -18,7 +18,7 @@ use CodeIgniter\HTTP\ResponseInterface;
 
 /**
  * Email Manager — Builder, Drips, Verifier, HTML Campaigns, Sender/Domain IDs.
- * Sends via Cheerio (or active email provider) when configured.
+ * Sends via External (or active email provider) when configured.
  */
 class EmailManager extends BaseController
 {
@@ -721,7 +721,7 @@ class EmailManager extends BaseController
                 $id = (int) $model->insert($row, true);
             }
 
-            return $this->jsonResponse(true, $model->find($id), 'Saved. Verify this Sender/Domain in Cheerio Dashboard for delivery.');
+            return $this->jsonResponse(true, $model->find($id), 'Saved. Verify this Sender/Domain in External Dashboard for delivery.');
         } catch (\Throwable $e) {
             return $this->jsonResponse(false, null, $e->getMessage(), [], 500);
         }

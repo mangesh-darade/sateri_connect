@@ -10,7 +10,7 @@ $keyword = $keyword ?? [];
 $isEdit = ! empty($keyword['id']);
 $action = $isEdit ? site_url('keywords/' . (int) $keyword['id']) : site_url('keywords');
 $provider = function_exists('whatsapp_provider') ? whatsapp_provider() : (string) ($whatsappProvider ?? 'cheerio');
-$providerShort = function_exists('whatsapp_provider_short') ? whatsapp_provider_short() : ($provider === 'meta' ? 'Meta' : 'Cheerio');
+$providerShort = function_exists('whatsapp_provider_short') ? whatsapp_provider_short() : ($provider === 'meta' ? 'Meta' : 'External');
 ?>
 <div class="page-stack">
 <div class="form-shell">
@@ -20,7 +20,7 @@ $providerShort = function_exists('whatsapp_provider_short') ? whatsapp_provider_
     </span>
     <span class="small text-muted mb-0">
         Keyword + auto-reply work only on the <strong><?= esc($providerShort) ?></strong> business number.
-        Cheerio active → message Cheerio number. Meta active → message Meta number.
+        External active → message External number. Meta active → message Meta number.
         <a href="<?= site_url('settings') ?>">Settings</a>
     </span>
 </div>

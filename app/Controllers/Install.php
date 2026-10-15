@@ -405,7 +405,7 @@ class Install extends Controller
 
             return redirect()->to('/install/finish')->with(
                 'success',
-                ($provider === 'meta' ? 'Meta' : 'Cheerio') . ' API settings saved.'
+                ($provider === 'meta' ? 'Meta' : 'External') . ' API settings saved.'
             );
         } catch (Throwable $e) {
             return redirect()->back()->withInput()->with('error', $e->getMessage());

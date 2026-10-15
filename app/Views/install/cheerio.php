@@ -2,21 +2,21 @@
 
 <?= $this->section('content') ?>
 <h3 class="mb-1" style="font-family:var(--font-display);color:var(--wa-ink)">WhatsApp Provider</h3>
-<p class="text-muted mb-3">Choose Cheerio or Meta. You can change this later in Settings.</p>
+<p class="text-muted mb-3">Choose External or Meta. You can change this later in Settings.</p>
 <form action="<?= site_url('install/cheerio') ?>" method="post">
     <?= csrf_field() ?>
     <?php $timezoneOptions = $timezoneOptions ?? []; ?>
     <div class="mb-3">
         <label class="form-label">Provider</label>
         <select name="whatsapp_provider" class="form-select" id="installProvider">
-            <option value="cheerio" <?= old('whatsapp_provider', 'cheerio') === 'cheerio' ? 'selected' : '' ?>>Cheerio Direct API</option>
+            <option value="cheerio" <?= old('whatsapp_provider', 'cheerio') === 'cheerio' ? 'selected' : '' ?>>External Direct API</option>
             <option value="meta" <?= old('whatsapp_provider') === 'meta' ? 'selected' : '' ?>>Meta Cloud API</option>
         </select>
     </div>
 
     <div id="installCheerioFields">
         <div class="mb-3">
-            <label class="form-label">Cheerio API Key</label>
+            <label class="form-label">External API Key</label>
             <input type="password" name="cheerio_api_key" class="form-control" value="<?= esc(old('cheerio_api_key') ?? '') ?>" autocomplete="off" placeholder="x-api-key from app.cheerio.in">
             <div class="form-text"><a href="https://app.cheerio.in/settings/apikey" target="_blank" rel="noopener">Generate API key</a></div>
         </div>

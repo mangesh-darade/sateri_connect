@@ -105,15 +105,15 @@ if (! function_exists('whatsapp_provider_label')) {
     /** Full product label, e.g. "Meta Cloud API" */
     function whatsapp_provider_label(): string
     {
-        return is_meta_provider() ? 'Meta Cloud API' : 'Cheerio Direct API';
+        return is_meta_provider() ? 'Meta Cloud API' : 'External Direct API';
     }
 }
 
 if (! function_exists('whatsapp_provider_short')) {
-    /** Short UI label for buttons / badges: Meta | Cheerio */
+    /** Short UI label for buttons / badges: Meta | External */
     function whatsapp_provider_short(): string
     {
-        return is_meta_provider() ? 'Meta' : 'Cheerio';
+        return is_meta_provider() ? 'Meta' : 'External';
     }
 }
 
@@ -129,12 +129,12 @@ if (! function_exists('whatsapp_provider_dashboard_url')) {
 if (! function_exists('whatsapp_provider_dashboard_label')) {
     function whatsapp_provider_dashboard_label(): string
     {
-        return is_meta_provider() ? 'Meta Business Manager' : 'Cheerio Dashboard';
+        return is_meta_provider() ? 'Meta Business Manager' : 'External Dashboard';
     }
 }
 
 if (! function_exists('whatsapp_sync_label')) {
-    /** e.g. "Sync from Meta" / "Sync from Cheerio" */
+    /** e.g. "Sync from Meta" / "Sync from External" */
     function whatsapp_sync_label(string $noun = ''): string
     {
         $base = 'Sync from ' . whatsapp_provider_short();
@@ -160,7 +160,7 @@ if (! function_exists('email_provider_label')) {
     {
         return match (email_provider()) {
             'sendgrid' => 'SendGrid',
-            'cheerio'  => 'Cheerio Email API',
+            'cheerio'  => 'External Email API',
             default    => 'SMTP',
         };
     }
@@ -171,7 +171,7 @@ if (! function_exists('email_provider_short')) {
     {
         return match (email_provider()) {
             'sendgrid' => 'SendGrid',
-            'cheerio'  => 'Cheerio',
+            'cheerio'  => 'External',
             default    => 'SMTP',
         };
     }

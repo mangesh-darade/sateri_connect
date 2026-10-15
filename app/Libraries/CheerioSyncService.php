@@ -10,7 +10,7 @@ use App\Models\TagModel;
 use Throwable;
 
 /**
- * Sync Cheerio Direct API contacts / workflows into local tables.
+ * Sync External Direct API contacts / workflows into local tables.
  */
 class CheerioSyncService
 {
@@ -69,7 +69,7 @@ class CheerioSyncService
                 'email'         => ! empty($row['email']) ? (string) $row['email'] : null,
                 'status'        => $status,
                 'custom_fields' => $custom,
-                'notes'         => ! empty($row['_id']) ? ('Cheerio ID: ' . $row['_id']) : null,
+                'notes'         => ! empty($row['_id']) ? ('External ID: ' . $row['_id']) : null,
             ];
 
             $contactId = 0;
@@ -151,13 +151,13 @@ class CheerioSyncService
         $provider = $settings->getWhatsAppProvider();
 
         if ($provider === 'meta') {
-            // Meta Graph has no contact directory — use saved Cheerio API key for CRM sync.
+            // Meta Graph has no contact directory — use saved External API key for CRM sync.
             $cheerio = new CheerioDirectAPI($settings);
             try {
                 $remote = $this->normalizeContactList($cheerio->getContacts());
             } catch (Throwable $e) {
                 throw new \RuntimeException(
-                    'Meta is active for messaging. To sync contacts, save a Cheerio API key in Settings (Cheerio credentials stay saved), then try again. '
+                    'Meta is active for messaging. To sync contacts, save an External API key in Settings (External credentials stay saved), then try again. '
                     . 'Or contacts will appear automatically from Meta webhooks. Detail: ' . $e->getMessage(),
                     0,
                     $e
@@ -316,7 +316,7 @@ class CheerioSyncService
                 $remote = $this->normalizeWorkflowList($cheerio->getWorkflows());
             } catch (Throwable $e) {
                 throw new \RuntimeException(
-                    'Meta is active for messaging. To sync workflows, save a Cheerio API key in Settings, then try again. Detail: ' . $e->getMessage(),
+                    'Meta is active for messaging. To sync workflows, save an External API key in Settings, then try again. Detail: ' . $e->getMessage(),
                     0,
                     $e
                 );

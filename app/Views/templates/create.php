@@ -8,7 +8,7 @@
 
 <?= $this->section('content') ?>
 <?php
-$providerShort = function_exists('whatsapp_provider_short') ? whatsapp_provider_short() : 'Cheerio';
+$providerShort = function_exists('whatsapp_provider_short') ? whatsapp_provider_short() : 'External';
 $providerLabel = function_exists('whatsapp_provider_label') ? whatsapp_provider_label() : 'provider';
 $dashUrl       = function_exists('whatsapp_provider_dashboard_url') ? whatsapp_provider_dashboard_url() : 'https://app.cheerio.in/';
 $dashLabel     = function_exists('whatsapp_provider_dashboard_label') ? whatsapp_provider_dashboard_label() : 'provider dashboard';
