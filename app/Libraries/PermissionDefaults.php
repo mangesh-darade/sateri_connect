@@ -31,7 +31,15 @@ final class PermissionDefaults
     public static function ensure(): void
     {
         try {
-            $db       = db_connect();
+            $db = db_connect();
+            $db->table('permissions')
+                ->where('slug', 'templates.sync')
+                ->where('description', 'Sync templates from Cheerio')
+                ->update([
+                    'description' => 'Sync templates from External',
+                    'updated_at'  => date('Y-m-d H:i:s'),
+                ]);
+
             $existing = array_column(
                 $db->table('permissions')->select('slug')->whereIn('slug', array_keys(self::ADDED))->get()->getResultArray(),
                 'slug'

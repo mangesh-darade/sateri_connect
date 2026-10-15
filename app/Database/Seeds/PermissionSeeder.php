@@ -39,7 +39,7 @@ class PermissionSeeder extends Seeder
             ['name' => 'Create Templates', 'slug' => 'templates.create', 'module' => 'templates', 'description' => 'Create templates'],
             ['name' => 'Edit Templates', 'slug' => 'templates.edit', 'module' => 'templates', 'description' => 'Edit templates'],
             ['name' => 'Delete Templates', 'slug' => 'templates.delete', 'module' => 'templates', 'description' => 'Delete templates'],
-            ['name' => 'Sync Templates', 'slug' => 'templates.sync', 'module' => 'templates', 'description' => 'Sync templates from Cheerio'],
+            ['name' => 'Sync Templates', 'slug' => 'templates.sync', 'module' => 'templates', 'description' => 'Sync templates from External'],
             // Chat
             ['name' => 'View Chat', 'slug' => 'chat.view', 'module' => 'chat', 'description' => 'Access inbox and conversations'],
             ['name' => 'Send Messages', 'slug' => 'chat.send', 'module' => 'chat', 'description' => 'Send chat messages'],
