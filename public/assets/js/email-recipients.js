@@ -77,7 +77,11 @@
       rows = d.recipients || [];
 
       $('#erSubject').text(log.subject || '(No subject)');
-      $('#erMeta').text([log.kind ? log.kind.charAt(0).toUpperCase() + log.kind.slice(1) : '', (log.provider || '').toUpperCase(), log.created_at, rows.length + ' recipient(s)'].filter(Boolean).join(' · '));
+      var providerName = String(log.provider || '').toLowerCase();
+      if (providerName === 'cheerio') providerName = 'External';
+      else if (providerName === 'ses') providerName = 'Amazon SES';
+      else if (providerName) providerName = providerName.charAt(0).toUpperCase() + providerName.slice(1);
+      $('#erMeta').text([log.kind ? log.kind.charAt(0).toUpperCase() + log.kind.slice(1) : '', providerName, log.created_at, rows.length + ' recipient(s)'].filter(Boolean).join(' · '));
 
       var counts = d.counts || {};
       $('#erCounts').html(Object.keys(STATUS).filter(function (k) { return counts[k]; }).map(function (k) {
