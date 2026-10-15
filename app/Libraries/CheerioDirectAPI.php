@@ -1639,6 +1639,8 @@ class CheerioDirectAPI
 
         return [
             'ok'                  => $ok,
+            'provider'            => 'external',
+            'provider_label'      => 'External Direct API',
             'phone'               => $phone,
             'templates_reachable' => $templatesReachable,
             'template_count'      => $templateCount,

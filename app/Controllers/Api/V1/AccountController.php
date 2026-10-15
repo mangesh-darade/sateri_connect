@@ -26,8 +26,9 @@ class AccountController extends BaseV1Controller
         $provider = $settings->getWhatsAppProvider();
 
         $wabaInfo = [
-            'provider' => $provider,
-            'status'   => 'unconfigured',
+            'provider'       => $provider,
+            'provider_label' => $provider === SettingsService::PROVIDER_META ? 'Meta Cloud API' : 'External Direct API',
+            'status'         => 'unconfigured',
         ];
 
         try {
