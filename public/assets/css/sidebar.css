@@ -42,8 +42,16 @@ body.layout-fixed .main-sidebar.elint-sidebar {
     flex-direction: column !important;
     overflow: hidden !important;
 }
-body.layout-fixed .main-sidebar.elint-sidebar > .brand-link {
+body.layout-fixed .main-sidebar.elint-sidebar > .elint-menu-search {
     flex: 0 0 auto !important;
+    height: var(--header-h, 58px);
+    min-height: var(--header-h, 58px);
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center;
+    padding: 0 12px !important;
+    border-bottom: 1px solid var(--elint-border);
+    background: #fff;
 }
 body.layout-fixed .main-sidebar.elint-sidebar > .sidebar {
     flex: 1 1 auto !important;

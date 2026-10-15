@@ -19,7 +19,6 @@
     if ($appTimezone === '') {
         $appTimezone = 'UTC';
     }
-    $siteLogo    = function_exists('setting_asset_url') ? setting_asset_url('site_logo') : '';
     $siteFavicon = function_exists('setting_asset_url') ? setting_asset_url('site_favicon') : '';
     ?>
     <title><?= esc($title ?? 'Dashboard') ?> | <?= esc($appName) ?></title>
@@ -138,14 +137,16 @@
                 $waPhone = trim((string) ($waAccount['phone'] ?? ''));
                 $waPic = trim((string) ($waAccount['profile_picture_url'] ?? ''));
                 $waConnected = ! empty($waAccount['connected']);
-                $menuAvatar = $waPic !== ''
-                    ? $waPic
-                    : (string) ($user['avatar'] ?? base_url('assets/img/avatar.png'));
+                $clientLogo = function_exists('setting_asset_url') ? setting_asset_url('site_logo') : '';
+                $menuAvatarIsLogo = $clientLogo !== '';
+                $menuAvatar = $menuAvatarIsLogo
+                    ? $clientLogo
+                    : ($waPic !== '' ? $waPic : (string) ($user['avatar'] ?? base_url('assets/img/avatar.png')));
                 $menuTitle = $waName !== '' ? $waName : (string) ($user['name'] ?? session('user_name') ?? 'User');
                 $menuPhone = $waPhone !== '' ? $waPhone : (string) ($user['email'] ?? session('user_email') ?? '');
                 ?>
                 <a href="#" class="nav-link dropdown-toggle user-menu-toggle app-topbar-user" data-bs-toggle="dropdown" aria-expanded="false">
-                    <img src="<?= esc($menuAvatar) ?>" class="user-image img-circle js-wa-avatar" alt="<?= esc($menuTitle) ?>" referrerpolicy="no-referrer">
+                    <img src="<?= esc($menuAvatar) ?>" class="user-image js-wa-avatar<?= $menuAvatarIsLogo ? ' is-client-logo' : ' img-circle' ?>" alt="<?= esc($menuTitle) ?>" referrerpolicy="no-referrer">
                     <span class="app-topbar-user-meta d-none d-md-flex">
                         <span class="app-topbar-user-name js-wa-name"><?= esc($menuTitle) ?></span>
                         <span class="app-topbar-user-role js-wa-phone"><?= esc($menuPhone !== '' ? $menuPhone : (string) ($user['role_name'] ?? session('role_name') ?? 'Member')) ?></span>
@@ -154,7 +155,7 @@
                 </a>
                 <ul class="dropdown-menu dropdown-menu-lg dropdown-menu-end user-menu-dropdown">
                     <li class="user-header bg-wa wa-account-header">
-                        <img src="<?= esc($menuAvatar) ?>" class="img-circle wa-account-avatar js-wa-avatar" alt="<?= esc($menuTitle) ?>" referrerpolicy="no-referrer">
+                        <img src="<?= esc($menuAvatar) ?>" class="wa-account-avatar js-wa-avatar<?= $menuAvatarIsLogo ? ' is-client-logo' : ' img-circle' ?>" alt="<?= esc($menuTitle) ?>" referrerpolicy="no-referrer">
                         <div class="wa-account-copy">
                             <div class="wa-account-name js-wa-name"><?= esc($menuTitle) ?></div>
                             <?php if ($menuPhone !== ''): ?>
@@ -203,20 +204,11 @@
         $userAvatar = (string) ($user['avatar'] ?? base_url('assets/img/avatar.png'));
         $inboxBadge = (int) ($notifCount ?? 0);
         $mobileNavTabs = [];
-        $workspaceLabel = $appTagline !== '' ? $appTagline : 'Workspace';
-        $brandInitial = mb_strtoupper(mb_substr($appName !== '' ? $appName : 'S', 0, 1));
         ?>
-        <a href="<?= site_url('dashboard') ?>" class="brand-link elint-brand elint-workspace<?= $siteLogo !== '' ? ' has-logo-only' : '' ?>" title="<?= esc($appName) ?>">
-            <?php if ($siteLogo !== ''): ?>
-                <img src="<?= esc($siteLogo) ?>" alt="<?= esc($appName) ?>" class="brand-image brand-logo-img">
-            <?php else: ?>
-                <span class="elint-brand-mark" aria-hidden="true"><?= esc($brandInitial) ?></span>
-            <?php endif; ?>
-            <span class="elint-brand-copy">
-                <span class="brand-text"><?= esc($appName !== '' ? $appName : 'Sateri Connect') ?></span>
-                <span class="brand-sub"><?= esc($workspaceLabel) ?></span>
-            </span>
-        </a>
+        <div class="elint-menu-search">
+            <i data-lucide="search" class="elint-menu-search-icon" aria-hidden="true"></i>
+            <input type="search" id="sidebarMenuSearch" class="elint-menu-search-input" placeholder="Search menu..." aria-label="Search menu" autocomplete="off">
+        </div>
         <div class="sidebar">
             <?php
             $currentUri = trim(uri_string(), '/');
@@ -322,7 +314,7 @@
                 ];
             }
 
-            // Inbox (Cheerio-like IA — first after dashboard)
+            // Inbox (External-like IA — first after dashboard)
             $inboxItems = [];
             if (function_exists('can') && can('chat.view')) {
                 $settingsSvc = function_exists('service') ? service('settingsService') : null;
@@ -411,7 +403,7 @@
                     ['label' => 'Email Manager', 'icon' => 'mail-open', 'url' => site_url('email-manager'), 'match' => ['email-manager'], 'perm' => 'emails.view'],
                     ['label' => 'Email Templates', 'icon' => 'mail', 'url' => site_url('templates?channel=email'), 'match' => ['templates'], 'query' => $emailQuery, 'perm' => 'templates.view'],
                     ['label' => 'Email Workflows (Auto Drips)', 'icon' => 'workflow', 'url' => site_url('automations?channel=email'), 'match' => ['automations'], 'query' => ['channel' => ['email', 'drips']], 'perm' => 'automations.view'],
-                    ['label' => 'Email List Verifier', 'icon' => 'shield', 'url' => site_url('email-manager?tab=verifier'), 'match' => ['email-manager'], 'tab' => 'verifier', 'perm' => 'emails.view'],
+                    ['label' => 'Email Settings', 'icon' => 'mail', 'url' => site_url('settings/email'), 'match' => ['settings/email'], 'perm' => 'settings.view'],
                 ],
             ];
             $marketingItems[] = [
@@ -471,11 +463,6 @@
                     'icon' => 'bar-chart-3',
                     'url' => site_url('analytics'),
                     'match' => ['analytics', 'reports'],
-                    'children' => [
-                        ['label' => 'Overview', 'icon' => 'pie-chart', 'url' => site_url('analytics'), 'match' => ['analytics']],
-                        ['label' => 'Reports', 'icon' => 'bar-chart-3', 'url' => site_url('reports'), 'match' => ['reports']],
-                        ['label' => 'Delivery Report', 'icon' => 'truck', 'url' => site_url('reports/delivery'), 'match' => ['reports/delivery']],
-                    ],
                 ];
             }
             if ($analyticsItems !== []) {
@@ -488,21 +475,6 @@
             }
             if (function_exists('can') && can('roles.view')) {
                 $systemItems[] = ['label' => 'Roles', 'icon' => 'shield', 'url' => site_url('roles'), 'match' => ['roles']];
-            }
-            if (function_exists('can') && can('guide.view')) {
-                $systemItems[] = [
-                    'label' => 'Setup Workspace',
-                    'icon' => 'wrench',
-                    'url' => site_url('guide/local'),
-                    'match' => ['guide', 'guide/local', 'guide/production', 'guide/meta-official', 'guide/meta-screenshots', 'guide/automations'],
-                    'children' => [
-                        ['label' => 'Local Guide', 'icon' => 'monitor-smartphone', 'url' => site_url('guide/local'), 'match' => ['guide/local']],
-                        ['label' => 'Production Guide', 'icon' => 'server', 'url' => site_url('guide/production'), 'match' => ['guide/production']],
-                        ['label' => 'Meta Publish Guide', 'icon' => 'book-open', 'url' => site_url('guide/meta-official'), 'match' => ['guide/meta-official']],
-                        ['label' => 'Meta Screenshot Guide', 'icon' => 'image', 'url' => site_url('guide/meta-screenshots'), 'match' => ['guide/meta-screenshots']],
-                        ['label' => 'Automations Guide', 'icon' => 'bot', 'url' => site_url('guide/automations'), 'match' => ['guide/automations']],
-                    ],
-                ];
             }
             if ($systemItems !== []) {
                 $navGroups[] = ['title' => 'System', 'items' => $systemItems];
@@ -586,10 +558,6 @@
             }
             $addMobileTab($mobileNavTabs, 'More', 'menu', '#', [], null, 'pushmenu');
             ?>
-            <div class="elint-menu-search">
-                <i data-lucide="search" class="elint-menu-search-icon" aria-hidden="true"></i>
-                <input type="search" id="sidebarMenuSearch" class="elint-menu-search-input" placeholder="Search menu..." aria-label="Search menu" autocomplete="off">
-            </div>
             <nav class="sidebar-nav-scroll app-sidebar-nav" id="elintSidebarNav">
                 <?php foreach ($navGroups as $group): ?>
                     <?php if ($group['title'] !== ''): ?>
@@ -698,35 +666,6 @@
                         </a>
                     </li>
                     <?php endif; ?>
-                    <?php if (function_exists('can') && can('settings.view')): ?>
-                    <?php
-                    $settingsUri    = trim(uri_string(), '/');
-                    $settingsOpen   = $settingsUri === 'settings' || str_starts_with($settingsUri, 'settings/');
-                    $settingsEmail  = str_starts_with($settingsUri, 'settings/email');
-                    $settingsSystem = $settingsOpen && ! $settingsEmail;
-                    ?>
-                    <li class="nav-item app-sidebar-item has-tree<?= $settingsOpen ? ' menu-open' : '' ?>" data-menu-label="settings">
-                        <a href="<?= site_url('settings') ?>" class="nav-link app-sidebar-toggle<?= $settingsOpen ? ' active' : '' ?>" data-toggle="tree" aria-expanded="<?= $settingsOpen ? 'true' : 'false' ?>" title="Settings" aria-label="Settings">
-                            <i class="nav-icon" data-lucide="settings" aria-hidden="true"></i>
-                            <p>Settings</p>
-                            <i class="right sidebar-link-arrow" data-lucide="chevron-down" aria-hidden="true"></i>
-                        </a>
-                        <ul class="nav nav-treeview app-sidebar-tree">
-                            <li class="nav-item<?= $settingsSystem ? ' is-active' : '' ?>" data-menu-label="system settings">
-                                <a href="<?= site_url('settings') ?>" class="nav-link<?= $settingsSystem ? ' active' : '' ?>" title="System Settings" aria-current="<?= $settingsSystem ? 'page' : 'false' ?>">
-                                    <i class="nav-icon" data-lucide="sliders-horizontal" aria-hidden="true"></i>
-                                    <p>System Settings</p>
-                                </a>
-                            </li>
-                            <li class="nav-item<?= $settingsEmail ? ' is-active' : '' ?>" data-menu-label="email settings">
-                                <a href="<?= site_url('settings/email') ?>" class="nav-link<?= $settingsEmail ? ' active' : '' ?>" title="Email Settings" aria-current="<?= $settingsEmail ? 'page' : 'false' ?>">
-                                    <i class="nav-icon" data-lucide="mail" aria-hidden="true"></i>
-                                    <p>Email Settings</p>
-                                </a>
-                            </li>
-                        </ul>
-                    </li>
-                    <?php endif; ?>
                 </ul>
                 <?php if ($pbEnabled && $pbName !== ''): ?>
                 <div style="padding:8px 12px;margin:6px 8px 4px;border-radius:6px;background:rgba(255,255,255,0.04);font-size:0.72rem;color:rgba(255,255,255,0.6);display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap">
@@ -779,6 +718,7 @@
                                         <?= esc(whatsapp_provider_short()) ?>
                                     </span>
                                 <?php endif; ?>
+                                <?= $this->renderSection('header_title_extra') ?>
                             </div>
                             <?php if (! empty($subtitle)): ?>
                                 <p class="page-subtitle mb-0 d-none d-md-block"><?= esc($subtitle) ?></p>
@@ -894,8 +834,8 @@
         autoSyncJobs: <?= json_encode(function_exists('can') ? (new \App\Libraries\AutoSyncService())->jobs(static fn (string $p): bool => can($p)) : []) ?>,
         timezone: <?= json_encode($appTimezone) ?>,
         whatsappProvider: <?= json_encode(function_exists('whatsapp_provider') ? whatsapp_provider() : 'cheerio') ?>,
-        whatsappProviderShort: <?= json_encode(function_exists('whatsapp_provider_short') ? whatsapp_provider_short() : 'Cheerio') ?>,
-        whatsappProviderLabel: <?= json_encode(function_exists('whatsapp_provider_label') ? whatsapp_provider_label() : 'Cheerio Direct API') ?>,
+        whatsappProviderShort: <?= json_encode(function_exists('whatsapp_provider_short') ? whatsapp_provider_short() : 'External') ?>,
+        whatsappProviderLabel: <?= json_encode(function_exists('whatsapp_provider_label') ? whatsapp_provider_label() : 'External Direct API') ?>,
         waIdentityNeedsRefresh: <?= ! empty($waIdentityNeedsRefresh) ? 'true' : 'false' ?>,
         waAccount: <?= json_encode([
             'display_name'        => (string) (($waAccount['display_name'] ?? '')),

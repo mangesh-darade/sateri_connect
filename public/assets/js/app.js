@@ -1014,7 +1014,7 @@
             $('.js-wa-phone-row').removeClass('d-none');
         }
         if (pic) {
-            $('.js-wa-avatar').attr('src', pic);
+            $('.js-wa-avatar').not('.is-client-logo').attr('src', pic);
         }
         APP.waAccount = Object.assign({}, APP.waAccount || {}, identity, {
             display_name: name || (APP.waAccount && APP.waAccount.display_name) || '',
