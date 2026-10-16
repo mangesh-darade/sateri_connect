@@ -1,0 +1,15 @@
+---
+description: Return contract for all app/Libraries/*Service.php methods
+alwaysApply: true
+---
+
+# Service Layer Return Contract
+
+Every Service method MUST return: `['ok' => bool, 'status' => int, 'message' => string]` + optional `data` or `errors`.
+
+- `ok: false, status: 422, errors: [field => reason]` — validation fail
+- `ok: false, status: 502, message: generic` — 3rd party API fail  
+- `ok: false, status: 404` — not found
+- Never throw exceptions out of a Service — catch internally, return `ok: false`
+- Services never call `redirect()`, `view()`, or set flash — only return data arrays
+- Controller MUST check `$result['ok']` before using `$result['data']`

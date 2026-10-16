@@ -1,0 +1,35 @@
+---
+description: Error presenter and exception handling pattern
+alwaysApply: true
+---
+
+# Error Presenter & Exception Handling Pattern
+
+- `render_app_error(string $title, string $message, int $code = 500)` — web error view render.
+- `AppExceptionHandler` — global CI4 handler, overrides default error page in prod.
+- `ErrorPresenter` — formats user-facing error pages.
+
+## Controller (Web request)
+```php
+try {
+    $result = $this->service->do();
+} catch (Throwable $e) {
+    log_message('error', '[ControllerName::method] ' . $e->getMessage() . ' | user_id=' . session('user_id'));
+    return render_app_error('Something went wrong', 'Please try again.', 500);
+}
+```
+
+## Controller (AJAX/API request)
+```php
+} catch (Throwable $e) {
+    log_message('error', '[ControllerName::ajaxMethod] ' . $e->getMessage());
+    return $this->response->setStatusCode(500)->setJSON(['status' => 'error', 'message' => 'Server error.']);
+}
+```
+
+## Rules
+- Services return `['ok' => false]` — they never call `render_app_error()`.
+- Never show DB error strings, table names, stack traces in any response.
+- Never leave `var_dump`, `dd()`, `print_r` in committed code.
+- Log: class, method, error message, user_id, record_id. Never log passwords, tokens, keys.
+- Detect AJAX vs Web: `$this->request->isAJAX()` → JSON. Web → `render_app_error()`.

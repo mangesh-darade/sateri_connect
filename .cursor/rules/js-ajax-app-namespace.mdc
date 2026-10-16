@@ -1,0 +1,16 @@
+---
+description: JS/AJAX APP.* namespace standard for all frontend code
+globs: public/assets/js/**/*.js,app/Views/**/*.php
+alwaysApply: false
+---
+
+# JS / AJAX APP Namespace Standard
+
+- Use `$.ajax()` only — never `fetch()` or raw XHR.
+- Every AJAX call: `beforeSend` (disable btn) + `complete` (re-enable) + `error` callback — mandatory.
+- Use `APP.csrf()` for CSRF token — never hardcode.
+- Feedback: `APP.toast(msg, 'success|error|warning')` — never `alert()` or inline Bootstrap alert clones.
+- Global 401 handling already in base layout via `$.ajaxSetup` — do not re-implement per page.
+- Page JS → `<?= $this->section('scripts') ?>` block. Reusable JS → `public/assets/js/`.
+- Never redeclare `APP.*` functions per page — call or extend existing helpers.
+- Check `response.status === 'success'` (not HTTP code) for app-level success.

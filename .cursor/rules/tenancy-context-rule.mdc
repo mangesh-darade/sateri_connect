@@ -1,0 +1,14 @@
+---
+description: Multi-tenant context and DB connection rules
+alwaysApply: true
+---
+
+# Tenancy Context Rule
+
+- Use `TenantContext` for current tenant's db/id. Never hardcode DB name.
+- Use `TenantConnection::get()` for tenant-scoped DB — not raw `db_connect('default')` without confirming tenant DB is switched.
+- `MasterTenantRepository` → master DB only. Never mix with tenant queries.
+- `SettingsService` already reads from correct tenant DB — inject it, don't query `settings` table directly.
+- `ApiAuthFilter` resolves tenant for API routes — do not re-resolve in API controllers.
+- Portal hosts (localhost/127.0.0.1) use session for tenant, not subdomain — don't assume subdomain always exists.
+- Never access `$_SERVER['HTTP_HOST']` to determine tenant — use `TenantResolver`.

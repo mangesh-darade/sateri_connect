@@ -1,0 +1,14 @@
+---
+description: Pattern for all 3rd party API calls (Cheerio, Meta, SES, SMTP)
+alwaysApply: true
+---
+
+# 3rd Party API Call Pattern
+
+- Always wrap in `try { } catch (Throwable $e)`.
+- `log_message('error', '[Class::method] ' . $e->getMessage() . ' | context')` — never expose to frontend.
+- Return `['ok' => false, 'status' => 502, 'message' => 'Service unavailable.']` on any external fail.
+- Never log API keys, tokens, passwords. Log only user_id, record_id, domain, endpoint.
+- Set HTTP timeout: 15s for Meta/Cheerio, 30s for SES identity ops.
+- 429 from provider → return status 429. 401/403 from provider → return 502 (never expose auth detail).
+- Use existing clients: `MetaCloudAPI`, `CheerioDirectAPI`, `SesEmailDriver`, `EmailProvider` — never create new HTTP clients.

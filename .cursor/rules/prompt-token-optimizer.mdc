@@ -1,0 +1,17 @@
+---
+description: Auto-infer raw prompts and strictly optimize token usage
+alwaysApply: true
+---
+
+# Prompt & Token Optimization Rule
+
+- **Auto-Infer Rough & Shorthand Input**: When user writes short/informal Marathi/Hinglish (e.g. "he fix kr", "EmailSenderModel soft delete fix"):
+  - Silently identify target files from open tabs, cursor position, or `PROJECT_MAP.md`.
+  - When user pastes a raw error/trace, jump straight to the fix without repeating the error.
+  - Apply CI4 standards, CSRF, escaping, and activity logging without asking questions.
+  - Never repeat back the prompt or explain what you are about to do.
+- **Minimum Token Protocol**:
+  - Direct execution, zero preamble/pleasantries.
+  - No unsolicited explanations: code execution only; never explain how/why unless user explicitly asks "explain" or "kasa kela sang".
+  - Surgical edits only via `replace_file_content`. No full-file rewrites.
+  - Final response max 1-3 lines with clickable file links. Do not dump duplicate code in chat.

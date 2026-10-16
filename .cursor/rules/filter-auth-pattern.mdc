@@ -1,0 +1,34 @@
+---
+description: Filter and auth pattern for routes and controllers
+alwaysApply: true
+---
+
+# Filter / Auth Pattern
+
+## Available Filters
+- `auth` — session login check
+- `permission` — RBAC gate
+- `api-auth` — Bearer/X-API-Key + tenant resolution
+- `csrf` — auto on all non-API POST
+- `rate-limit` — IP throttle (login, OTP, public)
+
+## Rules
+- Every protected web route MUST be inside an `auth` filter group — never check `session('user_id')` manually in controller.
+- Permission check: `can('permission.slug')` — never raw DB permission query.
+- New API endpoint → `/api/v1/` prefix + `api-auth` filter. Never create API endpoint without auth.
+- `RateLimitFilter` → apply at route level, not inside controller.
+- Webhooks → `WebhookValidator` HMAC check inside controller method (not a filter — raw payload needed first).
+- `ApiAuthFilter` already resolves tenant — do not re-resolve in API controllers.
+
+## Route Pattern
+```php
+// Web
+$routes->group('module', ['filter' => 'auth'], function($routes) {
+    $routes->get('/', 'MyController::index');
+    $routes->post('store', 'MyController::store');
+});
+// API
+$routes->group('api/v1/module', ['filter' => 'api-auth'], function($routes) {
+    $routes->get('/', 'Api\MyController::index');
+});
+```
