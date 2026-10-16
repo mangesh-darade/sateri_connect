@@ -1,0 +1,51 @@
+---
+description: Meta WhatsApp Cloud API, Cheerio, webhooks, template send standards
+alwaysApply: true
+---
+
+# Meta / WhatsApp Cloud API Rule
+
+## Key Libraries (Use these — never create new HTTP clients)
+- `MetaCloudAPI` — WhatsApp Cloud API (graph.facebook.com)
+- `CheerioDirectAPI` — Cheerio WhatsApp API (same interface as MetaCloudAPI)
+- `MetaApiErrorMapper` — Raw Meta errors → user-friendly messages
+- `WebhookValidator` — HMAC SHA-256 + challenge (Meta + Cheerio + master)
+- `WhatsAppTemplateSendGuard` — Template APPROVED + WABA ownership check
+- `WhatsAppTemplatePayload` — Build Meta-shaped template payload
+- `WhatsAppTemplateVariables` — Variable extraction and substitution
+- `WhatsAppSendWindow` — 24-hour session window check
+- `TemplateSyncService` — Sync templates from Meta/Cheerio
+- `MetaEmbeddedSignup` — WABA onboarding (FB.login → code exchange → phone register)
+
+## Rules
+
+### Credentials
+- Load via `$this->settings->getMetaConfig()` — never hardcode or read `$_ENV` directly.
+- Active provider → `$this->settings->getWhatsAppProvider()`. Never assume `meta` or `cheerio`.
+- API version default `v25.0` — always from settings, never hardcode.
+
+### Sending Templates
+- Always `WhatsAppTemplateSendGuard::resolveApprovedTemplate()` before any template send.
+- Build payload via `WhatsAppTemplatePayload` — never hand-build template JSON.
+- Variable substitution → `WhatsAppTemplateVariables`. Never do string-replace in controller.
+- Check `WhatsAppSendWindow` before free-form messages.
+
+### Error Handling
+- Parse Meta errors → `MetaApiErrorMapper::parseDecoded()` + `::humanize()`.
+- Never return raw Meta API error JSON to the user (contains internal codes).
+- 401/403 → "token invalid/expired, reconnect in Settings." Log internally.
+- 429 → return 429 user message. Do not retry immediately.
+- Do not add retry loops — `MetaCloudAPI` already has `config->maxRetries`.
+
+### Webhooks
+- Read raw body FIRST: `$rawBody = file_get_contents('php://input')` — before CI4 parses input.
+- Validate: `WebhookValidator::validateSignature($rawBody, $signatureHeader)` — if mismatch → log + 401.
+- Return HTTP 200 within 5 seconds. Offload heavy processing to queue.
+- Challenge: `WebhookValidator::verifyChallenge($mode, $token, $challenge)`.
+
+### Templates Sync
+- Sync via `TemplateSyncService` — never raw API call in controller.
+- Templates need `status = APPROVED` + `waba_id` match before send.
+
+### Logging
+- Never log `access_token`, `app_secret`. Log only `phone_number_id`, `waba_id`, `template_name`.
