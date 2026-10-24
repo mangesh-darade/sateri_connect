@@ -904,6 +904,30 @@
             if (d.form_id) html += '<option value="' + esc(d.form_id) + '" selected>' + esc(d.form_name || d.form_id) + '</option>';
             html += '</select>';
             html += inspHint('Login with the Facebook profile that owns the Lead Ads. Pick the business portfolio, then the ad account, then the Page that collects the leads. Leave the form blank to run for every form on that Page.');
+
+            // Form Testing & Preview helper card right below Lead Form
+            html += '<div class="card border-primary-subtle bg-light-subtle p-2 mt-2 js-fb-test-card" style="border:1px solid #bfdbfe;background:#f8faff;border-radius:6px;">';
+            html += '<div class="d-flex align-items-center justify-content-between mb-1">';
+            html += '<span class="fw-semibold small text-primary"><i class="fas fa-vial me-1"></i> Test & Preview Lead Form</span>';
+            html += '<span class="badge bg-primary text-white" style="font-size:10px;">Meta Tool</span>';
+            html += '</div>';
+            html += '<p class="small text-muted mb-2" style="font-size:11px;line-height:1.4;">' +
+                'या फॉर्मची टेस्ट लीड सबमिट करण्यासाठी खालील लिंकवर क्लिक करा. Meta Tool उघडून हा Page आणि Form निवडा व <b>Preview form</b> वरून टेस्ट करा.' +
+                '</p>';
+            html += '<a href="https://developers.facebook.com/tools/lead-ads-testing" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-primary w-100 mb-1 text-center js-fb-test-tool-btn" style="font-size:12px;font-weight:600;">' +
+                '<i class="fas fa-external-link-alt me-1"></i> Open Meta Lead Testing Tool' +
+                '</a>';
+            if (d.page_id) {
+                var suiteFormsUrl = 'https://business.facebook.com/latest/instant_forms/forms?asset_id=' + encodeURIComponent(d.page_id);
+                html += '<a href="' + esc(suiteFormsUrl) + '" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary w-100 text-center js-fb-suite-forms-btn mt-1" style="font-size:11px;">' +
+                    '<i class="fab fa-facebook me-1"></i> View Instant Forms in Meta Suite' +
+                    '</a>';
+            }
+            html += '<div class="mt-2 pt-2 border-top small js-fb-test-summary" style="font-size:10.5px;color:#475569;">';
+            html += '<div><b>Page:</b> <span class="js-fb-summary-page">' + esc(d.page_name || d.page_id || 'Not selected') + '</span>' + (d.page_id ? (' <code class="text-muted">(' + esc(d.page_id) + ')</code>') : '') + '</div>';
+            html += '<div><b>Form:</b> <span class="js-fb-summary-form">' + esc(d.form_name || (d.form_id ? d.form_id : 'Any form on this page')) + '</span>' + (d.form_id ? (' <code class="text-muted">(' + esc(d.form_id) + ')</code>') : '') + '</div>';
+            html += '</div>';
+            html += '</div>';
             html += '</div>';
         }
         if (t === 'kylas_event_create' || t === 'kylas_event_update') {
@@ -1813,6 +1837,14 @@
                 node.data.form_id = '';
                 node.data.form_name = '';
                 $('.js-fb-status').text((res && res.message) || ('Connected: ' + node.data.page_name));
+                $('.js-fb-summary-page').html(esc(node.data.page_name) + ' <code class="text-muted">(' + esc(pageId) + ')</code>');
+                $('.js-fb-summary-form').text('Any form on this page');
+                var suiteUrl = 'https://business.facebook.com/latest/instant_forms/forms?asset_id=' + encodeURIComponent(pageId);
+                if ($('.js-fb-suite-forms-btn').length) {
+                    $('.js-fb-suite-forms-btn').attr('href', suiteUrl);
+                } else {
+                    $('<a href="' + esc(suiteUrl) + '" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary w-100 text-center js-fb-suite-forms-btn mt-1" style="font-size:11px;"><i class="fab fa-facebook me-1"></i> View Instant Forms in Meta Suite</a>').insertAfter('.js-fb-test-tool-btn');
+                }
                 renderNodes();
                 $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
             }).fail(function (xhr) {
@@ -1822,7 +1854,11 @@
         $('#inspectorBody').on('change', '.js-fb-form', function () {
             var node = findNode(Flow.selectedId);
             if (!node) return;
-            node.data.form_name = $(this).val() ? $(this).find('option:selected').text() : '';
+            var formVal = String($(this).val() || '');
+            node.data.form_name = formVal ? $(this).find('option:selected').text() : '';
+            var formText = node.data.form_name || 'Any form on this page';
+            var formCode = formVal ? (' <code class="text-muted">(' + esc(formVal) + ')</code>') : '';
+            $('.js-fb-summary-form').html(esc(formText) + formCode);
             renderNodes();
             $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
         });
