@@ -1873,6 +1873,7 @@
             if (!node || !node.data) return;
             var formId = String($('.js-fb-form').val() || node.data.form_id || '');
             var pageId = String($('.js-fb-page').val() || node.data.page_id || '');
+            var businessId = String($('.js-fb-portfolio').val() || node.data.business_id || '');
             if (!formId) {
                 if (window.APP && APP.toast) APP.toast('Please select a Lead Form first.', 'warning');
                 return;
@@ -1881,7 +1882,8 @@
             $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i> Sending Test Lead…');
             APP.post(fbLeadUrl('/automations/facebook/test-lead'), {
                 form_id: formId,
-                page_id: pageId
+                page_id: pageId,
+                business_id: businessId
             }).done(function (res) {
                 if (window.APP && APP.toast) APP.toast((res && res.message) || 'Test lead created on Meta! Automation triggered.', 'success');
                 $('.js-fb-status').text('Test lead created (ID: ' + ((res.data && res.data.lead_id) || '') + '). Webhook sent!');

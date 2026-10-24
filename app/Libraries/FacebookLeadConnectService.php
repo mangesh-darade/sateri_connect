@@ -828,19 +828,20 @@ class FacebookLeadConnectService
      *
      * @return array{lead_id: string, form_id: string, page_id: string}
      */
-    public function sendTestLead(string $formId, string $pageId = ''): array
+    public function sendTestLead(string $formId, string $pageId = '', string $businessId = ''): array
     {
         $this->assertId($formId, 'Lead form');
-        $pageId = trim($pageId);
+        $pageId     = trim($pageId);
+        $businessId = trim($businessId);
         if ($pageId !== '') {
             $this->assertId($pageId, 'Lead page');
         }
 
         $pageToken = '';
-        $settings = new SettingsService();
-        $meta     = $settings->getMetaConfig();
+        $settings  = new SettingsService();
+        $meta      = $settings->getMetaConfig();
 
-        // 1. If page matches current settings, use saved page_access_token
+        // 1. If page matches current settings and token is saved, use it
         if ($pageId !== '' && ($meta['page_id'] ?? '') === $pageId && ! empty($meta['page_access_token'])) {
             $pageToken = trim((string) $meta['page_access_token']);
         }
@@ -849,21 +850,49 @@ class FacebookLeadConnectService
         if ($pageToken === '') {
             $userToken = session()->get(self::SESSION_TOKEN);
             if ($userToken && $pageId !== '') {
+                // Direct Page node query with user token
                 try {
-                    $pageRow = $this->resolvePage($pageId, '', $userToken);
-                    $pageToken = trim((string) ($pageRow['access_token'] ?? ''));
+                    $pageObj = $this->graph($pageId, ['fields' => 'id,name,access_token'], $userToken);
+                    $tok     = trim((string) ($pageObj['access_token'] ?? ''));
+                    if ($tok !== '') {
+                        $pageToken = $tok;
+                    }
                 } catch (\Throwable) {
+                }
+
+                // If direct query didn't give token, search portfolio/user pages
+                if ($pageToken === '') {
+                    try {
+                        $pageRow = $this->resolvePage($pageId, $businessId, $userToken);
+                        $tok     = trim((string) ($pageRow['access_token'] ?? ''));
+                        if ($tok !== '') {
+                            $pageToken = $tok;
+                        }
+                    } catch (\Throwable) {
+                    }
+                }
+
+                // If resolved, update settings so future requests are instant
+                if ($pageToken !== '') {
+                    try {
+                        $payload = [
+                            'page_id'           => $pageId,
+                            'page_access_token' => $pageToken,
+                        ];
+                        if ($businessId !== '' && $businessId !== 'profile') {
+                            $payload['business_id'] = $businessId;
+                        }
+                        $settings->setMetaConfig($payload);
+                    } catch (\Throwable) {
+                    }
                 }
             }
         }
 
-        // 3. Fallback: use any saved meta_page_access_token from settings
-        if ($pageToken === '' && ! empty($meta['page_access_token'])) {
-            $pageToken = trim((string) $meta['page_access_token']);
-        }
-
         if ($pageToken === '') {
-            throw new \RuntimeException('Page Access Token not found. Please connect the page or login with Facebook first.');
+            throw new \RuntimeException(
+                'Facebook authorization required for this page (' . ($pageId ?: 'selected') . '). Please click "Login with Facebook" above first, or use the Meta Lead Testing Tool below.'
+            );
         }
 
         // Meta allows only 1 active test lead per form. Delete previous test lead if exists.

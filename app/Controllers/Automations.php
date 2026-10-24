@@ -447,7 +447,8 @@ class Automations extends BaseController
         try {
             $data = (new \App\Libraries\FacebookLeadConnectService())->sendTestLead(
                 (string) $this->request->getPost('form_id'),
-                (string) $this->request->getPost('page_id')
+                (string) $this->request->getPost('page_id'),
+                (string) $this->request->getPost('business_id')
             );
         } catch (\Throwable $e) {
             return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
