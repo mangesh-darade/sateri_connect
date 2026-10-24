@@ -56,10 +56,10 @@ class FacebookLeadConnectService
      *
      * @return array{user_name: string, businesses: list<array{id: string, name: string}>, profile_pages: int, missing_permissions: list<string>}
      */
-    public function start(string $userToken, string $code = ''): array
+    public function start(string $userToken, string $code = '', string $redirectUri = ''): array
     {
         if (trim($code) !== '') {
-            $userToken = $this->exchangeAuthorizationCode($code);
+            $userToken = $this->exchangeAuthorizationCode($code, $redirectUri);
         }
         $userToken = $this->assertUserToken($userToken);
 
@@ -536,7 +536,7 @@ class FacebookLeadConnectService
         return $creds;
     }
 
-    protected function exchangeAuthorizationCode(string $code): string
+    protected function exchangeAuthorizationCode(string $code, string $redirectUri = ''): string
     {
         $code = trim($code);
         $length = strlen($code);
@@ -547,17 +547,22 @@ class FacebookLeadConnectService
         $creds = $this->requireCredentials();
         $url = 'https://graph.facebook.com/' . $creds['version'] . '/oauth/access_token';
 
+        $query = [
+            'client_id'     => $creds['app_id'],
+            'client_secret' => $creds['secret'],
+            'code'          => $code,
+        ];
+        if ($redirectUri !== '') {
+            $query['redirect_uri'] = $redirectUri;
+        }
+
         try {
             $client = Services::curlrequest([
                 'timeout'     => 20,
                 'http_errors' => false,
             ], null, null, false);
             $response = $client->get($url, [
-                'query' => [
-                    'client_id'     => $creds['app_id'],
-                    'client_secret' => $creds['secret'],
-                    'code'          => $code,
-                ],
+                'query' => $query,
             ]);
         } catch (Throwable) {
             throw new RuntimeException('Facebook could not be reached. Try again.');

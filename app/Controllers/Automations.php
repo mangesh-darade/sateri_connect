@@ -367,14 +367,15 @@ class Automations extends BaseController
             return $denied;
         }
 
-        $token = trim((string) $this->request->getPost('access_token'));
-        $code = trim((string) $this->request->getPost('code'));
+        $token       = trim((string) $this->request->getPost('access_token'));
+        $code        = trim((string) $this->request->getPost('code'));
+        $redirectUri = trim((string) $this->request->getPost('redirect_uri'));
         if ($token === '' && $code === '') {
             return $this->jsonResponse(false, null, 'Facebook login did not return a token.', [], 422);
         }
 
         try {
-            $data = (new \App\Libraries\FacebookLeadConnectService())->start($token, $code);
+            $data = (new \App\Libraries\FacebookLeadConnectService())->start($token, $code, $redirectUri);
         } catch (\Throwable $e) {
             return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
         }

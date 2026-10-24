@@ -1737,13 +1737,14 @@
                 return;
             }
             var configId = String((Flow.meta && Flow.meta.fb_config_id) || '');
-            var loginOptions = configId
-                ? { config_id: configId, response_type: 'code', override_default_response_type: true }
-                : {
-                    scope: 'pages_show_list,pages_read_engagement,pages_manage_metadata,pages_manage_ads,leads_retrieval,business_management,ads_read',
-                    auth_type: 'rerequest',
-                    return_scopes: true
-                };
+            var loginOptions = {
+                scope: 'pages_show_list,pages_read_engagement,pages_manage_metadata,pages_manage_ads,leads_retrieval,business_management,ads_read',
+                auth_type: 'rerequest',
+                return_scopes: true
+            };
+            if (configId) {
+                loginOptions.config_id = configId;
+            }
             FB.login(function (response) {
                 var auth = response && response.authResponse;
                 if (!auth || (!auth.code && !auth.accessToken)) {
@@ -1751,7 +1752,9 @@
                     return;
                 }
                 $('.js-fb-status').text('Loading portfolios…');
-                var payload = auth.code ? { code: auth.code } : { access_token: auth.accessToken };
+                var payload = auth.accessToken
+                    ? { access_token: auth.accessToken }
+                    : { code: auth.code, redirect_uri: window.location.href.split('#')[0] };
                 APP.post(fbLeadUrl('/automations/facebook/login'), payload).done(function (res) {
                     var data = (res && res.data) || {};
                     var businesses = data.businesses || [];
