@@ -95,6 +95,30 @@ class TenantConnection
         return $this->apply($key, 'webhook');
     }
 
+    public function applyFromRequestHost(?string $host = null): bool
+    {
+        $host = trim((string) ($host ?? ($_SERVER['HTTP_HOST'] ?? '')));
+        if ($host === '') {
+            return false;
+        }
+
+        $hostOnly = strtolower(explode(':', $host)[0]);
+
+        if ($this->apply($hostOnly, 'host')) {
+            return true;
+        }
+
+        $parts = explode('.', $hostOnly);
+        if (count($parts) >= 3) {
+            $subdomain = $parts[0];
+            if ($this->apply($subdomain, 'host')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * @param array<string, mixed> $row
      */
@@ -163,6 +187,7 @@ class TenantConnection
         // Pass connection array to avoid group lookup edge cases after config mutation.
         $config = config(DatabaseConfig::class);
         DatabaseConfig::connect($config->default, false);
+        \CodeIgniter\Config\Factories::reset('models');
     }
 
     protected function currentDatabaseName(): string

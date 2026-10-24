@@ -1727,8 +1727,11 @@
                 APP.post(fbLeadUrl('/automations/facebook/login'), payload).done(function (res) {
                     var data = (res && res.data) || {};
                     var businesses = data.businesses || [];
-                    if (!businesses.length && data.profile_pages > 0) {
-                        businesses = [{ id: 'profile', name: 'Pages on this Facebook profile' }];
+                    if (data.profile_pages > 0) {
+                        var hasProfile = businesses.some(function (b) { return b.id === 'profile'; });
+                        if (!hasProfile) {
+                            businesses.push({ id: 'profile', name: 'Pages on this Facebook profile' });
+                        }
                     }
                     fillFbSelect($('.js-fb-portfolio'), businesses, businesses.length ? 'Choose a portfolio' : 'No portfolio on this profile', '');
                     fillFbSelect($('.js-fb-account'), [], 'Choose a portfolio first', '');
@@ -1755,8 +1758,15 @@
             $('.js-fb-status').text('Loading ad accounts…');
             APP.post(fbLeadUrl('/automations/facebook/accounts'), { business_id: businessId }).done(function (res) {
                 var rows = (res.data && res.data.accounts) || [];
-                fillFbSelect($('.js-fb-account'), rows, rows.length ? 'Choose an ad account' : 'No ad account in this portfolio', '');
-                $('.js-fb-status').text(rows.length ? 'Choose an ad account.' : 'No ad account in this portfolio.');
+                if (!rows.length) {
+                    rows = [{ id: 'none', name: 'No ad account (Pages only)' }];
+                }
+                fillFbSelect($('.js-fb-account'), rows, 'Choose an ad account', '');
+                if (rows.length === 1 && rows[0].id === 'none') {
+                    $('.js-fb-account').val('none').trigger('change');
+                } else {
+                    $('.js-fb-status').text('Choose an ad account.');
+                }
             }).fail(function (xhr) {
                 fbLeadFail(xhr, 'Could not load ad accounts.');
             });

@@ -29,7 +29,7 @@
 | **Analytics** | **Analytics** | • Overview Analytics<br>• Campaign Reports<br>• Delivery Reports | `/analytics`<br>`/reports`<br>`/reports/delivery` | `reports.view` |
 | **System** | **Users** | — | `/users` | `users.view` |
 | | **Roles & Permissions**| — | `/roles` | `roles.view` |
-| | **Setup Workspace** | • Local Guide<br>• Production Guide<br>• Meta Publish Guide<br>• Meta Screenshot Guide<br>• Automations Guide | `/guide/local`<br>`/guide/production`<br>`/guide/meta-official`<br>`/guide/meta-screenshots`<br>`/guide/automations` | `guide.view` |
+| | **Setup Workspace** | • Local Guide<br>• Production Guide<br>• Meta Publish Guide<br>• Meta Screenshot Guide<br>• Facebook Leads Guide<br>• Automations Guide | `/guide/local`<br>`/guide/production`<br>`/guide/meta-official`<br>`/guide/meta-screenshots`<br>`/guide/meta-lead-ads`<br>`/guide/automations` | `guide.view` |
 | **Footer / Config**| **Activity Logs** | Audit Trail, Event History & Old vs New Diff | `/activity-logs` | `reports.view` / `settings.view` |
 | | **Settings** | General, WhatsApp, Email Provider, Meta, AI Copilot, API Tokens | `/settings` | `settings.view` |
 | | **API Docs** | REST API v1 Specification | `/api/docs` | Public / Developer |
@@ -171,6 +171,7 @@
   - `POST /automations/(:num)/builder` — Save flow graph nodes & edges
   - `POST /automations/(:num)/toggle` — Enable/disable automation rule
   - `POST /automations/(:num)/delete` — Delete rule
+  - `POST /automations/facebook/login` & `accounts` & `pages` & `connect` — Facebook Lead Ads OAuth & leadgen webhook subscription wizard
 
 ### 12. Keywords (`keywords`)
 - **Route:** `GET /keywords` | `Keywords::index`

@@ -35,6 +35,11 @@ class Guide extends BaseController
             'title'    => 'Meta Screenshot Guide',
             'subtitle' => 'Visual walkthrough for Meta setup, webhook validation, template sync, and go-live checks.',
         ],
+        'meta-lead-ads' => [
+            'file'     => 'META_FACEBOOK_LEAD_ADS_SETUP_GUIDE.md',
+            'title'    => 'Facebook Lead Ads Guide',
+            'subtitle' => 'Step-by-step Meta Developer, Webhook, and Business Suite setup for Lead Ads.',
+        ],
         'automations' => [
             'file'     => '',
             'title'    => 'Automation Flows',
@@ -229,6 +234,7 @@ class Guide extends BaseController
             ['type' => 'production', 'label' => 'Production'],
             ['type' => 'meta-official', 'label' => 'Meta Publish'],
             ['type' => 'meta-screenshots', 'label' => 'Meta Screenshots'],
+            ['type' => 'meta-lead-ads', 'label' => 'Facebook Leads'],
             ['type' => 'automations', 'label' => 'Automations'],
         ];
     }

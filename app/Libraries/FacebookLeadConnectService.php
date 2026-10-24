@@ -72,6 +72,19 @@ class FacebookLeadConnectService
         $profilePages = $this->listProfilePages($sessionToken);
         session()->set(self::SESSION_PAGES, $profilePages);
 
+        if ($profilePages !== []) {
+            $hasProfile = false;
+            foreach ($businesses as $b) {
+                if (($b['id'] ?? '') === 'profile') {
+                    $hasProfile = true;
+                    break;
+                }
+            }
+            if (! $hasProfile) {
+                $businesses[] = ['id' => 'profile', 'name' => 'Pages on this Facebook profile'];
+            }
+        }
+
         return [
             'user_name'           => trim((string) ($me['name'] ?? '')),
             'businesses'          => $businesses,
@@ -97,7 +110,7 @@ class FacebookLeadConnectService
             $this->collect($businessId . '/client_ad_accounts', ['fields' => 'id,name,account_id', 'limit' => '100'], $token)
         );
 
-        return $this->uniqueOptions($rows, static function (array $row): array {
+        $options = $this->uniqueOptions($rows, static function (array $row): array {
             $id = trim((string) ($row['id'] ?? ''));
             if ($id !== '' && ! str_starts_with($id, 'act_')) {
                 $id = 'act_' . $id;
@@ -108,6 +121,15 @@ class FacebookLeadConnectService
                 'name' => trim((string) ($row['name'] ?? $id)),
             ];
         });
+
+        // If the portfolio has no ad accounts, provide a fallback so the user can still select pages
+        if ($options === []) {
+            return [['id' => 'none', 'name' => 'No ad account (Pages only)']];
+        }
+
+        $options[] = ['id' => 'none', 'name' => 'None / All Pages (No ad account)'];
+
+        return $options;
     }
 
     /**
