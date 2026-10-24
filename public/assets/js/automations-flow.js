@@ -912,7 +912,7 @@
             html += '<span class="badge bg-primary text-white" style="font-size:10px;">Meta Tool</span>';
             html += '</div>';
             html += '<p class="small text-muted mb-2" style="font-size:11px;line-height:1.4;">' +
-                'या फॉर्मची टेस्ट लीड सबमिट करण्यासाठी खालील लिंकवर क्लिक करा. Meta Tool उघडून हा Page आणि Form निवडा व <b>Preview form</b> वरून टेस्ट करा.' +
+                'Click the link below to open the Meta Lead Testing Tool. Select this Page and Form, then click <b>Preview form</b> to submit a test lead.' +
                 '</p>';
             html += '<a href="https://developers.facebook.com/tools/lead-ads-testing" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-primary w-100 mb-1 text-center js-fb-test-tool-btn" style="font-size:12px;font-weight:600;">' +
                 '<i class="fas fa-external-link-alt me-1"></i> Open Meta Lead Testing Tool' +
