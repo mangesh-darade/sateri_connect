@@ -821,4 +821,149 @@ class FacebookLeadConnectService
 
         return $out;
     }
+
+    /**
+     * Trigger a real test lead on Meta for this specific instant form.
+     * Meta generates the lead and dispatches real-time webhook to Sateri Connect.
+     *
+     * @return array{lead_id: string, form_id: string, page_id: string}
+     */
+    public function sendTestLead(string $formId, string $pageId = ''): array
+    {
+        $this->assertId($formId, 'Lead form');
+        $pageId = trim($pageId);
+        if ($pageId !== '') {
+            $this->assertId($pageId, 'Lead page');
+        }
+
+        $pageToken = '';
+        $settings = new SettingsService();
+        $meta     = $settings->getMetaConfig();
+
+        // 1. If page matches current settings, use saved page_access_token
+        if ($pageId !== '' && ($meta['page_id'] ?? '') === $pageId && ! empty($meta['page_access_token'])) {
+            $pageToken = trim((string) $meta['page_access_token']);
+        }
+
+        // 2. Try resolving via user session token
+        if ($pageToken === '') {
+            $userToken = session()->get(self::SESSION_TOKEN);
+            if ($userToken && $pageId !== '') {
+                try {
+                    $pageRow = $this->resolvePage($pageId, '', $userToken);
+                    $pageToken = trim((string) ($pageRow['access_token'] ?? ''));
+                } catch (\Throwable) {
+                }
+            }
+        }
+
+        // 3. Fallback: use any saved meta_page_access_token from settings
+        if ($pageToken === '' && ! empty($meta['page_access_token'])) {
+            $pageToken = trim((string) $meta['page_access_token']);
+        }
+
+        if ($pageToken === '') {
+            throw new \RuntimeException('Page Access Token not found. Please connect the page or login with Facebook first.');
+        }
+
+        // Meta allows only 1 active test lead per form. Delete previous test lead if exists.
+        try {
+            $this->graphDelete($formId . '/test_leads', $pageToken);
+        } catch (\Throwable) {
+        }
+
+        // Create new test lead on Meta
+        $res = $this->graphPost($formId . '/test_leads', [], $pageToken);
+        $leadId = trim((string) ($res['id'] ?? ''));
+        if ($leadId === '') {
+            throw new \RuntimeException('Meta did not return a lead ID.');
+        }
+
+        log_activity('create', 'automations', 'Sent Facebook test lead for form ' . $formId, [
+            'lead_id' => $leadId,
+            'form_id' => $formId,
+            'page_id' => $pageId,
+        ]);
+
+        return [
+            'lead_id' => $leadId,
+            'form_id' => $formId,
+            'page_id' => $pageId,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    protected function graphPost(string $path, array $data, string $token): array
+    {
+        $creds = $this->credentials();
+        $path  = ltrim($path, '/');
+        if (preg_match('#^[A-Za-z0-9_./-]+$#', $path) !== 1 || str_contains($path, '..')) {
+            throw new \RuntimeException('Facebook request was rejected.');
+        }
+        $url = 'https://graph.facebook.com/' . $creds['version'] . '/' . $path;
+        $headers = ['Accept' => 'application/json'];
+        if ($token !== '') {
+            $headers['Authorization'] = 'Bearer ' . $token;
+        }
+
+        try {
+            $client = \Config\Services::curlrequest([
+                'timeout'     => 20,
+                'http_errors' => false,
+            ], null, null, false);
+            $response = $client->post($url, [
+                'form_params' => $data,
+                'headers'     => $headers,
+            ]);
+        } catch (\Throwable) {
+            throw new \RuntimeException('Facebook could not be reached. Try again.');
+        }
+
+        $decoded = json_decode((string) $response->getBody(), true);
+        if (! is_array($decoded)) {
+            throw new \RuntimeException('Facebook returned an unexpected response.');
+        }
+        if ($response->getStatusCode() >= 400 || isset($decoded['error'])) {
+            $message = is_array($decoded['error'] ?? null)
+                ? (string) ($decoded['error']['message'] ?? 'Facebook request failed.')
+                : 'Facebook request failed.';
+            throw new \RuntimeException(mb_substr($message, 0, 300));
+        }
+
+        return $decoded;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function graphDelete(string $path, string $token): array
+    {
+        $creds = $this->credentials();
+        $path  = ltrim($path, '/');
+        if (preg_match('#^[A-Za-z0-9_./-]+$#', $path) !== 1 || str_contains($path, '..')) {
+            throw new \RuntimeException('Facebook request was rejected.');
+        }
+        $url = 'https://graph.facebook.com/' . $creds['version'] . '/' . $path;
+        $headers = ['Accept' => 'application/json'];
+        if ($token !== '') {
+            $headers['Authorization'] = 'Bearer ' . $token;
+        }
+
+        try {
+            $client = \Config\Services::curlrequest([
+                'timeout'     => 15,
+                'http_errors' => false,
+            ], null, null, false);
+            $response = $client->delete($url, [
+                'headers' => $headers,
+            ]);
+
+            return (array) json_decode((string) $response->getBody(), true);
+        } catch (\Throwable) {
+            return [];
+        }
+    }
 }

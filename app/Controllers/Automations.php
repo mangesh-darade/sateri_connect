@@ -438,6 +438,24 @@ class Automations extends BaseController
         return $this->jsonResponse(true, $data, $message);
     }
 
+    public function facebookTestLead(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('automations.edit')) {
+            return $denied;
+        }
+
+        try {
+            $data = (new \App\Libraries\FacebookLeadConnectService())->sendTestLead(
+                (string) $this->request->getPost('form_id'),
+                (string) $this->request->getPost('page_id')
+            );
+        } catch (\Throwable $e) {
+            return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
+        }
+
+        return $this->jsonResponse(true, $data, 'Test lead submitted to Meta successfully! Webhook will trigger your automation.');
+    }
+
     /**
      * AJAX / form: save builder flow graph + compiled rules.
      */

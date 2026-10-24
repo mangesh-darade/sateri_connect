@@ -314,6 +314,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('automations/facebook/accounts', 'Automations::facebookAccounts', ['filter' => 'csrf']);
     $routes->post('automations/facebook/pages', 'Automations::facebookPages', ['filter' => 'csrf']);
     $routes->post('automations/facebook/connect', 'Automations::facebookConnect', ['filter' => 'csrf']);
+    $routes->post('automations/facebook/test-lead', 'Automations::facebookTestLead', ['filter' => 'csrf']);
     $routes->get('automations/create', 'Automations::create');
     $routes->post('automations', 'Automations::store', ['filter' => 'csrf']);
     $routes->get('automations/(:num)/edit', 'Automations::edit/$1');

@@ -912,8 +912,12 @@
             html += '<span class="badge bg-primary text-white" style="font-size:10px;">Meta Tool</span>';
             html += '</div>';
             html += '<p class="small text-muted mb-2" style="font-size:11px;line-height:1.4;">' +
-                'Click the link below to open the Meta Lead Testing Tool. Select this Page and Form, then click <b>Preview form</b> to submit a test lead.' +
+                'Trigger a live test lead for this specific form directly, or open Meta tools.' +
                 '</p>';
+            html += '<button type="button" class="btn btn-sm btn-success w-100 mb-2 js-fb-send-test-lead" style="font-size:12px;font-weight:600;"' + (d.form_id ? '' : ' disabled') + '>' +
+                '<i class="fas fa-bolt me-1"></i> Send Test Lead Now (1-Click)' +
+                '</button>';
+            html += '<div class="text-center text-muted small mb-2" style="font-size:10px;">— OR USE META TOOLS —</div>';
             html += '<a href="https://developers.facebook.com/tools/lead-ads-testing" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-primary w-100 mb-1 text-center js-fb-test-tool-btn" style="font-size:12px;font-weight:600;">' +
                 '<i class="fas fa-external-link-alt me-1"></i> Open Meta Lead Testing Tool' +
                 '</a>';
@@ -1859,8 +1863,33 @@
             var formText = node.data.form_name || 'Any form on this page';
             var formCode = formVal ? (' <code class="text-muted">(' + esc(formVal) + ')</code>') : '';
             $('.js-fb-summary-form').html(esc(formText) + formCode);
+            $('.js-fb-send-test-lead').prop('disabled', !formVal);
             renderNodes();
             $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+        });
+        $('#inspectorBody').on('click', '.js-fb-send-test-lead', function () {
+            var $btn = $(this);
+            var node = findNode(Flow.selectedId);
+            if (!node || !node.data) return;
+            var formId = String($('.js-fb-form').val() || node.data.form_id || '');
+            var pageId = String($('.js-fb-page').val() || node.data.page_id || '');
+            if (!formId) {
+                if (window.APP && APP.toast) APP.toast('Please select a Lead Form first.', 'warning');
+                return;
+            }
+            var origHtml = $btn.html();
+            $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i> Sending Test Lead…');
+            APP.post(fbLeadUrl('/automations/facebook/test-lead'), {
+                form_id: formId,
+                page_id: pageId
+            }).done(function (res) {
+                if (window.APP && APP.toast) APP.toast((res && res.message) || 'Test lead created on Meta! Automation triggered.', 'success');
+                $('.js-fb-status').text('Test lead created (ID: ' + ((res.data && res.data.lead_id) || '') + '). Webhook sent!');
+            }).fail(function (xhr) {
+                fbLeadFail(xhr, 'Could not send test lead.');
+            }).always(function () {
+                $btn.prop('disabled', false).html(origHtml);
+            });
         });
         $('#inspectorBody').on('click', '.insp-var-toggle', function () {
             $(this).siblings('.insp-var-menu').toggleClass('d-none');
