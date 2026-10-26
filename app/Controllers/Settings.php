@@ -441,6 +441,7 @@ class Settings extends BaseController
                 if ($publicBase !== '') {
                     $publicBase = $settings->normalizeHttpsOrigin($publicBase);
                     $settings->set('webhook_public_base', $publicBase, 'whatsapp');
+                    $settings->syncWebhookHostRoute($publicBase);
                 }
             }
 
@@ -976,7 +977,13 @@ class Settings extends BaseController
                         return $this->jsonResponse(false, $resolved, $msg, [], 422);
                     }
                     $settings->set('webhook_public_base', $autoBase, 'whatsapp');
+                    $settings->syncWebhookHostRoute($autoBase);
                     $resolved = $settings->resolveWebhookPublicConfig();
+                } else {
+                    $pinBase = (string) ($resolved['public_base'] ?? $resolved['auto_base'] ?? '');
+                    if ($pinBase !== '') {
+                        $settings->syncWebhookHostRoute($pinBase);
+                    }
                 }
 
                 $callback = (string) ($resolved['public_callback'] ?? '');
@@ -1031,6 +1038,7 @@ class Settings extends BaseController
                     );
                 }
                 $settings->set('webhook_public_base', $base, 'whatsapp');
+                $settings->syncWebhookHostRoute($base);
                 $local    = site_url('webhooks');
                 $callback = $this->buildPublicWebhookUrl($base, $local);
 

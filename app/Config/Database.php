@@ -40,15 +40,6 @@ class Database extends Config
     public function applyBySubdomain(string $subdomain): void
     {
         switch ($subdomain) {
-            case 'localhost':
-                $this->default['hostname'] = 'localhost';
-                $this->default['username'] = 'root';
-                $this->default['password'] = '';
-                $this->default['database'] = 'elintom_reach_platfrom';
-                $this->default['DBDriver'] = 'MySQLi';
-                $this->default['port']     = 3306;
-                break;
-
             default:
                 // Single domain / subdomain default fallback from .env
                 $defaultDb = (string) env('database.default.database', env('DB_DATABASE', ''));

@@ -606,11 +606,23 @@ class MasterTenantRepository
         return array_values(array_unique($secrets));
     }
 
-    public function upsertLoginIndex(string $email, string $tenantKey): bool
+    /**
+     * True when a different, still-active tenant already owns a routing row.
+     * Routing rows (login email, phone id, host) must never be silently re-pointed by a tenant,
+     * otherwise one client could capture another client's logins or webhooks.
+     */
+    protected function claimedByAnotherTenant(string $ownerKey, string $newKey): bool
+    {
+        $ownerKey = strtolower(trim($ownerKey));
+
+        return $ownerKey !== '' && $ownerKey !== $newKey && $this->findActiveTenant($ownerKey) !== null;
+    }
+
+    public function upsertLoginIndex(string $email, string $tenantKey, bool $allowReassign = false): bool
     {
         $email     = strtolower(trim($email));
         $tenantKey = strtolower(trim($tenantKey));
-        if ($email === '' || $tenantKey === '') {
+        if ($email === '' || $tenantKey === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return false;
         }
 
@@ -619,6 +631,13 @@ class MasterTenantRepository
             $now = date('Y-m-d H:i:s');
             $existing = $db->table('tenant_login_index')->where('email', $email)->get()->getRowArray();
             if (is_array($existing)) {
+                $owner = (string) ($existing['tenant_key'] ?? '');
+                if (! $allowReassign && $this->claimedByAnotherTenant($owner, $tenantKey)) {
+                    log_message('warning', 'Login index: email already belongs to another tenant; refusing to reassign to {key}.', ['key' => $tenantKey]);
+
+                    return false;
+                }
+
                 return (bool) $db->table('tenant_login_index')->where('email', $email)->update([
                     'tenant_key' => $tenantKey,
                     'updated_at' => $now,
@@ -674,11 +693,15 @@ class MasterTenantRepository
         string $phoneNumberId,
         string $tenantKey,
         ?string $appSecret = null,
-        ?string $verifyToken = null
+        ?string $verifyToken = null,
+        bool $allowReassign = false
     ): bool {
         $phoneNumberId = trim($phoneNumberId);
         $tenantKey     = strtolower(trim($tenantKey));
-        if ($phoneNumberId === '' || $tenantKey === '') {
+        if (
+            preg_match('/^[A-Za-z0-9_\-]{1,64}$/', $phoneNumberId) !== 1
+            || preg_match('/^[a-z0-9_\-]{1,64}$/', $tenantKey) !== 1
+        ) {
             return false;
         }
 
@@ -702,6 +725,15 @@ class MasterTenantRepository
                 ->getRowArray();
 
             if (is_array($existing)) {
+                if (! $allowReassign && $this->claimedByAnotherTenant((string) ($existing['tenant_key'] ?? ''), $tenantKey)) {
+                    log_message('warning', 'Phone route {pnid} already belongs to another tenant; refusing to reassign to {key}.', [
+                        'pnid' => $phoneNumberId,
+                        'key'  => $tenantKey,
+                    ]);
+
+                    return false;
+                }
+
                 return (bool) $db->table('tenant_phone_routes')
                     ->where('phone_number_id', $phoneNumberId)
                     ->update($data);
@@ -715,6 +747,167 @@ class MasterTenantRepository
             log_message('error', 'MasterTenantRepository::upsertPhoneRoute failed: {msg}', ['msg' => $e->getMessage()]);
 
             return false;
+        }
+    }
+
+    /**
+     * Public hostname or subdomain label → tenant key (webhook / shared vanity hosts).
+     *
+     * @return array<string, mixed>|null
+     */
+    public function findHostRoute(string $host): ?array
+    {
+        $host = strtolower(trim($host));
+        if (str_contains($host, ':')) {
+            $host = explode(':', $host, 2)[0];
+        }
+        if ($host === '') {
+            return null;
+        }
+
+        try {
+            $this->ensureHostRoutesTable();
+            $row = $this->db()->table('tenant_host_routes')
+                ->where('host', $host)
+                ->get()
+                ->getRowArray();
+        } catch (Throwable $e) {
+            log_message('error', 'MasterTenantRepository::findHostRoute failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return null;
+        }
+
+        return is_array($row) ? $row : null;
+    }
+
+    /**
+     * Hosts/labels a tenant must never be able to claim: the portal itself, IPs, and generic labels
+     * that would capture unrelated traffic.
+     */
+    protected function isClaimableHost(string $host): bool
+    {
+        if (preg_match('/^[a-z0-9]([a-z0-9\-\.]{0,189}[a-z0-9])?$/', $host) !== 1 || filter_var($host, FILTER_VALIDATE_IP)) {
+            return false;
+        }
+
+        $tenancy = config(Tenancy::class);
+        if ($tenancy->isPortalHost($host)) {
+            return false;
+        }
+
+        $reserved = ['www', 'app', 'api', 'admin', 'portal', 'connect', 'mail', 'webhook', 'webhooks', 'localhost'];
+        foreach ($tenancy->portalHosts as $portalHost) {
+            $reserved[] = explode('.', (string) $portalHost)[0];
+        }
+
+        return ! in_array($host, $reserved, true);
+    }
+
+    public function upsertHostRoute(string $host, string $tenantKey, bool $allowReassign = false): bool
+    {
+        $host      = strtolower(trim($host));
+        $tenantKey = strtolower(trim($tenantKey));
+        if (str_contains($host, ':')) {
+            $host = explode(':', $host, 2)[0];
+        }
+        if (
+            $host === ''
+            || preg_match('/^[a-z0-9_\-]{1,64}$/', $tenantKey) !== 1
+            || ! $this->isClaimableHost($host)
+        ) {
+            return false;
+        }
+
+        try {
+            $this->ensureHostRoutesTable();
+            $db  = $this->db();
+            $now = date('Y-m-d H:i:s');
+            $existing = $db->table('tenant_host_routes')
+                ->where('host', $host)
+                ->get()
+                ->getRowArray();
+
+            if (is_array($existing)) {
+                if (! $allowReassign && $this->claimedByAnotherTenant((string) ($existing['tenant_key'] ?? ''), $tenantKey)) {
+                    log_message('warning', 'Host route {host} already belongs to another tenant; refusing to reassign to {key}.', [
+                        'host' => $host,
+                        'key'  => $tenantKey,
+                    ]);
+
+                    return false;
+                }
+
+                return (bool) $db->table('tenant_host_routes')
+                    ->where('host', $host)
+                    ->update([
+                        'tenant_key' => $tenantKey,
+                        'updated_at' => $now,
+                    ]);
+            }
+
+            return (bool) $db->table('tenant_host_routes')->insert([
+                'host'       => $host,
+                'tenant_key' => $tenantKey,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        } catch (Throwable $e) {
+            log_message('error', 'MasterTenantRepository::upsertHostRoute failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return false;
+        }
+    }
+
+    /**
+     * Register full host + first subdomain label for a tenant's public webhook base.
+     */
+    public function syncHostRoutesFromPublicBase(string $publicBase, string $tenantKey): void
+    {
+        $tenantKey = strtolower(trim($tenantKey));
+        if ($tenantKey === '') {
+            return;
+        }
+
+        $publicBase = trim($publicBase);
+        if ($publicBase !== '' && ! str_contains($publicBase, '://')) {
+            $publicBase = 'https://' . $publicBase;
+        }
+        $host = strtolower(trim((string) (parse_url($publicBase, PHP_URL_HOST) ?: '')));
+        if ($host === '') {
+            return;
+        }
+
+        $this->upsertHostRoute($host, $tenantKey);
+        $parts = explode('.', $host);
+        if (count($parts) >= 3 && $parts[0] !== 'www') {
+            $this->upsertHostRoute($parts[0], $tenantKey);
+        }
+    }
+
+    public function ensureHostRoutesTable(): void
+    {
+        static $ready = false;
+        if ($ready) {
+            return;
+        }
+
+        try {
+            $db = $this->db();
+            if (! $db->tableExists('tenant_host_routes')) {
+                $db->query('CREATE TABLE `tenant_host_routes` (
+                    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    `host` VARCHAR(191) NOT NULL,
+                    `tenant_key` VARCHAR(64) NOT NULL,
+                    `created_at` DATETIME NULL,
+                    `updated_at` DATETIME NULL,
+                    PRIMARY KEY (`id`),
+                    UNIQUE KEY `tenant_host_routes_host` (`host`),
+                    KEY `tenant_host_routes_tenant` (`tenant_key`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci');
+            }
+            $ready = true;
+        } catch (Throwable $e) {
+            log_message('error', 'MasterTenantRepository::ensureHostRoutesTable failed: {msg}', ['msg' => $e->getMessage()]);
         }
     }
 
@@ -774,6 +967,49 @@ class MasterTenantRepository
 
             return false;
         }
+    }
+
+    /** Remove a master tenant row (used to undo a provisioning that failed half-way). */
+    public function deleteTenant(string $key): bool
+    {
+        $key = strtolower(trim($key));
+        if ($key === '') {
+            return false;
+        }
+
+        try {
+            return (bool) $this->db()->table('tenants')->where('key', $key)->delete();
+        } catch (Throwable $e) {
+            log_message('error', 'MasterTenantRepository::deleteTenant failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return false;
+        }
+    }
+
+    /** True when a tenant row already points at this database on this server. */
+    public function databaseInUse(string $hostname, int $port, string $database): bool
+    {
+        try {
+            $hostname = strtolower(trim($hostname));
+            $rows     = $this->db()->table('tenants')
+                ->select('db_hostname, db_port')
+                ->where('db_database', $database)
+                ->get()
+                ->getResultArray();
+            foreach ($rows as $row) {
+                $sameHost = strtolower(trim((string) ($row['db_hostname'] ?? ''))) === $hostname;
+                $samePort = (int) ($row['db_port'] ?? 3306) === $port;
+                if ($sameHost && $samePort) {
+                    return true;
+                }
+            }
+        } catch (Throwable $e) {
+            log_message('error', 'MasterTenantRepository::databaseInUse failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return true; // fail closed: refuse to provision if we cannot prove the DB is free
+        }
+
+        return false;
     }
 
     public function decryptTenantPassword(string $stored): string

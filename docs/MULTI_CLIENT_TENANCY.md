@@ -62,10 +62,10 @@ This will:
 
 ## Platform super admin
 
-Default (after `php spark tenant:ensure-master`):
+Created by `php spark tenant:ensure-master [--admin-email=you@domain.com] [--admin-password=...]`.
+No fixed default password exists: if none is supplied (flag or `PLATFORM_ADMIN_PASSWORD` env) a random one is generated and printed once. Minimum 12 characters.
 
-- Email: `platform@sateri.local`
-- Password: `Platform@123`
+> Existing installs that were created with the old default (`platform@sateri.local` / `Platform@123`) **must change that password now**.
 
 Login → **Platform dashboard** (`/platform/clients`):
 
@@ -121,3 +121,6 @@ Or run once per tenant key.
 - Tenant DB passwords in master are stored encrypted (`enc:…`) when written via provision.
 - Emails are globally unique in `tenant_login_index`.
 - Do not put tenant credentials in `.env` `database.default.*` (still ignored for default group).
+- Production: use a dedicated MySQL user for master (SELECT/INSERT/UPDATE on `sateri_master` only, no `root`, non-empty password) and one MySQL user per tenant database limited to that database.
+- Routing rows (login email, phone number id, webhook host) cannot be re-pointed to another tenant while the current owner is active; only the platform layer may pass `allowReassign`.
+- A tenant key that is not in master is rejected unless it is the request's own legacy host tenant.

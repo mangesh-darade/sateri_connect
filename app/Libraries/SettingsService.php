@@ -868,12 +868,32 @@ class SettingsService
         }
 
         $this->set('webhook_public_base', $autoBase, 'whatsapp');
+        $this->syncWebhookHostRoute($autoBase);
         $resolved = $this->resolveWebhookPublicConfig($requestOrigin);
         $resolved['auto_persisted'] = true;
         $resolved['source'] = 'auto';
         $resolved['hint'] = 'Live callback auto-detected and saved from your HTTPS domain.';
 
         return $resolved;
+    }
+
+    /**
+     * Pin vanity webhook host → current tenant in master (elintomreach → swasthe_testing).
+     */
+    public function syncWebhookHostRoute(string $publicBase): void
+    {
+        $tenantKey = trim((string) (TenantContext::get() ?? ''));
+        if ($tenantKey === '' || ! MasterTenantRepository::masterConfigured()) {
+            return;
+        }
+
+        try {
+            (new MasterTenantRepository())->syncHostRoutesFromPublicBase($publicBase, $tenantKey);
+        } catch (\Throwable $e) {
+            log_message('warning', 'SettingsService::syncWebhookHostRoute failed: {msg}', [
+                'msg' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

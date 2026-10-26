@@ -63,6 +63,8 @@ class TenantResolver
         // Legacy Host slug → switch credentials (no extra DB round-trip).
         $db->applyBySubdomain($hostKey);
         if (trim((string) ($db->default['database'] ?? '')) !== '') {
+            // Not marked as bound: this DB may be the .env fallback, and a master row for the same key
+            // must still win when apply() runs.
             if (! TenantContext::has()) {
                 TenantContext::set($hostKey, 'subdomain');
             }
@@ -130,6 +132,14 @@ class TenantResolver
     }
 
     protected static function currentHost(): string
+    {
+        return self::requestHost();
+    }
+
+    /**
+     * Current request hostname (no port). Public for webhook host→tenant routing.
+     */
+    public static function requestHost(): string
     {
         $host = '';
         if (! empty($_SERVER['HTTP_HOST'])) {
