@@ -350,7 +350,7 @@ class Templates extends BaseController
             );
         } catch (Throwable $e) {
             // Still allow local delete if Cheerio already removed it.
-            log_message('warning', 'Cheerio template delete: {msg}', ['msg' => $e->getMessage()]);
+            log_message('warning', 'External template delete: {msg}', ['msg' => $e->getMessage()]);
         }
 
         $model->delete($id);

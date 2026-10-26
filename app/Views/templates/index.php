@@ -173,7 +173,7 @@ sort($templateLanguages);
 </div>
 
 <div id="templateCardView" class="template-view-panel page-section">
-    <div class="row g-2">
+    <div class="row g-3">
         <?php foreach ($templates as $tpl): ?>
             <?php
             $status = $normalizeStatus((string) ($tpl['status'] ?? ''));
@@ -181,6 +181,11 @@ sort($templateLanguages);
             $language = strtolower(trim((string) ($tpl['language'] ?? '')));
             $varsCount = $variableCount($tpl);
             $isApproved = strtoupper((string) ($tpl['status'] ?? '')) === 'APPROVED';
+            $headerType = strtoupper(trim((string) ($tpl['header_type'] ?? '')));
+            $headerText = trim((string) ($tpl['header_content'] ?? ''));
+            $bodyText   = trim((string) ($tpl['body'] ?? ''));
+            $footerText = trim((string) ($tpl['footer'] ?? ''));
+            $mediaIcon  = ['IMAGE' => 'fa-image', 'VIDEO' => 'fa-circle-play', 'DOCUMENT' => 'fa-file-lines'][$headerType] ?? '';
             $searchText = strtolower(trim(implode(' ', [
                 (string) ($tpl['name'] ?? ''),
                 (string) ($tpl['body'] ?? ''),
@@ -196,22 +201,36 @@ sort($templateLanguages);
                 data-category="<?= esc($category, 'attr') ?>"
                 data-language="<?= esc($language, 'attr') ?>"
                 data-search="<?= esc($searchText, 'attr') ?>">
-                <div class="dash-panel h-100 d-flex flex-column">
-                    <div class="panel-head align-items-start">
-                        <div>
-                            <h3 class="mb-1"><?= esc($tpl['name']) ?></h3>
-                            <div class="small text-muted"><?= esc($tpl['language'] ?? '') ?> · <?= esc($tpl['category'] ?? '') ?></div>
+                <article class="tpl-card is-<?= esc($status, 'attr') ?>">
+                    <header class="tpl-card-head">
+                        <div class="tpl-card-title">
+                            <h3 title="<?= esc((string) $tpl['name'], 'attr') ?>"><?= esc($tpl['name']) ?></h3>
+                            <div class="tpl-chips">
+                                <?php if ($category !== ''): ?><span class="tpl-chip"><i class="fas fa-tag"></i> <?= esc(ucfirst($category)) ?></span><?php endif; ?>
+                                <?php if ($language !== ''): ?><span class="tpl-chip"><i class="fas fa-language"></i> <?= esc($tpl['language']) ?></span><?php endif; ?>
+                                <span class="tpl-chip"><i class="fas fa-code"></i> <?= (int) $varsCount ?> variable<?= $varsCount === 1 ? '' : 's' ?></span>
+                            </div>
                         </div>
                         <?= view('partials/status_badge', ['status' => strtolower($tpl['status'] ?? 'unknown')]) ?>
+                    </header>
+
+                    <div class="tpl-preview" aria-label="Message preview">
+                        <div class="tpl-bubble">
+                            <?php if ($mediaIcon !== ''): ?>
+                                <div class="tpl-media"><i class="fas <?= esc($mediaIcon, 'attr') ?>"></i> <?= esc(ucfirst(strtolower($headerType))) ?> header</div>
+                            <?php elseif ($headerText !== '' && $headerType === 'TEXT'): ?>
+                                <div class="tpl-bubble-header"><?= esc(mb_strimwidth($headerText, 0, 60, '…')) ?></div>
+                            <?php endif; ?>
+                            <p class="tpl-bubble-body"><?= $bodyText !== '' ? esc(mb_strimwidth($bodyText, 0, 180, '…')) : '<span class="text-muted">No body text</span>' ?></p>
+                            <?php if ($footerText !== ''): ?><div class="tpl-bubble-footer"><?= esc(mb_strimwidth($footerText, 0, 60, '…')) ?></div><?php endif; ?>
+                        </div>
                     </div>
-                    <div class="panel-body flex-grow-1">
-                        <p class="small mb-2" style="white-space:pre-wrap;color:var(--text-muted)"><?= esc(mb_strimwidth($tpl['body'] ?? '', 0, 160, '…')) ?></p>
-                        <div class="small text-muted mb-1"><?= (int) $varsCount ?> variable<?= $varsCount === 1 ? '' : 's' ?></div>
-                        <?php if (! empty($tpl['synced_at'])): ?>
-                            <div class="small text-muted">Last synced <?= esc(format_app_datetime($tpl['synced_at'] ?? null)) ?></div>
-                        <?php endif; ?>
-                    </div>
-                    <div class="panel-body border-top pt-2 d-flex flex-wrap gap-2" style="border-color:var(--border)!important">
+
+                    <?php if (! empty($tpl['synced_at'])): ?>
+                        <div class="tpl-synced"><i class="far fa-clock"></i> Synced <?= esc(format_app_datetime($tpl['synced_at'] ?? null)) ?></div>
+                    <?php endif; ?>
+
+                    <footer class="tpl-actions">
                         <button type="button" class="btn btn-sm btn-outline-secondary btn-preview-tpl"
                             data-id="<?= (int) $tpl['id'] ?>"
                             data-name="<?= esc($tpl['name'], 'attr') ?>"
@@ -221,19 +240,19 @@ sort($templateLanguages);
                             data-header-type="<?= esc($tpl['header_type'] ?? '', 'attr') ?>">
                             <i class="fas fa-eye"></i> View
                         </button>
-                        <a href="<?= site_url('templates/' . (int) $tpl['id']) ?>" class="btn btn-sm btn-outline-secondary">Details</a>
+                        <a href="<?= site_url('templates/' . (int) $tpl['id']) ?>" class="btn btn-sm btn-outline-secondary"><i class="fas fa-circle-info"></i> Details</a>
                         <?php if ($isApproved && function_exists('can') && (can('chat.send') || can('templates.sync') || can('templates.create'))): ?>
                             <button type="button"
-                                class="btn btn-sm btn-wa btn-send-test-tpl"
+                                class="btn btn-sm btn-wa btn-send-test-tpl ms-auto"
                                 data-id="<?= (int) $tpl['id'] ?>"
                                 data-name="<?= esc($tpl['name'], 'attr') ?>"
                                 data-language="<?= esc($tpl['language'] ?? '', 'attr') ?>"
                                 data-status="<?= esc($tpl['status'] ?? '', 'attr') ?>">
-                                <i class="fas fa-paper-plane"></i> Send Test
+                                <i class="fas fa-paper-plane"></i> Send test
                             </button>
                         <?php endif; ?>
-                    </div>
-                </div>
+                    </footer>
+                </article>
             </div>
         <?php endforeach; ?>
     </div>
@@ -781,5 +800,30 @@ $(function () {
 .js-tpl-status-filter.is-active {
     box-shadow: 0 0 0 2px var(--bs-primary, #0284c7) !important;
 }
+
+/* Template cards */
+.tpl-card { position: relative; height: 100%; display: flex; flex-direction: column; gap: 0.85rem; padding: 1rem 1.1rem 0.9rem; background: var(--card-bg, #fff); border: 1px solid var(--border, #e4e7ec); border-radius: 14px; overflow: hidden; transition: box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease; }
+.tpl-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: #98a2b3; }
+.tpl-card.is-approved::before { background: #12b76a; }
+.tpl-card.is-pending::before { background: #f79009; }
+.tpl-card.is-rejected::before { background: #f04438; }
+.tpl-card.is-disabled::before, .tpl-card.is-paused::before { background: #667085; }
+.tpl-card:hover { box-shadow: 0 10px 28px rgba(16, 24, 40, 0.1); transform: translateY(-2px); border-color: rgba(16, 24, 40, 0.16); }
+.tpl-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; }
+.tpl-card-title { min-width: 0; }
+.tpl-card-title h3 { margin: 0 0 0.4rem; font-size: 0.98rem; font-weight: 700; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tpl-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.tpl-chip { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.12rem 0.5rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: 0.72rem; font-weight: 600; }
+.tpl-chip i { font-size: 0.68rem; color: #98a2b3; }
+.tpl-preview { flex: 1 1 auto; padding: 0.8rem; border-radius: 12px; background: #e9efe9 linear-gradient(180deg, #e7efe7, #dfe9df); }
+.tpl-bubble { position: relative; max-width: 100%; padding: 0.55rem 0.7rem 0.6rem; border-radius: 0 10px 10px 10px; background: #fff; box-shadow: 0 1px 1px rgba(16, 24, 40, 0.12); font-size: 0.82rem; color: #101828; }
+.tpl-bubble::before { content: ""; position: absolute; top: 0; left: -6px; border: 6px solid transparent; border-top-color: #fff; border-right-color: #fff; }
+.tpl-bubble-header { margin-bottom: 0.3rem; font-weight: 700; }
+.tpl-media { display: flex; align-items: center; justify-content: center; gap: 0.4rem; margin-bottom: 0.4rem; padding: 0.9rem 0; border-radius: 8px; background: #eef1f4; color: #667085; font-size: 0.78rem; font-weight: 600; }
+.tpl-bubble-body { margin: 0; white-space: pre-wrap; word-break: break-word; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+.tpl-bubble-footer { margin-top: 0.35rem; font-size: 0.72rem; color: #667085; }
+.tpl-synced { font-size: 0.74rem; color: #98a2b3; }
+.tpl-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; padding-top: 0.75rem; border-top: 1px solid var(--border, #eaecf0); }
+@media (prefers-reduced-motion: reduce) { .tpl-card { transition: none; } .tpl-card:hover { transform: none; } }
 </style>
 <?= $this->endSection() ?>
