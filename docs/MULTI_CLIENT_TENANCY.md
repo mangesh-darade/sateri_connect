@@ -26,15 +26,9 @@ API JWT claim "tenant" → tenant DB
 CREATE DATABASE sateri_master CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 ```
 
-2. Optional `.env` overrides (defaults: localhost / root / empty / `sateri_master`):
+2. Master DB credentials live in `app/Config/Tenancy.php` (`$masterSets`, no `.env` needed). The set is picked per request: **local** when the host is `localhost` / `127.0.0.1` / a dev tunnel (or CLI outside production), **production** for any other host and always when `CI_ENVIRONMENT = production` (the Host header is never trusted there). The production password is stored in that file, so keep it out of shared/public git remotes.
 
 ```ini
-database.master.hostname = localhost
-database.master.username = root
-database.master.password =
-database.master.database = sateri_master
-database.master.port = 3306
-
 # Comma-separated hosts that use session/JWT tenancy (not Host slug alone)
 tenancy.portalHosts = localhost,127.0.0.1,connect.example.com
 ```
