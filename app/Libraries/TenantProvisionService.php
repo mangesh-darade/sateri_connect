@@ -63,6 +63,8 @@ class TenantProvisionService
         $adminEmail  = strtolower(trim((string) ($input['admin_email'] ?? ('admin@' . $key . '.local'))));
         $adminPass   = (string) ($input['admin_password'] ?? '');
         $adminName   = trim((string) ($input['admin_name'] ?? 'Admin'));
+        $country     = strtolower(trim((string) ($input['country_code'] ?? '91')));
+        $adminPhone  = '';
         $skipCreate  = ! empty($input['skip_create_db']);
         $skipMigrate = ! empty($input['skip_migrate']);
 
@@ -73,6 +75,19 @@ class TenantProvisionService
         $dbError = $this->validateDatabaseTarget($database, $hostname, $port, ! empty($input['allow_existing_db']));
         if ($dbError !== null) {
             return ['ok' => false, 'message' => $dbError];
+        }
+
+        if (WhatsAppCountries::nameOf($country) === '' || $country === 'other') {
+            return ['ok' => false, 'message' => 'Choose the client\'s country.'];
+        }
+
+        // The create screen always sends the mobile number; CLI provisioning may leave it out.
+        if (array_key_exists('admin_phone', $input)) {
+            $phone = WhatsAppCountries::validatePhone($country, (string) $input['admin_phone']);
+            if (! $phone['ok']) {
+                return ['ok' => false, 'message' => $phone['message']];
+            }
+            $adminPhone = $phone['full'];
         }
 
         if ($adminEmail === '' || ! filter_var($adminEmail, FILTER_VALIDATE_EMAIL)) {
@@ -100,6 +115,7 @@ class TenantProvisionService
             'db_database'        => $database,
             'db_port'            => $port,
             'status'             => 'active',
+            'country_code'       => $country,
             'platform_admin_id'  => (int) ($input['platform_admin_id'] ?? 0),
         ])) {
             return ['ok' => false, 'message' => 'Failed to register client in master.'];
@@ -130,7 +146,7 @@ class TenantProvisionService
         TenantContext::set($key, 'provision');
 
         try {
-            $this->ensureAdminUser($adminEmail, $adminPass, $adminName);
+            $this->ensureAdminUser($adminEmail, $adminPass, $adminName, true, null, $adminPhone);
             if (! $this->master->upsertLoginIndex($adminEmail, $key)) {
                 throw new RuntimeException('Login index could not be saved.');
             }
@@ -143,6 +159,14 @@ class TenantProvisionService
             $this->master->removeLoginIndexForTenantEmail($key, $adminEmail);
 
             return ['ok' => false, 'message' => 'Could not create the client admin login. Nothing was saved; check the admin email and password and try again.'];
+        }
+
+        // Country decides the wallet currency and the starting timezone. Neither is worth undoing the client for.
+        try {
+            (new WalletService())->setCurrency(WhatsAppCountries::currencyOf($country));
+            service('settingsService')->set('timezone', WhatsAppCountries::timezoneOf($country), 'general', false);
+        } catch (Throwable $e) {
+            log_message('warning', '[TenantProvisionService::provision] country defaults not applied for {key}: {msg}', ['key' => $key, 'msg' => $e->getMessage()]);
         }
 
         return [
@@ -159,13 +183,17 @@ class TenantProvisionService
      *
      * @return array{ok: bool, message: string}
      */
-    public function setClientLogin(string $tenantKey, string $email, string $password, string $name = 'Admin'): array
+    public function setClientLogin(string $tenantKey, string $email, string $password, string $name = 'Admin', ?string $phone = null): array
     {
         $tenantKey = strtolower(trim($tenantKey));
         $email     = strtolower(trim($email));
         $password  = trim($password);
         if ($tenantKey === '' || $email === '') {
             return ['ok' => false, 'message' => 'Tenant and email are required.'];
+        }
+
+        if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return ['ok' => false, 'message' => 'Enter a valid email address.'];
         }
 
         $other = $this->master->findTenantKeyByEmail($email);
@@ -194,9 +222,23 @@ class TenantProvisionService
                 return ['ok' => false, 'message' => 'The email field must contain a unique value.'];
             }
 
-            $this->ensureAdminUser($email, $password, $name !== '' ? $name : 'Admin', $password !== '', $current);
+            $this->ensureAdminUser($email, $password, $name !== '' ? $name : 'Admin', $password !== '', $current, (string) $phone);
             if (! $this->master->upsertLoginIndex($email, $tenantKey)) {
+                // Keep master and client DB in step: put the client user back as it was.
+                if ($current !== null) {
+                    $users->builder()->where('id', (int) $current['id'])->update(array_intersect_key(
+                        $current,
+                        array_flip(['name', 'email', 'password', 'role_id', 'status', 'email_verified_at', 'phone'])
+                    ));
+                }
+
                 return ['ok' => false, 'message' => 'That email is already used by another client or is not a valid email address.'];
+            }
+
+            // Email changed: the old address must stop routing to this client.
+            $oldEmail = $current !== null ? strtolower(trim((string) ($current['email'] ?? ''))) : '';
+            if ($oldEmail !== '' && $oldEmail !== $email) {
+                $this->master->removeLoginIndexForTenantEmail($tenantKey, $oldEmail);
             }
         } catch (Throwable $e) {
             return ['ok' => false, 'message' => $this->safeMessage($e, 'Could not save the client login. See the application log for details.')];
@@ -252,7 +294,7 @@ class TenantProvisionService
     /**
      * @param array<string, mixed>|null $existing Current admin row to update. Null inserts a new user.
      */
-    protected function ensureAdminUser(string $email, string $password, string $name, bool $updatePassword = true, ?array $existing = null): void
+    protected function ensureAdminUser(string $email, string $password, string $name, bool $updatePassword = true, ?array $existing = null, string $phone = ''): void
     {
         $role = model(RoleModel::class)->findBySlug('super-admin')
             ?? model(RoleModel::class)->findBySlug('super_admin')
@@ -273,6 +315,9 @@ class TenantProvisionService
             'status'            => 'active',
             'email_verified_at' => date('Y-m-d H:i:s'),
         ];
+        if ($phone !== '') {
+            $data['phone'] = $phone;
+        }
         if ($updatePassword || $existing === null) {
             if ($password === '') {
                 throw new RuntimeException('Password is required for a new admin user.');

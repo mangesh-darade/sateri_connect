@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Libraries\DataTablesQuery;
 use App\Libraries\MasterTenantRepository;
 use App\Libraries\TenantConnection;
 use App\Models\ApiRequestLogModel;
@@ -24,6 +25,36 @@ class PlatformApiUsage extends BaseController
             'platformName' => (string) session('platform_admin_name'),
             'clients'      => (new MasterTenantRepository())->listActiveTenants((int) session('platform_admin_id')),
         ]);
+    }
+
+    /**
+     * GET platform/api-usage/data — server-side page of the active clients this admin owns (DataTables protocol).
+     * Per-client usage is still loaded per row from client().
+     */
+    public function clientsData(): ResponseInterface
+    {
+        $repo    = new MasterTenantRepository();
+        $adminId = (int) session('platform_admin_id');
+        $repo->ensureTenantOwnerColumn();
+        $all = $repo->isPrimaryPlatformAdmin($adminId);
+
+        $out = DataTablesQuery::respond($this->request, [
+            'builder'  => static function () use ($adminId, $all) {
+                $b = MasterTenantRepository::masterConnection()->table('tenants')->select('`key`, name')->where('status', 'active');
+                if (! $all) {
+                    $b->where('platform_admin_id', $adminId);
+                }
+
+                return $b;
+            },
+            'columns'  => [0 => 'name'],
+            'search'   => ['name', '`key`'],
+            'order'    => [0, 'asc'],
+            'tiebreak' => '`key`',
+            'map'      => static fn (array $t): array => ['key' => (string) $t['key'], 'name' => (string) ($t['name'] !== '' ? $t['name'] : $t['key'])],
+        ]);
+
+        return $this->response->setJSON($out);
     }
 
     /**

@@ -36,14 +36,64 @@ class PlatformClients extends BaseController
 
     public function all(): string
     {
-        $dash = (new PlatformStatsService())->dashboard($this->platformAdminId());
+        $adminId = $this->platformAdminId();
+        $cache   = new \App\Libraries\ClientStatsCache();
+        $repo    = new MasterTenantRepository();
+
+        // Search, filters, sorting and paging run in SQL on the stats cache; the URL carries the state.
+        $get = $this->request->getGet();
+        $f = ['q' => trim((string) ($get['q'] ?? ''))];
+        foreach (\App\Libraries\ClientStatsCache::FILTERS as $name => $opts) {
+            $v = (string) ($get[$name] ?? '');
+            $f[$name] = isset($opts[$v]) ? $v : '';
+        }
+        $f['country'] = strtolower(trim((string) ($get['country'] ?? '')));
+        $sort = isset(\App\Libraries\ClientStatsCache::SORTS[(string) ($get['sort'] ?? '')]) ? (string) $get['sort'] : 'name';
+        $dir  = ($get['dir'] ?? '') === 'desc' ? 'desc' : 'asc';
+        $per  = in_array((int) ($get['per'] ?? 0), [10, 25, 50, 100], true) ? (int) $get['per'] : 10;
+        $page = max(1, (int) ($get['page'] ?? 1));
+
+        // Only a few stale clients are recomputed per view; `php spark stats:refresh` (cron) keeps the rest warm.
+        $cache->refreshStale($adminId);
+        $keys = array_map(static fn (array $t): string => strtolower(trim((string) ($t['key'] ?? ''))), $repo->listActiveTenants($adminId));
+
+        $res   = $cache->query($f, $sort, $dir, $page, $per, $keys);
+        $pages = max(1, (int) ceil($res['total'] / $per));
+        if ($page > $pages) {
+            $page = $pages;
+            $res  = $cache->query($f, $sort, $dir, $page, $per, $keys);
+        }
+
+        $missing = $res['wallet_missing'];
 
         return view('platform/clients/all', [
-            'pageTitle'    => 'All clients',
-            'navActive'    => 'clients',
-            'clients'      => $dash['clients'],
-            'platformName' => (string) session('platform_admin_name'),
+            'pageTitle'       => 'All clients',
+            'navActive'       => 'clients',
+            'clients'         => $res['rows'],
+            'counts'          => $res['counts'],
+            'total'           => $res['total'],
+            'page'            => $page,
+            'pages'           => $pages,
+            'per'             => $per,
+            'q'               => $f['q'],
+            'f'               => array_diff_key($f, ['q' => 1, 'country' => 1]),
+            'country'         => $f['country'],
+            'countries'       => $res['countries'],
+            'sort'            => $sort,
+            'dir'             => $dir,
+            'refreshedAt'     => $res['refreshed_at'],
+            'walletTotal'     => $res['wallet_total'],
+            'walletTotalNote' => $missing !== [] ? 'Excludes ' . implode(', ', $missing) . ' (no exchange rate)' : '',
+            'platformName'    => (string) session('platform_admin_name'),
         ]);
+    }
+
+    /** "Refresh" button on All clients: recompute every client now. */
+    public function refreshStats(): ResponseInterface
+    {
+        $res = (new \App\Libraries\ClientStatsCache())->refreshStale($this->platformAdminId(), true, 0);
+
+        return redirect()->to(site_url('platform/clients/all'))->with('success', 'Refreshed ' . $res['refreshed'] . ' client' . ($res['refreshed'] === 1 ? '' : 's') . '.');
     }
 
     public function create(): string|ResponseInterface
@@ -332,9 +382,6 @@ class PlatformClients extends BaseController
         $msg = (string) ($result['message'] ?? 'Created');
         if (! empty($result['admin_email'])) {
             $msg .= ' · Login: ' . $result['admin_email'];
-            if (! empty($result['admin_password'])) {
-                $msg .= ' / ' . $result['admin_password'];
-            }
         }
 
         return redirect()->to('/platform/clients/' . rawurlencode((string) $result['key']))
@@ -356,6 +403,8 @@ class PlatformClients extends BaseController
             'port'           => $dbPort,
             'admin_email'    => (string) $this->request->getPost('admin_email'),
             'admin_password' => (string) $this->request->getPost('admin_password'),
+            'country_code'   => (string) $this->request->getPost('country_code'),
+            'admin_phone'    => (string) $this->request->getPost('admin_phone'),
             'admin_name'         => (string) ($this->request->getPost('admin_name') ?: 'Admin'),
             'platform_admin_id'  => $this->platformAdminId(),
         ]);
@@ -434,6 +483,7 @@ class PlatformClients extends BaseController
             'meta'         => $metaDisplay,
             'adminEmail'   => (string) ($stats['admin_email'] ?? ''),
             'adminName'    => (string) ($stats['admin_name'] ?? ''),
+            'adminPhone'   => (string) ($stats['admin_phone'] ?? ''),
             'appName'      => $appName,
             'platformName' => (string) session('platform_admin_name'),
             'seats'        => $seats,
@@ -482,11 +532,24 @@ class PlatformClients extends BaseController
             return redirect()->to('/platform/clients')->with('error', 'Client not found.');
         }
         $password = trim((string) $this->request->getPost('admin_password'));
+
+        // Mobile: optional on edit (older clients have none). When given it must fit the chosen country.
+        $phoneFull = null;
+        $phoneIn   = trim((string) $this->request->getPost('admin_phone'));
+        if ($phoneIn !== '') {
+            $phone = \App\Libraries\WhatsAppCountries::validatePhone((string) $this->request->getPost('phone_country'), $phoneIn);
+            if (! $phone['ok']) {
+                return redirect()->to('/platform/clients/' . rawurlencode($key) . '#access')->withInput()->with('error', $phone['message']);
+            }
+            $phoneFull = $phone['full'];
+        }
+
         $result = (new TenantProvisionService())->setClientLogin(
             $key,
             (string) $this->request->getPost('admin_email'),
             $password,
-            (string) ($this->request->getPost('admin_name') ?: 'Admin')
+            (string) ($this->request->getPost('admin_name') ?: 'Admin'),
+            $phoneFull
         );
 
         if (! ($result['ok'] ?? false)) {
@@ -497,10 +560,56 @@ class PlatformClients extends BaseController
             'tenant_key'        => $key,
             'admin_email'       => (string) $this->request->getPost('admin_email'),
             'password_changed'  => $password !== '',
+            'phone_changed'     => $phoneFull !== null,
             'platform_admin_id' => (int) session('platform_admin_id'),
         ]);
 
         return redirect()->to('/platform/clients/' . rawurlencode($key))->with('success', (string) $result['message']);
+    }
+
+    /**
+     * Change the client's country. The wallet currency follows it while the wallet is unused.
+     */
+    public function saveCountry(string $key): ResponseInterface
+    {
+        $key  = strtolower(trim($key));
+        $repo = new MasterTenantRepository();
+        if ($repo->findActiveTenant($key) === null || ! $repo->platformAdminOwnsTenant($this->platformAdminId(), $key)) {
+            return redirect()->to('/platform/clients')->with('error', 'Client not found.');
+        }
+
+        $country = strtolower(trim((string) $this->request->getPost('country_code')));
+        if (\App\Libraries\WhatsAppCountries::nameOf($country) === '' || $country === 'other') {
+            return redirect()->back()->with('error', 'Choose a country.');
+        }
+        if (! $repo->setTenantCountry($key, $country)) {
+            return redirect()->back()->with('error', 'Could not save the country.');
+        }
+
+        $msg = 'Country saved.';
+        if ((new TenantConnection())->apply($key, 'platform')) {
+            TenantContext::set($key, 'platform');
+            $wallet = new \App\Libraries\WalletService();
+            $result = $wallet->setCurrency(\App\Libraries\WhatsAppCountries::currencyOf($country));
+            $msg .= $result['ok'] ? ' Wallet currency is ' . $wallet->currency() . '.' : ' ' . $result['message'];
+        }
+
+        log_activity('update', 'platform', 'Platform admin set client country: ' . $key, [
+            'tenant_key'        => $key,
+            'country_code'      => $country,
+            'platform_admin_id' => $this->platformAdminId(),
+        ]);
+
+        try {
+            $row = $repo->findActiveTenant($key);
+            if (is_array($row)) {
+                (new \App\Libraries\ClientStatsCache())->refresh($row);
+            }
+        } catch (\Throwable $e) {
+            log_message('warning', 'Stats cache refresh after country change failed: {msg}', ['msg' => $e->getMessage()]);
+        }
+
+        return redirect()->to('/platform/clients/' . rawurlencode($key))->with('success', $msg);
     }
 
     public function saveOwner(string $key): ResponseInterface

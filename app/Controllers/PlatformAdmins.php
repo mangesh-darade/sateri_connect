@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Libraries\MasterTenantRepository;
+use App\Libraries\DataTablesQuery;
 use CodeIgniter\HTTP\ResponseInterface;
 
 /**
@@ -25,6 +26,36 @@ class PlatformAdmins extends BaseController
             'admins'    => $repo->listPlatformAdmins(),
             'currentId' => (int) session('platform_admin_id'),
         ]);
+    }
+
+    /** Server-side rows for the super admins table (DataTables protocol). No password hashes or tokens. */
+    public function data(): ResponseInterface
+    {
+        $repo = new MasterTenantRepository();
+        if (! $repo->isPrimaryPlatformAdmin((int) session('platform_admin_id'))) {
+            return $this->response->setStatusCode(403)->setJSON(['error' => 'Not allowed.']);
+        }
+        $repo->listPlatformAdmins(); // makes sure the is_primary column exists
+        $currentId = (int) session('platform_admin_id');
+
+        $out = DataTablesQuery::respond($this->request, [
+            'builder'  => static fn () => MasterTenantRepository::masterConnection()->table('platform_admins')
+                ->select('id, email, name, status, is_primary, created_at'),
+            'columns'  => [0 => 'name', 1 => 'email', 2 => 'is_primary', 3 => 'status', 4 => 'created_at'],
+            'search'   => ['name', 'email', 'status'],
+            'order'    => [2, 'desc'],
+            'tiebreak' => 'id',
+            'map'      => static fn (array $a): array => [
+                'name'       => (string) $a['name'],
+                'email'      => (string) $a['email'],
+                'is_you'     => (int) $a['id'] === $currentId,
+                'is_primary' => (int) ($a['is_primary'] ?? 0) === 1,
+                'status'     => (string) ($a['status'] ?? 'active'),
+                'created_at' => (string) ($a['created_at'] ?? ''),
+            ],
+        ]);
+
+        return $this->response->setJSON($out);
     }
 
     public function store(): ResponseInterface

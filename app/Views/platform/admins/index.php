@@ -41,55 +41,48 @@ $currentId = (int) ($currentId ?? 0);
     <div class="platform-card-head">
         <div>
             <h2>Platform super admins</h2>
-            <p><?= count($admins) ?> account<?= count($admins) === 1 ? '' : 's' ?></p>
+            <p>Search, sort and page through every super admin account.</p>
         </div>
     </div>
-    <?php if ($admins === []): ?>
-        <div class="platform-empty">
-            <strong>No super admins yet</strong>
-            <p>Create the first platform login above.</p>
-        </div>
-    <?php else: ?>
-        <div class="platform-table-wrap">
-            <table class="platform-table">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Access</th>
-                        <th>Status</th>
-                        <th>Created</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($admins as $admin): ?>
-                        <?php $isYou = (int) ($admin['id'] ?? 0) === $currentId; ?>
-                        <tr>
-                            <td>
-                                <div class="platform-client-name"><?= esc((string) ($admin['name'] ?? '')) ?></div>
-                                <?php if ($isYou): ?>
-                                    <div class="platform-client-meta">You</div>
-                                <?php endif; ?>
-                            </td>
-                            <td><?= esc((string) ($admin['email'] ?? '')) ?></td>
-                            <td>
-                                <?php if ((int) ($admin['is_primary'] ?? 0) === 1): ?>
-                                    <span class="platform-badge platform-badge-ok">Main · all clients</span>
-                                <?php else: ?>
-                                    <span class="platform-badge">Own clients</span>
-                                <?php endif; ?>
-                            </td>
-                            <td>
-                                <span class="platform-badge <?= strtolower((string) ($admin['status'] ?? '')) === 'active' ? 'platform-badge-ok' : 'platform-badge-warn' ?>">
-                                    <?= esc(ucfirst((string) ($admin['status'] ?? 'active'))) ?>
-                                </span>
-                            </td>
-                            <td><?= esc((string) ($admin['created_at'] ?? '')) ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-    <?php endif; ?>
+    <div class="platform-table-wrap">
+        <table class="platform-table" id="adminsTable" style="width:100%">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Access</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
 </section>
+<?= $this->endSection() ?>
+
+<?= $this->section('scripts') ?>
+<?= view('partials/platform_dt_assets') ?>
+<script>
+AppDT.table('#adminsTable', {
+    url: <?= json_encode(site_url('platform/admins/data')) ?>,
+    order: [[2, 'desc']],
+    emptyText: 'No super admins yet',
+    columns: [
+        { data: null, render: function (r) {
+            return '<div class="platform-client-name">' + AppDT.esc(r.name) + '</div>' + (r.is_you ? '<div class="platform-client-meta">You</div>' : '');
+        } },
+        { data: null, render: function (r) { return AppDT.esc(r.email); } },
+        { data: null, render: function (r) {
+            return r.is_primary ? '<span class="platform-badge platform-badge-ok">Main · all clients</span>' : '<span class="platform-badge">Own clients</span>';
+        } },
+        { data: null, render: function (r) {
+            var t = String(r.status || 'active');
+            var on = t.toLowerCase() === 'active';
+            return '<span class="platform-badge ' + (on ? 'platform-badge-ok' : 'platform-badge-warn') + '">' + AppDT.esc(t.charAt(0).toUpperCase() + t.slice(1)) + '</span>';
+        } },
+        { data: null, render: function (r) { return AppDT.esc(r.created_at); } }
+    ]
+});
+</script>
 <?= $this->endSection() ?>

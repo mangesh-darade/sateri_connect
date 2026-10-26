@@ -18,8 +18,13 @@
     <?= favicon_link_tags($platformFavicon, (string) ($pageTitle ?? 'Platform')) ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
+    <?php /* Fonts + icons load without blocking first paint; text renders in the fallback stack until they arrive (display=swap). */ ?>
+    <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Manrope:wght@600;700;800&display=swap">
+    <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
+    <noscript>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Manrope:wght@600;700;800&display=swap">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
+    </noscript>
     <link rel="stylesheet" href="<?= asset_url('assets/css/platform.css') ?>">
     <?= $this->renderSection('styles') ?>
 </head>
@@ -56,6 +61,22 @@ $brandInitial = mb_strtoupper(mb_substr($platformSiteName !== '' ? $platformSite
                 <i class="fab fa-meta" aria-hidden="true"></i>
                 <span>Embedded Signup</span>
             </a>
+            <a href="<?= site_url('platform/wallet-report') ?>" class="platform-side-link<?= $navActive === 'wa-report' ? ' is-active' : '' ?>">
+                <i class="fas fa-wallet" aria-hidden="true"></i>
+                <span>Wallet report</span>
+            </a>
+            <?php if ($isMainPlatformAdmin): ?>
+            <a href="<?= site_url('platform/wa-rates') ?>" class="platform-side-link<?= $navActive === 'wa-rates' ? ' is-active' : '' ?>">
+                <i class="fas fa-indian-rupee-sign" aria-hidden="true"></i>
+                <span>WhatsApp rates</span>
+            </a>
+            <?php endif; ?>
+            <?php if ($isMainPlatformAdmin): ?>
+            <a href="<?= site_url('platform/payments') ?>" class="platform-side-link<?= $navActive === 'payments' ? ' is-active' : '' ?>">
+                <i class="fas fa-credit-card" aria-hidden="true"></i>
+                <span>Online payments</span>
+            </a>
+            <?php endif; ?>
             <a href="<?= site_url('platform/api-usage') ?>" class="platform-side-link<?= $navActive === 'api-usage' ? ' is-active' : '' ?>">
                 <i class="fas fa-plug" aria-hidden="true"></i>
                 <span>API Usage</span>

@@ -23,7 +23,7 @@ $clients = $clients ?? [];
         </div>
     <?php else: ?>
         <div class="platform-table-wrap">
-            <table class="platform-table">
+            <table class="platform-table" id="usageTable" style="width:100%">
                 <thead>
                 <tr>
                     <th>Client</th>
@@ -33,26 +33,7 @@ $clients = $clients ?? [];
                     <th class="is-actions">Details</th>
                 </tr>
                 </thead>
-                <tbody>
-                <?php foreach ($clients as $c): ?>
-                    <?php $key = (string) ($c['key'] ?? ''); ?>
-                    <tr data-usage-row="<?= esc($key, 'attr') ?>">
-                        <td>
-                            <div class="platform-client-name"><?= esc((string) ($c['name'] ?? $key)) ?></div>
-                            <div class="platform-client-meta"><?= esc($key) ?></div>
-                        </td>
-                        <td class="js-usage-keys" style="font-size:0.82rem">—</td>
-                        <td class="js-usage-calls">—</td>
-                        <td class="js-usage-last" style="font-size:0.8rem;color:var(--pf-muted);white-space:nowrap">—</td>
-                        <td class="is-actions">
-                            <button type="button" class="btn-pf js-usage-toggle" data-key="<?= esc($key, 'attr') ?>"><i class="fas fa-list"></i> <span>Report</span></button>
-                        </td>
-                    </tr>
-                    <tr class="platform-usage-detail" data-usage-detail="<?= esc($key, 'attr') ?>">
-                        <td colspan="5" class="js-usage-detail"></td>
-                    </tr>
-                <?php endforeach; ?>
-                </tbody>
+                <tbody></tbody>
             </table>
         </div>
     <?php endif; ?>
@@ -60,6 +41,7 @@ $clients = $clients ?? [];
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
+<?= view('partials/platform_dt_assets') ?>
 <script>
 (function () {
     'use strict';
@@ -67,6 +49,9 @@ $clients = $clients ?? [];
     var baseUrl = <?= json_encode(rtrim(site_url('platform/api-usage'), '/')) ?>;
     var reports = {};
     var filters = {};
+    var openKeys = {};
+    var dt = null;
+    var loading = {};
 
     function esc(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -190,19 +175,32 @@ $clients = $clients ?? [];
         return sel('data-usage-detail', key);
     }
 
+    function rowFor(key) {
+        var tr = sel('data-usage-row', key);
+        return tr ? dt.row(tr) : null;
+    }
+
     function setOpen(key, open) {
-        var detail = detailRow(key);
+        var row = rowFor(key);
+        if (!row) return;
+        openKeys[key] = open;
+        if (open) {
+            row.child('<div class="platform-usage-detail-box" style="background:#f7f8f6;padding:0.75rem 0.85rem" data-usage-detail="' + esc(key) + '"><div class="js-usage-detail"></div></div>').show();
+        } else {
+            row.child.hide();
+        }
         var label = sel('data-usage-row', key).querySelector('.js-usage-toggle span');
-        if (detail) detail.classList.toggle('is-open', open);
         if (label) label.textContent = open ? 'Hide' : 'Report';
     }
 
     function openReport(key, status) {
         filters[key] = status || filters[key] || 'all';
-        setOpen(key, true);
-        var box = detailRow(key).querySelector('.js-usage-detail');
+        if (!openKeys[key]) setOpen(key, true);
+        var detail = detailRow(key);
+        var box = detail ? detail.querySelector('.js-usage-detail') : null;
+        if (!box) return;
         if (!reports[key]) {
-            box.innerHTML = '<p class="platform-usage-empty"><i class="fas fa-spinner fa-spin"></i> Loading report…</p>';
+            box.innerHTML = '<p class="platform-usage-empty"><i class="fas fa-spinner fa-spin"></i> Loading report\u2026</p>';
         }
         load(key).then(function () {
             if (reports[key]) paint(key);
@@ -210,36 +208,54 @@ $clients = $clients ?? [];
         });
     }
 
+    function fill(key) {
+        var row = sel('data-usage-row', key);
+        var d = reports[key];
+        if (!row || !d) return;
+        row.querySelector('.js-usage-keys').innerHTML = keysHtml(d.keys);
+        row.querySelector('.js-usage-cell-calls').innerHTML = countsHtml(key, d);
+        row.querySelector('.js-usage-last').textContent = d.last || 'Never';
+    }
+
     function load(key) {
         var row = sel('data-usage-row', key);
         if (!row) return Promise.resolve();
-        row.querySelector('.js-usage-calls').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        if (loading[key]) return loading[key];
+        row.querySelector('.js-usage-cell-calls').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
-        return fetch(baseUrl + '/' + encodeURIComponent(key), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        loading[key] = fetch(baseUrl + '/' + encodeURIComponent(key), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(function (res) {
                 return res.json().catch(function () { return { success: false, message: 'Unexpected response (HTTP ' + res.status + ').' }; });
             })
             .then(function (json) {
+                var r = sel('data-usage-row', key);
                 if (!json.success) {
-                    row.querySelector('.js-usage-calls').innerHTML = '<span class="platform-badge platform-badge-down">' + esc(json.message || 'Error') + '</span>';
+                    if (r) r.querySelector('.js-usage-cell-calls').innerHTML = '<span class="platform-badge platform-badge-down">' + esc(json.message || 'Error') + '</span>';
                     return;
                 }
-                var d = json.data;
-                reports[key] = d;
+                reports[key] = json.data;
                 filters[key] = filters[key] || 'all';
-                row.querySelector('.js-usage-keys').innerHTML = keysHtml(d.keys);
-                row.querySelector('.js-usage-calls').innerHTML = countsHtml(key, d);
-                row.querySelector('.js-usage-last').textContent = d.last || 'Never';
-                if (detailRow(key).classList.contains('is-open')) paint(key);
+                fill(key);
+                if (openKeys[key]) paint(key);
             })
             .catch(function () {
-                row.querySelector('.js-usage-calls').innerHTML = '<span class="platform-badge platform-badge-down">Network error</span>';
-            });
+                var r = sel('data-usage-row', key);
+                if (r) r.querySelector('.js-usage-cell-calls').innerHTML = '<span class="platform-badge platform-badge-down">Network error</span>';
+            })
+            .then(function () { delete loading[key]; });
+
+        return loading[key];
     }
 
-    function loadAll() {
-        var keys = Array.prototype.map.call(document.querySelectorAll('[data-usage-row]'), function (r) { return r.getAttribute('data-usage-row'); });
-        return keys.reduce(function (p, key) { return p.then(function () { return load(key); }); }, Promise.resolve());
+    // Load the stats of the clients on the current page, one after another.
+    function loadVisible(force) {
+        var keys = Array.prototype.map.call(document.querySelectorAll('#usageTable [data-usage-row]'), function (r) { return r.getAttribute('data-usage-row'); });
+        return keys.reduce(function (p, key) {
+            return p.then(function () {
+                if (!force && reports[key]) { fill(key); return null; }
+                return load(key);
+            });
+        }, Promise.resolve());
     }
 
     document.addEventListener('click', function (e) {
@@ -262,15 +278,44 @@ $clients = $clients ?? [];
         var btn = e.target.closest('.js-usage-toggle');
         if (!btn) return;
         var key = btn.getAttribute('data-key');
-        var detail = detailRow(key);
-        if (detail && detail.classList.contains('is-open')) setOpen(key, false);
+        if (openKeys[key]) setOpen(key, false);
         else openReport(key, filters[key] || 'all');
     });
 
     var refresh = document.getElementById('apiUsageRefresh');
-    if (refresh) refresh.addEventListener('click', loadAll);
+    if (refresh) refresh.addEventListener('click', function () { loadVisible(true); });
 
-    if (document.querySelector('[data-usage-row]')) loadAll();
+    if (document.getElementById('usageTable')) {
+        dt = AppDT.table('#usageTable', {
+            url: baseUrl + '/data',
+            order: [[0, 'asc']],
+            emptyText: 'No active clients',
+            createdRow: function (tr, r) { tr.setAttribute('data-usage-row', r.key); },
+            columns: [
+                { data: null, render: function (r) {
+                    return '<div class="platform-client-name">' + esc(r.name) + '</div><div class="platform-client-meta">' + esc(r.key) + '</div>';
+                } },
+                { data: null, orderable: false, className: 'js-usage-keys', render: function () { return '\u2014'; } },
+                { data: null, orderable: false, className: 'js-usage-cell-calls', render: function () { return '\u2014'; } },
+                { data: null, orderable: false, className: 'js-usage-last', render: function () { return '\u2014'; } },
+                { data: null, orderable: false, className: 'is-actions', render: function (r) {
+                    return '<button type="button" class="btn-pf js-usage-toggle" data-key="' + esc(r.key) + '"><i class="fas fa-list"></i> <span>Report</span></button>';
+                } }
+            ],
+            drawCallback: function () {
+                $('#usageTable tbody tr[data-usage-row]').each(function () {
+                    var key = this.getAttribute('data-usage-row');
+                    $(this).find('.js-usage-keys').css({ fontSize: '0.82rem' });
+                    $(this).find('.js-usage-last').css({ fontSize: '0.8rem', color: 'var(--pf-muted)', whiteSpace: 'nowrap' });
+                    if (openKeys[key]) {
+                        setOpen(key, true);
+                        if (reports[key]) paint(key);
+                    }
+                });
+                loadVisible(false);
+            }
+        });
+    }
 })();
 </script>
 <?= $this->endSection() ?>

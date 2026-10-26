@@ -66,19 +66,22 @@ class TenantEnsureMaster extends BaseCommand
                 $this->createPlatformSettings($forge);
                 $this->createPlatformAdmins($forge);
                 $this->createPlatformAdminMeta($forge);
+                $this->createLoginAttempts($forge);
                 CLI::write('Master tenancy tables created.', 'green');
             } else {
                 CLI::write('Master tenancy tables already present.', 'green');
             }
 
             (new \App\Libraries\MetaDataDeletionService())->ensureTable();
+            (new \App\Libraries\ClientStatsCache())->ensureTable();
+            (new \App\Libraries\MswipeService())->ensureRouteTable();
 
             $repo = new \App\Libraries\MasterTenantRepository();
             $repo->ensureTenantOwnerColumn();
             $repo->ensurePrimaryAdminColumn();
             $repo->ensureAdminMetaTable();
             $repo->ensureHostRoutesTable();
-            CLI::write('Master columns synced: tenants.platform_admin_id, platform_admins.is_primary, platform_admin_meta, tenant_host_routes.', 'green');
+            CLI::write('Master columns synced: tenants.platform_admin_id, tenants.country_code, platform_admins.is_primary, platform_admin_meta, tenant_host_routes.', 'green');
             $adminEmail = strtolower(trim((string) (CLI::getOption('admin-email') ?? 'platform@sateri.local')));
             if (! filter_var($adminEmail, FILTER_VALIDATE_EMAIL)) {
                 CLI::error('Invalid --admin-email.');
@@ -125,6 +128,7 @@ class TenantEnsureMaster extends BaseCommand
             'max_users' => ['type' => 'INT', 'unsigned' => true, 'null' => true],
             'max_roles' => ['type' => 'INT', 'unsigned' => true, 'null' => true],
             'platform_admin_id' => ['type' => 'INT', 'unsigned' => true, 'null' => true],
+            'country_code' => ['type' => 'VARCHAR', 'constraint' => 8, 'null' => true],
             'created_at' => ['type' => 'DATETIME', 'null' => true],
             'updated_at' => ['type' => 'DATETIME', 'null' => true],
         ]);
@@ -210,6 +214,22 @@ class TenantEnsureMaster extends BaseCommand
         $forge->addKey('id', true);
         $forge->addUniqueKey('email');
         $forge->createTable('platform_admins', true);
+    }
+
+    protected function createLoginAttempts($forge): void
+    {
+        $forge->addField([
+            'id' => ['type' => 'BIGINT', 'unsigned' => true, 'auto_increment' => true],
+            'email' => ['type' => 'VARCHAR', 'constraint' => 191],
+            'ip_address' => ['type' => 'VARCHAR', 'constraint' => 45],
+            'channel' => ['type' => 'VARCHAR', 'constraint' => 10, 'default' => 'web'],
+            'user_agent' => ['type' => 'VARCHAR', 'constraint' => 255, 'default' => ''],
+            'created_at' => ['type' => 'DATETIME'],
+        ]);
+        $forge->addKey('id', true);
+        $forge->addKey(['email', 'created_at']);
+        $forge->addKey(['ip_address', 'created_at']);
+        $forge->createTable('login_attempts', true);
     }
 
     protected function createPlatformAdminMeta($forge): void
