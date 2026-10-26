@@ -42,29 +42,8 @@ class EmailManager extends BaseController
         $settings = new SettingsService();
         $provider = $settings->getEmailProvider();
 
-        $campaignRows = model(EmailHtmlCampaignModel::class)->orderBy('id', 'DESC')->findAll(50);
+        // The campaigns table loads page by page from campaignsData() (server-side DataTable).
         $campaigns = [];
-        foreach ($campaignRows as $row) {
-            if (! is_array($row)) {
-                continue;
-            }
-
-            $campaigns[] = [
-                'id'                 => (int) ($row['id'] ?? 0),
-                'name'               => (string) ($row['name'] ?? ('Campaign #' . ((int) ($row['id'] ?? 0)))),
-                'subject'            => (string) ($row['subject'] ?? ''),
-                'status'             => (string) ($row['status'] ?? 'draft'),
-                'sent_count'         => (int) ($row['sent_count'] ?? 0),
-                'failed_count'       => (int) ($row['failed_count'] ?? 0),
-                'builder_id'         => ! empty($row['builder_id']) ? (int) $row['builder_id'] : null,
-                'cheerio_builder_id' => isset($row['cheerio_builder_id']) ? (string) $row['cheerio_builder_id'] : null,
-                'mode'               => (string) ($row['mode'] ?? 'recipients'),
-                'label_name'         => isset($row['label_name']) ? (string) $row['label_name'] : null,
-                'recipients'         => is_array($row['recipients'] ?? null) ? $row['recipients'] : [],
-                'html_content'       => (string) ($row['html_content'] ?? ''),
-                'last_error'         => isset($row['last_error']) ? (string) $row['last_error'] : null,
-            ];
-        }
 
         $tagModel = model(\App\Models\TagModel::class);
         $customerGroups = $tagModel->listWithContactCounts();
@@ -86,6 +65,37 @@ class EmailManager extends BaseController
             'reputation'         => (new \App\Libraries\EmailReputationGuard())->status(),
             'companyAddress'     => \App\Libraries\EmailTracking::companyAddress(),
         ]);
+    }
+
+    /** Server-side rows for the Campaign Broadcasts table (search, sort, paging in SQL). */
+    public function campaignsData(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('emails.view')) {
+            return $denied;
+        }
+
+        $canSend = function_exists('can') && can('emails.send');
+
+        return $this->response->setJSON(\App\Libraries\DataTablesQuery::respond($this->request, [
+            'builder'  => static fn () => db_connect()->table('email_html_campaigns c')
+                ->select('c.id, c.name, c.subject, c.status, c.sent_count, c.failed_count, c.last_error, c.attachment_name'),
+            'columns'  => [0 => 'c.name', 1 => 'c.status', 2 => 'c.sent_count'],
+            'search'   => ['c.name', 'c.subject', 'c.status'],
+            'order'    => [3, 'desc'],
+            'tiebreak' => 'c.id',
+            'map'      => static fn (array $r): array => [
+                'id'              => (int) $r['id'],
+                'name'            => (string) ($r['name'] !== '' ? $r['name'] : ('Campaign #' . (int) $r['id'])),
+                'subject'         => (string) ($r['subject'] ?? ''),
+                'status'          => (string) $r['status'],
+                'sent_count'      => (int) $r['sent_count'],
+                'failed_count'    => (int) $r['failed_count'],
+                'last_error'      => (string) ($r['last_error'] ?? ''),
+                'attachment_name' => (string) ($r['attachment_name'] ?? ''),
+                'view_url'        => site_url('campaigns/email/' . (int) $r['id']),
+                'can_send'        => $canSend,
+            ],
+        ]));
     }
 
     public function getGroupEmails(int $tagId): ResponseInterface

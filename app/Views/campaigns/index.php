@@ -51,7 +51,6 @@ $filterStatus = (string) ($filterStatus ?? '');
 $filterSearch = (string) ($filterSearch ?? '');
 $filterSort = (string) ($filterSort ?? 'latest');
 $openChannel = (string) ($openChannel ?? '');
-$campaigns = $campaigns ?? [];
 ?>
 <div class="page-list campaign-hub" id="campaignHub"
      data-open-channel="<?= esc($openChannel, 'attr') ?>"
@@ -102,14 +101,14 @@ $campaigns = $campaigns ?? [];
         <div class="card-body py-3">
             <form method="get" action="<?= site_url('campaigns') ?>" class="filter-bar mb-0" id="campaignFilterForm">
                 <input type="hidden" name="channel" value="<?= esc($filterChannel !== 'email' ? 'whatsapp' : 'email') ?>">
-                <input type="search" name="q" value="<?= esc($filterSearch) ?>" class="form-control form-control-sm" placeholder="Search campaign" title="Search">
-                <select name="status" class="form-select form-select-sm" title="Status">
+                <input type="search" name="q" id="campaignSearch" value="<?= esc($filterSearch) ?>" class="form-control form-control-sm" placeholder="Search campaign" title="Search">
+                <select name="status" id="campaignStatus" class="form-select form-select-sm" title="Status">
                     <option value="">All status</option>
                     <?php foreach (['draft', 'scheduled', 'queued', 'running', 'sending', 'completed', 'sent', 'paused', 'failed', 'cancelled'] as $st): ?>
                         <option value="<?= $st ?>" <?= $filterStatus === $st ? 'selected' : '' ?>><?= esc(ucfirst($st)) ?></option>
                     <?php endforeach; ?>
                 </select>
-                <select name="sort" class="form-select form-select-sm" title="Sort">
+                <select name="sort" id="campaignSort" class="form-select form-select-sm" title="Sort">
                     <option value="latest" <?= $filterSort === 'latest' ? 'selected' : '' ?>>Latest</option>
                     <option value="oldest" <?= $filterSort === 'oldest' ? 'selected' : '' ?>>Oldest</option>
                     <option value="name" <?= $filterSort === 'name' ? 'selected' : '' ?>>Name</option>
@@ -125,12 +124,15 @@ $campaigns = $campaigns ?? [];
     <div class="card">
         <div class="card-header d-flex align-items-center justify-content-between gap-2">
             <h2 class="card-title mb-0">Recent campaigns</h2>
-            <span class="small text-muted"><?= count($campaigns) ?> total</span>
+            <span class="small text-muted" id="campaignTotal"></span>
         </div>
         <div class="card-body py-3">
-            <?php if (! empty($campaigns)): ?>
             <div class="table-responsive">
-                <table class="table table-sm table-hover align-middle w-100 mb-0" id="campaignsTable">
+                <table class="table table-sm table-hover align-middle w-100 mb-0" id="campaignsTable"
+                       data-url="<?= site_url('campaigns/data') ?>"
+                       data-channel="<?= esc($filterChannel !== 'email' ? 'whatsapp' : 'email', 'attr') ?>"
+                       data-sort="<?= esc($filterSort, 'attr') ?>"
+                       data-empty-text="No campaigns yet. Create a WhatsApp or Email campaign to start broadcasting.">
                     <thead>
                         <tr>
                             <th>Campaign Name</th>
@@ -141,68 +143,16 @@ $campaigns = $campaigns ?? [];
                             <th>Contacts</th>
                             <th>Sent</th>
                             <th class="text-end">Actions</th>
+                            <th>Created</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <?php foreach ($campaigns as $c): ?>
-                            <?php
-                            $channel = (string) ($c['channel'] ?? 'whatsapp');
-                            $created = ! empty($c['created_at']) ? format_app_datetime($c['created_at']) : '';
-                            ?>
-                            <tr>
-                                <td>
-                                    <a class="fw-semibold text-decoration-none" href="<?= esc($c['view_url'] ?? '#') ?>"><?= esc($c['name'] ?? '') ?></a>
-                                    <?php if ($created !== ''): ?>
-                                        <div class="text-muted small"><?= esc($created) ?></div>
-                                    <?php endif; ?>
-                                </td>
-                                <td>
-                                    <?php if ($c['label'] !== ''): ?>
-                                        <span class="badge rounded-pill bg-light text-dark border px-2 py-1"><i class="fas fa-tag me-1 text-muted"></i><?= esc($c['label']) ?></span>
-                                    <?php else: ?>
-                                        <span class="text-muted">—</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td class="text-muted small"><?= esc($c['campaign_type'] ?? '—') ?></td>
-                                <td>
-                                    <?php if ($channel === 'email'): ?>
-                                        <span class="badge text-bg-light border">Email</span>
-                                    <?php else: ?>
-                                        <span class="badge text-bg-light border">WhatsApp</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td><?= view('partials/status_badge', ['status' => $c['status'] ?? 'draft']) ?></td>
-                                <td><?= (int) ($c['contacts'] ?? 0) ?></td>
-                                <td><?= (int) ($c['sent'] ?? 0) ?></td>
-                                <td class="text-end">
-                                    <div class="table-actions justify-content-end">
-                                        <a class="btn btn-sm btn-outline-secondary" href="<?= esc($c['view_url'] ?? '#') ?>" title="View"><i class="fas fa-eye"></i></a>
-                                        <?php if ($channel === 'whatsapp' && function_exists('can') && can('campaigns.edit') && in_array($c['status'] ?? '', ['draft', 'scheduled', 'paused'], true)): ?>
-                                            <a class="btn btn-sm btn-outline-secondary" href="<?= esc($c['edit_url'] ?? '#') ?>" title="Edit"><i class="fas fa-edit"></i></a>
-                                        <?php endif; ?>
-                                        <?php if ($channel === 'whatsapp' && function_exists('can') && can('campaigns.delete')): ?>
-                                            <button type="button" class="btn btn-sm btn-outline-danger" data-confirm-delete data-url="<?= site_url('campaigns/' . (int) $c['id'] . '/delete') ?>" title="Delete"><i class="fas fa-trash"></i></button>
-                                        <?php endif; ?>
-                                    </div>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
+                    <tbody></tbody>
                 </table>
             </div>
-            <?php else: ?>
-                <?= view('partials/empty_state', [
-                    'icon'        => 'bullhorn',
-                    'title'       => 'No campaigns yet',
-                    'text'        => 'Create a WhatsApp or Email campaign to start broadcasting.',
-                    'actionUrl'   => null,
-                    'actionLabel' => null,
-                ]) ?>
-                <?php if ($canCreateWa || $canCreateEmail): ?>
-                    <div class="text-center mt-n2 mb-3">
-                        <button type="button" class="btn btn-wa btn-sm js-open-campaign-wizard" data-channel="<?= $canCreateWa ? 'whatsapp' : 'email' ?>">New campaign</button>
-                    </div>
-                <?php endif; ?>
+            <?php if ($canCreateWa || $canCreateEmail): ?>
+                <div class="text-center mt-3 d-none" id="campaignEmptyCta">
+                    <button type="button" class="btn btn-wa btn-sm js-open-campaign-wizard" data-channel="<?= $canCreateWa ? 'whatsapp' : 'email' ?>">New campaign</button>
+                </div>
             <?php endif; ?>
         </div>
     </div>
@@ -213,6 +163,7 @@ $campaigns = $campaigns ?? [];
 
 <?= $this->section('styles') ?>
 <style>
+#campaignHub .dataTables_filter { display: none; }
 .campaign-wizard .modal-dialog { max-width: 760px; }
 .campaign-wizard .modal-dialog.modal-xl { max-width: 980px; }
 .campaign-wizard-step { display: none; }
@@ -275,4 +226,5 @@ $campaigns = $campaigns ?? [];
 <?= $this->section('scripts') ?>
 <?= $this->include('partials/email_editor_assets') ?>
 <script src="<?= asset_url('assets/js/campaigns.js') ?>"></script>
+<script src="<?= asset_url('assets/js/campaign-tables.js') ?>"></script>
 <?= $this->endSection() ?>

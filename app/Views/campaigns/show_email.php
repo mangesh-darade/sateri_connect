@@ -26,6 +26,7 @@ $createdAt = ! empty($campaign['created_at']) ? format_app_datetime($campaign['c
 $isActive = in_array($status, ['queued', 'sending', 'running'], true);
 ?>
 
+<style>.email-campaign-details .dataTables_filter { display: none; }</style>
 <div class="email-campaign-details page-stack pb-4">
     <!-- Top Header & Status Banner -->
     <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden" style="border: 1px solid #e2e8f0 !important;">
@@ -207,7 +208,7 @@ $isActive = in_array($status, ['queued', 'sending', 'running'], true);
                 </div>
 
                 <div class="table-responsive" style="max-height: 480px;">
-                    <table class="table table-hover align-middle mb-0" id="recipientsTable">
+                    <table class="table table-hover align-middle mb-0 w-100" id="recipientsTable" data-url="<?= site_url('campaigns/email/' . $id . '/recipients-data') ?>">
                         <thead class="bg-light sticky-top">
                             <tr class="small text-muted text-uppercase" style="font-size: 0.72rem; letter-spacing: 0.5px;">
                                 <th class="ps-3">Recipient</th>
@@ -216,75 +217,7 @@ $isActive = in_array($status, ['queued', 'sending', 'running'], true);
                                 <th class="text-center">Clicks</th>
                             </tr>
                         </thead>
-                        <tbody class="small" id="recipientsTableBody">
-                            <?php if ($recipients === []): ?>
-                                <tr>
-                                    <td colspan="4" class="text-center py-4 text-muted">
-                                        <i class="fas fa-user-slash opacity-25 fs-4 d-block mb-1"></i>
-                                        No individual recipient addresses logged.
-                                    </td>
-                                </tr>
-                            <?php else: ?>
-                                <?php foreach ($recipients as $recEmail): ?>
-                                    <?php
-                                    $recEmailLower = strtolower(trim($recEmail));
-                                    $contact = $contactsMap[$recEmailLower] ?? null;
-                                    $contactName = $contact['name'] ?? null;
-                                    $contactMobile = $contact['mobile'] ?? null;
-                                    $emailLog = $logByEmail[$recEmailLower] ?? null;
-
-                                    $recStatus = $status === 'sent' ? 'sent' : ($status === 'failed' ? 'failed' : 'queued');
-                                    if ($emailLog && ! empty($emailLog['status'])) {
-                                        $recStatus = $emailLog['status'];
-                                    }
-                                    $recOpens = $emailLog ? (int) ($emailLog['open_count'] ?? 0) : 0;
-                                    $recClicks = $emailLog ? (int) ($emailLog['click_count'] ?? 0) : 0;
-                                    ?>
-                                    <tr class="recipient-row" data-email="<?= esc($recEmailLower) ?>" data-search="<?= esc($recEmailLower . ' ' . ($contactName ?? '')) ?>">
-                                        <td class="ps-3 py-2.5">
-                                            <div class="d-flex align-items-center gap-2">
-                                                <div class="rounded-circle bg-light border d-flex align-items-center justify-content-center text-secondary fw-bold"
-                                                     style="width: 32px; height: 32px; font-size: 0.75rem;">
-                                                    <?= esc(strtoupper(substr($contactName ?: $recEmail, 0, 1))) ?>
-                                                </div>
-                                                <div>
-                                                    <div class="fw-semibold text-dark">
-                                                        <?= esc($contactName ?: $recEmail) ?>
-                                                    </div>
-                                                    <?php if ($contactName): ?>
-                                                        <div class="text-muted text-truncate" style="font-size: 0.74rem;">
-                                                            <?= esc($recEmail) ?>
-                                                            <?php if ($contactMobile): ?> · <?= esc($contactMobile) ?><?php endif; ?>
-                                                        </div>
-                                                    <?php endif; ?>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td class="col-status">
-                                            <?= view('partials/status_badge', ['status' => $recStatus]) ?>
-                                        </td>
-                                        <td class="text-center col-opens">
-                                            <?php if ($recOpens > 0): ?>
-                                                <span class="badge bg-info-subtle text-info border px-2 py-1">
-                                                    <i class="fas fa-eye me-1"></i> <?= $recOpens ?>
-                                                </span>
-                                            <?php else: ?>
-                                                <span class="text-muted">—</span>
-                                            <?php endif; ?>
-                                        </td>
-                                        <td class="text-center col-clicks">
-                                            <?php if ($recClicks > 0): ?>
-                                                <span class="badge bg-warning-subtle text-warning border px-2 py-1">
-                                                    <i class="fas fa-mouse-pointer me-1"></i> <?= $recClicks ?>
-                                                </span>
-                                            <?php else: ?>
-                                                <span class="text-muted">—</span>
-                                            <?php endif; ?>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </tbody>
+                        <tbody class="small" id="recipientsTableBody"></tbody>
                     </table>
                 </div>
             </div>
@@ -336,23 +269,16 @@ $isActive = in_array($status, ['queued', 'sending', 'running'], true);
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
+<script src="<?= asset_url('assets/js/campaign-tables.js') ?>"></script>
 <script>
 $(function () {
+    var dt = window.CampaignTables ? window.CampaignTables.emailRecipients('#recipientsTable') : null;
     var progressUrl = '<?= site_url('campaigns/' . $id . '/progress') ?>';
     var isPolling = false;
     var pollTimer = null;
 
     function countLabel(n) {
         return Number(n || 0).toLocaleString();
-    }
-
-    function engagementCell(count, kind) {
-        var n = Number(count || 0);
-        if (n <= 0) return '<span class="text-muted">—</span>';
-        if (kind === 'clicks') {
-            return '<span class="badge bg-warning-subtle text-warning border px-2 py-1"><i class="fas fa-mouse-pointer me-1"></i> ' + n + '</span>';
-        }
-        return '<span class="badge bg-info-subtle text-info border px-2 py-1"><i class="fas fa-eye me-1"></i> ' + n + '</span>';
     }
 
     function updateEmailUI(data) {
@@ -375,15 +301,7 @@ $(function () {
         $('#emailLastErrorText').text(err);
         $('#emailLastError').toggleClass('d-none', err === '').toggleClass('d-flex', err !== '');
         $('.js-send-camp-btn').toggleClass('d-none', !data.can_send);
-        if (data.recipients) {
-            $.each(data.recipients, function (_, row) {
-                var $tr = $('#recipientsTableBody tr[data-email="' + row.email + '"]');
-                if (!$tr.length) return;
-                $tr.find('.col-status').html(row.status_badge || '');
-                $tr.find('.col-opens').html(engagementCell(row.opens, 'opens'));
-                $tr.find('.col-clicks').html(engagementCell(row.clicks, 'clicks'));
-            });
-        }
+        if (dt) dt.ajax.reload(null, false);
     }
 
     function fetchEmailProgress(isManual) {
@@ -417,17 +335,12 @@ $(function () {
     });
     scheduleEmailPoll();
 
-    // ── Live filter for recipients table ─────────────────────
-    $('#recipientFilterInput').on('keyup', function () {
-        var q = $.trim($(this).val()).toLowerCase();
-        $('#recipientsTableBody tr.recipient-row').each(function () {
-            var searchData = $(this).data('search') || '';
-            if (!q || searchData.indexOf(q) !== -1) {
-                $(this).show();
-            } else {
-                $(this).hide();
-            }
-        });
+    // Recipient filter box drives the server-side search.
+    var filterTimer = null;
+    $('#recipientFilterInput').on('input', function () {
+        var v = $.trim($(this).val());
+        clearTimeout(filterTimer);
+        filterTimer = setTimeout(function () { if (dt) dt.search(v).draw(); }, 350);
     });
 
     // ── Send Campaign Trigger ────────────────────────────────

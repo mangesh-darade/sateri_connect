@@ -140,7 +140,7 @@ $isActive = in_array($campaign['status'] ?? '', ['running', 'scheduled', 'queued
     <div class="panel-head"><h3>Recipients</h3></div>
     <div class="panel-body p-0">
         <div class="table-responsive">
-            <table class="table table-hover mb-0" id="campaignContactsTable">
+            <table class="table table-hover mb-0 w-100" id="campaignContactsTable" data-url="<?= site_url('campaigns/' . $id . '/recipients-data') ?>">
                 <thead>
                     <tr>
                         <th>Contact</th>
@@ -152,19 +152,7 @@ $isActive = in_array($campaign['status'] ?? '', ['running', 'scheduled', 'queued
                         <th>Error</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <?php foreach (($recipients ?? $campaign_contacts ?? []) as $r): ?>
-                        <tr data-recipient-id="<?= (int) ($r['id'] ?? 0) ?>">
-                            <td><?= esc($r['name'] ?? '') ?></td>
-                            <td><?= esc($r['mobile'] ?? '') ?></td>
-                            <td class="col-status"><?= view('partials/status_badge', ['status' => $r['status'] ?? '']) ?></td>
-                            <td class="col-sent text-muted small"><?= esc(! empty($r['sent_at']) ? format_app_datetime($r['sent_at']) : (! empty($r['processed_at']) ? format_app_datetime($r['processed_at']) : '—')) ?></td>
-                            <td class="col-delivered text-muted small"><?= esc(! empty($r['delivered_at']) ? format_app_datetime($r['delivered_at']) : '—') ?></td>
-                            <td class="col-read text-muted small"><?= esc(! empty($r['read_at']) ? format_app_datetime($r['read_at']) : '—') ?></td>
-                            <td class="col-error small text-danger"><?= esc($r['error_message'] ?? '') ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
+                <tbody></tbody>
             </table>
         </div>
     </div>
@@ -172,6 +160,7 @@ $isActive = in_array($campaign['status'] ?? '', ['running', 'scheduled', 'queued
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
+<script src="<?= asset_url('assets/js/campaign-tables.js') ?>"></script>
 <script>
 $(function () {
     var campaignId = <?= $id ?>;
@@ -203,10 +192,8 @@ $(function () {
         });
     }
 
-    var dt = null;
-    if ($.fn.DataTable) {
-        dt = $('#campaignContactsTable').DataTable({ pageLength: 25 });
-    }
+    // Recipients: server-side DataTable (campaign-tables.js); reloaded in place on each progress poll.
+    var dt = window.CampaignTables ? window.CampaignTables.waRecipients('#campaignContactsTable') : null;
 
     function updateUI(data) {
         if (!data) return;
@@ -246,19 +233,7 @@ $(function () {
             chartInstance.update();
         }
 
-        if (data.recipients && data.recipients.length > 0) {
-            $.each(data.recipients, function (_, r) {
-                var $row = $('#campaignContactsTable tr[data-recipient-id="' + r.id + '"]');
-                if ($row.length) {
-                    $row.find('.col-status').html(r.status_badge || r.status);
-                    $row.find('.col-sent').text(r.sent_at || '—');
-                    $row.find('.col-delivered').text(r.delivered_at || '—');
-                    $row.find('.col-read').text(r.read_at || '—');
-                    $row.find('.col-error').text(r.error || '');
-                    if (dt) dt.row($row).invalidate('dom');
-                }
-            });
-        }
+        if (dt) dt.ajax.reload(null, false);
 
         var isActive = ['running', 'scheduled', 'queued', 'processing'].indexOf(currentStatus) !== -1;
         if (isActive) {

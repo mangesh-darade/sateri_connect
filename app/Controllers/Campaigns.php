@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Libraries\ActivityLogger;
+use App\Libraries\DataTablesQuery;
 use App\Libraries\SettingsService;
 use App\Models\CampaignContactModel;
 use App\Models\CampaignModel;
@@ -37,13 +38,10 @@ class Campaigns extends BaseController
         $search  = trim((string) ($this->request->getGet('q') ?? ''));
         $sort    = strtolower(trim((string) ($this->request->getGet('sort') ?? 'latest')));
 
-        $campaigns = $this->buildMergedCampaignList($status, $channel, $search, $sort);
-
         $settings = new SettingsService();
 
         return $this->render('campaigns/index', [
             'pageTitle'       => 'Recent Campaigns',
-            'campaigns'       => $campaigns,
             'filterStatus'    => $status,
             'filterChannel'   => $channel,
             'filterSearch'    => $search,
@@ -166,12 +164,8 @@ class Campaigns extends BaseController
         model(CampaignModel::class)->updateStats($id);
         $campaign = model(CampaignModel::class)->find($id);
 
-        $recipients = model(CampaignContactModel::class)
-            ->select('campaign_contacts.*, contacts.name, contacts.mobile')
-            ->join('contacts', 'contacts.id = campaign_contacts.contact_id', 'left')
-            ->where('campaign_contacts.campaign_id', $id)
-            ->orderBy('campaign_contacts.id', 'DESC')
-            ->findAll(500);
+        // Recipients are loaded page by page by recipientsData() (server-side DataTable).
+        $recipients = [];
 
         if ($this->request->isAJAX()) {
             return $this->progressResponse($campaign, $recipients);
@@ -185,7 +179,6 @@ class Campaigns extends BaseController
         return $this->render('campaigns/show', [
             'pageTitle'  => 'Campaign: ' . $campaign['name'],
             'campaign'   => $campaign,
-            'recipients' => $recipients,
             'template'   => $template,
             'tags'       => model(TagModel::class)->orderBy('name', 'ASC')->findAll(),
         ]);
@@ -219,66 +212,22 @@ class Campaigns extends BaseController
             return null;
         }
 
-        // Resolve recipients
-        $recipients = is_array($campaign['recipients'] ?? null) ? $campaign['recipients'] : [];
-        if ($recipients === [] && ! empty($campaign['label_name'])) {
-            $tag = model(TagModel::class)->where('name', $campaign['label_name'])->first();
-            if (! $tag && ctype_digit((string) $campaign['label_name'])) {
-                $tag = model(TagModel::class)->find((int) $campaign['label_name']);
-            }
-            if ($tag) {
-                $contacts = model(TagModel::class)->getContacts((int) $tag['id']);
-                foreach ($contacts as $con) {
-                    $em = strtolower(trim((string) ($con['email'] ?? '')));
-                    if ($em !== '' && filter_var($em, FILTER_VALIDATE_EMAIL)) {
-                        $recipients[] = $em;
-                    }
-                }
-            }
-        }
-        $recipients = array_values(array_unique($recipients));
+        $recipients = $this->resolveEmailRecipients($campaign);
 
-        // Match contact profiles in CRM
-        $contactsMap = [];
-        if ($recipients !== []) {
-            $matched = model(ContactModel::class)
-                ->select('id, name, email, mobile')
-                ->whereIn('email', array_slice($recipients, 0, 500))
-                ->findAll();
-            foreach ($matched as $m) {
-                $contactsMap[strtolower(trim($m['email']))] = $m;
-            }
-        }
-
-        // Email logs
-        $logs = model(EmailLogModel::class)
+        // Engagement totals come from one aggregate query over every log row (no row cap).
+        $agg = db_connect()->table('email_logs')
+            ->select('SUM(open_count) AS opens, SUM(click_count) AS clicks, SUM(open_count > 0) AS u_opens, SUM(click_count > 0) AS u_clicks', false)
             ->where('html_campaign_id', $id)
-            ->orderBy('id', 'DESC')
-            ->findAll(200);
+            ->get()->getRowArray() ?: [];
 
-        // Stats calculation
         $sentCount   = (int) ($campaign['sent_count'] ?? 0);
         $failedCount = (int) ($campaign['failed_count'] ?? 0);
         $totalTarget = max(count($recipients), $sentCount);
 
-        $totalOpens   = 0;
-        $totalClicks  = 0;
-        $uniqueOpens  = 0;
-        $uniqueClicks = 0;
-        $logByEmail   = [];
-        foreach ($logs as $log) {
-            $opens  = (int) ($log['open_count'] ?? 0);
-            $clicks = (int) ($log['click_count'] ?? 0);
-            $totalOpens += $opens;
-            $totalClicks += $clicks;
-            if ($opens > 0) $uniqueOpens++;
-            if ($clicks > 0) $uniqueClicks++;
-
-            $logEmail = strtolower(trim((string) ($log['to_email'] ?? '')));
-            if ($logEmail !== '' && ! isset($logByEmail[$logEmail])) {
-                $logByEmail[$logEmail] = $log;
-            }
-        }
+        $totalOpens   = (int) ($agg['opens'] ?? 0);
+        $totalClicks  = (int) ($agg['clicks'] ?? 0);
+        $uniqueOpens  = (int) ($agg['u_opens'] ?? 0);
+        $uniqueClicks = (int) ($agg['u_clicks'] ?? 0);
 
         $openRate  = $sentCount > 0 ? round(($uniqueOpens / $sentCount) * 100, 1) : 0;
         $clickRate = $sentCount > 0 ? round(($uniqueClicks / $sentCount) * 100, 1) : 0;
@@ -302,9 +251,6 @@ class Campaigns extends BaseController
             'campaign'       => $campaign,
             'id'             => $id,
             'recipients'     => $recipients,
-            'contactsMap'    => $contactsMap,
-            'logs'           => $logs,
-            'logByEmail'     => $logByEmail,
             'builder'        => $builder,
             'provider'       => $provider,
             'providerLabel'  => $providerLabel,
@@ -346,12 +292,8 @@ class Campaigns extends BaseController
         model(CampaignModel::class)->updateStats($id);
         $campaign = model(CampaignModel::class)->find($id);
 
-        $recipients = model(CampaignContactModel::class)
-            ->select('campaign_contacts.*, contacts.name, contacts.mobile')
-            ->join('contacts', 'contacts.id = campaign_contacts.contact_id', 'left')
-            ->where('campaign_contacts.campaign_id', $id)
-            ->orderBy('campaign_contacts.id', 'DESC')
-            ->findAll(500);
+        // Recipients are loaded page by page by recipientsData() (server-side DataTable).
+        $recipients = [];
 
         return $this->progressResponse($campaign, $recipients);
     }
@@ -367,24 +309,6 @@ class Campaigns extends BaseController
         $status   = (string) ($campaign['status'] ?? 'draft');
         $sent     = (int) $detail['sentCount'];
         $target   = (int) $detail['totalTarget'];
-        $rows     = [];
-        foreach ($detail['recipients'] as $email) {
-            $key = strtolower(trim((string) $email));
-            $log = $detail['logByEmail'][$key] ?? null;
-            $recStatus = $status === 'sent' ? 'sent' : ($status === 'failed' ? 'failed' : 'queued');
-            if (is_array($log) && ! empty($log['status'])) {
-                $recStatus = (string) $log['status'];
-            }
-            $opens  = is_array($log) ? (int) ($log['open_count'] ?? 0) : 0;
-            $clicks = is_array($log) ? (int) ($log['click_count'] ?? 0) : 0;
-            $rows[] = [
-                'email'        => $key,
-                'status_badge' => view('partials/status_badge', ['status' => $recStatus]),
-                'opens'        => $opens,
-                'clicks'       => $clicks,
-            ];
-        }
-
         return $this->jsonResponse(true, [
             'channel'       => 'email',
             'status'        => $status,
@@ -403,7 +327,6 @@ class Campaigns extends BaseController
             'unique_clicks' => (int) $detail['uniqueClicks'],
             'total_clicks'  => (int) $detail['totalClicks'],
             'click_rate'    => $detail['clickRate'],
-            'recipients'    => $rows,
         ]);
     }
 
@@ -1440,116 +1363,252 @@ class Campaigns extends BaseController
     }
 
     /**
-     * @return list<array<string, mixed>>
+     * Server-side rows for the campaigns hub table (one channel at a time: whatsapp | email).
      */
-    protected function buildMergedCampaignList(string $status, string $channel, string $search, string $sort): array
+    public function data(): ResponseInterface
     {
-        $rows = [];
-
-        $tagRows = model(TagModel::class)->findAll();
-        $tagsMap = [];
-        foreach ($tagRows as $t) {
-            $tagsMap[(int) $t['id']] = (string) $t['name'];
+        if ($denied = $this->requirePermission('campaigns.view')) {
+            return $denied;
         }
 
-        if ($channel === '' || $channel === 'whatsapp' || $channel === 'all') {
-            $wa = db_connect()->table('campaigns c')
-                ->select('c.id, c.name, c.status, c.template_id, c.total_contacts, c.sent_count, c.delivered_count, c.failed_count, c.scheduled_at, c.created_at, c.payload, t.name AS template_name')
-                ->join('templates t', 't.id = c.template_id', 'left')
-                ->orderBy('c.created_at', 'DESC')
-                ->get()
-                ->getResultArray();
+        $chParam  = $this->request->getGet('channel');
+        $channel  = is_string($chParam) && strtolower(trim($chParam)) === 'email' ? 'email' : 'whatsapp';
+        $canEdit = function_exists('can') && can('campaigns.edit');
+        $canDel  = function_exists('can') && can('campaigns.delete');
 
-            foreach ($wa as $c) {
-                $payload = [];
-                if (! empty($c['payload'])) {
-                    $decoded = is_string($c['payload']) ? json_decode($c['payload'], true) : $c['payload'];
-                    $payload = is_array($decoded) ? $decoded : [];
+        $statusFilter = static function (string $col): callable {
+            return static function ($b, array $get) use ($col): void {
+                $st = strtolower(trim((string) ($get['status'] ?? '')));
+                if ($st !== '' && preg_match('/^[a-z_]{1,20}$/', $st) === 1) {
+                    $b->where($col, $st);
                 }
-                $audience = is_array($payload['_audience'] ?? null) ? $payload['_audience'] : [];
-                $labelName = trim((string) ($audience['label_name'] ?? ''));
-                if ($labelName === '') {
+            };
+        };
+
+        if ($channel === 'email') {
+            if (! db_connect()->tableExists('email_html_campaigns')) {
+                return $this->response->setJSON(['draw' => (int) ($this->request->getGet('draw') ?? 0), 'recordsTotal' => 0, 'recordsFiltered' => 0, 'data' => []]);
+            }
+
+            return $this->response->setJSON(DataTablesQuery::respond($this->request, [
+                'builder' => static fn () => db_connect()->table('email_html_campaigns c')
+                    ->select("c.id, c.name, c.label_name, c.subject, c.status, c.sent_count, c.failed_count, c.created_at,"
+                        . " CASE WHEN c.recipients_json IS NULL OR c.recipients_json IN ('', '[]', 'null') THEN 0"
+                        . " ELSE LENGTH(c.recipients_json) - LENGTH(REPLACE(c.recipients_json, ',', '')) + 1 END AS contacts", false),
+                'columns'  => [0 => 'c.name', 1 => 'c.label_name', 2 => 'c.subject', 4 => 'c.status', 5 => 'contacts', 6 => 'c.sent_count', 8 => 'c.created_at'],
+                'search'   => ['c.name', 'c.label_name', 'c.subject'],
+                'filters'  => $statusFilter('c.status'),
+                'order'    => [8, 'desc'],
+                'tiebreak' => 'c.id',
+                'map'      => static fn (array $r): array => [
+                    'id'           => (int) $r['id'],
+                    'channel'      => 'email',
+                    'name'         => (string) $r['name'],
+                    'label'        => trim((string) ($r['label_name'] ?? '')),
+                    'type'         => (string) (($r['subject'] ?? '') !== '' ? $r['subject'] : 'Email'),
+                    'status'       => (string) $r['status'],
+                    'status_badge' => view('partials/status_badge', ['status' => $r['status']]),
+                    'contacts'     => (int) $r['contacts'],
+                    'sent'         => (int) $r['sent_count'],
+                    'created_at'   => ! empty($r['created_at']) ? format_app_datetime($r['created_at']) : '',
+                    'view_url'     => site_url('campaigns/email/' . (int) $r['id']),
+                    'can_edit'     => false,
+                    'can_delete'   => false,
+                ],
+            ]));
+        }
+
+        $tags = [];
+        foreach (model(TagModel::class)->findAll() as $t) {
+            $tags[(int) $t['id']] = (string) $t['name'];
+        }
+
+        return $this->response->setJSON(DataTablesQuery::respond($this->request, [
+            'builder' => static fn () => db_connect()->table('campaigns c')
+                ->select('c.id, c.name, c.status, c.total_contacts, c.sent_count, c.created_at, c.payload, t.name AS template_name')
+                ->join('templates t', 't.id = c.template_id', 'left'),
+            'columns'  => [0 => 'c.name', 2 => 't.name', 4 => 'c.status', 5 => 'c.total_contacts', 6 => 'c.sent_count', 8 => 'c.created_at'],
+            // The label lives inside the payload JSON (_audience.label_name), so it is matched there.
+            'search'   => ['c.name', 't.name', 'c.payload'],
+            'filters'  => $statusFilter('c.status'),
+            'order'    => [8, 'desc'],
+            'tiebreak' => 'c.id',
+            'map'      => function (array $r) use ($tags, $canEdit, $canDel): array {
+                $payload  = is_string($r['payload'] ?? null) ? json_decode((string) $r['payload'], true) : null;
+                $audience = is_array($payload) && is_array($payload['_audience'] ?? null) ? $payload['_audience'] : [];
+                $label    = trim((string) ($audience['label_name'] ?? ''));
+                if ($label === '') {
                     $tagId = (int) ($audience['label_id'] ?? ($audience['tag_ids'][0] ?? 0));
-                    if ($tagId > 0 && isset($tagsMap[$tagId])) {
-                        $labelName = $tagsMap[$tagId];
+                    if ($tagId > 0 && isset($tags[$tagId])) {
+                        $label = $tags[$tagId];
                     } elseif (! empty($audience['all'])) {
-                        $labelName = 'All Contacts';
+                        $label = 'All Contacts';
                     }
                 }
-                $rows[] = [
-                    'id'             => (int) $c['id'],
-                    'channel'        => 'whatsapp',
-                    'name'           => (string) ($c['name'] ?? ''),
-                    'label'          => $labelName,
-                    'campaign_type'  => (string) ($c['template_name'] ?? 'WhatsApp'),
-                    'status'         => (string) ($c['status'] ?? 'draft'),
-                    'contacts'       => (int) ($c['total_contacts'] ?? 0),
-                    'sent'           => (int) ($c['sent_count'] ?? 0),
-                    'delivered'      => (int) ($c['delivered_count'] ?? 0),
-                    'failed'         => (int) ($c['failed_count'] ?? 0),
-                    'scheduled_at'   => $c['scheduled_at'] ?? null,
-                    'created_at'     => $c['created_at'] ?? null,
-                    'view_url'       => site_url('campaigns/' . (int) $c['id']),
-                    'edit_url'       => site_url('campaigns/' . (int) $c['id'] . '/edit'),
+
+                return [
+                    'id'           => (int) $r['id'],
+                    'channel'      => 'whatsapp',
+                    'name'         => (string) $r['name'],
+                    'label'        => $label,
+                    'type'         => (string) (($r['template_name'] ?? '') !== '' ? $r['template_name'] : 'WhatsApp'),
+                    'status'       => (string) $r['status'],
+                    'status_badge' => view('partials/status_badge', ['status' => $r['status']]),
+                    'contacts'     => (int) $r['total_contacts'],
+                    'sent'         => (int) $r['sent_count'],
+                    'created_at'   => ! empty($r['created_at']) ? format_app_datetime($r['created_at']) : '',
+                    'view_url'     => site_url('campaigns/' . (int) $r['id']),
+                    'edit_url'     => site_url('campaigns/' . (int) $r['id'] . '/edit'),
+                    'delete_url'   => site_url('campaigns/' . (int) $r['id'] . '/delete'),
+                    'can_edit'     => $canEdit && in_array((string) $r['status'], ['draft', 'scheduled', 'paused'], true),
+                    'can_delete'   => $canDel,
                 ];
+            },
+        ]));
+    }
+
+    /**
+     * Server-side rows for the WhatsApp campaign recipients table.
+     */
+    public function recipientsData(int $id): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('campaigns.view')) {
+            return $denied;
+        }
+
+        $dash = static fn ($v): string => ! empty($v) ? format_app_datetime($v) : '—';
+
+        return $this->response->setJSON(DataTablesQuery::respond($this->request, [
+            'builder' => static fn () => db_connect()->table('campaign_contacts cc')
+                ->select('cc.id, cc.status, cc.sent_at, cc.delivered_at, cc.read_at, cc.error_message, ct.name, ct.mobile')
+                ->join('contacts ct', 'ct.id = cc.contact_id', 'left')
+                ->where('cc.campaign_id', $id),
+            'columns'  => [0 => 'ct.name', 1 => 'ct.mobile', 2 => 'cc.status', 3 => 'cc.sent_at', 4 => 'cc.delivered_at', 5 => 'cc.read_at'],
+            'search'   => ['ct.name', 'ct.mobile', 'cc.status', 'cc.error_message'],
+            'order'    => [3, 'desc'],
+            'tiebreak' => 'cc.id',
+            'map'      => static fn (array $r): array => [
+                'id'           => (int) $r['id'],
+                'name'         => (string) ($r['name'] ?? ''),
+                'mobile'       => (string) ($r['mobile'] ?? ''),
+                'status'       => (string) $r['status'],
+                'status_badge' => view('partials/status_badge', ['status' => $r['status']]),
+                'sent_at'      => $dash($r['sent_at']),
+                'delivered_at' => $dash($r['delivered_at']),
+                'read_at'      => $dash($r['read_at']),
+                'error'        => (string) ($r['error_message'] ?? ''),
+            ],
+        ]));
+    }
+
+    /**
+     * Server-side rows for the email campaign recipients table. The recipient list is stored as JSON on the
+     * campaign (or comes from a label), so search and paging run on that list; contact names and engagement
+     * are then fetched for the current page only (two queries, no per-row lookups).
+     */
+    public function emailRecipientsData(int $id): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('campaigns.view')) {
+            return $denied;
+        }
+
+        $get   = $this->request->getGet() ?? [];
+        $draw  = (int) ($get['draw'] ?? 0);
+        $start = max(0, (int) ($get['start'] ?? 0));
+        $len   = max(1, min(100, (int) ($get['length'] ?? 25)));
+        $qRaw  = is_array($get['search'] ?? null) ? ($get['search']['value'] ?? '') : '';
+        $q     = is_scalar($qRaw) ? mb_strtolower(mb_substr(trim((string) $qRaw), 0, 200)) : '';
+        $ord0  = is_array($get['order'][0] ?? null) ? $get['order'][0] : [];
+
+        $campaign = model(EmailHtmlCampaignModel::class)->find($id);
+        if ($campaign === null) {
+            return $this->response->setStatusCode(404)->setJSON(['draw' => $draw, 'recordsTotal' => 0, 'recordsFiltered' => 0, 'data' => [], 'error' => 'Email campaign not found.']);
+        }
+
+        $all   = $this->resolveEmailRecipients($campaign);
+        $total = count($all);
+
+        if ($q !== '' && $all !== []) {
+            $byName = [];
+            $rows   = db_connect()->table('contacts')->select('email')
+                ->where('deleted_at', null)->like('name', $q)->where('email !=', '')->limit(5000)->get()->getResultArray();
+            foreach ($rows as $r) {
+                $byName[strtolower(trim((string) $r['email']))] = true;
+            }
+            $all = array_values(array_filter($all, static fn (string $e): bool => str_contains($e, $q) || isset($byName[$e])));
+        }
+
+        if (is_scalar($ord0['column'] ?? null) && (int) $ord0['column'] === 0) {
+            strtolower(is_scalar($ord0['dir'] ?? null) ? (string) $ord0['dir'] : 'asc') === 'desc' ? rsort($all) : sort($all);
+        }
+
+        $filtered = count($all);
+        $page     = array_slice($all, $start, $len);
+
+        $contacts = [];
+        $logs     = [];
+        if ($page !== []) {
+            foreach (db_connect()->table('contacts')->select('name, email, mobile')->where('deleted_at', null)->whereIn('email', $page)->get()->getResultArray() as $c) {
+                $contacts[strtolower(trim((string) $c['email']))] ??= $c;
+            }
+            foreach (db_connect()->table('email_logs')->select('to_email, status, open_count, click_count')
+                ->where('html_campaign_id', $id)->whereIn('to_email', $page)->orderBy('id', 'DESC')->get()->getResultArray() as $l) {
+                $logs[strtolower(trim((string) $l['to_email']))] ??= $l;
             }
         }
 
-        if (($channel === '' || $channel === 'email' || $channel === 'all') && db_connect()->tableExists('email_html_campaigns')) {
-            $em = model(EmailHtmlCampaignModel::class)->orderBy('id', 'DESC')->findAll(200);
-            foreach ($em as $c) {
-                if (! is_array($c) || ! isset($c['id'])) {
-                    continue;
+        $campStatus = (string) ($campaign['status'] ?? 'draft');
+        $data       = [];
+        foreach ($page as $email) {
+            $log    = $logs[$email] ?? null;
+            $status = $campStatus === 'sent' ? 'sent' : ($campStatus === 'failed' ? 'failed' : 'queued');
+            if ($log !== null && ! empty($log['status'])) {
+                $status = (string) $log['status'];
+            }
+            $data[] = [
+                'email'        => $email,
+                'name'         => (string) ($contacts[$email]['name'] ?? ''),
+                'mobile'       => (string) ($contacts[$email]['mobile'] ?? ''),
+                'status_badge' => view('partials/status_badge', ['status' => $status]),
+                'opens'        => $log !== null ? (int) ($log['open_count'] ?? 0) : 0,
+                'clicks'       => $log !== null ? (int) ($log['click_count'] ?? 0) : 0,
+            ];
+        }
+
+        return $this->response->setJSON([
+            'draw'            => $draw,
+            'recordsTotal'    => $total,
+            'recordsFiltered' => $filtered,
+            'data'            => $data,
+        ]);
+    }
+
+    /**
+     * Unique lower-cased recipient emails of an email campaign (stored list, or the contacts of its label).
+     *
+     * @param array<string, mixed> $campaign
+     *
+     * @return list<string>
+     */
+    protected function resolveEmailRecipients(array $campaign): array
+    {
+        $recipients = is_array($campaign['recipients'] ?? null) ? $campaign['recipients'] : [];
+        if ($recipients === [] && ! empty($campaign['label_name'])) {
+            $tag = model(TagModel::class)->where('name', $campaign['label_name'])->first();
+            if (! $tag && ctype_digit((string) $campaign['label_name'])) {
+                $tag = model(TagModel::class)->find((int) $campaign['label_name']);
+            }
+            if ($tag) {
+                foreach (model(TagModel::class)->getContacts((int) $tag['id']) as $con) {
+                    $em = strtolower(trim((string) ($con['email'] ?? '')));
+                    if ($em !== '' && filter_var($em, FILTER_VALIDATE_EMAIL)) {
+                        $recipients[] = $em;
+                    }
                 }
-                $emLabel = trim((string) ($c['label_name'] ?? ''));
-                if ($emLabel === '' && ! empty($c['tag_id']) && isset($tagsMap[(int) $c['tag_id']])) {
-                    $emLabel = $tagsMap[(int) $c['tag_id']];
-                }
-                $rows[] = [
-                    'id'            => (int) $c['id'],
-                    'channel'       => 'email',
-                    'name'          => (string) ($c['name'] ?? ''),
-                    'label'         => $emLabel,
-                    'campaign_type' => (string) ($c['subject'] ?? 'Email'),
-                    'status'        => (string) ($c['status'] ?? 'draft'),
-                    'contacts'      => is_array($c['recipients'] ?? null) ? count($c['recipients']) : 0,
-                    'sent'          => (int) ($c['sent_count'] ?? 0),
-                    'delivered'     => (int) ($c['sent_count'] ?? 0),
-                    'failed'        => (int) ($c['failed_count'] ?? 0),
-                    'scheduled_at'  => $c['scheduled_at'] ?? null,
-                    'created_at'    => $c['created_at'] ?? null,
-                    'view_url'      => site_url('campaigns/email/' . (int) $c['id']),
-                    'edit_url'      => site_url('campaigns/email/' . (int) $c['id']),
-                ];
             }
         }
 
-        if ($status !== '') {
-            $rows = array_values(array_filter($rows, static fn (array $r): bool => strtolower((string) $r['status']) === $status));
-        }
-        if ($search !== '') {
-            $q = mb_strtolower($search);
-            $rows = array_values(array_filter($rows, static function (array $r) use ($q): bool {
-                return str_contains(mb_strtolower($r['name']), $q)
-                    || str_contains(mb_strtolower($r['label']), $q)
-                    || str_contains(mb_strtolower($r['campaign_type']), $q);
-            }));
-        }
-
-        usort($rows, static function (array $a, array $b) use ($sort): int {
-            $ta = strtotime((string) ($a['created_at'] ?? '')) ?: 0;
-            $tb = strtotime((string) ($b['created_at'] ?? '')) ?: 0;
-            if ($sort === 'oldest') {
-                return $ta <=> $tb;
-            }
-            if ($sort === 'name') {
-                return strcasecmp($a['name'], $b['name']);
-            }
-
-            return $tb <=> $ta;
-        });
-
-        return $rows;
+        return array_values(array_unique(array_map(static fn ($e): string => strtolower(trim((string) $e)), $recipients)));
     }
 
     /**

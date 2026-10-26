@@ -143,24 +143,17 @@ $isCheerio = ! empty($isCheerio);
                     <small class="text-muted">Broadcast logs and delivery status</small>
                 </div>
                 <div class="d-flex align-items-center gap-2">
-                    <span class="badge bg-secondary-subtle text-secondary"><?= count($campaigns) ?> campaigns</span>
+                    <span class="badge bg-secondary-subtle text-secondary" id="emCampaignsCount"></span>
                     <a href="<?= site_url('campaigns?channel=email') ?>" class="btn btn-outline-secondary btn-xs">
                         <i class="fas fa-external-link-alt me-1"></i> Broadcast Hub
                     </a>
                 </div>
             </div>
             <div class="card-body p-0">
-                <?php if ($campaigns === []): ?>
-                    <div class="text-center py-5 text-muted">
-                        <div class="mb-3 text-secondary opacity-50">
-                            <i class="fas fa-bullhorn fa-3x"></i>
-                        </div>
-                        <h6 class="fw-semibold text-dark mb-1">No campaigns created yet</h6>
-                        <p class="small text-muted mb-0">Compose and save your first campaign draft on the left.</p>
-                    </div>
-                <?php else: ?>
                 <div class="table-responsive">
-                    <table class="table table-sm table-hover align-middle mb-0 em-table">
+                    <table class="table table-sm table-hover align-middle mb-0 em-table w-100" id="emCampaignsTable"
+                           data-url="<?= site_url('email-manager/campaigns-data') ?>"
+                           data-empty-text="No campaigns created yet. Compose and save your first campaign draft on the left.">
                         <thead class="table-light">
                             <tr>
                                 <th>Campaign</th>
@@ -169,79 +162,9 @@ $isCheerio = ! empty($isCheerio);
                                 <th class="text-end">Actions</th>
                             </tr>
                         </thead>
-                        <tbody>
-                        <?php foreach ($campaigns as $c): ?>
-                            <?php
-                            if (! is_array($c)) {
-                                continue;
-                            }
-                            $campaignId = (int) ($c['id'] ?? 0);
-                            $campaignName = (string) ($c['name'] ?? ('Campaign #' . $campaignId));
-                            $campaignSubject = (string) ($c['subject'] ?? '');
-                            $campaignStatus = (string) ($c['status'] ?? 'draft');
-                            $stBadge = match ($campaignStatus) {
-                                'sent', 'completed' => 'bg-success-subtle text-success border border-success-subtle',
-                                'failed'            => 'bg-danger-subtle text-danger border border-danger-subtle',
-                                'sending'           => 'bg-info-subtle text-info border border-info-subtle',
-                                'paused'            => 'bg-warning-subtle text-warning-emphasis border border-warning-subtle',
-                                default             => 'bg-secondary-subtle text-secondary border border-secondary-subtle',
-                            };
-                            $canRetryFailed = $campaignStatus === 'sent' && (int) ($c['failed_count'] ?? 0) > 0;
-                            ?>
-                            <tr>
-                                <td>
-                                    <span class="fw-semibold text-dark"><?= esc($campaignName) ?></span>
-                                    <div class="text-muted small text-truncate" style="max-width: 200px;">
-                                        <?= esc($campaignSubject !== '' ? $campaignSubject : 'No subject') ?>
-                                    </div>
-                                    <?php if (! empty($c['attachment_name'])): ?>
-                                        <div class="mt-0.5">
-                                            <span class="badge bg-light text-secondary border" style="font-size: 0.65rem;">
-                                                <i class="fas fa-paperclip text-primary me-1"></i><?= esc($c['attachment_name']) ?>
-                                            </span>
-                                        </div>
-                                    <?php endif; ?>
-                                </td>
-                                <td>
-                                    <span class="badge <?= $stBadge ?> rounded-pill px-2 py-1">
-                                        <?= esc($canRetryFailed ? 'Sent with errors' : ucfirst($campaignStatus)) ?>
-                                    </span>
-                                    <?php if (in_array($campaignStatus, ['paused', 'failed'], true) && ! empty($c['last_error'])): ?>
-                                        <div class="text-muted small text-truncate" style="max-width: 220px;" title="<?= esc((string) $c['last_error'], 'attr') ?>">
-                                            <?= esc((string) $c['last_error']) ?>
-                                        </div>
-                                    <?php endif; ?>
-                                </td>
-                                <td>
-                                    <span class="text-success fw-semibold"><?= (int) ($c['sent_count'] ?? 0) ?></span>
-                                    <span class="text-muted">/</span>
-                                    <span class="text-danger"><?= (int) ($c['failed_count'] ?? 0) ?></span>
-                                </td>
-                                <td class="text-end text-nowrap">
-                                    <a href="<?= site_url('campaigns/email/' . $campaignId) ?>" class="btn btn-xs btn-outline-secondary me-1" title="View details">
-                                        <i class="fas fa-eye me-1"></i> View
-                                    </a>
-                                    <?php if ($canSend && $campaignId > 0 && in_array($campaignStatus, ['draft', 'failed', 'paused'], true)): ?>
-                                        <button type="button" class="btn btn-xs btn-primary em-send-camp" data-id="<?= $campaignId ?>" title="<?= $campaignStatus === 'draft' ? 'Broadcast campaign now' : 'Send to recipients who have not received it yet' ?>">
-                                            <i class="fas fa-paper-plane me-1"></i> <?= $campaignStatus === 'draft' ? 'Send' : ($campaignStatus === 'paused' ? 'Resume' : 'Retry') ?>
-                                        </button>
-                                    <?php elseif ($canSend && $campaignId > 0 && $canRetryFailed): ?>
-                                        <button type="button" class="btn btn-xs btn-outline-primary em-send-camp" data-id="<?= $campaignId ?>" title="Send only to recipients that failed">
-                                            <i class="fas fa-redo me-1"></i> Retry failed
-                                        </button>
-                                    <?php endif; ?>
-                                    <?php if ($canSend && $campaignId > 0): ?>
-                                        <button type="button" class="btn btn-xs btn-outline-danger em-del-camp ms-1" data-id="<?= $campaignId ?>" title="Delete">
-                                            <i class="fas fa-trash-alt"></i>
-                                        </button>
-                                    <?php endif; ?>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                        </tbody>
+                        <tbody></tbody>
                     </table>
                 </div>
-                <?php endif; ?>
             </div>
         </div>
     </div>
