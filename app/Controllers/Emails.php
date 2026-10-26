@@ -633,9 +633,12 @@ class Emails extends BaseController
     protected function recordRecipientEngagement(int $logId, string $type): void
     {
         try {
-            \App\Libraries\TenantResolver::ensureFromPublicKey((string) $this->request->getGet('t'));
+            // Unknown tenant key: record nothing rather than writing into whichever DB is loaded.
+            if (! \App\Libraries\TenantResolver::ensureFromPublicKey((string) $this->request->getGet('t'))) {
+                return;
+            }
 
-            $logs = model(EmailLogModel::class);
+            $logs = model(EmailLogModel::class, false);
             $type === \App\Models\EmailRecipientEventModel::TYPE_OPEN
                 ? $logs->recordOpen($logId)
                 : $logs->recordClick($logId);

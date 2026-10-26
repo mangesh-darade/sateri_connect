@@ -107,7 +107,8 @@ class ApiAuthFilter implements FilterInterface
             foreach ($master->listActiveTenants() as $tenant) {
                 $tKey = (string) ($tenant['key'] ?? '');
                 if ($tKey !== '' && $connection->apply($tKey, 'api_token_lookup')) {
-                    $candidateRow = model(ApiTokenModel::class)->findValidByPlainText($rawToken);
+                    // Fresh (non-shared) model: a shared one stays bound to the previous tenant's connection.
+                    $candidateRow = model(ApiTokenModel::class, false)->findValidByPlainText($rawToken);
                     if ($candidateRow !== null) {
                         $apiTokenRow = $candidateRow;
                         break;
@@ -121,6 +122,8 @@ class ApiAuthFilter implements FilterInterface
         }
 
         if ($apiTokenRow !== null) {
+            // The scan above may have switched tenants; make sure the models below use the matched one.
+            \CodeIgniter\Config\Factories::reset('models');
             $userId = (int) ($apiTokenRow['user_id'] ?? 0);
             $user   = model(UserModel::class)->find($userId);
 
@@ -150,6 +153,12 @@ class ApiAuthFilter implements FilterInterface
                 }
             }
 
+            // The key owner's role must allow this v1 endpoint, exactly like a logged-in user.
+            $denied = $this->deniedPermission($request, $permissions);
+            if ($denied !== null) {
+                return $this->forbidden($denied);
+            }
+
             // If token has specific abilities, enforce least-privilege scope check
             $abilities = $apiTokenRow['abilities'] ?? ['*'];
             if (! is_array($abilities)) {
@@ -157,7 +166,18 @@ class ApiAuthFilter implements FilterInterface
             }
 
             $requiredAbility = $this->resolveRequiredAbility($request);
-            if ($requiredAbility !== '' && ! in_array('*', $abilities, true) && ! in_array($requiredAbility, $abilities, true)) {
+            $scoped          = ! in_array('*', $abilities, true);
+            if ($scoped && $requiredAbility === '' && $this->isV1Path($request) && ! $this->isAbilityExempt($request)) {
+                // Deny by default: a scoped key may only reach endpoints that map to an ability.
+                return service('response')
+                    ->setStatusCode(403)
+                    ->setJSON([
+                        'status'  => 'error',
+                        'success' => false,
+                        'message' => 'Forbidden: This API token is not scoped for this endpoint.',
+                    ]);
+            }
+            if ($requiredAbility !== '' && $scoped && ! in_array($requiredAbility, $abilities, true)) {
                 return service('response')
                     ->setStatusCode(403)
                     ->setJSON([
@@ -244,6 +264,7 @@ class ApiAuthFilter implements FilterInterface
                 ]);
         }
 
+        \CodeIgniter\Config\Factories::reset('models');
         $user = model(UserModel::class)->find($userId);
         if ($user === null || ($user['status'] ?? '') !== 'active') {
             return service('response')
@@ -252,6 +273,18 @@ class ApiAuthFilter implements FilterInterface
                     'status'  => 'error',
                     'success' => false,
                     'message' => 'User not found or inactive.',
+                ]);
+        }
+
+        // A password change/reset signs out older tokens (same rule the web session uses).
+        $changedAt = (int) cache(UserModel::passwordChangedCacheKey($userId));
+        if ($changedAt > 0 && (int) ($payload->iat ?? 0) < $changedAt) {
+            return service('response')
+                ->setStatusCode(401)
+                ->setJSON([
+                    'status'  => 'error',
+                    'success' => false,
+                    'message' => 'Password was changed. Log in again.',
                 ]);
         }
 
@@ -267,6 +300,11 @@ class ApiAuthFilter implements FilterInterface
             if (in_array($roleSlug, ['super-admin', 'super_admin'], true)) {
                 $permissions = ['*'];
             }
+        }
+
+        $denied = $this->deniedPermission($request, $permissions);
+        if ($denied !== null) {
+            return $this->forbidden($denied);
         }
 
         session()->set([
@@ -317,6 +355,80 @@ class ApiAuthFilter implements FilterInterface
         return null;
     }
 
+    protected function isV1Path(RequestInterface $request): bool
+    {
+        return str_contains((string) $request->getUri()->getPath(), 'api/v1/');
+    }
+
+    /** Endpoints any valid key may call regardless of scope. */
+    protected function isAbilityExempt(RequestInterface $request): bool
+    {
+        return str_ends_with(rtrim((string) $request->getUri()->getPath(), '/'), '/health');
+    }
+
+    protected function forbidden(string $slug): ResponseInterface
+    {
+        return service('response')
+            ->setStatusCode(403)
+            ->setJSON([
+                'status'  => 'error',
+                'success' => false,
+                'message' => 'Permission denied: ' . $slug,
+            ]);
+    }
+
+    /**
+     * Role permission an `/api/v1` endpoint needs (null = none required). Legacy `/api` routes carry their
+     * own `permission:` filters, so this only covers v1.
+     */
+    protected function resolveRequiredPermission(RequestInterface $request): ?string
+    {
+        if (! $this->isV1Path($request)) {
+            return null;
+        }
+
+        $uri    = (string) $request->getUri()->getPath();
+        $method = strtoupper($request->getMethod());
+        $read   = in_array($method, ['GET', 'HEAD'], true);
+
+        if (str_contains($uri, '/contacts')) {
+            if ($read) {
+                return 'contacts.view';
+            }
+
+            return str_contains($uri, '/consent') ? 'contacts.edit' : 'contacts.create';
+        }
+        if (str_contains($uri, '/messages')) {
+            return $read ? 'chat.view' : 'chat.send';
+        }
+        if (str_contains($uri, '/templates')) {
+            return 'templates.view';
+        }
+        if (str_contains($uri, '/automations')) {
+            return $read ? 'automations.view' : 'automations.edit';
+        }
+        if (str_contains($uri, '/email/identities')) {
+            return $read ? 'emails.view' : 'emails.send';
+        }
+
+        return null; // account / health: any authenticated caller
+    }
+
+    /**
+     * @param list<string> $permissions role permissions (before any API-key ability narrowing)
+     *
+     * @return string|null missing permission slug, or null when allowed
+     */
+    protected function deniedPermission(RequestInterface $request, array $permissions): ?string
+    {
+        $needed = $this->resolveRequiredPermission($request);
+        if ($needed === null || in_array('*', $permissions, true) || in_array($needed, $permissions, true)) {
+            return null;
+        }
+
+        return $needed;
+    }
+
     /**
      * Map request endpoint and HTTP method to required token ability scope.
      */
@@ -325,7 +437,7 @@ class ApiAuthFilter implements FilterInterface
         $uri    = (string) $request->getUri()->getPath();
         $method = strtoupper($request->getMethod());
 
-        if (str_contains($uri, 'contacts/upsert') && $method === 'POST') {
+        if (str_contains($uri, 'contacts') && $method === 'POST') {
             return 'contacts:write';
         }
         if (str_contains($uri, 'contacts') && $method === 'GET') {

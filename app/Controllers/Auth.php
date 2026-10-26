@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Libraries\ActivityLogger;
+use App\Libraries\LoginThrottle;
 use App\Models\PasswordResetModel;
 use App\Models\RoleModel;
 use App\Models\UserModel;
@@ -91,9 +92,9 @@ class Auth extends BaseController
         $email    = (string) $this->request->getPost('email');
         $password = (string) $this->request->getPost('password');
 
-        // Per-account lockout too, so attacks spread across many IPs still hit a limit.
-        $accountKey = 'login_attempts_acct_' . md5(strtolower(trim($email)));
-        if ($this->isRateLimited($accountKey)) {
+        // Per email+IP and per-account limits, so a distributed attack still hits a cap while one
+        // attacker cannot lock a real user out of their own account.
+        if (LoginThrottle::blocked($email, $ip)) {
             return redirect()->back()->withInput()->with(
                 'error',
                 'Too many login attempts for this account. Please try again in 15 minutes or reset your password.'
@@ -134,7 +135,11 @@ class Auth extends BaseController
             $repo = new \App\Libraries\MasterTenantRepository();
             if ($postedTenant !== '') {
                 if ($repo->findActiveTenant($postedTenant) === null) {
-                    return redirect()->to('/login')->with('error', 'Client not found or inactive.');
+                    // Same answer as a wrong password, and counted, so tenant keys cannot be enumerated.
+                    $this->incrementAttempts($key);
+                    LoginThrottle::fail($email, $ip);
+
+                    return redirect()->back()->withInput()->with('error', 'Invalid email or password.');
                 }
                 $tenantKey = $postedTenant;
             } else {
@@ -163,9 +168,9 @@ class Auth extends BaseController
             $user = null;
         }
 
-        if ($user === null || ! password_verify($password, (string) ($user['password'] ?? ''))) {
+        if (! LoginThrottle::verify($password, is_array($user) ? (string) ($user['password'] ?? '') : null)) {
             $this->incrementAttempts($key);
-            $this->incrementAttempts($accountKey);
+            LoginThrottle::fail($email, $ip);
 
             return redirect()->back()->withInput()->with('error', 'Invalid email or password.');
         }
@@ -184,7 +189,7 @@ class Auth extends BaseController
         }
 
         $this->clearAttempts($key);
-        $this->clearAttempts($accountKey);
+        LoginThrottle::clear($email, $ip);
         $this->establishSession($user, $tenantKey ?? \App\Libraries\TenantContext::get());
 
         $users->update((int) $user['id'], ['last_login' => date('Y-m-d H:i:s')]);
@@ -293,7 +298,12 @@ class Auth extends BaseController
 
     public function verifyEmail(string $token): ResponseInterface
     {
-        $users = model(UserModel::class);
+        $tenantKey = trim((string) $this->request->getGet('t'));
+        if ($tenantKey !== '') {
+            \App\Libraries\TenantResolver::ensureFromPublicKey($tenantKey);
+        }
+
+        $users = model(UserModel::class, false);
         $user  = $users->findByVerificationToken($token);
 
         if ($user === null) {
@@ -495,6 +505,11 @@ class Auth extends BaseController
 
         $name = trim((string) ($user['name'] ?? 'there'));
         $link = site_url('verify-email/' . rawurlencode($token));
+        // Multi-tenant: the link must say which workspace DB holds this token.
+        $tenant = \App\Libraries\TenantContext::get();
+        if ($tenant !== null && $tenant !== '') {
+            $link .= '?t=' . rawurlencode($tenant);
+        }
 
         try {
             $message = "Hello {$name},\n\n" .

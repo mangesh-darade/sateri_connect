@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers\Api;
 
 use App\Libraries\ActivityLogger;
+use App\Libraries\LoginThrottle;
 use App\Models\RoleModel;
 use App\Models\UserModel;
 use CodeIgniter\HTTP\ResponseInterface;
@@ -28,6 +29,12 @@ class Auth extends BaseApiController
             ]);
         }
 
+        // Same per email+IP / per-account limits as the web login (the route only rate-limits by IP).
+        $ip = (string) ($this->request->getIPAddress() ?: 'unknown');
+        if (LoginThrottle::blocked($email, $ip)) {
+            return $this->respondError('Too many login attempts. Try again in 15 minutes.', [], 429);
+        }
+
         $tenantKey = null;
         if (\App\Libraries\MasterTenantRepository::masterConfigured()) {
             $tenantKey = (new \App\Libraries\MasterTenantRepository())->findTenantKeyByEmail($email);
@@ -38,15 +45,19 @@ class Auth extends BaseApiController
             }
         }
 
-        $user = model(UserModel::class)->findByEmail($email);
+        $user = model(UserModel::class, false)->findByEmail($email);
 
-        if ($user === null || ! password_verify($password, (string) ($user['password'] ?? ''))) {
+        if (! LoginThrottle::verify($password, is_array($user) ? (string) ($user['password'] ?? '') : null)) {
+            LoginThrottle::fail($email, $ip);
+
             return $this->respondError('Invalid credentials.', [], 401);
         }
 
         if (($user['status'] ?? '') !== 'active') {
             return $this->respondError('Account is inactive.', [], 403);
         }
+
+        LoginThrottle::clear($email, $ip);
 
         $role = model(RoleModel::class)->find((int) ($user['role_id'] ?? 0));
         $permissions = [];

@@ -26,6 +26,28 @@ class PlatformAuthFilter implements FilterInterface
             return redirect()->to('/login?tenant=_platform')->with('error', 'Sign in as platform super admin.');
         }
 
+        // At most once a minute, make sure this admin still exists and is active (cross-tenant power).
+        $checkedAt = (int) $session->get('platform_admin_checked_at');
+        if ($checkedAt < 1 || (time() - $checkedAt) >= 60) {
+            try {
+                $admin = (new \App\Libraries\MasterTenantRepository())
+                    ->findPlatformAdminById((int) $session->get('platform_admin_id'));
+                if ($admin === null || strtolower((string) ($admin['status'] ?? '')) !== 'active') {
+                    $session->destroy();
+                    if ($request->isAJAX()) {
+                        return service('response')
+                            ->setStatusCode(401)
+                            ->setJSON(['success' => false, 'message' => 'Platform admin required.']);
+                    }
+
+                    return redirect()->to('/login?tenant=_platform')->with('error', 'Sign in as platform super admin.');
+                }
+                $session->set('platform_admin_checked_at', time());
+            } catch (\Throwable $e) {
+                log_message('warning', 'PlatformAuthFilter revalidation skipped: {msg}', ['msg' => $e->getMessage()]);
+            }
+        }
+
         return null;
     }
 

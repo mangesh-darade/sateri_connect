@@ -66,7 +66,65 @@ class AuthFilter implements FilterInterface
             return redirect()->to('/login')->with('error', 'Your password was changed. Please log in again.');
         }
 
+        // A platform admin who opened this workspace is governed by the platform session instead.
+        if (! $session->get('platform_impersonating') && ! $this->userStillValid($session)) {
+            $session->destroy();
+
+            if ($request->isAJAX() || str_starts_with($request->getPath(), 'api/')) {
+                return service('response')
+                    ->setStatusCode(401)
+                    ->setJSON(['success' => false, 'message' => 'Your account is no longer active. Please log in again.']);
+            }
+
+            return redirect()->to('/login')->with('error', 'Your account is no longer active.');
+        }
+
         return null;
+    }
+
+    /**
+     * Sessions hold a snapshot taken at login. At most once a minute, re-read the user so deactivated or
+     * deleted accounts are signed out and role/permission changes take effect without a new login.
+     */
+    protected function userStillValid(object $session): bool
+    {
+        $checkedAt = (int) $session->get('user_checked_at');
+        if ($checkedAt > 0 && (time() - $checkedAt) < 60) {
+            return true;
+        }
+
+        try {
+            $user = model(\App\Models\UserModel::class, false)->find((int) $session->get('user_id'));
+            if ($user === null || ($user['status'] ?? '') !== 'active') {
+                return false;
+            }
+
+            $roleModel   = model(\App\Models\RoleModel::class, false);
+            $role        = $roleModel->find((int) ($user['role_id'] ?? 0));
+            $permissions = [];
+            if ($role !== null) {
+                $permissions = array_values(array_filter(array_map(
+                    static fn (array $p): string => (string) ($p['slug'] ?? ''),
+                    $roleModel->getPermissions((int) $role['id'])
+                )));
+                if (in_array($role['slug'] ?? '', ['super-admin', 'super_admin'], true)) {
+                    $permissions = ['*'];
+                }
+            }
+
+            $session->set([
+                'role_id'         => $user['role_id'] ?? null,
+                'role_name'       => $role['name'] ?? null,
+                'role_slug'       => $role['slug'] ?? null,
+                'permissions'     => $permissions,
+                'user_checked_at' => time(),
+            ]);
+        } catch (\Throwable $e) {
+            // A transient DB problem must not sign everyone out.
+            log_message('warning', 'AuthFilter user revalidation skipped: {msg}', ['msg' => $e->getMessage()]);
+        }
+
+        return true;
     }
 
     /**
