@@ -93,6 +93,28 @@ class ContactAttributeService
     }
 
     /**
+     * Decode one contact_attributes row and add its usage figures (used for a single table page).
+     *
+     * @param array<string, mixed> $row
+     *
+     * @return array<string, mixed>
+     */
+    public function describeRow(array $row): array
+    {
+        $key = (string) $row['attr_key'];
+        $row['options'] = $this->decodeOptions($row['options'] ?? null);
+        $path = db_connect()->escape('$."' . $key . '"');
+        $row['usage'] = (int) db_connect()->table('contacts')
+            ->where('deleted_at', null)
+            ->where("JSON_EXTRACT(custom_fields, {$path}) IS NOT NULL", null, false)
+            ->where("JSON_UNQUOTE(JSON_EXTRACT(custom_fields, {$path})) <> ''", null, false)
+            ->countAllResults();
+        $row['used_in'] = $this->usedIn($key);
+
+        return $row;
+    }
+
+    /**
      * Keys saved on contacts (imports, workflows, webhooks) that are not defined on the Attributes page yet,
      * with how many contacts have a value. Only defined attributes show as contact columns/fields.
      *

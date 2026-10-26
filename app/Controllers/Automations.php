@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Libraries\ActivityLogger;
 use App\Libraries\ContactAttributes;
+use App\Libraries\DataTablesQuery;
 use App\Libraries\WorkflowGraph;
 use App\Models\AutomationModel;
 use App\Models\AutomationRuleModel;
@@ -30,16 +31,37 @@ class Automations extends BaseController
             return $this->emailDrips();
         }
 
-        $automations = model(AutomationModel::class)
-            ->orderBy('priority', 'ASC')
-            ->orderBy('id', 'DESC')
-            ->findAll();
-
         return $this->render('automations/index', [
-            'pageTitle'   => 'Automations',
-            'automations' => $automations,
-            'channel'     => 'whatsapp',
+            'pageTitle' => 'Automations',
+            'channel'   => 'whatsapp',
         ]);
+    }
+
+    /** DataTables JSON for the WhatsApp workflows list. */
+    public function data(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('automations.view')) {
+            return $denied;
+        }
+
+        return $this->response->setJSON(DataTablesQuery::respond($this->request, [
+            'builder'  => static fn () => db_connect()->table('automations a')
+                ->select('a.id, a.name, a.trigger_type, a.priority, a.is_active, a.updated_at, '
+                    . "(a.flow_graph IS NOT NULL AND a.flow_graph <> '') AS has_graph", false),
+            'columns'  => [0 => 'a.name', 1 => 'a.trigger_type', 2 => 'a.priority', 3 => 'a.is_active', 4 => 'a.updated_at'],
+            'search'   => ['a.name', 'a.trigger_type'],
+            'order'    => [2, 'asc'],
+            'tiebreak' => 'a.id',
+            'map'      => static fn (array $r): array => [
+                'id'           => (int) $r['id'],
+                'name'         => (string) $r['name'],
+                'trigger_type' => (string) $r['trigger_type'],
+                'priority'     => (int) $r['priority'],
+                'is_active'    => (int) $r['is_active'],
+                'has_graph'    => (int) $r['has_graph'],
+                'updated_at'   => format_app_datetime($r['updated_at'] ?? null),
+            ],
+        ]));
     }
 
     public function emailDrips(): string|ResponseInterface
@@ -48,17 +70,55 @@ class Automations extends BaseController
             return $denied;
         }
 
-        $dripModel = model(\App\Models\EmailDripModel::class);
-        $drips     = $dripModel->withSteps(100);
-        $builders  = model(\App\Models\EmailBuilderModel::class)->orderBy('id', 'DESC')->findAll(100);
+        $db      = db_connect();
+        $totals  = $db->table('email_drips')->select('COUNT(*) AS total, SUM(status = \'active\') AS active', false)->get()->getRowArray() ?: [];
+        $steps   = (int) $db->table('email_drip_steps')->countAllResults();
+        $builders = model(\App\Models\EmailBuilderModel::class)->select('id, name')->orderBy('id', 'DESC')->findAll(100);
 
         return $this->render('automations/drips_index', [
-            'pageTitle' => 'Email Workflows (Auto Drips)',
-            'drips'     => $drips,
-            'builders'  => $builders,
-            'channel'   => 'email',
-            'canEdit'   => function_exists('can') && can('emails.send'),
+            'pageTitle'   => 'Email Workflows (Auto Drips)',
+            'totalDrips'  => (int) ($totals['total'] ?? 0),
+            'activeDrips' => (int) ($totals['active'] ?? 0),
+            'totalSteps'  => $steps,
+            'builders'    => $builders,
+            'channel'     => 'email',
+            'canEdit'     => function_exists('can') && can('emails.send'),
         ]);
+    }
+
+    /** DataTables JSON for the email drips list (each row carries its steps for the edit modal). */
+    public function dripsData(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('automations.view')) {
+            return $denied;
+        }
+
+        $out = DataTablesQuery::respond($this->request, [
+            'builder'  => static fn () => db_connect()->table('email_drips d')
+                ->select('d.id, d.name, d.description, d.trigger_type, d.trigger_value, d.status, '
+                    . '(SELECT COUNT(*) FROM email_drip_steps s WHERE s.drip_id = d.id) AS step_count', false),
+            'columns'  => [0 => 'd.name', 1 => 'd.trigger_type', 2 => 'step_count', 3 => 'd.status'],
+            'search'   => ['d.name', 'd.description', 'd.trigger_type', 'd.trigger_value', 'd.status'],
+            'order'    => [0, 'asc'],
+            'tiebreak' => 'd.id',
+        ]);
+
+        $ids    = array_map(static fn (array $r): int => (int) $r['id'], $out['data']);
+        $byDrip = [];
+        if ($ids !== []) {
+            foreach (model(\App\Models\EmailDripStepModel::class)->whereIn('drip_id', $ids)->orderBy('step_order', 'ASC')->findAll() as $step) {
+                $byDrip[(int) $step['drip_id']][] = $step;
+            }
+        }
+        $out['data'] = array_map(static function (array $r) use ($byDrip): array {
+            $r['id']         = (int) $r['id'];
+            $r['step_count'] = (int) $r['step_count'];
+            $r['steps']      = $byDrip[$r['id']] ?? [];
+
+            return $r;
+        }, $out['data']);
+
+        return $this->response->setJSON($out);
     }
 
     public function create(): string|ResponseInterface

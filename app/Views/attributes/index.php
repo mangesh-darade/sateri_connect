@@ -23,7 +23,7 @@
         <span class="small text-muted">Used in contact profiles, inbox, filters, workflows (<code>{{key}}</code>) and imports</span>
     </div>
     <div class="card-body py-3">
-        <table class="table table-sm table-hover align-middle w-100">
+        <table class="table table-sm table-hover align-middle w-100" id="attributesTable">
             <thead>
                 <tr>
                     <th>Label</th>
@@ -35,74 +35,7 @@
                     <?php if ($canEdit): ?><th class="text-end" style="width:110px">Action</th><?php endif; ?>
                 </tr>
             </thead>
-            <tbody>
-            <?php if (empty($attributes)): ?>
-                <tr>
-                    <td colspan="7" class="text-center text-muted py-4">
-                        No attributes yet. Add one (e.g. <strong>City</strong> as a dropdown) so agents and workflows save clean, typed values.
-                        <div class="small mt-1">Built-in fields (name, email, country, notes, status, birthday) are always available.</div>
-                    </td>
-                </tr>
-            <?php else: ?>
-                <?php foreach ($attributes as $attr): ?>
-                    <tr>
-                        <td class="fw-medium"><?= esc($attr['label']) ?></td>
-                        <td><code><?= esc($attr['attr_key']) ?></code></td>
-                        <td><span class="badge bg-light text-dark border"><?= esc($types[$attr['type']] ?? $attr['type']) ?></span></td>
-                        <td class="small text-muted">
-                            <?= $attr['options'] !== [] ? esc(implode(', ', $attr['options'])) : '' ?>
-                            <?php if (($attr['default_value'] ?? '') !== ''): ?>
-                                <div>Default: <span class="text-dark"><?= esc($attr['default_value']) ?></span></div>
-                            <?php endif; ?>
-                        </td>
-                        <td class="text-center">
-                            <?php if ((int) ($attr['usage'] ?? 0) > 0): ?>
-                                <a href="<?= site_url('contacts?attr_key=' . rawurlencode($attr['attr_key']) . '&attr_op=not_empty') ?>" title="Show these contacts"><?= (int) $attr['usage'] ?></a>
-                            <?php else: ?>0<?php endif; ?>
-                        </td>
-                        <?php
-                        $used      = $attr['used_in'] ?? ['workflows' => [], 'keywords' => [], 'campaigns' => []];
-                        $usedLinks = [
-                            'workflows' => ['icon' => 'fa-diagram-project', 'label' => 'workflow', 'url' => static fn ($id) => site_url('automations/' . $id . '/builder')],
-                            'keywords'  => ['icon' => 'fa-key', 'label' => 'keyword', 'url' => static fn ($id) => site_url('keywords/' . $id . '/edit')],
-                            'campaigns' => ['icon' => 'fa-bullhorn', 'label' => 'campaign', 'url' => static fn ($id) => site_url('campaigns/' . $id)],
-                        ];
-                        $usedCount = count($used['workflows']) + count($used['keywords']) + count($used['campaigns']);
-                        ?>
-                        <td class="small">
-                            <?php if ($usedCount === 0): ?>
-                                <span class="text-muted">—</span>
-                            <?php else: ?>
-                                <?php foreach ($usedLinks as $type => $meta): ?>
-                                    <?php foreach ($used[$type] as $ref): ?>
-                                        <a href="<?= esc($meta['url']($ref['id']), 'attr') ?>" class="badge bg-light text-dark border text-decoration-none me-1 mb-1" title="<?= esc(ucfirst($meta['label']), 'attr') ?>">
-                                            <i class="fas <?= $meta['icon'] ?> me-1 text-muted"></i><?= esc(mb_strimwidth($ref['name'] ?: ('#' . $ref['id']), 0, 28, '…')) ?>
-                                        </a>
-                                    <?php endforeach; ?>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </td>
-                        <?php if ($canEdit): ?>
-                        <td class="text-end">
-                            <div class="table-actions justify-content-end">
-                                <button type="button" class="btn btn-sm btn-outline-secondary" title="Edit"
-                                        data-crud-edit data-row="<?= esc(json_encode($attr), 'attr') ?>">
-                                    <i class="fas fa-pen"></i>
-                                </button>
-                                <button type="button" class="btn btn-sm btn-outline-danger" title="Delete"
-                                        data-crud-delete data-id="<?= (int) $attr['id'] ?>" data-name="<?= esc($attr['label'], 'attr') ?>"
-                                        data-text="<?= esc($usedCount > 0
-                                            ? 'Used in ' . $usedCount . ' workflow/keyword/campaign(s) — they keep working with the raw key but lose type checks. Values already saved on contacts are kept.'
-                                            : 'Values already saved on contacts are kept.', 'attr') ?>">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </td>
-                        <?php endif; ?>
-                    </tr>
-                <?php endforeach; ?>
-            <?php endif; ?>
-            </tbody>
+            <tbody></tbody>
         </table>
     </div>
 </div>
@@ -185,6 +118,64 @@
 <script src="<?= base_url('assets/js/simple-crud.js') ?>"></script>
 <script>
 (function ($) {
+    var canEdit = <?= $canEdit ? 'true' : 'false' ?>;
+    var siteBase = <?= json_encode(rtrim(site_url(), '/')) ?>;
+    function escAttr(v) { return AppDT.esc(v).replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+    var usedLinks = {
+        workflows: { icon: 'fa-diagram-project', label: 'Workflow', url: function (id) { return siteBase + '/automations/' + id + '/builder'; } },
+        keywords:  { icon: 'fa-key', label: 'Keyword', url: function (id) { return siteBase + '/keywords/' + id + '/edit'; } },
+        campaigns: { icon: 'fa-bullhorn', label: 'Campaign', url: function (id) { return siteBase + '/campaigns/' + id; } }
+    };
+
+    if ($('#attributesTable').length && <?= $tableReady ? 'true' : 'false' ?>) {
+        var cols = [
+            { data: null, className: 'fw-medium', render: function (r) { return AppDT.esc(r.label); } },
+            { data: null, render: function (r) { return '<code>' + AppDT.esc(r.attr_key) + '</code>'; } },
+            { data: null, render: function (r) { return '<span class="badge bg-light text-dark border">' + AppDT.esc(r.type_label) + '</span>'; } },
+            { data: null, orderable: false, className: 'small text-muted', render: function (r) {
+                var h = (r.options && r.options.length) ? AppDT.esc(r.options.join(', ')) : '';
+                if (r.default_value) h += '<div>Default: <span class="text-dark">' + AppDT.esc(r.default_value) + '</span></div>';
+                return h;
+            } },
+            { data: null, orderable: false, className: 'text-center', render: function (r) {
+                if (!(r.usage > 0)) return '0';
+                return '<a href="' + escAttr(siteBase + '/contacts?attr_key=' + encodeURIComponent(r.attr_key) + '&attr_op=not_empty') + '" title="Show these contacts">' + AppDT.esc(r.usage) + '</a>';
+            } },
+            { data: null, orderable: false, className: 'small', render: function (r) {
+                var h = '', n = 0;
+                $.each(usedLinks, function (type, meta) {
+                    $.each((r.used_in && r.used_in[type]) || [], function (_, ref) {
+                        n++;
+                        var name = ref.name || ('#' + ref.id);
+                        if (name.length > 28) name = name.slice(0, 27) + '\u2026';
+                        h += '<a href="' + escAttr(meta.url(ref.id)) + '" class="badge bg-light text-dark border text-decoration-none me-1 mb-1" title="' + escAttr(meta.label) + '">' +
+                            '<i class="fas ' + meta.icon + ' me-1 text-muted"></i>' + AppDT.esc(name) + '</a>';
+                    });
+                });
+                return n ? h : '<span class="text-muted">\u2014</span>';
+            } }
+        ];
+        if (canEdit) {
+            cols.push({ data: null, orderable: false, className: 'text-end', render: function (r) {
+                var n = 0;
+                $.each(r.used_in || {}, function (_, list) { n += list.length; });
+                var text = n > 0
+                    ? 'Used in ' + n + ' workflow/keyword/campaign(s) \u2014 they keep working with the raw key but lose type checks. Values already saved on contacts are kept.'
+                    : 'Values already saved on contacts are kept.';
+                return '<div class="table-actions justify-content-end">' +
+                    '<button type="button" class="btn btn-sm btn-outline-secondary" title="Edit" data-crud-edit data-row="' + escAttr(JSON.stringify(r)) + '"><i class="fas fa-pen"></i></button> ' +
+                    '<button type="button" class="btn btn-sm btn-outline-danger" title="Delete" data-crud-delete data-id="' + escAttr(r.id) + '" data-name="' + escAttr(r.label) + '" data-text="' + escAttr(text) + '"><i class="fas fa-trash"></i></button>' +
+                    '</div>';
+            } });
+        }
+        AppDT.table('#attributesTable', {
+            url: <?= json_encode(site_url('attributes/data')) ?>,
+            order: [[0, 'asc']],
+            emptyText: 'No attributes yet. Add one (e.g. City as a dropdown) so agents and workflows save clean, typed values.',
+            columns: cols
+        });
+    }
+
     function toggleOptions() { $('#attrOptionsWrap').toggleClass('d-none', $('#attrType').val() !== 'dropdown'); }
     $('#attrType').on('change', toggleOptions);
     $('#attributeModal form').on('crud:open', toggleOptions);

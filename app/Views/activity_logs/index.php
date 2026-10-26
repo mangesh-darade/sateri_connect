@@ -12,7 +12,7 @@
         'search'    => $filters['search'] ?? null,
     ]));
     ?>
-    <a href="<?= site_url('activity-logs/export?' . $exportQs) ?>" class="btn btn-sm btn-outline-secondary" title="Export CSV">
+    <a href="<?= site_url('activity-logs/export?' . $exportQs) ?>" id="activityExportLink" class="btn btn-sm btn-outline-secondary" title="Export CSV">
         <i class="fas fa-file-csv me-1 text-success"></i> Export CSV
     </a>
 </div>
@@ -23,18 +23,18 @@
     <!-- Filter Card -->
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-3">
-            <form method="get" action="<?= site_url('activity-logs') ?>" class="row g-2 align-items-end">
+            <form id="activityFilters" onsubmit="return false;" class="row g-2 align-items-end">
                 <div class="col-md-3">
                     <label class="form-label small text-muted mb-1">Search Keywords</label>
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-light border-end-0"><i class="fas fa-search text-muted"></i></span>
-                        <input type="text" name="search" class="form-control border-start-0" placeholder="Description, email, field..." value="<?= esc($filters['search'] ?? '') ?>">
+                        <input type="text" name="search" id="afSearch" class="form-control border-start-0" placeholder="Description, email, field..." value="<?= esc($filters['search'] ?? '') ?>">
                     </div>
                 </div>
 
                 <div class="col-md-2">
                     <label class="form-label small text-muted mb-1">Module</label>
-                    <select name="module" class="form-select form-select-sm">
+                    <select name="module" id="afModule" class="form-select form-select-sm">
                         <option value="">All Modules</option>
                         <?php foreach ($modules as $mod): ?>
                             <option value="<?= esc($mod) ?>" <?= ($filters['module'] ?? '') === $mod ? 'selected' : '' ?>>
@@ -46,7 +46,7 @@
 
                 <div class="col-md-2">
                     <label class="form-label small text-muted mb-1">User</label>
-                    <select name="user_id" class="form-select form-select-sm">
+                    <select name="user_id" id="afUser" class="form-select form-select-sm">
                         <option value="">All Users</option>
                         <?php foreach ($users as $u): ?>
                             <option value="<?= (int) $u['id'] ?>" <?= ((string) ($filters['user_id'] ?? '') === (string) $u['id']) ? 'selected' : '' ?>>
@@ -58,21 +58,18 @@
 
                 <div class="col-md-2">
                     <label class="form-label small text-muted mb-1">From Date</label>
-                    <input type="date" name="date_from" class="form-control form-control-sm" value="<?= esc($filters['date_from'] ?? '') ?>">
+                    <input type="date" name="date_from" id="afFrom" class="form-control form-control-sm" value="<?= esc($filters['date_from'] ?? '') ?>">
                 </div>
 
                 <div class="col-md-2">
                     <label class="form-label small text-muted mb-1">To Date</label>
-                    <input type="date" name="date_to" class="form-control form-control-sm" value="<?= esc($filters['date_to'] ?? '') ?>">
+                    <input type="date" name="date_to" id="afTo" class="form-control form-control-sm" value="<?= esc($filters['date_to'] ?? '') ?>">
                 </div>
 
                 <div class="col-md-1 d-flex gap-1">
-                    <button type="submit" class="btn btn-sm btn-primary w-100" title="Apply Filters">
-                        <i class="fas fa-filter"></i>
-                    </button>
-                    <a href="<?= site_url('activity-logs') ?>" class="btn btn-sm btn-outline-secondary" title="Reset Filters">
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100" id="afReset" title="Reset Filters">
                         <i class="fas fa-undo"></i>
-                    </a>
+                    </button>
                 </div>
             </form>
         </div>
@@ -83,16 +80,12 @@
         <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
             <h6 class="mb-0 fw-bold">
                 <i class="fas fa-history text-primary me-2"></i>Audit Trail &amp; Changes History
-                <span class="badge bg-light text-muted ms-2"><?= number_format($total) ?> events recorded</span>
             </h6>
-            <div class="text-muted small">
-                Showing page <?= (int) $page ?> of <?= max(1, (int) $totalPages) ?>
-            </div>
         </div>
 
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
+                <table class="table table-hover align-middle mb-0 w-100" id="activityLogsTable">
                     <thead class="table-light text-muted small text-uppercase">
                         <tr>
                             <th style="width: 170px;">Date &amp; Time</th>
@@ -104,152 +97,11 @@
                             <th style="width: 110px;" class="text-end">Details</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <?php if (! empty($logs) && is_array($logs)): ?>
-                            <?php foreach ($logs as $row): ?>
-                                <?php
-                                $action = strtolower((string) ($row['action'] ?? ''));
-                                $badgeClass = match(true) {
-                                    str_contains($action, 'create') || str_contains($action, 'add') || str_contains($action, 'import') => 'bg-success-subtle text-success border border-success-subtle',
-                                    str_contains($action, 'delete') || str_contains($action, 'erase') || str_contains($action, 'remove') => 'bg-danger-subtle text-danger border border-danger-subtle',
-                                    str_contains($action, 'send') || str_contains($action, 'run') || str_contains($action, 'dispatch') => 'bg-primary-subtle text-primary border border-primary-subtle',
-                                    str_contains($action, 'update') || str_contains($action, 'edit') || str_contains($action, 'save') => 'bg-info-subtle text-info border border-info-subtle',
-                                    str_contains($action, 'pause') || str_contains($action, 'stop') => 'bg-warning-subtle text-warning border border-warning-subtle',
-                                    default => 'bg-secondary-subtle text-secondary border border-secondary-subtle',
-                                };
-
-                                $meta = is_array($row['metadata'] ?? null) ? $row['metadata'] : [];
-                                $changes = [];
-                                if (! empty($meta['changes']) && is_array($meta['changes'])) {
-                                    $changes = $meta['changes'];
-                                } elseif (! empty($meta['before']) && ! empty($meta['after']) && is_array($meta['before']) && is_array($meta['after'])) {
-                                    foreach ($meta['after'] as $k => $v) {
-                                        $oldV = $meta['before'][$k] ?? null;
-                                        if ($oldV != $v) {
-                                            $changes[$k] = ['old' => $oldV, 'new' => $v];
-                                        }
-                                    }
-                                }
-                                $hasChanges = ($changes !== []);
-
-                                $logPayload = [
-                                    'id'          => (int) $row['id'],
-                                    'action'      => (string) ($row['action'] ?? 'EVENT'),
-                                    'module'      => (string) ($row['module'] ?? 'general'),
-                                    'user_name'   => (string) ($row['user_name'] ?? 'System'),
-                                    'user_email'  => (string) ($row['user_email'] ?? ''),
-                                    'created_at'  => format_app_datetime($row['created_at'] ?? null),
-                                    'description' => (string) ($row['description'] ?? ''),
-                                    'ip_address'  => (string) ($row['ip_address'] ?? '—'),
-                                    'user_agent'  => (string) ($row['user_agent'] ?? ''),
-                                    'metadata'    => $meta,
-                                    'changes'     => $changes,
-                                    'has_changes' => $hasChanges,
-                                    'badge_class' => $badgeClass,
-                                ];
-                                ?>
-                                <tr>
-                                    <td class="small text-muted text-nowrap">
-                                        <?= esc(format_app_datetime($row['created_at'] ?? null)) ?>
-                                    </td>
-                                    <td>
-                                        <div class="d-flex align-items-center">
-                                            <div class="avatar avatar-xs rounded-circle bg-light text-primary fw-bold me-2 d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 0.75rem;">
-                                                <?= strtoupper(substr($row['user_name'] ?? 'S', 0, 1)) ?>
-                                            </div>
-                                            <div>
-                                                <div class="fw-medium small"><?= esc($row['user_name'] ?? 'System') ?></div>
-                                                <?php if (! empty($row['user_email'])): ?>
-                                                    <div class="text-muted" style="font-size: 0.72rem;"><?= esc($row['user_email']) ?></div>
-                                                <?php endif; ?>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-light text-dark border">
-                                            <?= esc(ucfirst(str_replace('_', ' ', $row['module'] ?? 'general'))) ?>
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <span class="badge <?= $badgeClass ?> px-2 py-1">
-                                            <?= esc(strtoupper($row['action'] ?? 'EVENT')) ?>
-                                        </span>
-                                    </td>
-                                    <td class="small text-break">
-                                        <div><?= esc($row['description'] ?? '—') ?></div>
-                                        <?php if ($hasChanges): ?>
-                                            <div class="mt-1">
-                                                <button type="button" class="btn btn-xs btn-outline-info py-0 px-2 fw-medium rounded-pill btn-open-log" style="font-size: 0.73rem;" data-log="<?= esc(json_encode($logPayload), 'attr') ?>">
-                                                    <i class="fas fa-exchange-alt me-1"></i><?= count($changes) ?> field(s) modified
-                                                </button>
-                                            </div>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td class="small text-muted font-monospace" style="font-size: 0.78rem;">
-                                        <?= esc($row['ip_address'] ?? '—') ?>
-                                    </td>
-                                    <td class="text-end">
-                                        <button type="button" class="btn btn-xs <?= $hasChanges ? 'btn-primary' : 'btn-outline-secondary' ?> py-1 px-2 btn-open-log" data-log="<?= esc(json_encode($logPayload), 'attr') ?>" title="View change details">
-                                            <?php if ($hasChanges): ?>
-                                                <i class="fas fa-sliders-h me-1"></i> Changes
-                                            <?php else: ?>
-                                                <i class="fas fa-eye me-1"></i> View
-                                            <?php endif; ?>
-                                        </button>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php else: ?>
-                            <tr>
-                                <td colspan="7" class="text-center py-5 text-muted">
-                                    <i class="fas fa-inbox fa-2x mb-2 text-muted opacity-50 d-block"></i>
-                                    No activity logs found matching the selected filters.
-                                </td>
-                            </tr>
-                        <?php endif; ?>
-                    </tbody>
+                    <tbody></tbody>
                 </table>
             </div>
         </div>
 
-        <!-- Pagination Footer -->
-        <?php if ($totalPages > 1): ?>
-            <div class="card-footer bg-white border-top py-3 d-flex justify-content-between align-items-center">
-                <span class="text-muted small">
-                    Page <?= (int) $page ?> of <?= (int) $totalPages ?>
-                </span>
-                <nav aria-label="Activity logs pagination">
-                    <ul class="pagination pagination-sm mb-0">
-                        <?php
-                        $baseQs = $filters;
-                        ?>
-                        <li class="page-item <?= ($page <= 1) ? 'disabled' : '' ?>">
-                            <a class="page-link" href="<?= site_url('activity-logs?' . http_build_query(array_merge($baseQs, ['page' => $page - 1]))) ?>">
-                                <i class="fas fa-chevron-left"></i>
-                            </a>
-                        </li>
-
-                        <?php
-                        $startP = max(1, $page - 2);
-                        $endP   = min($totalPages, $page + 2);
-                        for ($i = $startP; $i <= $endP; $i++):
-                        ?>
-                            <li class="page-item <?= ($i === $page) ? 'active' : '' ?>">
-                                <a class="page-link" href="<?= site_url('activity-logs?' . http_build_query(array_merge($baseQs, ['page' => $i]))) ?>">
-                                    <?= $i ?>
-                                </a>
-                            </li>
-                        <?php endfor; ?>
-
-                        <li class="page-item <?= ($page >= $totalPages) ? 'disabled' : '' ?>">
-                            <a class="page-link" href="<?= site_url('activity-logs?' . http_build_query(array_merge($baseQs, ['page' => $page + 1]))) ?>">
-                                <i class="fas fa-chevron-right"></i>
-                            </a>
-                        </li>
-                    </ul>
-                </nav>
-            </div>
-        <?php endif; ?>
     </div>
 </div>
 
@@ -375,6 +227,82 @@ document.addEventListener('DOMContentLoaded', function() {
         keyboard: true
     });
 
+    var exportBase = <?= json_encode(site_url('activity-logs/export')) ?>;
+
+    function badgeClass(action) {
+        action = String(action || '').toLowerCase();
+        var has = function () {
+            for (var i = 0; i < arguments.length; i++) { if (action.indexOf(arguments[i]) !== -1) return true; }
+            return false;
+        };
+        if (has('create', 'add', 'import')) return 'bg-success-subtle text-success border border-success-subtle';
+        if (has('delete', 'erase', 'remove')) return 'bg-danger-subtle text-danger border border-danger-subtle';
+        if (has('send', 'run', 'dispatch')) return 'bg-primary-subtle text-primary border border-primary-subtle';
+        if (has('update', 'edit', 'save')) return 'bg-info-subtle text-info border border-info-subtle';
+        if (has('pause', 'stop')) return 'bg-warning-subtle text-warning border border-warning-subtle';
+        return 'bg-secondary-subtle text-secondary border border-secondary-subtle';
+    }
+
+    function prettyModule(m) {
+        m = String(m || 'general').replace(/_/g, ' ');
+        return m.charAt(0).toUpperCase() + m.slice(1);
+    }
+
+    function syncExportLink() {
+        var params = {
+            module: $('#afModule').val() || '',
+            user_id: $('#afUser').val() || '',
+            date_from: $('#afFrom').val() || '',
+            date_to: $('#afTo').val() || '',
+            search: $('#afSearch').val() || ''
+        };
+        var parts = [];
+        $.each(params, function (k, v) { if (v !== '') parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(v)); });
+        $('#activityExportLink').attr('href', exportBase + (parts.length ? '?' + parts.join('&') : ''));
+    }
+
+    var logsDt = AppDT.table('#activityLogsTable', {
+        url: <?= json_encode(site_url('activity-logs/data')) ?>,
+        order: [[0, 'desc']],
+        emptyText: 'No activity logs found matching the selected filters.',
+        filters: { q: '#afSearch', module: '#afModule', user_id: '#afUser', date_from: '#afFrom', date_to: '#afTo' },
+        columns: [
+            { data: null, className: 'small text-muted text-nowrap', render: function (r) { return AppDT.esc(r.created_at); } },
+            { data: null, render: function (r) {
+                var name = r.user_name || 'System';
+                var h = '<div class="d-flex align-items-center">' +
+                    '<div class="avatar avatar-xs rounded-circle bg-light text-primary fw-bold me-2 d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 0.75rem;">' +
+                    AppDT.esc(name.charAt(0).toUpperCase()) + '</div><div><div class="fw-medium small">' + AppDT.esc(name) + '</div>';
+                if (r.user_email) h += '<div class="text-muted" style="font-size: 0.72rem;">' + AppDT.esc(r.user_email) + '</div>';
+                return h + '</div></div>';
+            } },
+            { data: null, render: function (r) { return '<span class="badge bg-light text-dark border">' + AppDT.esc(prettyModule(r.module)) + '</span>'; } },
+            { data: null, render: function (r) {
+                return '<span class="badge ' + badgeClass(r.action) + ' px-2 py-1">' + AppDT.esc(String(r.action || 'EVENT').toUpperCase()) + '</span>';
+            } },
+            { data: null, orderable: false, className: 'small text-break', render: function (r) {
+                var h = '<div>' + AppDT.esc(r.description || '\u2014') + '</div>';
+                if (r.change_count > 0) {
+                    h += '<div class="mt-1"><button type="button" class="btn btn-xs btn-outline-info py-0 px-2 fw-medium rounded-pill btn-open-log" style="font-size: 0.73rem;">' +
+                        '<i class="fas fa-exchange-alt me-1"></i>' + AppDT.esc(r.change_count) + ' field(s) modified</button></div>';
+                }
+                return h;
+            } },
+            { data: null, className: 'small text-muted font-monospace', render: function (r) { return AppDT.esc(r.ip_address || '\u2014'); } },
+            { data: null, orderable: false, className: 'text-end', render: function (r) {
+                var has = r.change_count > 0;
+                return '<button type="button" class="btn btn-xs ' + (has ? 'btn-primary' : 'btn-outline-secondary') + ' py-1 px-2 btn-open-log" title="View change details">' +
+                    (has ? '<i class="fas fa-sliders-h me-1"></i> Changes' : '<i class="fas fa-eye me-1"></i> View') + '</button>';
+            } }
+        ],
+        drawCallback: syncExportLink
+    });
+
+    $('#afReset').on('click', function () {
+        $('#afSearch, #afModule, #afUser, #afFrom, #afTo').val('');
+        logsDt.ajax.reload();
+    });
+
     // Escape helper
     function escapeHtml(str) {
         if (str === null || str === undefined) return '';
@@ -388,16 +316,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
     $(document).on('click', '.btn-open-log', function(e) {
         e.preventDefault();
-        var raw = $(this).attr('data-log');
-        if (!raw) return;
+        var row = logsDt.row($(this).closest('tr')).data();
+        if (!row) return;
 
-        var data;
-        try {
-            data = JSON.parse(raw);
-        } catch (err) {
-            console.error('Failed to parse log data', err);
-            return;
-        }
+        var data = $.extend({}, row, {
+            action: row.action || 'EVENT',
+            module: row.module || 'general',
+            user_name: row.user_name || 'System',
+            ip_address: row.ip_address || '\u2014',
+            has_changes: row.change_count > 0,
+            badge_class: badgeClass(row.action)
+        });
 
         // Re-verify modal is attached to document.body
         if (modalEl.parentNode !== document.body) {

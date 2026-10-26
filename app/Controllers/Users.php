@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Libraries\ActivityLogger;
+use App\Libraries\DataTablesQuery;
 use App\Models\RoleModel;
 use App\Models\UserModel;
 use CodeIgniter\HTTP\ResponseInterface;
@@ -20,19 +21,38 @@ class Users extends BaseController
             return $denied;
         }
 
-        $users = db_connect()->table('users u')
-            ->select('u.id, u.name, u.email, u.phone, u.status, u.last_login, u.created_at, r.name AS role_name, r.slug AS role_slug')
-            ->join('roles r', 'r.id = u.role_id', 'left')
-            ->where('u.deleted_at', null)
-            ->orderBy('u.name', 'ASC')
-            ->get()
-            ->getResultArray();
-
         return $this->render('users/index', [
             'pageTitle' => 'Users',
-            'users'     => $users,
             'seats'     => (new \App\Libraries\TenantPlanLimits())->snapshot(),
         ]);
+    }
+
+    /** DataTables JSON for the team users list (never exposes password or token columns). */
+    public function data(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('users.view')) {
+            return $denied;
+        }
+
+        return $this->response->setJSON(DataTablesQuery::respond($this->request, [
+            'builder'  => static fn () => db_connect()->table('users u')
+                ->select('u.id, u.name, u.email, u.phone, u.status, u.last_login, r.name AS role_name')
+                ->join('roles r', 'r.id = u.role_id', 'left')
+                ->where('u.deleted_at', null),
+            'columns'  => [0 => 'u.name', 1 => 'u.email', 2 => 'u.phone', 3 => 'r.name', 4 => 'u.status', 5 => 'u.last_login'],
+            'search'   => ['u.name', 'u.email', 'u.phone', 'r.name', 'u.status'],
+            'order'    => [0, 'asc'],
+            'tiebreak' => 'u.id',
+            'map'      => static fn (array $r): array => [
+                'id'         => (int) $r['id'],
+                'name'       => (string) $r['name'],
+                'email'      => (string) $r['email'],
+                'phone'      => (string) ($r['phone'] ?? ''),
+                'role_name'  => (string) ($r['role_name'] ?? ''),
+                'status'     => (string) ($r['status'] ?? 'active'),
+                'last_login' => format_app_datetime($r['last_login'] ?? null),
+            ],
+        ]));
     }
 
     public function create(): string|ResponseInterface

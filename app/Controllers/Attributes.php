@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Libraries\ActivityLogger;
 use App\Libraries\ContactAttributeService;
+use App\Libraries\DataTablesQuery;
 use CodeIgniter\HTTP\ResponseInterface;
 use InvalidArgumentException;
 
@@ -20,19 +21,49 @@ class Attributes extends BaseController
             return $denied;
         }
         $service = service('contactAttributes');
-        $rows    = $service->tableReady() ? $service->listWithUsage() : [];
 
         if ($this->request->isAJAX() || $this->request->getGet('json') === '1') {
+            $rows = $service->tableReady() ? $service->listWithUsage() : [];
+
             return $this->jsonResponse(true, ['attributes' => $rows, 'types' => ContactAttributeService::TYPES]);
         }
 
         return $this->render('attributes/index', [
             'pageTitle'  => 'Attributes',
-            'attributes' => $rows,
             'types'      => ContactAttributeService::TYPES,
             'tableReady' => $service->tableReady(),
             'undefinedKeys' => $service->tableReady() ? $service->undefinedKeys() : [],
         ]);
+    }
+
+    /** DataTables JSON for the attribute definitions (usage figures are computed for the visible page only). */
+    public function data(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('contacts.view')) {
+            return $denied;
+        }
+        $service = service('contactAttributes');
+        if (! $service->tableReady()) {
+            return $this->response->setJSON([
+                'draw' => (int) ($this->request->getGet('draw') ?? 0), 'recordsTotal' => 0, 'recordsFiltered' => 0, 'data' => [],
+            ]);
+        }
+
+        return $this->response->setJSON(DataTablesQuery::respond($this->request, [
+            'builder'  => static fn () => db_connect()->table('contact_attributes a')
+                ->select('a.id, a.attr_key, a.label, a.type, a.options, a.default_value'),
+            'columns'  => [0 => 'a.label', 1 => 'a.attr_key', 2 => 'a.type'],
+            'search'   => ['a.label', 'a.attr_key', 'a.type', 'a.options', 'a.default_value'],
+            'order'    => [0, 'asc'],
+            'tiebreak' => 'a.id',
+            'map'      => static function (array $r) use ($service): array {
+                $row = $service->describeRow($r);
+                $row['id']        = (int) $row['id'];
+                $row['type_label'] = ContactAttributeService::TYPES[$row['type']] ?? $row['type'];
+
+                return $row;
+            },
+        ]));
     }
 
     public function store(): ResponseInterface

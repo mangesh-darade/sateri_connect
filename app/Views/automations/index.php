@@ -44,7 +44,6 @@
         <span class="small text-muted">Trigger → condition → action</span>
     </div>
     <div class="card-body py-3">
-        <?php if (! empty($automations)): ?>
         <table class="table table-sm table-hover align-middle w-100" id="automationsTable">
             <thead>
                 <tr>
@@ -56,60 +55,8 @@
                     <th class="text-end">Actions</th>
                 </tr>
             </thead>
-            <tbody>
-                <?php foreach ($automations as $a): ?>
-                    <tr>
-                        <td>
-                            <div class="fw-semibold"><?= esc($a['name']) ?></div>
-                            <?php if (($a['trigger_type'] ?? '') === 'cheerio_workflow'): ?>
-                                <small class="text-muted"><i class="fas fa-cloud"></i> Synced from External</small>
-                            <?php elseif (! empty($a['flow_graph'])): ?>
-                                <small class="text-wa"><i class="fas fa-project-diagram"></i> Visual workflow</small>
-                            <?php endif; ?>
-                        </td>
-                        <td><code><?= esc($a['trigger_type'] ?? '') ?></code></td>
-                        <td><?= esc((string) ($a['priority'] ?? 0)) ?></td>
-                        <td>
-                            <?php if (function_exists('can') && can('automations.edit')): ?>
-                                <form action="<?= site_url('automations/' . (int) $a['id'] . '/toggle') ?>" method="post" class="d-inline"><?= csrf_field() ?>
-                                    <button type="submit" class="btn btn-sm <?= ! empty($a['is_active']) ? 'btn-wa' : 'btn-outline-secondary' ?>">
-                                        <?= ! empty($a['is_active']) ? 'On' : 'Off' ?>
-                                    </button>
-                                </form>
-                            <?php else: ?>
-                                <?= ! empty($a['is_active']) ? 'On' : 'Off' ?>
-                            <?php endif; ?>
-                        </td>
-                        <td class="text-muted small text-nowrap"><?= esc(format_app_datetime($a['updated_at'] ?? null)) ?></td>
-                        <td class="text-end">
-                            <div class="table-actions justify-content-end">
-                            <?php if (function_exists('can') && can('automations.edit')): ?>
-                                <a href="<?= site_url('automations/' . (int) $a['id'] . '/edit') ?>" class="btn btn-sm btn-outline-secondary" title="Edit"><i class="fas fa-edit"></i></a>
-                                <a href="<?= site_url('automations/' . (int) $a['id'] . '/builder') ?>" class="btn btn-sm btn-outline-secondary" title="Builder"><i class="fas fa-project-diagram"></i></a>
-                            <?php endif; ?>
-                            <?php if (function_exists('can') && can('automations.create')): ?>
-                                <form action="<?= site_url('automations/' . (int) $a['id'] . '/duplicate') ?>" method="post" class="d-inline"><?= csrf_field() ?>
-                                    <button type="submit" class="btn btn-sm btn-outline-secondary" title="Duplicate"><i class="fas fa-copy"></i></button>
-                                </form>
-                            <?php endif; ?>
-                            <?php if (function_exists('can') && can('automations.delete')): ?>
-                                <button type="button" class="btn btn-sm btn-outline-danger" data-confirm-delete data-url="<?= site_url('automations/' . (int) $a['id'] . '/delete') ?>" title="Delete"><i class="fas fa-trash"></i></button>
-                            <?php endif; ?>
-                            </div>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-            </tbody>
+            <tbody></tbody>
         </table>
-        <?php else: ?>
-            <?= view('partials/empty_state', [
-                'icon'        => 'robot',
-                'title'       => 'No automations yet',
-                'text'        => 'Create a workflow to get started.',
-                'actionUrl'   => (function_exists('can') && can('automations.create')) ? site_url('automations/create') : null,
-                'actionLabel' => (function_exists('can') && can('automations.create')) ? 'New workflow' : null,
-            ]) ?>
-        <?php endif; ?>
     </div>
 </div>
 </div>
@@ -118,7 +65,60 @@
 <?= $this->section('scripts') ?>
 <script>
 $(function () {
-    if ($.fn.DataTable && $('#automationsTable').length) { $('#automationsTable').DataTable(); }
+    var perm = {
+        edit: <?= (function_exists('can') && can('automations.edit')) ? 'true' : 'false' ?>,
+        create: <?= (function_exists('can') && can('automations.create')) ? 'true' : 'false' ?>,
+        del: <?= (function_exists('can') && can('automations.delete')) ? 'true' : 'false' ?>
+    };
+    var csrfName = <?= json_encode(csrf_token()) ?>;
+    var csrfHash = <?= json_encode(csrf_hash()) ?>;
+    var base = <?= json_encode(rtrim(site_url('automations'), '/')) ?>;
+
+    function csrfField() {
+        return '<input type="hidden" name="' + AppDT.esc(csrfName) + '" value="' + AppDT.esc(csrfHash) + '">';
+    }
+
+    AppDT.table('#automationsTable', {
+        url: <?= json_encode(site_url('automations/data')) ?>,
+        order: [[2, 'asc']],
+        emptyText: 'No automations yet. Create a workflow to get started.',
+        columns: [
+            { data: null, render: function (r) {
+                var h = '<div class="fw-semibold">' + AppDT.esc(r.name) + '</div>';
+                if (r.trigger_type === 'cheerio_workflow') {
+                    h += '<small class="text-muted"><i class="fas fa-cloud"></i> Synced from External</small>';
+                } else if (r.has_graph) {
+                    h += '<small class="text-wa"><i class="fas fa-project-diagram"></i> Visual workflow</small>';
+                }
+                return h;
+            } },
+            { data: null, render: function (r) { return '<code>' + AppDT.esc(r.trigger_type) + '</code>'; } },
+            { data: null, render: function (r) { return AppDT.esc(r.priority); } },
+            { data: null, render: function (r) {
+                var on = !!r.is_active;
+                if (!perm.edit) return on ? 'On' : 'Off';
+                return '<form action="' + AppDT.esc(base + '/' + r.id + '/toggle') + '" method="post" class="d-inline">' + csrfField() +
+                    '<button type="submit" class="btn btn-sm ' + (on ? 'btn-wa' : 'btn-outline-secondary') + '">' + (on ? 'On' : 'Off') + '</button></form>';
+            } },
+            { data: null, className: 'text-muted small text-nowrap', render: function (r) { return AppDT.esc(r.updated_at); } },
+            { data: null, orderable: false, className: 'text-end', render: function (r) {
+                var h = '<div class="table-actions justify-content-end">';
+                if (perm.edit) {
+                    h += '<a href="' + AppDT.esc(base + '/' + r.id + '/edit') + '" class="btn btn-sm btn-outline-secondary" title="Edit"><i class="fas fa-edit"></i></a> ' +
+                        '<a href="' + AppDT.esc(base + '/' + r.id + '/builder') + '" class="btn btn-sm btn-outline-secondary" title="Builder"><i class="fas fa-project-diagram"></i></a> ';
+                }
+                if (perm.create) {
+                    h += '<form action="' + AppDT.esc(base + '/' + r.id + '/duplicate') + '" method="post" class="d-inline">' + csrfField() +
+                        '<button type="submit" class="btn btn-sm btn-outline-secondary" title="Duplicate"><i class="fas fa-copy"></i></button></form> ';
+                }
+                if (perm.del) {
+                    h += '<button type="button" class="btn btn-sm btn-outline-danger" data-confirm-delete data-url="' + AppDT.esc(base + '/' + r.id + '/delete') + '" title="Delete"><i class="fas fa-trash"></i></button>';
+                }
+                return h + '</div>';
+            } }
+        ]
+    });
+
     $('#formSyncCheerioWorkflows').on('submit', function () {
         var $btn = $('#btnSyncCheerioWorkflows').prop('disabled', true);
         $btn.html('<i class="fas fa-spinner fa-spin me-1"></i> Syncing…');

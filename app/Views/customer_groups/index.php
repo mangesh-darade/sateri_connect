@@ -22,7 +22,10 @@
         <span class="small text-muted">Use groups as campaign audiences</span>
     </div>
     <div class="card-body py-3">
-        <table id="customerGroupsTable" class="table table-sm table-hover align-middle w-100">
+        <table id="customerGroupsTable" class="table table-sm table-hover align-middle w-100"
+               data-url="<?= esc(site_url('customer-groups/data'), 'attr') ?>"
+               data-can-delete="<?= (function_exists('can') && can('contacts.delete')) ? '1' : '0' ?>"
+               data-can-export="<?= (function_exists('can') && can('contacts.export')) ? '1' : '0' ?>">
             <thead>
                 <tr>
                     <th>Group</th>
@@ -31,50 +34,7 @@
                     <th class="text-end" style="width:130px">Action</th>
                 </tr>
             </thead>
-            <tbody>
-                <?php if (empty($groups)): ?>
-                    <tr>
-                        <td colspan="4" class="text-center text-muted py-4">
-                            No customer groups yet. Click Add Group to create your first audience list for campaigns.
-                        </td>
-                    </tr>
-                <?php else: ?>
-                    <?php foreach ($groups as $group): ?>
-                        <tr data-id="<?= (int) $group['id'] ?>">
-                            <td>
-                                <span class="fw-medium"><?= esc($group['name'] ?? '') ?></span>
-                            </td>
-                            <td class="text-center"><?= (int) ($group['contact_count'] ?? 0) ?></td>
-                            <?php $added = $group['created_at'] ?? ''; ?>
-                            <td class="text-muted small" data-order="<?= $added !== '' ? (int) strtotime($added) : 0 ?>">
-                                <?= $added !== '' ? esc(format_app_datetime($added)) : '—' ?>
-                            </td>
-                            <td class="text-end">
-                                <div class="table-actions justify-content-end">
-                                    <a href="<?= site_url('customer-groups/' . (int) $group['id']) ?>"
-                                       class="btn btn-sm btn-outline-secondary" title="View contacts">
-                                        <i class="fas fa-eye"></i>
-                                    </a>
-                                    <?php if (function_exists('can') && can('contacts.delete')): ?>
-                                        <button type="button" class="btn btn-sm btn-outline-danger"
-                                                data-confirm-delete
-                                                data-url="<?= site_url('customer-groups/' . (int) $group['id'] . '/delete') ?>"
-                                                title="Delete group">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    <?php endif; ?>
-                                    <?php if (function_exists('can') && can('contacts.export')): ?>
-                                        <a href="<?= site_url('customer-groups/' . (int) $group['id'] . '/export') ?>"
-                                           class="btn btn-sm btn-outline-secondary" title="Download contacts">
-                                            <i class="fas fa-download"></i>
-                                        </a>
-                                    <?php endif; ?>
-                                </div>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-            </tbody>
+            <tbody></tbody>
         </table>
     </div>
 </div>

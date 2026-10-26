@@ -267,22 +267,34 @@
 
     function initDataTable() {
         var $table = $('#customerGroupsTable');
-        if (!$table.length || !$.fn.DataTable) return;
-        if ($table.find('tbody tr td[colspan]').length) return;
+        if (!$table.length || !window.AppDT) return;
 
-        $table.DataTable({
+        var site = base() + '/customer-groups/';
+        var canDelete = String($table.data('canDelete')) === '1';
+        var canExport = String($table.data('canExport')) === '1';
+
+        AppDT.table($table, {
+            url: $table.data('url'),
             order: [[2, 'desc']],
-            pageLength: 100,
-            lengthMenu: [[25, 50, 100, -1], [25, 50, 100, 'All']],
-            language: {
-                search: '_INPUT_',
-                searchPlaceholder: 'Search in groups',
-                lengthMenu: 'Rows per page _MENU_',
-                info: '_START_–_END_ of _TOTAL_',
-                paginate: { previous: '‹', next: '›' }
-            },
-            columnDefs: [
-                { targets: 3, orderable: false, searchable: false }
+            pageLength: 25,
+            emptyText: 'No customer groups yet. Click Add Group to create your first audience list for campaigns.',
+            language: { searchPlaceholder: 'Search in groups' },
+            columns: [
+                { data: null, render: function (r) { return '<span class="fw-medium">' + AppDT.esc(r.name) + '</span>'; } },
+                { data: null, className: 'text-center', render: function (r) { return AppDT.esc(r.contact_count); } },
+                { data: null, className: 'text-muted small', render: function (r) { return r.created_at ? AppDT.esc(r.created_at) : '—'; } },
+                { data: null, orderable: false, className: 'text-end', render: function (r) {
+                    var id = encodeURIComponent(r.id);
+                    var h = '<div class="table-actions justify-content-end">' +
+                        '<a href="' + site + id + '" class="btn btn-sm btn-outline-secondary" title="View contacts"><i class="fas fa-eye"></i></a> ';
+                    if (canDelete) {
+                        h += '<button type="button" class="btn btn-sm btn-outline-danger" data-confirm-delete data-url="' + site + id + '/delete" title="Delete group"><i class="fas fa-trash"></i></button> ';
+                    }
+                    if (canExport) {
+                        h += '<a href="' + site + id + '/export" class="btn btn-sm btn-outline-secondary" title="Download contacts"><i class="fas fa-download"></i></a>';
+                    }
+                    return h + '</div>';
+                } }
             ]
         });
     }

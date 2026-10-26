@@ -10,11 +10,10 @@
 
 <?= $this->section('content') ?>
 <?php
-$drips    = $drips ?? [];
-$builders = $builders ?? [];
-$totalDrips = count($drips);
-$activeDrips = count(array_filter($drips, fn($d) => ($d['status'] ?? '') === 'active'));
-$totalSteps = array_sum(array_map(fn($d) => is_array($d['steps'] ?? null) ? count($d['steps']) : 0, $drips));
+$builders    = $builders ?? [];
+$totalDrips  = (int) ($totalDrips ?? 0);
+$activeDrips = (int) ($activeDrips ?? 0);
+$totalSteps  = (int) ($totalSteps ?? 0);
 ?>
 <div class="page-list" id="emailDripsPageRoot">
 
@@ -71,114 +70,23 @@ $totalSteps = array_sum(array_map(fn($d) => is_array($d['steps'] ?? null) ? coun
                 <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-paper-plane text-primary me-2"></i>Email Nurture Journeys</h6>
                 <small class="text-muted">Automated multi-step timed email sequences triggered on tags, subscriptions, or events.</small>
             </div>
-            <span class="badge bg-secondary-subtle text-secondary"><?= count($drips) ?> workflows</span>
+            <span class="badge bg-secondary-subtle text-secondary"><?= (int) $totalDrips ?> workflows</span>
         </div>
         <div class="card-body p-0">
-            <?php if (empty($drips)): ?>
-                <div class="text-center py-5 text-muted">
-                    <div class="mb-3 text-secondary opacity-50">
-                        <i class="fas fa-stream fa-3x"></i>
-                    </div>
-                    <h6 class="fw-semibold text-dark mb-1">No email drip workflows yet</h6>
-                    <p class="small text-muted mb-3">Set up your first automated email series (e.g., Welcome series, onboarding steps).</p>
-                    <?php if (! empty($canEdit)): ?>
-                        <button type="button" class="btn btn-wa btn-sm" id="btnEmptyCreateDrip">
-                            <i class="fas fa-plus me-1"></i> Create First Drip Workflow
-                        </button>
-                    <?php endif; ?>
-                </div>
-            <?php else: ?>
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0" id="dripsTable">
-                        <thead class="table-light">
-                            <tr>
-                                <th style="width: 32%;">Workflow Name</th>
-                                <th style="width: 25%;">Trigger Condition</th>
-                                <th style="width: 15%;">Steps Count</th>
-                                <th style="width: 13%;">Status</th>
-                                <th style="width: 15%;" class="text-end">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($drips as $d): ?>
-                                <?php
-                                $dId      = (int) ($d['id'] ?? 0);
-                                $dName    = (string) ($d['name'] ?? 'Untitled Drip');
-                                $dDesc    = (string) ($d['description'] ?? '');
-                                $dTrigger = (string) ($d['trigger_type'] ?? 'manual');
-                                $dVal     = (string) ($d['trigger_value'] ?? '');
-                                $dStatus  = strtolower((string) ($d['status'] ?? 'draft'));
-                                $steps    = is_array($d['steps'] ?? null) ? $d['steps'] : [];
-                                $stepCnt  = count($steps);
-                                $dJson    = json_encode($d);
-                                ?>
-                                <tr data-id="<?= $dId ?>">
-                                    <td>
-                                        <div class="d-flex align-items-center gap-2">
-                                            <div class="rounded-2 bg-primary-subtle text-primary p-2 d-flex align-items-center justify-content-center" style="width:36px; height:36px;">
-                                                <i class="fas fa-stream"></i>
-                                            </div>
-                                            <div>
-                                                <div class="fw-semibold text-dark"><?= esc($dName) ?></div>
-                                                <?php if ($dDesc !== ''): ?>
-                                                    <div class="small text-muted text-truncate" style="max-width: 240px;"><?= esc($dDesc) ?></div>
-                                                <?php endif; ?>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <?php if ($dTrigger === 'on_tag'): ?>
-                                            <span class="badge bg-info-subtle text-info border"><i class="fas fa-tag me-1"></i> On Tag: <strong><?= esc($dVal ?: 'Any') ?></strong></span>
-                                        <?php elseif ($dTrigger === 'on_subscribe'): ?>
-                                            <span class="badge bg-success-subtle text-success border"><i class="fas fa-user-plus me-1"></i> On New Contact</span>
-                                        <?php else: ?>
-                                            <span class="badge bg-light text-dark border"><i class="fas fa-hand-pointer me-1"></i> Manual / API Trigger</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-secondary-subtle text-secondary fs-7">
-                                            <i class="fas fa-layer-group me-1"></i><?= $stepCnt ?> step<?= $stepCnt === 1 ? '' : 's' ?>
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <?= view('partials/status_badge', [
-                                            'status' => $dStatus,
-                                            'map'    => [
-                                                'active'   => 'success',
-                                                'draft'    => 'warning',
-                                                'paused'   => 'warning',
-                                                'archived' => 'secondary',
-                                            ],
-                                        ]) ?>
-                                    </td>
-                                    <td class="text-end">
-                                        <div class="table-actions justify-content-end gap-1">
-                                            <?php if (! empty($canEdit)): ?>
-                                                <button type="button" class="btn btn-sm btn-icon-action js-edit-drip"
-                                                        data-drip="<?= esc($dJson) ?>"
-                                                        title="Edit Drip Workflow">
-                                                    <i class="fas fa-pen text-primary"></i>
-                                                </button>
-                                                <button type="button" class="btn btn-sm btn-icon-action js-duplicate-drip"
-                                                        data-id="<?= $dId ?>"
-                                                        title="Duplicate workflow">
-                                                    <i class="fas fa-copy"></i>
-                                                </button>
-                                                <button type="button" class="btn btn-sm btn-icon-action js-delete-drip"
-                                                        data-id="<?= $dId ?>"
-                                                        data-name="<?= esc($dName) ?>"
-                                                        title="Delete Drip">
-                                                    <i class="fas fa-trash text-danger"></i>
-                                                </button>
-                                            <?php endif; ?>
-                                        </div>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            <?php endif; ?>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 w-100" id="dripsTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 32%;">Workflow Name</th>
+                            <th style="width: 25%;">Trigger Condition</th>
+                            <th style="width: 15%;">Steps Count</th>
+                            <th style="width: 13%;">Status</th>
+                            <th style="width: 15%;" class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
@@ -316,6 +224,51 @@ $totalSteps = array_sum(array_map(fn($d) => is_array($d['steps'] ?? null) ? coun
 $(function () {
     var dripModal = new bootstrap.Modal(document.getElementById('dripModal'));
     var stepIndex = 0;
+    var canEdit = <?= ! empty($canEdit) ? 'true' : 'false' ?>;
+    var statusColors = { active: 'success', draft: 'warning', paused: 'warning', archived: 'secondary' };
+
+    var dripsDt = AppDT.table('#dripsTable', {
+        url: <?= json_encode(site_url('automations/drips-data')) ?>,
+        order: [[0, 'asc']],
+        emptyText: 'No email drip workflows yet. Use "New Auto Drip" to create your first automated email series.',
+        columns: [
+            { data: null, render: function (r) {
+                var h = '<div class="d-flex align-items-center gap-2">' +
+                    '<div class="rounded-2 bg-primary-subtle text-primary p-2 d-flex align-items-center justify-content-center" style="width:36px; height:36px;"><i class="fas fa-stream"></i></div>' +
+                    '<div><div class="fw-semibold text-dark">' + AppDT.esc(r.name || 'Untitled Drip') + '</div>';
+                if (r.description) {
+                    h += '<div class="small text-muted text-truncate" style="max-width: 240px;">' + AppDT.esc(r.description) + '</div>';
+                }
+                return h + '</div></div>';
+            } },
+            { data: null, render: function (r) {
+                if (r.trigger_type === 'on_tag') {
+                    return '<span class="badge bg-info-subtle text-info border"><i class="fas fa-tag me-1"></i> On Tag: <strong>' + AppDT.esc(r.trigger_value || 'Any') + '</strong></span>';
+                }
+                if (r.trigger_type === 'on_subscribe') {
+                    return '<span class="badge bg-success-subtle text-success border"><i class="fas fa-user-plus me-1"></i> On New Contact</span>';
+                }
+                return '<span class="badge bg-light text-dark border"><i class="fas fa-hand-pointer me-1"></i> Manual / API Trigger</span>';
+            } },
+            { data: null, render: function (r) {
+                return '<span class="badge bg-secondary-subtle text-secondary fs-7"><i class="fas fa-layer-group me-1"></i>' +
+                    AppDT.esc(r.step_count) + ' step' + (r.step_count === 1 ? '' : 's') + '</span>';
+            } },
+            { data: null, render: function (r) {
+                var st = String(r.status || 'draft').toLowerCase();
+                var label = st.charAt(0).toUpperCase() + st.slice(1);
+                return '<span class="badge bg-' + (statusColors[st] || 'secondary') + '">' + AppDT.esc(label) + '</span>';
+            } },
+            { data: null, orderable: false, className: 'text-end', render: function (r) {
+                if (!canEdit) return '';
+                return '<div class="table-actions justify-content-end gap-1">' +
+                    '<button type="button" class="btn btn-sm btn-icon-action js-edit-drip" title="Edit Drip Workflow"><i class="fas fa-pen text-primary"></i></button> ' +
+                    '<button type="button" class="btn btn-sm btn-icon-action js-duplicate-drip" data-id="' + AppDT.esc(r.id) + '" title="Duplicate workflow"><i class="fas fa-copy"></i></button> ' +
+                    '<button type="button" class="btn btn-sm btn-icon-action js-delete-drip" data-id="' + AppDT.esc(r.id) + '" title="Delete Drip"><i class="fas fa-trash text-danger"></i></button>' +
+                    '</div>';
+            } }
+        ]
+    });
 
     function renderStep(step) {
         step = step || { delay_hours: 0, subject: '', html_content: '', builder_id: '' };
@@ -400,8 +353,8 @@ $(function () {
 
     // Edit Drip
     $(document).on('click', '.js-edit-drip', function () {
-        var drip = $(this).data('drip');
-        if (typeof drip === 'string') drip = JSON.parse(drip);
+        var drip = dripsDt.row($(this).closest('tr')).data();
+        if (!drip) return;
 
         $('#dripModalTitle').html('<i class="fas fa-pen text-primary me-2"></i>Edit Workflow #' + drip.id);
         $('#drip_id').val(drip.id);
@@ -487,7 +440,7 @@ $(function () {
     // Delete Drip
     $(document).on('click', '.js-delete-drip', function () {
         var id = $(this).data('id');
-        var name = $(this).data('name');
+        var name = (dripsDt.row($(this).closest('tr')).data() || {}).name || 'this workflow';
         APP.confirm({
             title: 'Delete Drip Workflow?',
             text: 'Are you sure you want to delete "' + name + '"? Any queued drip emails will be stopped.',

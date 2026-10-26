@@ -23,7 +23,7 @@
         <span class="small text-muted">In the inbox, type <code>/</code> in the message box to insert one</span>
     </div>
     <div class="card-body py-3">
-        <table class="table table-sm table-hover align-middle w-100">
+        <table class="table table-sm table-hover align-middle w-100" id="quickRepliesTable">
             <thead>
                 <tr>
                     <th style="width:160px">Shortcut</th>
@@ -32,37 +32,7 @@
                     <?php if ($canEdit): ?><th class="text-end" style="width:110px">Action</th><?php endif; ?>
                 </tr>
             </thead>
-            <tbody>
-            <?php if (empty($quickReplies)): ?>
-                <tr>
-                    <td colspan="4" class="text-center text-muted py-4">
-                        No quick replies yet. Add common answers (price, address, timings) so agents reply in one click.
-                    </td>
-                </tr>
-            <?php else: ?>
-                <?php foreach ($quickReplies as $qr): ?>
-                    <tr>
-                        <td><code>/<?= esc($qr['shortcut']) ?></code></td>
-                        <td class="fw-medium"><?= esc($qr['title']) ?></td>
-                        <td class="small text-muted text-truncate" style="max-width:420px" title="<?= esc($qr['message'], 'attr') ?>"><?= esc($qr['message']) ?></td>
-                        <?php if ($canEdit): ?>
-                        <td class="text-end">
-                            <div class="table-actions justify-content-end">
-                                <button type="button" class="btn btn-sm btn-outline-secondary" title="Edit"
-                                        data-crud-edit data-row="<?= esc(json_encode($qr), 'attr') ?>">
-                                    <i class="fas fa-pen"></i>
-                                </button>
-                                <button type="button" class="btn btn-sm btn-outline-danger" title="Delete"
-                                        data-crud-delete data-id="<?= (int) $qr['id'] ?>" data-name="/<?= esc($qr['shortcut'], 'attr') ?>">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </td>
-                        <?php endif; ?>
-                    </tr>
-                <?php endforeach; ?>
-            <?php endif; ?>
-            </tbody>
+            <tbody></tbody>
         </table>
     </div>
 </div>
@@ -117,6 +87,33 @@
 <script src="<?= base_url('assets/js/simple-crud.js') ?>"></script>
 <script>
 (function ($) {
+    var canEdit = <?= $canEdit ? 'true' : 'false' ?>;
+    function escAttr(v) { return AppDT.esc(v).replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+
+    if ($('#quickRepliesTable').length && <?= $tableReady ? 'true' : 'false' ?>) {
+        var cols = [
+            { data: null, render: function (r) { return '<code>/' + AppDT.esc(r.shortcut) + '</code>'; } },
+            { data: null, className: 'fw-medium', render: function (r) { return AppDT.esc(r.title); } },
+            { data: null, className: 'small text-muted', render: function (r) {
+                return '<div class="text-truncate" style="max-width:420px" title="' + escAttr(r.message) + '">' + AppDT.esc(r.message) + '</div>';
+            } }
+        ];
+        if (canEdit) {
+            cols.push({ data: null, orderable: false, className: 'text-end', render: function (r) {
+                return '<div class="table-actions justify-content-end">' +
+                    '<button type="button" class="btn btn-sm btn-outline-secondary" title="Edit" data-crud-edit data-row="' + escAttr(JSON.stringify(r)) + '"><i class="fas fa-pen"></i></button> ' +
+                    '<button type="button" class="btn btn-sm btn-outline-danger" title="Delete" data-crud-delete data-id="' + escAttr(r.id) + '" data-name="/' + escAttr(r.shortcut) + '"><i class="fas fa-trash"></i></button>' +
+                    '</div>';
+            } });
+        }
+        AppDT.table('#quickRepliesTable', {
+            url: <?= json_encode(site_url('quick-replies/data')) ?>,
+            order: [[0, 'asc']],
+            emptyText: 'No quick replies yet. Add common answers (price, address, timings) so agents reply in one click.',
+            columns: cols
+        });
+    }
+
     $(document).on('click', '.qr-placeholder', function () {
         var $ta = $(this).closest('.mb-1').find('textarea[name="message"]');
         var el = $ta[0];

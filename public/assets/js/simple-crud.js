@@ -15,6 +15,16 @@
         return (xhr && xhr.responseJSON && xhr.responseJSON.message) || fallback;
     }
 
+    // When the list is a server-side DataTable, refresh it in place instead of reloading the page.
+    function reloadTable($root) {
+        var $t = $root.find('table.dataTable').first();
+        if ($t.length && $.fn.DataTable) {
+            $t.DataTable().ajax.reload(null, false);
+            return true;
+        }
+        return false;
+    }
+
     $('[data-crud]').each(function () {
         var $root = $(this);
         var url = APP.baseUrl + $root.data('crud');
@@ -70,7 +80,7 @@
                 APP.post(url + '/' + $btn.data('id') + '/delete')
                     .done(function (res) {
                         APP.toast((res && res.message) || 'Deleted', 'success');
-                        $btn.closest('tr').fadeOut(200, function () { $(this).remove(); });
+                        if (!reloadTable($root)) { $btn.closest('tr').fadeOut(200, function () { $(this).remove(); }); }
                     })
                     .fail(function (xhr) { APP.toast(errorMessage(xhr, 'Could not delete'), 'error'); });
             });

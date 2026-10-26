@@ -183,7 +183,7 @@ class ActivityLogModel extends Model
     /**
      * Apply search filters to Query Builder.
      */
-    protected function applyFilters(\CodeIgniter\Database\BaseBuilder $builder, array $filters): void
+    public function applyFilters(\CodeIgniter\Database\BaseBuilder $builder, array $filters): void
     {
         if (! empty($filters['module'])) {
             $builder->where('activity_logs.module', (string) $filters['module']);

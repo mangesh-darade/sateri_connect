@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Libraries\ActivityLogger;
+use App\Libraries\DataTablesQuery;
 use CodeIgniter\HTTP\ResponseInterface;
 use InvalidArgumentException;
 
@@ -19,18 +20,40 @@ class QuickReplies extends BaseController
             return $denied;
         }
         $service = service('quickReplies');
-        $rows    = $service->all();
 
         if ($this->request->isAJAX() || $this->request->getGet('json') === '1') {
-            return $this->jsonResponse(true, ['quick_replies' => $rows]);
+            return $this->jsonResponse(true, ['quick_replies' => $service->all()]);
         }
 
         return $this->render('quick_replies/index', [
             'pageTitle'    => 'Quick replies',
-            'quickReplies' => $rows,
             'tableReady'   => $service->tableReady(),
             'attributeDefs' => service('contactAttributes')->definitions(),
         ]);
+    }
+
+    /** DataTables JSON for the quick replies list. */
+    public function data(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('chat.view')) {
+            return $denied;
+        }
+        if (! service('quickReplies')->tableReady()) {
+            return $this->response->setJSON([
+                'draw' => (int) ($this->request->getGet('draw') ?? 0), 'recordsTotal' => 0, 'recordsFiltered' => 0, 'data' => [],
+            ]);
+        }
+
+        return $this->response->setJSON(DataTablesQuery::respond($this->request, [
+            'builder'  => static fn () => db_connect()->table('quick_replies q')->select('q.id, q.shortcut, q.title, q.message'),
+            'columns'  => [0 => 'q.shortcut', 1 => 'q.title', 2 => 'q.message'],
+            'search'   => ['q.shortcut', 'q.title', 'q.message'],
+            'order'    => [0, 'asc'],
+            'tiebreak' => 'q.id',
+            'map'      => static fn (array $r): array => [
+                'id' => (int) $r['id'], 'shortcut' => (string) $r['shortcut'], 'title' => (string) $r['title'], 'message' => (string) $r['message'],
+            ],
+        ]));
     }
 
     public function store(): ResponseInterface

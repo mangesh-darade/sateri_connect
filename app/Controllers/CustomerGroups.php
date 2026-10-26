@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Libraries\ActivityLogger;
+use App\Libraries\DataTablesQuery;
 use App\Models\ContactModel;
 use App\Models\TagModel;
 use CodeIgniter\HTTP\ResponseInterface;
@@ -20,18 +21,44 @@ class CustomerGroups extends BaseController
             return $denied;
         }
 
-        $search = trim((string) ($this->request->getGet('q') ?? ''));
-        $groups = model(TagModel::class)->listWithContactCounts($search !== '' ? $search : null);
-
         if ($this->request->isAJAX() || $this->request->getGet('json') === '1') {
-            return $this->jsonResponse(true, ['groups' => $groups]);
+            $search = trim((string) ($this->request->getGet('q') ?? ''));
+
+            return $this->jsonResponse(true, ['groups' => model(TagModel::class)->listWithContactCounts($search !== '' ? $search : null)]);
         }
+
+        // Only id + name for the "add contact to existing group" picker; the table itself loads via data().
+        $groupOptions = db_connect()->table('tags')->select('id, name')->orderBy('name', 'ASC')->get()->getResultArray();
 
         return $this->render('customer_groups/index', [
             'pageTitle' => 'Customer Groups',
-            'groups'    => $groups,
-            'search'    => $search,
+            'groups'    => $groupOptions,
         ]);
+    }
+
+    /** DataTables JSON for the customer groups list. */
+    public function data(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('contacts.view')) {
+            return $denied;
+        }
+
+        return $this->response->setJSON(DataTablesQuery::respond($this->request, [
+            'builder'  => static fn () => db_connect()->table('tags t')
+                ->select('t.id, t.name, t.created_at, '
+                    . '(SELECT COUNT(DISTINCT ct.contact_id) FROM contact_tags ct '
+                    . 'JOIN contacts c ON c.id = ct.contact_id AND c.deleted_at IS NULL WHERE ct.tag_id = t.id) AS contact_count', false),
+            'columns'  => [0 => 't.name', 1 => 'contact_count', 2 => 't.created_at'],
+            'search'   => ['t.name'],
+            'order'    => [2, 'desc'],
+            'tiebreak' => 't.id',
+            'map'      => static fn (array $r): array => [
+                'id'            => (int) $r['id'],
+                'name'          => (string) $r['name'],
+                'contact_count' => (int) $r['contact_count'],
+                'created_at'    => ($r['created_at'] ?? '') !== '' && $r['created_at'] !== null ? format_app_datetime($r['created_at']) : '',
+            ],
+        ]));
     }
 
     public function show(int $id): string|ResponseInterface
