@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Libraries;
 
 use App\Models\EmailLogModel;
+use CodeIgniter\Database\BaseBuilder;
 use DateTimeImmutable;
 
 /**
@@ -69,15 +70,17 @@ class ReportService
      *   campaign_options:list<array{id:int,name:string}>
      * }
      */
-    public function whatsappReport(array $range, ?int $campaignId): array
+    public function whatsappReport(array $range, ?int $campaignId, bool $tables = true): array
     {
         $campaignId = ($campaignId !== null && $campaignId > 0) ? $campaignId : null;
         $summary    = $this->whatsappSummary($range['from_utc'], $range['to_utc'], $campaignId);
         $replies    = $this->whatsappRepliesByCampaign($range['from_utc'], $range['to_utc'], $campaignId);
         $summary['replies'] = array_sum($replies);
 
-        $breakdown = $this->whatsappCampaignBreakdown($range['from_utc'], $range['to_utc'], $campaignId, $replies);
-        $recipients = $this->whatsappRecipients($range['from_utc'], $range['to_utc'], $campaignId, self::RECIPIENT_PREVIEW);
+        // $tables = false: the page tables are server-side DataTables (Reports::campaignsData / recipientsData),
+        // so the breakdown and recipient lists are not loaded here. Exports keep the default (full data).
+        $breakdown  = $tables ? $this->whatsappCampaignBreakdown($range['from_utc'], $range['to_utc'], $campaignId, $replies) : [];
+        $recipients = $tables ? $this->whatsappRecipients($range['from_utc'], $range['to_utc'], $campaignId, self::RECIPIENT_PREVIEW) : ['rows' => [], 'total' => 0];
 
         return [
             'summary'          => $summary,
@@ -100,7 +103,7 @@ class ReportService
      *   campaign_options:list<array{id:int,name:string}>
      * }
      */
-    public function emailReport(array $range, ?int $campaignId): array
+    public function emailReport(array $range, ?int $campaignId, bool $tables = true): array
     {
         $campaignId = ($campaignId !== null && $campaignId > 0) ? $campaignId : null;
         $summary    = $this->emailSummary($range['from_utc'], $range['to_utc'], $campaignId);
@@ -110,11 +113,54 @@ class ReportService
         return [
             'summary'          => $summary,
             'daily'            => $this->emailDaily($range['from'], $range['to'], $range['from_utc'], $range['to_utc'], $campaignId),
-            'campaigns'        => $this->emailCampaignBreakdown($range['from_utc'], $range['to_utc'], $campaignId),
-            'logs'             => $this->emailLogs($range['from_utc'], $range['to_utc'], $campaignId, 50),
+            'campaigns'        => $tables ? $this->emailCampaignBreakdown($range['from_utc'], $range['to_utc'], $campaignId) : [],
+            'logs'             => $tables ? $this->emailLogs($range['from_utc'], $range['to_utc'], $campaignId, 50) : [],
             'unsubscribes'     => $unsubs['rows'],
             'campaign_options' => $this->emailCampaignOptions(),
         ];
+    }
+
+    /**
+     * Broadcast results grouped by the WhatsApp template they used. Only template sends that belong to
+     * a campaign are counted; template messages sent by automations or one by one are not tracked here.
+     *
+     * @param array{from:string,to:string,from_utc:string,to_utc:string} $range
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function whatsappTemplateReport(array $range): array
+    {
+        $db = db_connect();
+        if (! $db->tableExists('messages') || ! $db->tableExists('campaigns') || ! $db->tableExists('templates')) {
+            return [];
+        }
+
+        $rows = $db->table('messages m')
+            ->select("t.id, t.name, t.language, t.category, t.status AS template_status,
+                COUNT(DISTINCT c.id) AS campaigns,
+                SUM(CASE WHEN m.status IN ('sent','delivered','read') THEN 1 ELSE 0 END) AS sent,
+                SUM(CASE WHEN m.status IN ('delivered','read') THEN 1 ELSE 0 END) AS delivered,
+                SUM(CASE WHEN m.status = 'read' THEN 1 ELSE 0 END) AS `read`,
+                SUM(CASE WHEN m.status = 'failed' THEN 1 ELSE 0 END) AS failed", false)
+            ->join('campaigns c', 'c.id = m.campaign_id')
+            ->join('templates t', 't.id = c.template_id')
+            ->where('m.direction', 'outbound')
+            ->where('m.created_at >=', $range['from_utc'])
+            ->where('m.created_at <=', $range['to_utc'])
+            ->groupBy('t.id, t.name, t.language, t.category, t.status')
+            ->orderBy('sent', 'DESC')
+            ->get()->getResultArray();
+
+        foreach ($rows as &$r) {
+            $sent  = (int) $r['sent'];
+            $total = $sent + (int) $r['failed'];
+            $r['delivery_rate'] = $sent > 0 ? round(((int) $r['delivered'] / $sent) * 100, 1) : 0.0;
+            $r['read_rate']     = $sent > 0 ? round(((int) $r['read'] / $sent) * 100, 1) : 0.0;
+            $r['fail_rate']     = $total > 0 ? round(((int) $r['failed'] / $total) * 100, 1) : 0.0;
+        }
+        unset($r);
+
+        return $rows;
     }
 
     /**
@@ -530,10 +576,148 @@ class ReportService
         return $logs;
     }
 
+    // ------------------------------------------------------------------------------------------
+    // Server-side DataTables builders. Aggregated tables are a derived table (inner GROUP BY, outer
+    // plain SELECT) so DataTablesQuery can count, search, sort and page them in SQL.
+    // ------------------------------------------------------------------------------------------
+
+    private function derived(BaseBuilder $inner, string $alias = 'x'): BaseBuilder
+    {
+        return db_connect()->newQuery()->fromSubquery($inner, $alias);
+    }
+
+    /**
+     * One row per campaign: id, name, sent_count, delivered_count, read_count, failed_count, pending_count.
+     * Replies are attached per page by the controller.
+     */
+    public function whatsappCampaignTable(string $fromUtc, string $toUtc, ?int $campaignId): BaseBuilder
+    {
+        $inner = db_connect()->table('messages m')
+            ->select("m.campaign_id AS id, COALESCE(MAX(c.name), CONCAT('Campaign #', m.campaign_id)) AS name,
+                SUM(CASE WHEN m.status IN ('sent','delivered','read') THEN 1 ELSE 0 END) AS sent_count,
+                SUM(CASE WHEN m.status IN ('delivered','read') THEN 1 ELSE 0 END) AS delivered_count,
+                SUM(CASE WHEN m.status = 'read' THEN 1 ELSE 0 END) AS read_count,
+                SUM(CASE WHEN m.status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
+                SUM(CASE WHEN m.status = 'pending' THEN 1 ELSE 0 END) AS pending_count", false)
+            ->join('campaigns c', 'c.id = m.campaign_id', 'left')
+            ->where('m.direction', 'outbound')
+            ->where('m.campaign_id >', 0)
+            ->where('m.created_at >=', $fromUtc)
+            ->where('m.created_at <=', $toUtc)
+            ->groupBy('m.campaign_id');
+        if ($campaignId !== null && $campaignId > 0) {
+            $inner->where('m.campaign_id', $campaignId);
+        }
+
+        return $this->derived($inner);
+    }
+
+    /** Campaign recipients in the range, with contact and campaign names. */
+    public function whatsappRecipientTable(string $fromUtc, string $toUtc, ?int $campaignId): BaseBuilder
+    {
+        return $this->recipientBuilder($fromUtc, $toUtc, $campaignId)
+            ->select('campaign_contacts.id, campaign_contacts.contact_id, campaign_contacts.campaign_id, campaign_contacts.status, campaign_contacts.error_message, campaign_contacts.sent_at, campaign_contacts.delivered_at, campaign_contacts.read_at, contacts.name, contacts.mobile, campaigns.name AS campaign_name');
+    }
+
+    /**
+     * One row per email campaign; sends without a campaign (single, bulk, drip) are one row with id 0 when no
+     * campaign filter is active. Columns: id, name, sent_count, queued_count, failed_count, opened_count, clicked_count.
+     */
+    public function emailCampaignTable(string $fromUtc, string $toUtc, ?int $campaignId): BaseBuilder
+    {
+        $inner = db_connect()->table('email_logs l')
+            ->select("COALESCE(l.html_campaign_id, 0) AS id,
+                CASE WHEN COALESCE(l.html_campaign_id, 0) = 0 THEN 'Single, bulk, and drip'
+                     ELSE COALESCE(NULLIF(TRIM(MAX(h.name)), ''), NULLIF(TRIM(MAX(h.subject)), ''), CONCAT('Campaign #', l.html_campaign_id)) END AS name,
+                SUM(CASE WHEN l.status = 'sent' THEN 1 ELSE 0 END) AS sent_count,
+                SUM(CASE WHEN l.status = 'queued' THEN 1 ELSE 0 END) AS queued_count,
+                SUM(CASE WHEN l.status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
+                SUM(CASE WHEN l.open_count > 0 THEN 1 ELSE 0 END) AS opened_count,
+                SUM(CASE WHEN l.click_count > 0 THEN 1 ELSE 0 END) AS clicked_count", false)
+            ->join('email_html_campaigns h', 'h.id = l.html_campaign_id', 'left')
+            ->where('l.created_at >=', $fromUtc)
+            ->where('l.created_at <=', $toUtc)
+            ->groupBy('COALESCE(l.html_campaign_id, 0)', false);
+        if ($campaignId !== null && $campaignId > 0) {
+            $inner->where('l.html_campaign_id', $campaignId);
+        }
+
+        return $this->derived($inner);
+    }
+
+    /** Individual email sends in the range. */
+    public function emailLogTable(string $fromUtc, string $toUtc, ?int $campaignId): BaseBuilder
+    {
+        $b = db_connect()->table('email_logs l')
+            ->select('l.id, l.created_at, l.kind, l.to_email, l.subject, l.status, l.open_count, l.click_count')
+            ->where('l.created_at >=', $fromUtc)
+            ->where('l.created_at <=', $toUtc);
+        if ($campaignId !== null && $campaignId > 0) {
+            $b->where('l.html_campaign_id', $campaignId);
+        }
+
+        return $b;
+    }
+
+    /**
+     * @param array{from_utc:string,to_utc:string} $range
+     */
+    private function templateInner(array $range): BaseBuilder
+    {
+        return db_connect()->table('messages m')
+            ->select("t.id, t.name, t.language, t.category, t.status AS template_status,
+                COUNT(DISTINCT c.id) AS campaigns,
+                SUM(CASE WHEN m.status IN ('sent','delivered','read') THEN 1 ELSE 0 END) AS sent,
+                SUM(CASE WHEN m.status IN ('delivered','read') THEN 1 ELSE 0 END) AS delivered,
+                SUM(CASE WHEN m.status = 'read' THEN 1 ELSE 0 END) AS `read`,
+                SUM(CASE WHEN m.status = 'failed' THEN 1 ELSE 0 END) AS failed", false)
+            ->join('campaigns c', 'c.id = m.campaign_id')
+            ->join('templates t', 't.id = c.template_id')
+            ->where('m.direction', 'outbound')
+            ->where('m.created_at >=', $range['from_utc'])
+            ->where('m.created_at <=', $range['to_utc'])
+            ->groupBy('t.id, t.name, t.language, t.category, t.status');
+    }
+
+    /**
+     * One row per template, same figures as whatsappTemplateReport() but pageable in SQL.
+     *
+     * @param array{from_utc:string,to_utc:string} $range
+     */
+    public function whatsappTemplateTable(array $range): BaseBuilder
+    {
+        return $this->derived($this->templateInner($range));
+    }
+
+    /**
+     * Totals for the template report cards, in one query.
+     *
+     * @param array{from_utc:string,to_utc:string} $range
+     *
+     * @return array{templates:int,campaigns:int,sent:int,delivered:int,read:int,failed:int}
+     */
+    public function whatsappTemplateTotals(array $range): array
+    {
+        $out = ['templates' => 0, 'campaigns' => 0, 'sent' => 0, 'delivered' => 0, 'read' => 0, 'failed' => 0];
+        $db  = db_connect();
+        if (! $db->tableExists('messages') || ! $db->tableExists('campaigns') || ! $db->tableExists('templates')) {
+            return $out;
+        }
+
+        $row = $this->derived($this->templateInner($range))
+            ->select('COUNT(*) AS templates, COALESCE(SUM(x.campaigns),0) AS campaigns, COALESCE(SUM(x.sent),0) AS sent, COALESCE(SUM(x.delivered),0) AS delivered, COALESCE(SUM(x.`read`),0) AS `read`, COALESCE(SUM(x.failed),0) AS failed', false)
+            ->get()->getRowArray() ?: [];
+        foreach ($out as $k => $_) {
+            $out[$k] = (int) ($row[$k] ?? 0);
+        }
+
+        return $out;
+    }
+
     /**
      * @return array<int,int>
      */
-    private function whatsappRepliesByCampaign(string $fromUtc, string $toUtc, ?int $campaignId): array
+    public function whatsappRepliesByCampaign(string $fromUtc, string $toUtc, ?int $campaignId, ?array $ids = null): array
     {
         $sql = "
             SELECT attributed.campaign_id, COUNT(*) AS reply_count
@@ -559,6 +743,13 @@ class ReportService
         if ($campaignId !== null && $campaignId > 0) {
             $sql .= ' AND attributed.campaign_id = ?';
             $binds[] = $campaignId;
+        }
+        if ($ids !== null) {
+            $ids = array_values(array_filter(array_map('intval', $ids)));
+            if ($ids === []) {
+                return [];
+            }
+            $sql .= ' AND attributed.campaign_id IN (' . implode(',', $ids) . ')';
         }
         $sql .= ' GROUP BY attributed.campaign_id';
 
