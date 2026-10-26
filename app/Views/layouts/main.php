@@ -21,7 +21,7 @@
     }
     $siteFavicon = function_exists('setting_asset_url') ? setting_asset_url('site_favicon') : '';
     ?>
-    <title><?= esc($title ?? 'Dashboard') ?> | <?= esc($appName) ?></title>
+    <title><?= esc($title ?? $pageTitle ?? 'Dashboard') ?> | <?= esc($appName) ?></title>
     <?= favicon_link_tags($siteFavicon, (string) ($title ?? $appName)) ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -53,6 +53,34 @@
                     <span class="nav-clock-date" id="navAppClockDate">---- -- ----</span>
                 </div>
             </li>
+            <?php
+            $walletChip = null;
+            if (function_exists('can') && can('settings.view') && function_exists('is_meta_provider') && is_meta_provider()) {
+                try {
+                    $walletSvc  = new \App\Libraries\WalletService();
+                    $walletChip = $walletSvc->wallet();
+                } catch (\Throwable) {
+                    $walletChip = null;
+                }
+            }
+            ?>
+            <?php if (is_array($walletChip)): ?>
+            <?php
+            $walletHealth = $walletSvc->health($walletChip);
+            $walletOn  = $walletHealth['state'] !== 'off';
+            $walletBal = $walletHealth['balance'];
+            $walletLow = in_array($walletHealth['state'], ['low', 'empty'], true);
+            ?>
+            <li class="nav-item me-2">
+                <a href="<?= site_url('wallet') ?>" class="wallet-chip<?= $walletLow ? ' is-low' : '' ?>" title="<?= $walletHealth['state'] === 'empty' ? 'WhatsApp wallet is empty' : ($walletHealth['state'] === 'low' ? 'WhatsApp wallet balance is low' : 'WhatsApp wallet') ?>">
+                    <i class="fas fa-wallet" aria-hidden="true"></i>
+                    <span class="d-none d-sm-inline">Wallet</span>
+                    <?php if ($walletOn): ?>
+                        <strong><?= ((string) ($walletChip['currency'] ?? 'INR')) === 'INR' ? '₹' : esc((string) $walletChip['currency']) . ' ' ?><?= number_format($walletBal, 2) ?></strong>
+                    <?php endif; ?>
+                </a>
+            </li>
+            <?php endif; ?>
             <li class="nav-item dropdown d-none" id="navSyncWrap">
                 <a class="nav-link app-topbar-icon position-relative" id="navSyncToggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" href="#" aria-expanded="false" aria-label="Sync status" title="Sync status">
                     <i class="fas fa-rotate" id="navSyncIcon"></i>
@@ -182,6 +210,27 @@
                             <?= esc($user['role_name'] ?? session('role_name') ?? 'Member') ?>
                         </div>
                     </li>
+                    <?php
+                    $waSignup = ['ready' => false];
+                    if (function_exists('can') && can('settings.edit') && function_exists('is_meta_provider') && is_meta_provider()) {
+                        try {
+                            $waSignup = (new \App\Libraries\MetaEmbeddedSignup(service('settingsService')))->clientConfig();
+                        } catch (\Throwable) {
+                            $waSignup = ['ready' => false];
+                        }
+                    }
+                    ?>
+                    <?php if (! empty($waSignup['ready'])): ?>
+                    <li class="wa-connect-row">
+                        <button type="button" class="wa-connect-btn" id="btnConnectWhatsApp"
+                                data-app-id="<?= esc((string) $waSignup['app_id']) ?>"
+                                data-config-id="<?= esc((string) $waSignup['config_id']) ?>"
+                                data-api-version="<?= esc((string) $waSignup['api_version']) ?>"
+                                data-connect-url="<?= esc(site_url('settings/embedded-signup')) ?>">
+                            <i class="fab fa-whatsapp me-1"></i> Connect WhatsApp
+                        </button>
+                    </li>
+                    <?php endif; ?>
                     <li class="user-footer">
                         <?php if (function_exists('can') && can('settings.view')): ?>
                             <a href="<?= site_url('settings') ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-gear me-1"></i> Settings</a>
@@ -456,17 +505,35 @@
                 $navGroups[] = ['title' => 'Automation', 'items' => $automationItems];
             }
 
-            $analyticsItems = [];
+            // Analytics: the overview page with the WhatsApp and Email tabs.
             if (function_exists('can') && can('reports.view')) {
-                $analyticsItems[] = [
+                $navGroups[] = ['title' => 'Analytics', 'items' => [[
                     'label' => 'Analytics',
                     'icon' => 'bar-chart-3',
                     'url' => site_url('analytics'),
-                    'match' => ['analytics', 'reports'],
+                    'match' => ['analytics'],
+                ]]];
+            }
+
+            // Reports: one page per report.
+            $reportItems = [];
+            if (function_exists('can') && can('reports.view')) {
+                $reportItems[] = [
+                    'label' => 'Reports',
+                    'icon' => 'file-bar-chart',
+                    'url' => site_url('reports/transactions'),
+                    'match' => ['reports'],
+                    'children' => [
+                        ['label' => 'Transaction Report', 'icon' => 'receipt', 'url' => site_url('reports/transactions'), 'match' => ['reports/transactions'], 'perm' => 'reports.view'],
+                        ['label' => 'Deposit Report', 'icon' => 'piggy-bank', 'url' => site_url('reports/deposits'), 'match' => ['reports/deposits'], 'perm' => 'reports.view'],
+                        ['label' => 'Campaign Report', 'icon' => 'megaphone', 'url' => site_url('reports/campaigns'), 'match' => ['reports/campaigns'], 'perm' => 'reports.view'],
+                        ['label' => 'WhatsApp Template Report', 'icon' => 'message-square-text', 'url' => site_url('reports/templates'), 'match' => ['reports/templates'], 'perm' => 'reports.view'],
+                        ['label' => 'Email Report', 'icon' => 'mail', 'url' => site_url('reports/email'), 'match' => ['reports/email'], 'perm' => 'reports.view'],
+                    ],
                 ];
             }
-            if ($analyticsItems !== []) {
-                $navGroups[] = ['title' => 'Analytics', 'items' => $analyticsItems];
+            if ($reportItems !== []) {
+                $navGroups[] = ['title' => 'Reports', 'items' => $reportItems];
             }
 
             $systemItems = [];
@@ -709,7 +776,7 @@
                     <div class="d-flex flex-wrap align-items-start justify-content-between gap-2 page-header-row">
                         <div class="min-w-0 page-header-title">
                             <div class="page-intro-title-row">
-                                <h1 class="mb-0"><?= esc($title ?? 'Dashboard') ?></h1>
+                                <h1 class="mb-0"><?= esc($title ?? $pageTitle ?? 'Dashboard') ?></h1>
                                 <?php
                                 $isEmailRoute = str_starts_with($currentUri, 'email') || str_starts_with($currentUri, 'emails') || str_starts_with($currentUri, 'settings/email') || ($req->getGet('channel') === 'email');
                                 if (! $isEmailRoute && function_exists('whatsapp_provider_short')): ?>
@@ -846,6 +913,11 @@
     };
 </script>
 <script src="<?= asset_url('assets/js/app.js') ?>"></script>
+<script src="<?= asset_url('assets/js/app-datatable.js') ?>"></script>
+<?php if (! empty($waSignup['ready'])): ?>
+<script src="<?= asset_url('assets/js/meta-embedded-signup.js') ?>"></script>
+<script src="<?= asset_url('assets/js/tenant-wa-connect.js') ?>"></script>
+<?php endif; ?>
 <?php if (function_exists('is_ai_enabled') && is_ai_enabled() && can('ai.use')): ?>
 <?= view('partials/ai_copilot_drawer') ?>
 <script src="<?= asset_url('assets/js/ai-copilot.js') ?>"></script>

@@ -23,22 +23,30 @@ class Dashboard extends BaseController
             return $denied;
         }
 
+        \App\Libraries\PerformanceIndexes::ensure(db_connect());
+
         $svc = new DashboardStats();
 
         [$todayStart, $todayEnd] = app_day_bounds_utc();
         [$monthStart, $monthEnd] = AppDateTime::monthToDateBoundsUtc();
 
+        // One range map feeds every card and the 14-day trend, so each table is scanned once.
+        $dates  = AppDateTime::recentDaysYmd(14);
+        $ranges = [
+            'all'   => [null, null],
+            'today' => [$todayStart, $todayEnd],
+            'month' => [$monthStart, $monthEnd],
+        ];
+        foreach ($dates as $date) {
+            $ranges['d:' . $date] = app_day_bounds_utc($date);
+        }
+
+        $wa    = $svc->whatsappBuckets($ranges);
+        $email = $svc->emailBuckets($ranges);
+
         $channels = [
-            'whatsapp' => [
-                'all'   => $svc->whatsapp(),
-                'today' => $svc->whatsapp($todayStart, $todayEnd),
-                'month' => $svc->whatsapp($monthStart, $monthEnd),
-            ],
-            'email' => [
-                'all'   => $svc->email(),
-                'today' => $svc->email($todayStart, $todayEnd),
-                'month' => $svc->email($monthStart, $monthEnd),
-            ],
+            'whatsapp' => ['all' => $wa['all'], 'today' => $wa['today'], 'month' => $wa['month']],
+            'email'    => ['all' => $email['all'], 'today' => $email['today'], 'month' => $email['month']],
         ];
 
         $campaignStatus = $svc->campaignStatus();
@@ -51,7 +59,7 @@ class Dashboard extends BaseController
         ];
 
         $charts = [
-            'trends'    => $svc->dailyTrend(14),
+            'trends'    => $svc->dailyTrend($dates, $wa, $email),
             'campaigns' => [
                 'labels' => array_keys($campaignStatus),
                 'values' => array_values($campaignStatus),

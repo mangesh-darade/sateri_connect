@@ -83,36 +83,139 @@ class DashboardStats
     }
 
     /**
-     * Per-day sent/failed for both channels over the last N days (app timezone).
+     * WhatsApp counts for many UTC ranges in ONE scan of `messages`.
      *
-     * @return array{labels:list<string>,whatsapp:list<int>,email:list<int>,failed:list<int>,replies:list<int>}
+     * @param array<string, array{0:?string,1:?string}> $ranges key => [from, to] (null = open)
+     *
+     * @return array<string, array{sent:int,delivered:int,read:int,failed:int,replies:int}>
      */
-    public function dailyTrend(int $days): array
+    public function whatsappBuckets(array $ranges): array
     {
-        $dates = AppDateTime::recentDaysYmd($days);
-        $email = [];
-        try {
-            foreach (model(EmailLogModel::class)->daily($dates[0], end($dates)) as $row) {
-                $email[$row['date']] = $row;
-            }
-        } catch (\Throwable $e) {
-            log_message('error', 'DashboardStats::dailyTrend email failed: {msg}', ['msg' => $e->getMessage()]);
+        $db     = db_connect();
+        $select = [];
+        $i      = 0;
+        foreach ($ranges as [$from, $to]) {
+            $in = $this->rangeSql($db, $from, $to);
+            $select[] = "SUM(CASE WHEN {$in} AND direction = 'outbound' AND status IN ('sent','delivered','read') THEN 1 ELSE 0 END) AS s{$i}";
+            $select[] = "SUM(CASE WHEN {$in} AND direction = 'outbound' AND status IN ('delivered','read') THEN 1 ELSE 0 END) AS d{$i}";
+            $select[] = "SUM(CASE WHEN {$in} AND direction = 'outbound' AND status = 'read' THEN 1 ELSE 0 END) AS r{$i}";
+            $select[] = "SUM(CASE WHEN {$in} AND direction = 'outbound' AND status = 'failed' THEN 1 ELSE 0 END) AS f{$i}";
+            $select[] = "SUM(CASE WHEN {$in} AND direction = 'inbound' THEN 1 ELSE 0 END) AS i{$i}";
+            $i++;
         }
 
-        $out = ['labels' => [], 'whatsapp' => [], 'email' => [], 'failed' => [], 'replies' => []];
-        foreach ($dates as $date) {
-            [$from, $to] = app_day_bounds_utc($date);
-            $wa = $this->whatsapp($from, $to);
-            $em = $email[$date] ?? ['sent' => 0, 'failed' => 0];
+        $row = $db->table('messages')->select(implode(', ', $select), false)->get()->getRowArray() ?? [];
 
-            $out['labels'][]   = date('M j', strtotime($date));
-            $out['whatsapp'][] = $wa['sent'];
-            $out['email'][]    = (int) $em['sent'];
-            $out['failed'][]   = $wa['failed'] + (int) $em['failed'];
-            $out['replies'][]  = $wa['replies'];
+        $out = [];
+        $i   = 0;
+        foreach (array_keys($ranges) as $key) {
+            $out[$key] = [
+                'sent'      => (int) ($row["s{$i}"] ?? 0),
+                'delivered' => (int) ($row["d{$i}"] ?? 0),
+                'read'      => (int) ($row["r{$i}"] ?? 0),
+                'failed'    => (int) ($row["f{$i}"] ?? 0),
+                'replies'   => (int) ($row["i{$i}"] ?? 0),
+            ];
+            $i++;
         }
 
         return $out;
+    }
+
+    /**
+     * Email counts (+ bounces) for many UTC ranges: one scan of `email_logs`, one of the bounce events.
+     *
+     * @param array<string, array{0:?string,1:?string}> $ranges key => [from, to] (null = open)
+     *
+     * @return array<string, array{sent:int,failed:int,opened:int,clicked:int,bounced:int,open_rate:float}>
+     */
+    public function emailBuckets(array $ranges): array
+    {
+        $db      = db_connect();
+        $logSel  = [];
+        $bounceSel = [];
+        $i       = 0;
+        foreach ($ranges as [$from, $to]) {
+            $in = $this->rangeSql($db, $from, $to);
+            $logSel[]    = "SUM(CASE WHEN {$in} AND status = 'sent' THEN 1 ELSE 0 END) AS s{$i}";
+            $logSel[]    = "SUM(CASE WHEN {$in} AND status = 'failed' THEN 1 ELSE 0 END) AS f{$i}";
+            $logSel[]    = "SUM(CASE WHEN {$in} AND open_count > 0 THEN 1 ELSE 0 END) AS o{$i}";
+            $logSel[]    = "SUM(CASE WHEN {$in} AND click_count > 0 THEN 1 ELSE 0 END) AS c{$i}";
+            $bounceSel[] = "SUM(CASE WHEN {$in} THEN 1 ELSE 0 END) AS b{$i}";
+            $i++;
+        }
+
+        $log = $bounce = [];
+        try {
+            $log = $db->table('email_logs')->select(implode(', ', $logSel), false)->get()->getRowArray() ?? [];
+            $bounce = $db->table('email_recipient_events')
+                ->select(implode(', ', $bounceSel), false)
+                ->where('event_type', EmailRecipientEventModel::TYPE_BOUNCE)
+                ->get()->getRowArray() ?? [];
+        } catch (\Throwable $e) {
+            log_message('error', 'DashboardStats::emailBuckets failed: {msg}', ['msg' => $e->getMessage()]);
+        }
+
+        $out = [];
+        $i   = 0;
+        foreach (array_keys($ranges) as $key) {
+            $sent   = (int) ($log["s{$i}"] ?? 0);
+            $opened = (int) ($log["o{$i}"] ?? 0);
+            $out[$key] = [
+                'sent'      => $sent,
+                'failed'    => (int) ($log["f{$i}"] ?? 0),
+                'opened'    => $opened,
+                'clicked'   => (int) ($log["c{$i}"] ?? 0),
+                'bounced'   => (int) ($bounce["b{$i}"] ?? 0),
+                'open_rate' => $sent > 0 ? round(($opened / $sent) * 100, 1) : 0.0,
+            ];
+            $i++;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Per-day sent/failed for both channels, built from already-fetched `d:YYYY-MM-DD` buckets
+     * (see whatsappBuckets / emailBuckets) so no query runs per day.
+     *
+     * @param list<string>                $dates app-local Y-m-d, oldest first
+     * @param array<string, array<string,int>> $wa    whatsappBuckets() result
+     * @param array<string, array<string,mixed>> $email emailBuckets() result
+     *
+     * @return array{labels:list<string>,whatsapp:list<int>,email:list<int>,failed:list<int>,replies:list<int>}
+     */
+    public function dailyTrend(array $dates, array $wa, array $email): array
+    {
+        $out = ['labels' => [], 'whatsapp' => [], 'email' => [], 'failed' => [], 'replies' => []];
+        foreach ($dates as $date) {
+            $w = $wa['d:' . $date] ?? ['sent' => 0, 'failed' => 0, 'replies' => 0];
+            $e = $email['d:' . $date] ?? ['sent' => 0, 'failed' => 0];
+
+            $out['labels'][]   = date('M j', strtotime($date));
+            $out['whatsapp'][] = (int) $w['sent'];
+            $out['email'][]    = (int) $e['sent'];
+            $out['failed'][]   = (int) $w['failed'] + (int) $e['failed'];
+            $out['replies'][]  = (int) $w['replies'];
+        }
+
+        return $out;
+    }
+
+    /**
+     * SQL predicate limiting `created_at` to [from, to]; '1=1' when both are open.
+     */
+    protected function rangeSql(\CodeIgniter\Database\BaseConnection $db, ?string $from, ?string $to): string
+    {
+        $parts = [];
+        if ($from !== null) {
+            $parts[] = 'created_at >= ' . $db->escape($from);
+        }
+        if ($to !== null) {
+            $parts[] = 'created_at <= ' . $db->escape($to);
+        }
+
+        return $parts === [] ? '1=1' : '(' . implode(' AND ', $parts) . ')';
     }
 
     /**

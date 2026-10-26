@@ -29,11 +29,17 @@ class Roles extends BaseController
         $matrix      = [];
 
         foreach ($roles as $role) {
-            $perms = model(RoleModel::class)->getPermissions((int) $role['id']);
-            $matrix[(int) $role['id']] = array_map(
-                static fn (array $p): int => (int) $p['id'],
-                $perms
-            );
+            $matrix[(int) $role['id']] = [];
+        }
+        if ($matrix !== []) {
+            $rows = db_connect()->table('role_permissions')
+                ->select('role_id, permission_id')
+                ->whereIn('role_id', array_keys($matrix))
+                ->get()
+                ->getResultArray();
+            foreach ($rows as $row) {
+                $matrix[(int) $row['role_id']][] = (int) $row['permission_id'];
+            }
         }
 
         return $this->render('roles/index', [

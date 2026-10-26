@@ -24,10 +24,11 @@ class PlatformStatsService
      *   clients: list<array<string, mixed>>
      * }
      */
-    public function dashboard(?int $platformAdminId = null): array
+    public function dashboard(?int $platformAdminId = null, bool $withTrend = true): array
     {
         $tenants = $this->master->listActiveTenants($platformAdminId);
         $clients = [];
+        $trend   = $this->emptyTrend(14);
         $totals  = [
             'clients'      => 0,
             'online'       => 0,
@@ -53,8 +54,19 @@ class PlatformStatsService
         ];
         $emailKeys = ['email_sent', 'email_failed', 'email_opened', 'email_clicked', 'email_bounced', 'email_unsubscribed'];
 
+        $captured = $this->connection->capture();
         foreach ($tenants as $tenant) {
-            $row = $this->clientSnapshot($tenant);
+            // The trend rides on the same tenant connection as the snapshot (one switch per tenant).
+            $row = $this->clientSnapshot($tenant, false, $withTrend ? 14 : 0);
+            foreach ($row['trend'] ?? [] as $day) {
+                $d = (string) ($day['date'] ?? '');
+                if (isset($trend[$d])) {
+                    foreach (['sent', 'delivered', 'failed', 'replies'] as $k) {
+                        $trend[$d][$k] += (int) ($day[$k] ?? 0);
+                    }
+                }
+            }
+            unset($row['trend']);
             $clients[] = $row;
             $totals['clients']++;
 
@@ -81,6 +93,8 @@ class PlatformStatsService
             }
         }
 
+        $this->restoreConnection($captured);
+
         $totals['email_open_rate']   = $this->rate($totals['email_opened'], $totals['email_sent']);
         $totals['email_bounce_rate'] = $this->rate($totals['email_bounced'], $totals['email_sent']);
 
@@ -91,7 +105,7 @@ class PlatformStatsService
             ? round(($totals['failed'] / max(1, $totals['sent'] + $totals['failed'])) * 100, 1)
             : 0.0;
 
-        $trend = $this->aggregateTrend($tenants, 14);
+        $trend  = array_values($trend);
         $charts = $this->buildCharts($clients, $totals, $trend);
 
         return [
@@ -103,51 +117,33 @@ class PlatformStatsService
     }
 
     /**
-     * @param list<array<string, mixed>> $tenants
-     * @return list<array{date:string,sent:int,delivered:int,failed:int,replies:int}>
+     * Put the default connection back after a pass over many tenants, so later code in the request
+     * does not silently run against the last client's database.
+     *
+     * @param array<string, mixed> $captured
      */
-    protected function aggregateTrend(array $tenants, int $days): array
+    public function restoreConnection(array $captured): void
+    {
+        try {
+            $this->connection->restoreIfChanged($captured);
+        } catch (Throwable $e) {
+            log_message('warning', 'PlatformStatsService could not restore the default connection: {msg}', ['msg' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Zeroed per-day rows keyed by app-local date.
+     *
+     * @return array<string, array{date:string,sent:int,delivered:int,failed:int,replies:int}>
+     */
+    protected function emptyTrend(int $days): array
     {
         $byDate = [];
         foreach (AppDateTime::recentDaysYmd($days) as $date) {
-            $byDate[$date] = [
-                'date'      => $date,
-                'sent'      => 0,
-                'delivered' => 0,
-                'failed'    => 0,
-                'replies'   => 0,
-            ];
+            $byDate[$date] = ['date' => $date, 'sent' => 0, 'delivered' => 0, 'failed' => 0, 'replies' => 0];
         }
 
-        foreach ($tenants as $tenant) {
-            $key = strtolower(trim((string) ($tenant['key'] ?? '')));
-            if ($key === '') {
-                continue;
-            }
-            try {
-                if (! $this->connection->apply($key, 'platform-stats')) {
-                    continue;
-                }
-                $db = Database::connect();
-                foreach ($this->messagesByDay($db, $days) as $day) {
-                    $d = (string) ($day['date'] ?? '');
-                    if (! isset($byDate[$d])) {
-                        continue;
-                    }
-                    $byDate[$d]['sent']      += (int) ($day['sent'] ?? 0);
-                    $byDate[$d]['delivered'] += (int) ($day['delivered'] ?? 0);
-                    $byDate[$d]['failed']    += (int) ($day['failed'] ?? 0);
-                    $byDate[$d]['replies']   += (int) ($day['replies'] ?? 0);
-                }
-            } catch (Throwable $e) {
-                log_message('error', 'PlatformStatsService::aggregateTrend [{key}]: {msg}', [
-                    'key' => $key,
-                    'msg' => $e->getMessage(),
-                ]);
-            }
-        }
-
-        return array_values($byDate);
+        return $byDate;
     }
 
     /**
@@ -233,6 +229,7 @@ class PlatformStatsService
         $recentCampaigns = [];
         $adminEmail = '';
         $adminName  = '';
+        $adminPhone = '';
         $usersActive = 0;
         $lastMessageAt = null;
 
@@ -299,9 +296,11 @@ class PlatformStatsService
         if ($adminEmail !== '' && ($snap['health'] ?? '') !== 'down') {
             try {
                 $user = Database::connect()->table('users')->where('email', $adminEmail)->get()->getRowArray();
-                $adminName = is_array($user) ? (string) ($user['name'] ?? '') : '';
+                $adminName  = is_array($user) ? (string) ($user['name'] ?? '') : '';
+                $adminPhone = is_array($user) ? (string) ($user['phone'] ?? '') : '';
             } catch (Throwable) {
-                $adminName = '';
+                $adminName  = '';
+                $adminPhone = '';
             }
         }
 
@@ -317,6 +316,7 @@ class PlatformStatsService
         $snap['recent_campaigns'] = $recentCampaigns;
         $snap['admin_email']      = $adminEmail;
         $snap['admin_name']       = $adminName;
+        $snap['admin_phone']      = $adminPhone;
         $snap['users_active']     = $usersActive;
         $snap['last_message_at']  = $lastMessageAt;
         $snap['delivery_rate']    = ((int) ($snap['sent'] ?? 0)) > 0
@@ -333,7 +333,7 @@ class PlatformStatsService
      * @param array<string, mixed> $tenant
      * @return array<string, mixed>
      */
-    public function clientSnapshot(array $tenant, bool $alreadyConnected = false): array
+    public function clientSnapshot(array $tenant, bool $alreadyConnected = false, int $trendDays = 0): array
     {
         $key  = strtolower(trim((string) ($tenant['key'] ?? '')));
         $name = (string) ($tenant['name'] ?? $key);
@@ -360,6 +360,11 @@ class PlatformStatsService
             'meta_ready'   => false,
             'phone_number_id' => '',
             'app_name'     => $name,
+            'country_code'    => strtolower(trim((string) ($tenant['country_code'] ?? ''))),
+            'wallet_state'    => 'off',
+            'wallet_enabled'  => false,
+            'wallet_balance'  => 0.0,
+            'wallet_currency' => 'INR',
         ] + $this->emptyEmailStats();
 
         if ($key === '') {
@@ -377,6 +382,7 @@ class PlatformStatsService
 
             $db = Database::connect();
             $db->query('SELECT 1');
+            PerformanceIndexes::ensure($db);
 
             $base['users'] = $db->tableExists('users')
                 ? (int) $db->table('users')->where('deleted_at', null)->countAllResults()
@@ -394,6 +400,13 @@ class PlatformStatsService
                 ? (int) $db->table('message_queue')->where('status', 'pending')->countAllResults()
                 : 0;
 
+            $walletSvc = new WalletService();
+            $wallet    = $walletSvc->wallet();
+            $base['wallet_state']    = $walletSvc->health($wallet)['state'];
+            $base['wallet_enabled']  = (int) ($wallet['enabled'] ?? 0) === 1;
+            $base['wallet_balance']  = (float) ($wallet['balance'] ?? 0);
+            $base['wallet_currency'] = (string) ($wallet['currency'] ?? 'INR');
+
             if ($db->tableExists('messages')) {
                 $msg = $db->table('messages')
                     ->select("
@@ -410,6 +423,9 @@ class PlatformStatsService
                 $base['read']      = (int) ($msg['read'] ?? 0);
                 $base['failed']    = (int) ($msg['failed'] ?? 0);
                 $base['replies']   = (int) ($msg['replies'] ?? 0);
+                if ($trendDays > 0) {
+                    $base['trend'] = $this->messagesByDay($db, $trendDays);
+                }
             }
 
             $metaReady = false;
@@ -448,7 +464,9 @@ class PlatformStatsService
 
             return $base;
         } catch (Throwable $e) {
-            $base['error']        = $e->getMessage();
+            // Driver messages carry hosts, accounts and SQL: log them, show a generic line.
+            log_message('error', 'PlatformStatsService::clientSnapshot failed [{key}]: {msg}', ['key' => $key, 'msg' => $e->getMessage()]);
+            $base['error']        = 'Could not read this client database.';
             $base['health']       = 'down';
             $base['health_label'] = 'Offline';
 
@@ -465,27 +483,34 @@ class PlatformStatsService
             return [];
         }
 
-        $result = [];
-        foreach (AppDateTime::recentDaysYmd($days) as $date) {
+        // One range scan: a CASE bucket per (day, metric) instead of one query per day.
+        $dates  = AppDateTime::recentDaysYmd($days);
+        $select = [];
+        foreach ($dates as $i => $date) {
             [$from, $to] = app_day_bounds_utc($date);
-            $row = $db->table('messages')
-                ->select("
-                    SUM(CASE WHEN direction = 'outbound' AND status IN ('sent','delivered','read') THEN 1 ELSE 0 END) AS sent,
-                    SUM(CASE WHEN direction = 'outbound' AND status IN ('delivered','read') THEN 1 ELSE 0 END) AS delivered,
-                    SUM(CASE WHEN direction = 'outbound' AND status = 'failed' THEN 1 ELSE 0 END) AS failed,
-                    SUM(CASE WHEN direction = 'inbound' THEN 1 ELSE 0 END) AS replies
-                ", false)
-                ->where('created_at >=', $from)
-                ->where('created_at <=', $to)
-                ->get()
-                ->getRowArray();
+            $in = '(created_at >= ' . $db->escape($from) . ' AND created_at <= ' . $db->escape($to) . ')';
+            $select[] = "SUM(CASE WHEN {$in} AND direction = 'outbound' AND status IN ('sent','delivered','read') THEN 1 ELSE 0 END) AS s{$i}";
+            $select[] = "SUM(CASE WHEN {$in} AND direction = 'outbound' AND status IN ('delivered','read') THEN 1 ELSE 0 END) AS d{$i}";
+            $select[] = "SUM(CASE WHEN {$in} AND direction = 'outbound' AND status = 'failed' THEN 1 ELSE 0 END) AS f{$i}";
+            $select[] = "SUM(CASE WHEN {$in} AND direction = 'inbound' THEN 1 ELSE 0 END) AS r{$i}";
+        }
+        [$rangeFrom] = app_day_bounds_utc($dates[0]);
+        [, $rangeTo] = app_day_bounds_utc($dates[count($dates) - 1]);
+        $row = $db->table('messages')
+            ->select(implode(', ', $select), false)
+            ->where('created_at >=', $rangeFrom)
+            ->where('created_at <=', $rangeTo)
+            ->get()
+            ->getRowArray() ?? [];
 
+        $result = [];
+        foreach ($dates as $i => $date) {
             $result[] = [
                 'date'      => $date,
-                'sent'      => (int) ($row['sent'] ?? 0),
-                'delivered' => (int) ($row['delivered'] ?? 0),
-                'failed'    => (int) ($row['failed'] ?? 0),
-                'replies'   => (int) ($row['replies'] ?? 0),
+                'sent'      => (int) ($row["s{$i}"] ?? 0),
+                'delivered' => (int) ($row["d{$i}"] ?? 0),
+                'failed'    => (int) ($row["f{$i}"] ?? 0),
+                'replies'   => (int) ($row["r{$i}"] ?? 0),
             ];
         }
 
@@ -591,18 +616,26 @@ class PlatformStatsService
         [$from, $to] = AppDateTime::rangeBoundsUtc($dates[0], $dates[count($dates) - 1]);
 
         if ($db->tableExists('email_recipient_events')) {
-            $map = ['sent' => 'sent', 'failed' => 'failed', 'open' => 'opened', 'bounce' => 'bounced'];
-            $rows = $db->table('email_recipient_events')
-                ->select('event_type, first_at')
+            // Count per (day, event type) in SQL rather than pulling every event row into PHP.
+            $map    = ['sent' => 'sent', 'failed' => 'failed', 'open' => 'opened', 'bounce' => 'bounced'];
+            $select = [];
+            foreach ($dates as $i => $date) {
+                [$dFrom, $dTo] = AppDateTime::rangeBoundsUtc($date, $date);
+                $in = '(first_at >= ' . $db->escape($dFrom) . ' AND first_at <= ' . $db->escape($dTo) . ')';
+                foreach (array_keys($map) as $j => $type) {
+                    $select[] = "SUM(CASE WHEN {$in} AND event_type = " . $db->escape($type) . " THEN 1 ELSE 0 END) AS c{$i}_{$j}";
+                }
+            }
+            $row = $db->table('email_recipient_events')
+                ->select(implode(', ', $select), false)
                 ->whereIn('event_type', array_keys($map))
                 ->where('first_at >=', $from)
                 ->where('first_at <=', $to)
                 ->get()
-                ->getResultArray();
-            foreach ($rows as $r) {
-                $day = AppDateTime::format($r['first_at'] ?? null, 'Y-m-d', '');
-                if (isset($byDate[$day])) {
-                    $byDate[$day][$map[(string) $r['event_type']]]++;
+                ->getRowArray() ?? [];
+            foreach ($dates as $i => $date) {
+                foreach (array_values($map) as $j => $field) {
+                    $byDate[$date][$field] += (int) ($row["c{$i}_{$j}"] ?? 0);
                 }
             }
         }
