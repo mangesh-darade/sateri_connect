@@ -2054,7 +2054,56 @@ class MetaCloudAPI
             'to'                => $phone,
         ], $message);
 
-        return $this->request('POST', $this->phoneNumberId . '/messages', $payload);
+        // Edits and reactions are not new billable messages. Nothing is looked up while the wallet is off.
+        $wallet   = new WalletService();
+        $category = isset($message['message_id']) || ($message['type'] ?? '') === 'reaction' || ! $wallet->isEnabled()
+            ? null
+            : $this->billingCategory($message);
+
+        $charge = $category !== null ? $wallet->charge($phone, $category) : ['ok' => true, 'txn_id' => 0];
+        if (! $charge['ok']) {
+            throw new RuntimeException((string) $charge['message'], (int) $charge['status']);
+        }
+        $txnId = (int) ($charge['txn_id'] ?? 0);
+
+        try {
+            $result = $this->request('POST', $this->phoneNumberId . '/messages', $payload);
+        } catch (Throwable $e) {
+            $wallet->refundTransaction($txnId, 'Send failed');
+
+            throw $e;
+        }
+
+        $wallet->attachReference($txnId, (string) ($result['messages'][0]['id'] ?? ''));
+
+        return $result;
+    }
+
+    /**
+     * Meta bills templates by their approved category, everything else is a service message.
+     * An unknown template is treated as marketing, the dearest, so the wallet never under-charges.
+     *
+     * @param array<string, mixed> $message
+     */
+    protected function billingCategory(array $message): string
+    {
+        if (($message['type'] ?? '') !== 'template') {
+            return 'service';
+        }
+
+        $name = (string) ($message['template']['name'] ?? '');
+        $lang = (string) ($message['template']['language']['code'] ?? '');
+        try {
+            $templates = db_connect()->table('templates')->select('category');
+            $row = (clone $templates)->where('name', $name)->where('language', $lang)->get()->getRowArray()
+                ?? $templates->where('name', $name)->get()->getRowArray();
+        } catch (Throwable) {
+            $row = null;
+        }
+
+        $cat = strtolower((string) ($row['category'] ?? ''));
+
+        return in_array($cat, ['utility', 'authentication'], true) ? $cat : 'marketing';
     }
 
     protected function ensureConfigured(bool $needPhoneId): void

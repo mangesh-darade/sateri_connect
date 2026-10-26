@@ -167,6 +167,7 @@ class CampaignService
         } else {
             $queued = $this->queueRecipients($campaignId, $contactIds, $tagIds, $allActive);
             $this->assertHasEligibleRecipients($queued);
+            $this->assertWalletCovers($campaignId, $campaign);
 
             $this->campaigns->update($campaignId, [
                 'status'         => 'running',
@@ -235,6 +236,59 @@ class CampaignService
         $this->fireCampaignSentTriggers($campaignId);
 
         return $queued;
+    }
+
+    /**
+     * With the wallet on, a template campaign must be fully paid for before it starts, so it never runs
+     * half-way and fails the rest. The queued rows are cancelled when the balance is too low.
+     *
+     * @param array<string, mixed> $campaign
+     */
+    protected function assertWalletCovers(int $campaignId, array $campaign): void
+    {
+        $wallet = new WalletService();
+        if (! $wallet->isEnabled()
+            || (string) ($campaign['message_type'] ?? 'template') !== 'template'
+            || ! function_exists('is_meta_provider') || ! is_meta_provider()) {
+            return;
+        }
+
+        $db = db_connect();
+        $category = 'marketing';
+        if (! empty($campaign['template_id'])) {
+            $tpl = $db->table('templates')->select('category')->where('id', (int) $campaign['template_id'])->get()->getRowArray();
+            $cat = strtolower((string) ($tpl['category'] ?? ''));
+            $category = in_array($cat, ['utility', 'authentication'], true) ? $cat : 'marketing';
+        }
+
+        $phones = array_column(
+            $db->table('message_queue q')->select('c.mobile')
+                ->join('contacts c', 'c.id = q.contact_id')
+                ->where('q.campaign_id', $campaignId)->where('q.status', 'pending')
+                ->get()->getResultArray(),
+            'mobile'
+        );
+        $est = $wallet->estimate($phones, $category);
+        $balance = $wallet->balance();
+
+        $problem = null;
+        if ($est['unpriced'] > 0) {
+            $problem = 'No WhatsApp rate is set for the country of ' . $est['unpriced'] . ' recipient' . ($est['unpriced'] === 1 ? '' : 's') . '. Ask the platform admin to add the rate.';
+        } elseif (($room = $wallet->capRoom()) !== null && $room < $est['total']) {
+            $problem = 'Spending limit reached. This campaign needs about ' . number_format($est['total'], 2)
+                . ' but only ' . number_format($room, 2) . ' is left under your daily or monthly WhatsApp limit. Ask your platform admin to raise it.';
+        } elseif ($balance < $est['total']) {
+            $problem = 'Insufficient wallet balance. This campaign needs about ' . number_format($est['total'], 2)
+                . ' for ' . count($phones) . ' messages, and the balance is ' . number_format($balance, 2) . '. Recharge your wallet and start again.';
+        }
+        if ($problem === null) {
+            return;
+        }
+
+        $db->table('message_queue')->where('campaign_id', $campaignId)->where('status', 'pending')
+            ->update(['status' => 'cancelled', 'updated_at' => date('Y-m-d H:i:s')]);
+
+        throw new RuntimeException($problem, 402);
     }
 
     /**

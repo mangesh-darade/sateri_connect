@@ -505,10 +505,11 @@ return array (
       'kind' => 'KEY `kind` (`kind`)',
       'created_at' => 'KEY `created_at` (`created_at`)',
       'provider' => 'KEY `provider` (`provider`)',
+      'idx_email_logs_created_status' => 'KEY `idx_email_logs_created_status` (`created_at`,`status`)',
     ),
     'options' => 'ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
   ),
-  'email_recipient_events' => 
+  'email_recipient_events' =>
   array (
     'columns' => 
     array (
@@ -532,10 +533,11 @@ return array (
       'campaign_id' => 'KEY `campaign_id` (`campaign_id`)',
       'email_event_type' => 'KEY `email_event_type` (`email`,`event_type`)',
       'message_id' => 'KEY `message_id` (`message_id`)',
+      'idx_ere_type_first_at' => 'KEY `idx_ere_type_first_at` (`event_type`,`first_at`)',
     ),
     'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
   ),
-  'email_senders' => 
+  'email_senders' =>
   array (
     'columns' => 
     array (
@@ -771,6 +773,7 @@ return array (
       'channel' => 'KEY `channel` (`channel`)',
       'external_message_id' => 'KEY `external_message_id` (`external_message_id`)',
       'uniq_messages_wa_inbound_id' => 'UNIQUE KEY `uniq_messages_wa_inbound_id` (`wa_inbound_id`)',
+      'idx_messages_created_dir_status' => 'KEY `idx_messages_created_dir_status` (`created_at`,`direction`,`status`)',
     ),
     'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
   ),
@@ -794,10 +797,11 @@ return array (
       'user_id' => 'KEY `user_id` (`user_id`)',
       'is_read' => 'KEY `is_read` (`is_read`)',
       'type' => 'KEY `type` (`type`)',
+      'idx_notifications_user_read_created' => 'KEY `idx_notifications_user_read_created` (`user_id`,`is_read`,`created_at`)',
     ),
     'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
   ),
-  'password_resets' => 
+  'password_resets' =>
   array (
     'columns' => 
     array (
@@ -1090,7 +1094,88 @@ return array (
     ),
     'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
   ),
-  'webhook_logs' => 
+  'wallet_transactions' =>
+  array (
+    'columns' =>
+    array (
+      'id' => 'bigint unsigned NOT NULL AUTO_INCREMENT',
+      'type' => 'varchar(10) COLLATE utf8mb4_general_ci NOT NULL',
+      'amount' => 'decimal(14,4) NOT NULL DEFAULT \'0.0000\'',
+      'balance_after' => 'decimal(14,4) NOT NULL DEFAULT \'0.0000\'',
+      'category' => 'varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'country_code' => 'varchar(8) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'reference' => 'varchar(191) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'description' => 'varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'base_amount' => 'decimal(14,4) DEFAULT NULL',
+      'tax_amount' => 'decimal(14,4) DEFAULT NULL',
+      'created_by' => 'int unsigned DEFAULT NULL',
+      'created_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' =>
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+      'uniq_wallet_tx_type_reference' => 'UNIQUE KEY `uniq_wallet_tx_type_reference` (`type`,`reference`)',
+      'category_created_at' => 'KEY `category_created_at` (`category`,`created_at`)',
+      'created_at' => 'KEY `created_at` (`created_at`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
+  'wallet_payments' =>
+  array (
+    'columns' =>
+    array (
+      'id' => 'bigint unsigned NOT NULL AUTO_INCREMENT',
+      'order_id' => 'varchar(64) COLLATE utf8mb4_general_ci NOT NULL',
+      'gateway' => 'varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'razorpay\'',
+      'gateway_ref' => 'varchar(191) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'gateway_txn' => 'varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'payment_id' => 'varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'source' => 'varchar(20) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'checkout\'',
+      'status' => 'varchar(12) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'created\'',
+      'currency' => 'varchar(3) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'INR\'',
+      'credit_amount' => 'decimal(14,2) NOT NULL DEFAULT \'0.00\'',
+      'tax_percent' => 'decimal(5,2) NOT NULL DEFAULT \'0.00\'',
+      'tax_amount' => 'decimal(14,2) NOT NULL DEFAULT \'0.00\'',
+      'total_amount' => 'decimal(14,2) NOT NULL DEFAULT \'0.00\'',
+      'invoice_no' => 'varchar(40) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'created_by' => 'int unsigned DEFAULT NULL',
+      'paid_at' => 'datetime DEFAULT NULL',
+      'created_at' => 'datetime DEFAULT NULL',
+      'updated_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' =>
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+      'uniq_wallet_payments_order' => 'UNIQUE KEY `uniq_wallet_payments_order` (`order_id`)',
+      'payment_id' => 'KEY `payment_id` (`payment_id`)',
+      'status_created_at' => 'KEY `status_created_at` (`status`,`created_at`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
+  'wallets' =>
+  array (
+    'columns' =>
+    array (
+      'id' => 'int unsigned NOT NULL AUTO_INCREMENT',
+      'enabled' => 'tinyint(1) NOT NULL DEFAULT \'0\'',
+      'balance' => 'decimal(14,4) NOT NULL DEFAULT \'0.0000\'',
+      'currency' => 'varchar(3) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'INR\'',
+      'low_balance_alert' => 'decimal(14,2) NOT NULL DEFAULT \'0.00\'',
+      'tax_percent' => 'decimal(5,2) NOT NULL DEFAULT \'0.00\'',
+      'markup_percent' => 'decimal(6,2) NOT NULL DEFAULT \'0.00\'',
+      'daily_cap' => 'decimal(14,2) NOT NULL DEFAULT \'0.00\'',
+      'monthly_cap' => 'decimal(14,2) NOT NULL DEFAULT \'0.00\'',
+      'auto_topup_amount' => 'decimal(14,2) NOT NULL DEFAULT \'0.00\'',
+      'last_low_alert_at' => 'datetime DEFAULT NULL',
+      'updated_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' =>
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
+  'webhook_logs' =>
   array (
     'columns' => 
     array (
