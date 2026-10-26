@@ -75,8 +75,10 @@ class TenantEnsureMaster extends BaseCommand
             (new \App\Libraries\MetaDataDeletionService())->ensureTable();
             (new \App\Libraries\ClientStatsCache())->ensureTable();
             (new \App\Libraries\MswipeService())->ensureRouteTable();
+            (new \App\Libraries\WalletRateCard())->ensureTable();   // wa_rates + wa_fx_rates
 
             $repo = new \App\Libraries\MasterTenantRepository();
+            $repo->ensurePlatformSettingsTable();
             $repo->ensureTenantOwnerColumn();
             $repo->ensurePrimaryAdminColumn();
             $repo->ensureAdminMetaTable();

@@ -1102,8 +1102,39 @@ class MasterTenantRepository
             return (string) ($row['value'] ?? $default);
         } catch (Throwable $e) {
             log_message('debug', 'getPlatformSetting failed: {msg}', ['msg' => $e->getMessage()]);
+            // A master DB that predates platform_settings: create it so the next save works.
+            $this->ensurePlatformSettingsTable();
 
             return $default;
+        }
+    }
+
+    /**
+     * Create `platform_settings` when the master DB was set up before it existed (same shape as
+     * `tenant:ensure-master`). Never throws; runs at most once per request.
+     */
+    public function ensurePlatformSettingsTable(): void
+    {
+        static $done = false;
+        if ($done || ! self::masterConfigured()) {
+            return;
+        }
+        $done = true;
+
+        try {
+            $this->db()->query(
+                'CREATE TABLE IF NOT EXISTS `platform_settings` (
+                    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    `key` VARCHAR(100) NOT NULL,
+                    `value` TEXT NULL,
+                    `created_at` DATETIME NULL,
+                    `updated_at` DATETIME NULL,
+                    PRIMARY KEY (`id`),
+                    UNIQUE KEY `key` (`key`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
+            );
+        } catch (Throwable $e) {
+            log_message('error', 'ensurePlatformSettingsTable failed: {msg}', ['msg' => $e->getMessage()]);
         }
     }
 
@@ -1113,6 +1144,8 @@ class MasterTenantRepository
         if ($key === '' || ! self::masterConfigured()) {
             return;
         }
+
+        $this->ensurePlatformSettingsTable();
 
         $store = $encrypt ? $this->encryptSecret($value) : $value;
         $now   = date('Y-m-d H:i:s');
