@@ -1416,6 +1416,108 @@ class MetaCloudAPI
     }
 
     /**
+     * Ensure Meta App webhook receives Facebook Lead Ads (object=page, field=leadgen).
+     *
+     * Page /subscribed_apps alone is not enough — without this app subscription Meta never
+     * POSTs leadgen events to our callback URL.
+     *
+     * @return array{ok: bool, detail: string, error: ?string, app_id: string}
+     */
+    public function ensurePageLeadgenAppSubscription(?string $callbackUrl = null, ?string $verifyToken = null): array
+    {
+        $this->loadCredentials();
+        $meta      = $this->settings->getMetaConfig();
+        $appId     = trim((string) ($meta['app_id'] ?? ''));
+        $appSecret = trim((string) ($meta['app_secret'] ?? ''));
+        $verify    = trim((string) ($verifyToken ?: ($meta['verify_token'] ?? '')));
+        $callback  = trim((string) ($callbackUrl ?? ''));
+
+        if ($callback === '') {
+            $resolved = $this->settings->resolveWebhookPublicConfig();
+            $callback = (string) ($resolved['public_callback'] ?? $resolved['auto_callback'] ?? '');
+        }
+
+        if (($appId === '' || $appSecret === '' || $verify === '') && MasterTenantRepository::masterConfigured()) {
+            try {
+                $tech = (new MasterTenantRepository())->getPlatformMetaTechProvider();
+                if ($appId === '') {
+                    $appId = trim((string) ($tech['app_id'] ?? ''));
+                }
+                if ($appSecret === '') {
+                    $appSecret = trim((string) ($tech['app_secret'] ?? ''));
+                }
+                if ($verify === '') {
+                    $verify = trim((string) ($tech['webhook_verify_token'] ?? ''));
+                }
+            } catch (Throwable) {
+                // Keep tenant values.
+            }
+        }
+
+        if ($appId === '' || $appSecret === '') {
+            return [
+                'ok'     => false,
+                'detail' => 'Meta App ID / App Secret missing for leadgen subscribe',
+                'error'  => 'Save Meta App ID and App Secret, then reconnect the Facebook Lead page.',
+                'app_id' => $appId,
+            ];
+        }
+        if ($callback === '' || ! str_starts_with($callback, 'https://')) {
+            return [
+                'ok'     => false,
+                'detail' => 'Public HTTPS webhook URL missing',
+                'error'  => 'Set a public HTTPS webhook base in Settings → Webhooks before lead forms can deliver.',
+                'app_id' => $appId,
+            ];
+        }
+        if ($verify === '') {
+            return [
+                'ok'     => false,
+                'detail' => 'Verify token missing',
+                'error'  => 'Generate a webhook verify token in Settings → Webhooks.',
+                'app_id' => $appId,
+            ];
+        }
+
+        try {
+            $fields = ['leadgen'];
+            $current = $this->appGraphRequest('GET', $appId . '/subscriptions', [], $appId, $appSecret);
+            $rows = is_array($current['data'] ?? null) ? $current['data'] : [];
+            foreach ($rows as $row) {
+                if (! is_array($row) || strtolower((string) ($row['object'] ?? '')) !== 'page') {
+                    continue;
+                }
+                foreach ($this->extractSubscriptionFieldNames(['data' => [$row]]) as $name) {
+                    if ($name !== '' && ! in_array($name, $fields, true)) {
+                        $fields[] = $name;
+                    }
+                }
+            }
+
+            $this->appGraphRequest('POST', $appId . '/subscriptions', [
+                'object'       => 'page',
+                'callback_url' => $callback,
+                'verify_token' => $verify,
+                'fields'       => implode(',', $fields),
+            ], $appId, $appSecret);
+
+            return [
+                'ok'     => true,
+                'detail' => 'Page leadgen subscribed (' . implode(', ', $fields) . ')',
+                'error'  => null,
+                'app_id' => $appId,
+            ];
+        } catch (Throwable $e) {
+            return [
+                'ok'     => false,
+                'detail' => 'Page leadgen subscribe failed',
+                'error'  => $this->humanizeWebhookFieldsError($e->getMessage()),
+                'app_id' => $appId,
+            ];
+        }
+    }
+
+    /**
      * Ensure Meta App webhook subscription includes `messages` (required for Live Chat inbound).
      *
      * URL verify alone is not enough — without field subscribe, Meta never POSTs customer replies.

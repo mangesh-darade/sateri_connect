@@ -97,6 +97,14 @@ class MetaPageMessagingAPI
         $this->request('POST', $this->pageId . '/subscribed_apps', [
             'subscribed_fields' => implode(',', $fields),
         ]);
+
+        // App-level Page webhook (object=page, field=leadgen). Without this Meta never
+        // delivers leadgen POSTs even when the Page is subscribed to the app.
+        $appSub = (new MetaCloudAPI($this->settings))->ensurePageLeadgenAppSubscription();
+        if (empty($appSub['ok'])) {
+            $detail = trim((string) ($appSub['error'] ?? $appSub['detail'] ?? 'leadgen app subscribe failed'));
+            throw new RuntimeException($detail !== '' ? $detail : 'Could not subscribe Page leadgen on the Meta app.');
+        }
     }
 
     /**
