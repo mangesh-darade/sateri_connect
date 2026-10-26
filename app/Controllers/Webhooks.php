@@ -43,6 +43,9 @@ class Webhooks extends Controller
      */
     protected function verify(): ResponseInterface|string
     {
+        // Vanity host (elintomreach) → correct tenant before reading verify token from settings.
+        (new \App\Libraries\TenantConnection())->applyFromRequestHost();
+
         $mode      = $this->request->getGet('hub_mode') ?? $this->request->getGet('hub.mode');
         $token     = $this->request->getGet('hub_verify_token') ?? $this->request->getGet('hub.verify_token');
         $challenge = $this->request->getGet('hub_challenge') ?? $this->request->getGet('hub.challenge');
@@ -85,24 +88,149 @@ class Webhooks extends Controller
             $payload = [];
         }
 
-        // Portal multi-client: switch tenant DB from phone_number_id before signature/settings.
-        $phoneNumberId = $this->extractPhoneNumberId($payload);
-        if ($phoneNumberId !== '') {
-            (new \App\Libraries\TenantConnection())->applyFromPhoneNumberId($phoneNumberId);
+        $signature     = $this->request->getHeaderLine('X-Hub-Signature-256');
+        $allowUnsigned = $this->allowUnsignedWebhooks();
+        $tenantConn    = new \App\Libraries\TenantConnection();
+
+        // Meta may batch several WABAs / Pages into one POST. Each entry is routed to its own tenant,
+        // verified with that tenant's credentials, processed, and the previous tenant is restored.
+        $accepted = 0;
+        $rejected = 0;
+        foreach ($this->splitIntoEntryPayloads($payload) as $shard) {
+            $snapshot = $tenantConn->capture();
+            try {
+                $result = $this->receiveShard($shard, $rawBody, $signature, $tenantConn, $allowUnsigned);
+            } catch (Throwable $e) {
+                log_message('error', 'Webhook shard failed: {msg}', ['msg' => $e->getMessage()]);
+                $result = 'error';
+            } finally {
+                $tenantConn->restoreIfChanged($snapshot);
+            }
+
+            if ($result === 'accepted') {
+                $accepted++;
+            } elseif ($result === 'rejected') {
+                $rejected++;
+            }
         }
 
-        $signature = $this->request->getHeaderLine('X-Hub-Signature-256');
-        $validator = new WebhookValidator();
-        $matchedProvider = $validator->matchSignatureProvider($rawBody, $signature !== '' ? $signature : null, $phoneNumberId);
+        if ($accepted === 0 && $rejected > 0) {
+            return $this->response->setStatusCode(403)->setJSON([
+                'success' => false,
+                'message' => 'Invalid signature',
+            ]);
+        }
+
+        return $this->response->setStatusCode(200)->setJSON(['success' => true]);
+    }
+
+    /**
+     * One payload per `entry`, so every entry can be routed and verified on its own.
+     *
+     * @param array<string, mixed> $payload
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function splitIntoEntryPayloads(array $payload): array
+    {
+        $entries = $payload['entry'] ?? null;
+        if (! is_array($entries) || $entries === []) {
+            return [$payload];
+        }
+
+        $shards = [];
+        foreach ($entries as $entry) {
+            if (is_array($entry)) {
+                $shards[] = array_merge($payload, ['entry' => [$entry]]);
+            }
+        }
+
+        return $shards !== [] ? $shards : [$payload];
+    }
+
+    /**
+     * Unsigned payloads are only ever accepted when explicitly enabled; the default is development only.
+     * Override with `webhook.allowUnsigned = true|false` in .env.
+     */
+    protected function allowUnsignedWebhooks(): bool
+    {
+        $default = defined('ENVIRONMENT') && ENVIRONMENT === 'development';
+        $env     = env('webhook.allowUnsigned', null);
+        if ($env === null || $env === '') {
+            return $default;
+        }
+
+        return filter_var($env, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /** Shared portal / tunnel hosts carry no tenant of their own, so routing must come from the payload. */
+    protected function isSharedPortalRequest(): bool
+    {
+        $host = \App\Libraries\TenantResolver::requestHost();
+
+        return config(\Config\Tenancy::class)->isPortalHost($host)
+            || \App\Libraries\SubdomainDatabase::isLocalTunnelHost($host);
+    }
+
+    /**
+     * @param array<string, mixed> $shard
+     *
+     * @return string accepted|rejected|skipped
+     */
+    protected function receiveShard(
+        array $shard,
+        string $rawBody,
+        string $signature,
+        \App\Libraries\TenantConnection $tenantConn,
+        bool $allowUnsigned
+    ): string {
+        $phoneNumberId = $this->extractPhoneNumberId($shard);
+        $signatureOrNull = $signature !== '' ? $signature : null;
+
+        // Platform = one shared Meta webhook URL for all tenants.
+        // Route by payload identity first (not by hostname):
+        // 1) WhatsApp → phone_number_id (master tenant_phone_routes)
+        // 2) Page / leadgen → page_id (tenant Settings meta_page_id)
+        // 3) Fallback → host route / discover (vanity domain only)
+        if (\App\Libraries\MasterTenantRepository::masterConfigured()) {
+            $masterSigned = $signatureOrNull !== null
+                && (new WebhookValidator())->signedByMasterSecret($rawBody, $signatureOrNull, $phoneNumberId);
+
+            $routed = false;
+            if ($phoneNumberId !== '') {
+                $routed = $tenantConn->applyFromPhoneNumberId($phoneNumberId);
+            } else {
+                $pageId = $this->extractPageId($shard);
+                if ($pageId !== '') {
+                    $routed = (new \App\Libraries\FacebookLeadService())->useTenantForPage($pageId, $masterSigned);
+                }
+                if (! $routed) {
+                    $routed = $tenantConn->applyFromRequestHost(null, $masterSigned);
+                }
+            }
+
+            // On the shared host a payload we cannot route must never land in whatever tenant happens to be loaded.
+            if (! $routed && $this->isSharedPortalRequest()) {
+                log_message('warning', 'Webhook entry dropped: no tenant routes to phone_number_id/page of this payload.');
+
+                return 'skipped';
+            }
+        } else {
+            $tenantConn->applyFromRequestHost();
+        }
+
+        // Built after routing so it reads the routed tenant's credentials.
+        $validator       = new WebhookValidator();
+        $matchedProvider = $validator->matchSignatureProvider($rawBody, $signatureOrNull, $phoneNumberId);
         $valid           = $matchedProvider !== null;
 
-        // Local / non-production: still accept payload so Live Chat testing works
-        // when App Secret is missing/mismatched. Production stays strict.
-        $allowUnsigned = defined('ENVIRONMENT') && ENVIRONMENT !== 'production';
+        if (! $valid && ! $allowUnsigned) {
+            return 'rejected';
+        }
 
         $logId = model(WebhookLogModel::class)->insert([
-            'event_type'      => $this->detectEventType($payload),
-            'payload'         => $payload,
+            'event_type'      => $this->detectEventType($shard),
+            'payload'         => $shard,
             'headers'         => [
                 'X-Hub-Signature-256' => $signature,
                 'Content-Type'        => $this->request->getHeaderLine('Content-Type'),
@@ -111,30 +239,17 @@ class Webhooks extends Controller
             'processed'       => 0,
         ]);
 
-        if (! $valid && ! $allowUnsigned) {
-            if ($logId) {
-                model(WebhookLogModel::class)->markProcessed((int) $logId, 'Invalid signature');
-            }
-
-            return $this->response->setStatusCode(403)->setJSON([
-                'success' => false,
-                'message' => 'Invalid signature',
-            ]);
-        }
-
-        if (! $valid && $allowUnsigned) {
-            log_message('warning', 'Webhook accepted without valid signature (ENVIRONMENT={env}). Check Meta App Secret in Settings.', [
-                'env' => ENVIRONMENT,
-            ]);
+        if (! $valid) {
+            log_message('warning', 'Webhook accepted without valid signature (unsigned webhooks enabled). Check Meta App Secret in Settings.');
             if ($logId) {
                 model(WebhookLogModel::class)->update((int) $logId, [
-                    'error_message' => 'Accepted without valid signature (non-production)',
+                    'error_message' => 'Accepted without valid signature (unsigned webhooks enabled)',
                 ]);
             }
         }
 
         try {
-            $this->processPayload($payload);
+            $this->processPayload($shard);
             if ($logId) {
                 model(WebhookLogModel::class)->markProcessed((int) $logId);
             }
@@ -145,7 +260,7 @@ class Webhooks extends Controller
             }
         }
 
-        return $this->response->setStatusCode(200)->setJSON(['success' => true]);
+        return 'accepted';
     }
 
     /**
@@ -171,6 +286,50 @@ class Webhooks extends Controller
                 $meta = $value['metadata'] ?? null;
                 if (is_array($meta) && ! empty($meta['phone_number_id'])) {
                     return trim((string) $meta['phone_number_id']);
+                }
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Facebook Page id from Messenger / Lead Ads webhook payloads.
+     *
+     * @param array<string, mixed> $payload
+     */
+    protected function extractPageId(array $payload): string
+    {
+        $object = strtolower((string) ($payload['object'] ?? ''));
+        if ($object !== 'page' && $object !== 'instagram') {
+            return '';
+        }
+
+        $entries = $payload['entry'] ?? [];
+        if (! is_array($entries)) {
+            return '';
+        }
+
+        foreach ($entries as $entry) {
+            if (! is_array($entry)) {
+                continue;
+            }
+            $pageId = trim((string) ($entry['id'] ?? ''));
+            if ($pageId !== '') {
+                return $pageId;
+            }
+            $changes = $entry['changes'] ?? [];
+            if (! is_array($changes)) {
+                continue;
+            }
+            foreach ($changes as $change) {
+                $value = is_array($change) ? ($change['value'] ?? []) : [];
+                if (! is_array($value)) {
+                    continue;
+                }
+                $fromValue = trim((string) ($value['page_id'] ?? ''));
+                if ($fromValue !== '') {
+                    return $fromValue;
                 }
             }
         }
@@ -682,6 +841,15 @@ class Webhooks extends Controller
             return;
         }
 
+        // Any other inbound WhatsApp message from the customer records opt-in
+        // (new or existing contact). STOP / opted-out contacts are left alone.
+        if ($consent->optInFromInboundMessage($contact, 'whatsapp_inbound')) {
+            $fresh = $contactModel->find($contactId);
+            if (is_array($fresh)) {
+                $contact = $fresh;
+            }
+        }
+
         // Reply to an open workflow "Ask question": continue that flow instead of starting new ones.
         if ($autoReplyAllowed) {
             try {
@@ -1036,6 +1204,14 @@ class Webhooks extends Controller
     {
         $object = (string) ($payload['object'] ?? '');
         if ($object === 'page' || $object === 'instagram') {
+            $changes = $payload['entry'][0]['changes'] ?? [];
+            if (is_array($changes)) {
+                foreach ($changes as $change) {
+                    if (is_array($change) && (string) ($change['field'] ?? '') === 'leadgen') {
+                        return 'leadgen';
+                    }
+                }
+            }
             $messaging = $payload['entry'][0]['messaging'][0] ?? [];
             if (is_array($messaging) && ! empty($messaging['message'])) {
                 return 'page_messages';

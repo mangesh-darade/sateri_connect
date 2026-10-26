@@ -99,6 +99,25 @@ class WebhookValidator
     }
 
     /**
+     * Signature check that needs no tenant database: the route's own secret plus platform-level secrets.
+     * Safe to run before any tenant is selected.
+     */
+    public function signedByMasterSecret(string $rawBody, ?string $signatureHeader, string $phoneNumberId = ''): bool
+    {
+        if ($signatureHeader === null || $signatureHeader === '' || ! MasterTenantRepository::masterConfigured()) {
+            return false;
+        }
+
+        foreach ((new MasterTenantRepository())->appSecretsForPhoneNumber($phoneNumberId) as $secret) {
+            if (hash_equals('sha256=' . hash_hmac('sha256', $rawBody, $secret), $signatureHeader)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Active provider first, then the other — so Settings preference wins when both match.
      *
      * @return list<array{provider: string, verify_token: string, webhook_secret: string}>

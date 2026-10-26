@@ -17,42 +17,97 @@ class FacebookLeadService
 {
     /**
      * Point the request at the tenant whose Settings Page ID matches this Facebook Page.
+     * Used when platform shares one Meta webhook URL across all tenants.
+     *
+     * @return bool True when a tenant with this page_id was selected
      */
-    public function useTenantForPage(string $pageId): void
+    public function useTenantForPage(string $pageId, bool $trusted = true): bool
     {
         $pageId = trim($pageId);
-        if ($pageId === '' || ! MasterTenantRepository::masterConfigured()) {
-            return;
+        if ($pageId === '' || preg_match('/^[A-Za-z0-9_\-]{1,64}$/', $pageId) !== 1 || ! MasterTenantRepository::masterConfigured()) {
+            return false;
         }
 
-        \CodeIgniter\Config\Factories::reset('models');
-        $settingModel = model(\App\Models\SettingModel::class, false);
-        $current = trim((string) ($settingModel->getValue('meta_page_id', '') ?? ''));
-        if ($current === $pageId) {
-            return;
+        if ($this->currentTenantHasPage($pageId)) {
+            return true;
         }
 
         $connection = new TenantConnection();
         $snapshot   = $connection->capture();
 
-        foreach ((new MasterTenantRepository())->listActiveTenants(null) as $row) {
-            $key = strtolower(trim((string) ($row['key'] ?? '')));
-            if ($key === '' || $key === TenantContext::get()) {
-                continue;
+        // Fast path: the tenant we resolved for this page recently (verified again below).
+        $cacheKey  = 'fb_page_tenant_' . sha1($pageId);
+        $cachedKey = '';
+        try {
+            $cachedKey = (string) cache($cacheKey);
+        } catch (Throwable) {
+            $cachedKey = '';
+        }
+        if ($cachedKey !== '') {
+            if ($connection->apply($cachedKey, 'webhook') && $this->currentTenantHasPage($pageId)) {
+                return true;
             }
-            if (! $connection->apply($key, 'webhook')) {
-                continue;
-            }
-            \CodeIgniter\Config\Factories::reset('models');
-            $settingModel = model(\App\Models\SettingModel::class, false);
-            $found = trim((string) ($settingModel->getValue('meta_page_id', '') ?? ''));
-            if ($found === $pageId) {
-                return;
+            $connection->restore($snapshot);
+        }
+
+        // A full scan opens every tenant database; cap it for requests that are not platform-signed.
+        if (! $trusted) {
+            try {
+                $ip = (string) service('request')->getIPAddress();
+                if (service('throttler')->check('fb_page_scan_' . md5($ip), 10, MINUTE) === false) {
+                    return false;
+                }
+            } catch (Throwable) {
+                // throttler unavailable: continue
             }
         }
 
-        $connection->restore($snapshot);
-        \CodeIgniter\Config\Factories::reset('models');
+        $matches = [];
+        foreach ((new MasterTenantRepository())->listActiveTenants(null) as $row) {
+            $key = strtolower(trim((string) ($row['key'] ?? '')));
+            if ($key === '' || $key === ($snapshot['key'] ?? null)) {
+                continue;
+            }
+            if ($connection->apply($key, 'webhook_scan') && $this->currentTenantHasPage($pageId)) {
+                $matches[] = $key;
+            }
+        }
+
+        // Two tenants claiming one Page id is ambiguous (or a hijack attempt): never guess.
+        if (count($matches) !== 1) {
+            if (count($matches) > 1) {
+                log_message('warning', 'Facebook page {page} is configured in more than one tenant; not routing.', ['page' => $pageId]);
+            }
+            $connection->restore($snapshot);
+
+            return false;
+        }
+
+        if (! $connection->apply($matches[0], 'webhook')) {
+            $connection->restore($snapshot);
+
+            return false;
+        }
+
+        try {
+            cache()->save($cacheKey, $matches[0], 600);
+        } catch (Throwable) {
+            // cache is only an optimisation
+        }
+
+        return true;
+    }
+
+    protected function currentTenantHasPage(string $pageId): bool
+    {
+        try {
+            \CodeIgniter\Config\Factories::reset('models');
+            $found = trim((string) (model(\App\Models\SettingModel::class, false)->getValue('meta_page_id', '') ?? ''));
+        } catch (Throwable) {
+            return false;
+        }
+
+        return $found !== '' && $found === $pageId;
     }
 
     /**
@@ -68,35 +123,44 @@ class FacebookLeadService
             return ['ok' => false, 'message' => 'Facebook lead id is missing or invalid.'];
         }
 
-        $this->useTenantForPage($pageId);
-
-        $cacheKey = 'fb_lead_' . sha1($leadId);
-        try {
-            if (cache()->get($cacheKey)) {
-                return ['ok' => true, 'duplicate' => true, 'contact_id' => 0];
-            }
-        } catch (Throwable) {
-            $cacheKey = '';
-        }
+        // Never leave the process switched to another tenant after this lead is handled.
+        $connection = new TenantConnection();
+        $snapshot   = $connection->capture();
 
         try {
-            $lead = (new MetaPageMessagingAPI())->fetchLead($leadId);
-        } catch (Throwable $e) {
-            log_message('error', 'Facebook lead fetch failed: {msg}', ['msg' => $e->getMessage()]);
+            $this->useTenantForPage($pageId);
 
-            return ['ok' => false, 'message' => $e->getMessage()];
-        }
-
-        $result = $this->applyLead($lead, $value);
-        if ($cacheKey !== '' && ($result['ok'] ?? false)) {
+            // Scoped per tenant: the same lead id must not suppress another tenant's lead.
+            $cacheKey = 'fb_lead_' . sha1((TenantContext::get() ?? 'default') . ':' . $leadId);
             try {
-                cache()->save($cacheKey, 1, 7 * 86400);
+                if (cache()->get($cacheKey)) {
+                    return ['ok' => true, 'duplicate' => true, 'contact_id' => 0];
+                }
             } catch (Throwable) {
-                // A retry may run the workflow again. The contact match stays the same.
+                $cacheKey = '';
             }
-        }
 
-        return $result;
+            try {
+                $lead = (new MetaPageMessagingAPI())->fetchLead($leadId);
+            } catch (Throwable $e) {
+                log_message('error', 'Facebook lead fetch failed: {msg}', ['msg' => $e->getMessage()]);
+
+                return ['ok' => false, 'message' => $e->getMessage()];
+            }
+
+            $result = $this->applyLead($lead, $value);
+            if ($cacheKey !== '' && ($result['ok'] ?? false)) {
+                try {
+                    cache()->save($cacheKey, 1, 7 * 86400);
+                } catch (Throwable) {
+                    // A retry may run the workflow again. The contact match stays the same.
+                }
+            }
+
+            return $result;
+        } finally {
+            $connection->restoreIfChanged($snapshot);
+        }
     }
 
     /**
@@ -237,12 +301,25 @@ class FacebookLeadService
      */
     public function phoneFrom(array $fields): string
     {
-        foreach (['phone_number', 'phone', 'mobile_number', 'mobile', 'cell_phone'] as $key) {
+        $preferred = [
+            'phone_number', 'phone', 'mobile_number', 'mobile', 'cell_phone',
+            'whatsapp_number', 'whatsapp', 'wa_number', 'contact_number', 'telephone',
+        ];
+        foreach ($preferred as $key) {
             $raw = trim((string) ($fields[$key] ?? ''));
-            if ($raw === '') {
+            $digits = preg_replace('/\D+/', '', $raw) ?? '';
+            if (strlen($digits) >= 8 && strlen($digits) <= 16) {
+                return $digits;
+            }
+        }
+
+        // Custom form labels: any field whose key looks like a phone.
+        foreach ($fields as $key => $raw) {
+            $key = strtolower((string) $key);
+            if (! str_contains($key, 'phone') && ! str_contains($key, 'mobile') && ! str_contains($key, 'whatsapp')) {
                 continue;
             }
-            $digits = preg_replace('/\D+/', '', $raw) ?? '';
+            $digits = preg_replace('/\D+/', '', (string) $raw) ?? '';
             if (strlen($digits) < 8 || strlen($digits) > 16) {
                 continue;
             }
@@ -324,8 +401,6 @@ class FacebookLeadService
                     'name'             => $name !== '' ? $name : null,
                     'email'            => $email !== '' ? $email : null,
                     'mobile'           => $phone,
-                    'wa_opt_in'        => 1,
-                    'wa_opt_in_source' => 'facebook_lead',
                 ], $wasCreated);
                 $contactId = (int) ($contact['id'] ?? 0);
             } elseif ($email !== '') {
@@ -367,13 +442,6 @@ class FacebookLeadService
             if ($email !== '' && trim((string) ($contact['email'] ?? '')) === '') {
                 $updates['email'] = $email;
             }
-            if (empty($contact['wa_opt_in_source'])) {
-                $updates['wa_opt_in_source'] = 'facebook_lead';
-            }
-            if ($phone !== '' && empty($contact['wa_opt_in'])) {
-                $updates['wa_opt_in'] = 1;
-            }
-
             $custom = is_array($contact['custom_fields'] ?? null) ? $contact['custom_fields'] : [];
 
             // Store metadata safely
@@ -426,6 +494,18 @@ class FacebookLeadService
 
             if ($db->transStatus() === false) {
                 return ['contact_id' => 0, 'was_created' => false];
+            }
+
+            // Consent service records the opt-in and never overrides an existing STOP / opt-out.
+            if ($phone !== '') {
+                try {
+                    $fresh = $contacts->find($contactId);
+                    if (is_array($fresh)) {
+                        service('whatsAppConsent')->optInIfMissing($fresh, 'facebook_lead');
+                    }
+                } catch (Throwable $ce) {
+                    log_message('warning', 'Facebook lead opt-in failed: {msg}', ['msg' => $ce->getMessage()]);
+                }
             }
 
             return ['contact_id' => $contactId, 'was_created' => $wasCreated];
