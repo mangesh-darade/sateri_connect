@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Libraries\ActivityLogger;
+use App\Libraries\DataTablesQuery;
 use App\Models\MessageQueueModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
@@ -26,25 +27,64 @@ class Queue extends BaseController
         }
 
         $status = (string) ($this->request->getGet('status') ?? '');
-        $model  = model(MessageQueueModel::class);
-
-        if ($status !== '') {
-            $model->where('status', $status);
-        }
-
-        $items = $model
-            ->select('message_queue.*, contacts.name AS contact_name, contacts.mobile, campaigns.name AS campaign_name')
-            ->join('contacts', 'contacts.id = message_queue.contact_id', 'left')
-            ->join('campaigns', 'campaigns.id = message_queue.campaign_id', 'left')
-            ->orderBy('message_queue.id', 'DESC')
-            ->findAll(100);
 
         return $this->render('queue/index', [
             'pageTitle'    => 'Message Queue',
-            'items'        => $items,
             'filterStatus' => $status,
             'stats'        => $this->buildStats(),
         ]);
+    }
+
+    /**
+     * Server-side DataTables feed for the queue list.
+     */
+    public function data(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('queue.view')) {
+            return $denied;
+        }
+
+        $canManage = function_exists('can') && can('queue.manage');
+
+        return $this->response->setJSON(DataTablesQuery::respond($this->request, [
+            'builder'  => static fn () => db_connect()->table('message_queue q')
+                ->select('q.id, q.contact_id, q.message_type, q.status, q.attempts, q.max_attempts, q.scheduled_at, q.error_message, q.payload, c.name AS contact_name, c.mobile, cp.name AS campaign_name')
+                ->join('contacts c', 'c.id = q.contact_id', 'left')
+                ->join('campaigns cp', 'cp.id = q.campaign_id', 'left'),
+            'columns'  => [0 => 'q.id', 1 => 'c.name', 2 => 'q.message_type', 3 => 'q.status', 4 => 'q.attempts', 5 => 'q.scheduled_at', 6 => 'q.error_message'],
+            'search'   => ['q.id', 'c.name', 'c.mobile', 'cp.name', 'q.message_type', 'q.status', 'q.error_message'],
+            'filters'  => static function ($b, array $get): void {
+                $st = (string) ($get['status'] ?? '');
+                if (in_array($st, ['pending', 'processing', 'sent', 'failed', 'cancelled'], true)) {
+                    $b->where('q.status', $st);
+                }
+            },
+            'order'    => [0, 'desc'],
+            'tiebreak' => 'q.id',
+            'map'      => static function (array $r) use ($canManage): array {
+                $max      = (int) ($r['max_attempts'] ?? 3);
+                $attempts = (int) ($r['attempts'] ?? 0);
+                $payload  = (string) ($r['payload'] ?? '');
+
+                return [
+                    'id'            => (int) $r['id'],
+                    'contact_id'    => (int) ($r['contact_id'] ?? 0),
+                    'contact_url'   => ! empty($r['contact_id']) ? site_url('contacts/' . (int) $r['contact_id']) : '',
+                    'contact_label' => (string) (($r['contact_name'] ?? '') ?: (($r['mobile'] ?? '') ?: '#' . $r['contact_id'])),
+                    'contact_name'  => (string) (($r['contact_name'] ?? '') ?: ($r['mobile'] ?? '')),
+                    'campaign'      => (string) ($r['campaign_name'] ?? ''),
+                    'type'          => (string) (($r['message_type'] ?? '') ?: 'text'),
+                    'status'        => (string) ($r['status'] ?? ''),
+                    'attempts'      => min($attempts, $max) . '/' . $max,
+                    'exhausted'     => ($r['status'] ?? '') === 'failed' && $attempts >= $max,
+                    'scheduled'     => format_app_datetime($r['scheduled_at'] ?? null),
+                    'error'         => (string) ($r['error_message'] ?? ''),
+                    'payload'       => $payload,
+                    'retry_url'     => $canManage ? site_url('queue/' . (int) $r['id'] . '/retry') : '',
+                    'cancel_url'    => $canManage ? site_url('queue/' . (int) $r['id'] . '/cancel') : '',
+                ];
+            },
+        ]));
     }
 
     public function process(): ResponseInterface

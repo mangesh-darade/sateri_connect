@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Libraries\DataTablesQuery;
 use App\Libraries\SmartFormService;
 use App\Models\SmartFormModel;
 use App\Models\SmartFormResponseModel;
@@ -22,27 +23,46 @@ class SmartForms extends BaseController
             return $denied;
         }
 
-        $forms = model(SmartFormModel::class)->orderBy('id', 'DESC')->findAll();
-        $counts = [];
-        if ($forms !== []) {
-            $ids = array_map(static fn (array $row): int => (int) $row['id'], $forms);
-            $rows = model(SmartFormResponseModel::class)
-                ->select('form_id, COUNT(*) AS total')
-                ->whereIn('form_id', $ids)
-                ->groupBy('form_id')
-                ->findAll();
-            foreach ($rows as $row) {
-                $counts[(int) $row['form_id']] = (int) $row['total'];
-            }
-        }
-
         return $this->render('smart_forms/index', [
             'pageTitle'       => 'Smart Forms',
-            'forms'           => $forms,
-            'counts'          => $counts,
+            'hasForms'        => db_connect()->table('smart_forms')->countAllResults() > 0,
             'captchaSiteKey'  => SmartFormService::recaptchaSiteKey(),
             'captchaReady'    => SmartFormService::recaptchaReady(),
         ]);
+    }
+
+    /**
+     * Server-side DataTables feed for the smart form list.
+     */
+    public function data(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('contacts.view')) {
+            return $denied;
+        }
+
+        return $this->response->setJSON(DataTablesQuery::respond($this->request, [
+            'builder'  => static fn () => db_connect()->table('smart_forms f')
+                ->select('f.id, f.name, f.slug, f.status')
+                ->select('(SELECT COUNT(*) FROM smart_form_responses r WHERE r.form_id = f.id) AS response_count', false),
+            'columns'  => [
+                0 => 'f.name',
+                1 => 'f.slug',
+                2 => 'f.status',
+                3 => '(SELECT COUNT(*) FROM smart_form_responses r2 WHERE r2.form_id = f.id)',
+            ],
+            'search'   => ['f.name', 'f.slug', 'f.status'],
+            'order'    => [0, 'asc'],
+            'tiebreak' => 'f.id',
+            'map'      => static fn (array $r): array => [
+                'id'        => (int) $r['id'],
+                'name'      => (string) $r['name'],
+                'slug'      => (string) $r['slug'],
+                'url'       => SmartFormService::publicUrl((string) $r['slug']),
+                'status'    => (string) $r['status'],
+                'responses' => (int) ($r['response_count'] ?? 0),
+                'edit_url'  => site_url('smart-forms/' . (int) $r['id'] . '/edit'),
+            ],
+        ]));
     }
 
     public function create(): string|ResponseInterface

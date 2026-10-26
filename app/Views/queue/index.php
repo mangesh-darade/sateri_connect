@@ -72,84 +72,7 @@
                     <th class="text-end">Actions</th>
                 </tr>
             </thead>
-            <tbody>
-                <?php foreach (($items ?? $queue ?? []) as $item): ?>
-                    <?php
-                        $attempts = (int) ($item['attempts'] ?? 0);
-                        $maxAttempts = (int) ($item['max_attempts'] ?? 3);
-                        $displayAttempts = min($attempts, $maxAttempts) . '/' . $maxAttempts;
-                        $payloadJson = is_string($item['payload'] ?? null) ? $item['payload'] : json_encode($item['payload'] ?? []);
-                    ?>
-                    <tr data-id="<?= (int) $item['id'] ?>">
-                        <td><?= (int) $item['id'] ?></td>
-                        <td>
-                            <?php if (!empty($item['contact_id'])): ?>
-                                <a href="<?= site_url('contacts/' . (int) $item['contact_id']) ?>" class="fw-semibold text-decoration-none">
-                                    <?= esc($item['contact_name'] ?: ($item['mobile'] ?: '#' . $item['contact_id'])) ?>
-                                </a>
-                            <?php else: ?>
-                                <span class="text-muted">—</span>
-                            <?php endif; ?>
-                            <?php if (!empty($item['campaign_name'])): ?>
-                                <div class="text-muted small"><i class="fas fa-bullhorn me-1"></i><?= esc($item['campaign_name']) ?></div>
-                            <?php endif; ?>
-                        </td>
-                        <td><span class="badge bg-light text-dark border"><?= esc($item['message_type'] ?? 'text') ?></span></td>
-                        <td data-search="<?= esc(strtolower((string)($item['status'] ?? ''))) ?>" data-order="<?= esc(strtolower((string)($item['status'] ?? ''))) ?>">
-                            <?= view('partials/status_badge', [
-                                'status' => $item['status'] ?? '',
-                                'map'    => [
-                                    'sent'       => 'success',
-                                    'pending'    => 'warning',
-                                    'processing' => 'info',
-                                    'failed'     => 'danger',
-                                    'cancelled'  => 'secondary',
-                                ],
-                            ]) ?>
-                        </td>
-                        <td>
-                            <?php if ($item['status'] === 'failed' && $attempts >= $maxAttempts): ?>
-                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle"><?= esc($displayAttempts) ?></span>
-                            <?php else: ?>
-                                <?= esc($displayAttempts) ?>
-                            <?php endif; ?>
-                        </td>
-                        <td class="text-muted small text-nowrap"><?= esc(format_app_datetime($item['scheduled_at'] ?? null)) ?></td>
-                        <td class="small text-danger" title="<?= esc((string)($item['error_message'] ?? '')) ?>">
-                            <?= esc(mb_strimwidth((string)($item['error_message'] ?? ''), 0, 55, '…')) ?>
-                        </td>
-                        <td class="text-end">
-                            <div class="table-actions justify-content-end gap-1">
-                                <button type="button" class="btn btn-sm btn-icon-action js-view-payload"
-                                        data-id="<?= (int) $item['id'] ?>"
-                                        data-type="<?= esc($item['message_type'] ?? 'text') ?>"
-                                        data-contact="<?= esc($item['contact_name'] ?: ($item['mobile'] ?? '')) ?>"
-                                        data-error="<?= esc((string)($item['error_message'] ?? '')) ?>"
-                                        data-payload="<?= esc($payloadJson) ?>"
-                                        title="View Payload">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                                <?php if (function_exists('can') && can('queue.manage')): ?>
-                                    <?php if (in_array($item['status'] ?? '', ['failed', 'cancelled'], true)): ?>
-                                        <button type="button" class="btn btn-sm btn-icon-action text-primary js-retry-item"
-                                                data-url="<?= site_url('queue/' . (int) $item['id'] . '/retry') ?>"
-                                                title="Retry message now">
-                                            <i class="fas fa-redo"></i>
-                                        </button>
-                                    <?php endif; ?>
-                                    <?php if (in_array($item['status'] ?? '', ['pending', 'processing'], true)): ?>
-                                        <button type="button" class="btn btn-sm btn-icon-action text-danger js-cancel-item"
-                                                data-url="<?= site_url('queue/' . (int) $item['id'] . '/cancel') ?>"
-                                                title="Cancel queue item">
-                                            <i class="fas fa-ban"></i>
-                                        </button>
-                                    <?php endif; ?>
-                                <?php endif; ?>
-                            </div>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-            </tbody>
+            <tbody></tbody>
         </table>
     </div>
 </div>
@@ -185,33 +108,57 @@
 <?= $this->section('scripts') ?>
 <script>
 $(function () {
-    var table = null;
-    if ($.fn.DataTable) {
-        table = $('#queueTable').DataTable({
-            order: [[0, 'desc']],
-            pageLength: 25
-        });
+    var badge = {sent: 'success', pending: 'warning', processing: 'info', failed: 'danger', cancelled: 'secondary'};
+    var esc = AppDT.esc;
 
-        $('#queueStatusFilter').on('change', function () {
-            var val = (this.value || '').trim().toLowerCase();
-            if (!val) {
-                table.column(3).search('').draw();
-            } else {
-                table.column(3).search('^' + val + '$', true, false, true).draw();
-            }
-        });
+    AppDT.table('#queueTable', {
+        url: <?= json_encode(site_url('queue/data')) ?>,
+        order: [[0, 'desc']],
+        emptyText: 'No queue jobs found',
+        filters: {status: '#queueStatusFilter'},
+        columns: [
+            {data: 'id'},
+            {data: null, render: function (r, t) {
+                if (t !== 'display') return r.contact_label;
+                var h = r.contact_id ? '<a href="' + esc(r.contact_url) + '" class="fw-semibold text-decoration-none">' + esc(r.contact_label) + '</a>' : '<span class="text-muted">—</span>';
+                if (r.campaign) h += '<div class="text-muted small"><i class="fas fa-bullhorn me-1"></i>' + esc(r.campaign) + '</div>';
+                return h;
+            }},
+            {data: null, render: function (r, t) {
+                return t === 'display' ? '<span class="badge bg-light text-dark border">' + esc(r.type) + '</span>' : r.type;
+            }},
+            {data: null, render: function (r, t) {
+                return t === 'display' ? '<span class="badge bg-' + (badge[r.status] || 'secondary') + '">' + esc(r.status.charAt(0).toUpperCase() + r.status.slice(1)) + '</span>' : r.status;
+            }},
+            {data: null, render: function (r, t) {
+                if (t !== 'display') return r.attempts;
+                return r.exhausted ? '<span class="badge bg-danger-subtle text-danger border border-danger-subtle">' + esc(r.attempts) + '</span>' : esc(r.attempts);
+            }},
+            {data: null, className: 'text-muted small text-nowrap', render: function (r, t) { return t === 'display' ? esc(r.scheduled) : r.scheduled; }},
+            {data: null, className: 'small text-danger', render: function (r, t) {
+                if (t !== 'display') return r.error;
+                var e = r.error || '';
+                return '<span title="' + esc(e) + '">' + esc(e.length > 55 ? e.slice(0, 54) + '…' : e) + '</span>';
+            }},
+            {data: null, orderable: false, className: 'text-end', render: function (r) {
+                var h = '<div class="table-actions justify-content-end gap-1">' +
+                    '<button type="button" class="btn btn-sm btn-icon-action js-view-payload" data-id="' + esc(r.id) + '" data-type="' + esc(r.type) + '" data-contact="' + esc(r.contact_name) + '" data-error="' + esc(r.error) + '" data-payload="' + esc(r.payload) + '" title="View Payload"><i class="fas fa-eye"></i></button>';
+                if (r.retry_url && (r.status === 'failed' || r.status === 'cancelled')) {
+                    h += '<button type="button" class="btn btn-sm btn-icon-action text-primary js-retry-item" data-url="' + esc(r.retry_url) + '" title="Retry message now"><i class="fas fa-redo"></i></button>';
+                }
+                if (r.cancel_url && (r.status === 'pending' || r.status === 'processing')) {
+                    h += '<button type="button" class="btn btn-sm btn-icon-action text-danger js-cancel-item" data-url="' + esc(r.cancel_url) + '" title="Cancel queue item"><i class="fas fa-ban"></i></button>';
+                }
+                return h + '</div>';
+            }}
+        ]
+    });
 
-        // Click on KPI card to quickly filter table or toggle
-        $('.js-kpi-filter').on('click', function () {
-            var status = ($(this).data('filter') || '').toString().toLowerCase();
-            var current = ($('#queueStatusFilter').val() || '').toString().toLowerCase();
-            if (current === status) {
-                $('#queueStatusFilter').val('').trigger('change');
-            } else {
-                $('#queueStatusFilter').val(status).trigger('change');
-            }
-        });
-    }
+    $('.js-kpi-filter').on('click', function () {
+        var status = ($(this).data('filter') || '').toString().toLowerCase();
+        var current = ($('#queueStatusFilter').val() || '').toString().toLowerCase();
+        $('#queueStatusFilter').val(current === status ? '' : status).trigger('change');
+    });
 
     function refreshStats() {
         APP.get(APP.baseUrl + '/queue/stats').done(function (res) {

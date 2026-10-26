@@ -48,7 +48,7 @@ try {
         <h2 class="card-title mb-0">Keywords</h2>
     </div>
     <div class="card-body py-3">
-        <?php if (! empty($keywords)): ?>
+        <?php if (! empty($hasKeywords)): ?>
         <table class="table table-sm table-hover align-middle w-100" id="keywordsTable">
             <thead>
                 <tr>
@@ -60,27 +60,7 @@ try {
                     <th class="text-end">Actions</th>
                 </tr>
             </thead>
-            <tbody>
-                <?php foreach ($keywords as $kw): ?>
-                    <tr data-id="<?= (int) $kw['id'] ?>">
-                        <td><?= esc((string) ($kw['menu_order'] ?? 0)) ?></td>
-                        <td><code><?= esc($kw['keyword']) ?></code></td>
-                        <td><?= esc($kw['match_type'] ?? '') ?></td>
-                        <td><?= esc($kw['response_type'] ?? 'text') ?></td>
-                        <td><?= ! empty($kw['is_active']) ? '<span class="badge rounded-pill" style="background:var(--wa-mist);color:var(--wa-teal)">On</span>' : '<span class="badge rounded-pill bg-secondary">Off</span>' ?></td>
-                        <td class="text-end">
-                            <div class="table-actions justify-content-end">
-                            <?php if (function_exists('can') && can('keywords.edit')): ?>
-                                <a href="<?= site_url('keywords/' . (int) $kw['id'] . '/edit') ?>" class="btn btn-sm btn-outline-secondary" title="Edit"><i class="fas fa-edit"></i></a>
-                            <?php endif; ?>
-                            <?php if (function_exists('can') && can('keywords.delete')): ?>
-                                <button type="button" class="btn btn-sm btn-outline-danger" data-confirm-delete data-url="<?= site_url('keywords/' . (int) $kw['id'] . '/delete') ?>" title="Delete"><i class="fas fa-trash"></i></button>
-                            <?php endif; ?>
-                            </div>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-            </tbody>
+            <tbody></tbody>
         </table>
         <?php else: ?>
             <?= view('partials/empty_state', [
@@ -97,5 +77,30 @@ try {
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
-<script>$(function(){ if($.fn.DataTable && $('#keywordsTable').length){ $('#keywordsTable').DataTable({order:[[0,'asc']]}); } });</script>
+<script>
+$(function () {
+    var esc = AppDT.esc;
+    AppDT.table('#keywordsTable', {
+        url: <?= json_encode(site_url('keywords/data')) ?>,
+        order: [[0, 'asc']],
+        emptyText: 'No keywords found',
+        columns: [
+            {data: 'order'},
+            {data: null, render: function (r, t) { return t === 'display' ? '<code>' + esc(r.keyword) + '</code>' : r.keyword; }},
+            {data: 'match', render: function (v, t) { return t === 'display' ? esc(v) : v; }},
+            {data: 'type', render: function (v, t) { return t === 'display' ? esc(v) : v; }},
+            {data: null, render: function (r, t) {
+                if (t !== 'display') return r.active ? 1 : 0;
+                return r.active ? '<span class="badge rounded-pill" style="background:var(--wa-mist);color:var(--wa-teal)">On</span>' : '<span class="badge rounded-pill bg-secondary">Off</span>';
+            }},
+            {data: null, orderable: false, className: 'text-end', render: function (r) {
+                var h = '<div class="table-actions justify-content-end">';
+                if (r.edit_url) h += '<a href="' + esc(r.edit_url) + '" class="btn btn-sm btn-outline-secondary" title="Edit"><i class="fas fa-edit"></i></a>';
+                if (r.delete_url) h += '<button type="button" class="btn btn-sm btn-outline-danger" data-confirm-delete data-url="' + esc(r.delete_url) + '" title="Delete"><i class="fas fa-trash"></i></button>';
+                return h + '</div>';
+            }}
+        ]
+    });
+});
+</script>
 <?= $this->endSection() ?>

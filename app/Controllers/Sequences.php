@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Libraries\DataTablesQuery;
 use App\Libraries\SequenceService;
 use CodeIgniter\HTTP\ResponseInterface;
 
@@ -15,21 +16,53 @@ class Sequences extends BaseController
             return $denied;
         }
 
-        $db = db_connect();
-        $rows = [];
-        if ($db->tableExists('message_sequences')) {
-            $rows = $db->table('message_sequences s')
-                ->select('s.*, (SELECT COUNT(*) FROM sequence_steps st WHERE st.sequence_id = s.id) AS step_count,
-                    (SELECT COUNT(*) FROM sequence_enrollments e WHERE e.sequence_id = s.id AND e.status = \'active\') AS active_enrollments')
-                ->orderBy('s.id', 'DESC')
-                ->get()
-                ->getResultArray();
+        return $this->render('sequences/index', [
+            'pageTitle'    => 'Sequences',
+            'hasSequences' => db_connect()->tableExists('message_sequences')
+                && db_connect()->table('message_sequences')->countAllResults() > 0,
+        ]);
+    }
+
+    /**
+     * Server-side DataTables feed for the sequence list.
+     */
+    public function data(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('sequences.view')) {
+            return $denied;
         }
 
-        return $this->render('sequences/index', [
-            'pageTitle' => 'Sequences',
-            'sequences' => $rows,
-        ]);
+        if (! db_connect()->tableExists('message_sequences')) {
+            return $this->response->setJSON(['draw' => (int) $this->request->getGet('draw'), 'recordsTotal' => 0, 'recordsFiltered' => 0, 'data' => []]);
+        }
+
+        $canEdit   = function_exists('can') && can('sequences.edit');
+        $canDelete = function_exists('can') && can('sequences.delete');
+
+        return $this->response->setJSON(DataTablesQuery::respond($this->request, [
+            'builder'  => static fn () => db_connect()->table('message_sequences s')
+                ->select('s.id, s.name, s.is_active')
+                ->select('(SELECT COUNT(*) FROM sequence_steps st WHERE st.sequence_id = s.id) AS step_count', false)
+                ->select('(SELECT COUNT(*) FROM sequence_enrollments e WHERE e.sequence_id = s.id AND e.status = \'active\') AS active_enrollments', false),
+            'columns'  => [
+                0 => 's.name',
+                1 => '(SELECT COUNT(*) FROM sequence_steps st2 WHERE st2.sequence_id = s.id)',
+                2 => '(SELECT COUNT(*) FROM sequence_enrollments e2 WHERE e2.sequence_id = s.id AND e2.status = \'active\')',
+                3 => 's.is_active',
+            ],
+            'search'   => ['s.name'],
+            'order'    => [0, 'asc'],
+            'tiebreak' => 's.id',
+            'map'      => static fn (array $r): array => [
+                'id'          => (int) $r['id'],
+                'name'        => (string) ($r['name'] ?? ''),
+                'steps'       => (int) ($r['step_count'] ?? 0),
+                'enrollments' => (int) ($r['active_enrollments'] ?? 0),
+                'active'      => ! empty($r['is_active']),
+                'edit_url'    => $canEdit ? site_url('sequences/' . (int) $r['id'] . '/edit') : '',
+                'delete_url'  => $canDelete ? site_url('sequences/' . (int) $r['id'] . '/delete') : '',
+            ],
+        ]));
     }
 
     public function create(): string|ResponseInterface

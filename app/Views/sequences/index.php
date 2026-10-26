@@ -14,8 +14,8 @@
         <span class="small text-muted">Multi-step drips · exit on reply</span>
     </div>
     <div class="card-body py-3">
-        <?php if (! empty($sequences)): ?>
-        <table class="table table-sm table-hover align-middle w-100">
+        <?php if (! empty($hasSequences)): ?>
+        <table class="table table-sm table-hover align-middle w-100" id="sequencesTable">
             <thead>
                 <tr>
                     <th>Name</th>
@@ -25,32 +25,7 @@
                     <th class="text-end">Actions</th>
                 </tr>
             </thead>
-            <tbody>
-                <?php foreach ($sequences as $s): ?>
-                    <tr>
-                        <td class="fw-semibold"><?= esc($s['name'] ?? '') ?></td>
-                        <td><?= (int) ($s['step_count'] ?? 0) ?></td>
-                        <td><?= (int) ($s['active_enrollments'] ?? 0) ?></td>
-                        <td><?= ! empty($s['is_active']) ? 'On' : 'Off' ?></td>
-                        <td class="text-end">
-                            <div class="table-actions justify-content-end">
-                            <?php if (function_exists('can') && can('sequences.edit')): ?>
-                            <a href="<?= site_url('sequences/' . (int) $s['id'] . '/edit') ?>" class="btn btn-sm btn-outline-secondary" title="Edit"><i class="fas fa-edit"></i></a>
-                            <?php endif; ?>
-                            <?php if (function_exists('can') && can('sequences.delete')): ?>
-                            <button type="button" class="btn btn-sm btn-outline-danger" title="Delete"
-                                    data-confirm-delete
-                                    data-url="<?= site_url('sequences/' . (int) $s['id'] . '/delete') ?>"
-                                    data-title="Delete sequence?"
-                                    data-text="This cannot be undone.">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                            <?php endif; ?>
-                            </div>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-            </tbody>
+            <tbody></tbody>
         </table>
         <?php else: ?>
             <div class="page-hint">No sequences yet. Create a multi-step drip (text or template) and enroll contacts.</div>
@@ -58,4 +33,29 @@
     </div>
 </div>
 </div>
+<?= $this->endSection() ?>
+
+<?= $this->section('scripts') ?>
+<script>
+$(function () {
+    var esc = AppDT.esc;
+    AppDT.table('#sequencesTable', {
+        url: <?= json_encode(site_url('sequences/data')) ?>,
+        order: [[0, 'asc']],
+        emptyText: 'No sequences found',
+        columns: [
+            {data: null, className: 'fw-semibold', render: function (r, t) { return t === 'display' ? esc(r.name) : r.name; }},
+            {data: 'steps'},
+            {data: 'enrollments'},
+            {data: null, render: function (r, t) { return t === 'display' ? (r.active ? 'On' : 'Off') : (r.active ? 1 : 0); }},
+            {data: null, orderable: false, className: 'text-end', render: function (r) {
+                var h = '<div class="table-actions justify-content-end">';
+                if (r.edit_url) h += '<a href="' + esc(r.edit_url) + '" class="btn btn-sm btn-outline-secondary" title="Edit"><i class="fas fa-edit"></i></a>';
+                if (r.delete_url) h += '<button type="button" class="btn btn-sm btn-outline-danger" title="Delete" data-confirm-delete data-url="' + esc(r.delete_url) + '" data-title="Delete sequence?" data-text="This cannot be undone."><i class="fas fa-trash"></i></button>';
+                return h + '</div>';
+            }}
+        ]
+    });
+});
+</script>
 <?= $this->endSection() ?>

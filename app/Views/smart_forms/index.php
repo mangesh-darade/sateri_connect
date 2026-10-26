@@ -38,38 +38,47 @@
     <div class="card">
         <div class="card-header"><h2 class="card-title mb-0">Smart Forms</h2></div>
         <div class="card-body p-0">
-            <?php if ($forms === []): ?>
+            <?php if (empty($hasForms)): ?>
                 <div class="page-hint m-3">No forms yet.</div>
             <?php else: ?>
                 <div class="table-responsive">
-                    <table class="table table-hover mb-0">
+                    <table class="table table-hover mb-0 w-100" id="smartFormsTable">
                         <thead>
                             <tr>
                                 <th>Name</th>
                                 <th>Link</th>
                                 <th>Status</th>
                                 <th>Responses</th>
-                                <th></th>
+                                <th class="text-end"></th>
                             </tr>
                         </thead>
-                        <tbody>
-                        <?php foreach ($forms as $row): ?>
-                            <?php $id = (int) $row['id']; ?>
-                            <tr>
-                                <td><?= esc((string) $row['name']) ?></td>
-                                <td><a href="<?= esc(\App\Libraries\SmartFormService::publicUrl((string) $row['slug'])) ?>" target="_blank" rel="noopener"><?= esc($row['slug']) ?></a></td>
-                                <td><?= esc((string) $row['status']) ?></td>
-                                <td><?= (int) ($counts[$id] ?? 0) ?></td>
-                                <td class="text-end">
-                                    <a class="btn btn-sm btn-outline-secondary" href="<?= site_url('smart-forms/' . $id . '/edit') ?>">Edit</a>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                        </tbody>
+                        <tbody></tbody>
                     </table>
                 </div>
             <?php endif; ?>
         </div>
     </div>
 </div>
+<?= $this->endSection() ?>
+
+<?= $this->section('scripts') ?>
+<script>
+$(function () {
+    var esc = AppDT.esc;
+    AppDT.table('#smartFormsTable', {
+        url: <?= json_encode(site_url('smart-forms/data')) ?>,
+        order: [[0, 'asc']],
+        emptyText: 'No forms found',
+        columns: [
+            {data: 'name', render: function (v, t) { return t === 'display' ? esc(v) : v; }},
+            {data: null, render: function (r, t) { return t === 'display' ? '<a href="' + esc(r.url) + '" target="_blank" rel="noopener">' + esc(r.slug) + '</a>' : r.slug; }},
+            {data: 'status', render: function (v, t) { return t === 'display' ? esc(v) : v; }},
+            {data: 'responses'},
+            {data: null, orderable: false, className: 'text-end', render: function (r) {
+                return '<a class="btn btn-sm btn-outline-secondary" href="' + esc(r.edit_url) + '">Edit</a>';
+            }}
+        ]
+    });
+});
+</script>
 <?= $this->endSection() ?>

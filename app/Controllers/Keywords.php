@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Libraries\ActivityLogger;
+use App\Libraries\DataTablesQuery;
 use App\Models\KeywordModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
@@ -19,15 +20,42 @@ class Keywords extends BaseController
             return $denied;
         }
 
-        $keywords = model(KeywordModel::class)
-            ->orderBy('menu_order', 'ASC')
-            ->orderBy('id', 'ASC')
-            ->findAll();
-
         return $this->render('keywords/index', [
-            'pageTitle' => 'Keywords',
-            'keywords'  => $keywords,
+            'pageTitle'   => 'Keywords',
+            'hasKeywords' => db_connect()->table('keywords')->countAllResults() > 0,
         ]);
+    }
+
+    /**
+     * Server-side DataTables feed for the keyword list.
+     */
+    public function data(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('keywords.view')) {
+            return $denied;
+        }
+
+        $canEdit   = function_exists('can') && can('keywords.edit');
+        $canDelete = function_exists('can') && can('keywords.delete');
+
+        return $this->response->setJSON(DataTablesQuery::respond($this->request, [
+            'builder'  => static fn () => db_connect()->table('keywords k')
+                ->select('k.id, k.keyword, k.match_type, k.response_type, k.menu_order, k.is_active'),
+            'columns'  => [0 => 'k.menu_order', 1 => 'k.keyword', 2 => 'k.match_type', 3 => 'k.response_type', 4 => 'k.is_active'],
+            'search'   => ['k.keyword', 'k.match_type', 'k.response_type'],
+            'order'    => [0, 'asc'],
+            'tiebreak' => 'k.id',
+            'map'      => static fn (array $r): array => [
+                'id'         => (int) $r['id'],
+                'order'      => (int) ($r['menu_order'] ?? 0),
+                'keyword'    => (string) $r['keyword'],
+                'match'      => (string) ($r['match_type'] ?? ''),
+                'type'       => (string) (($r['response_type'] ?? '') ?: 'text'),
+                'active'     => ! empty($r['is_active']),
+                'edit_url'   => $canEdit ? site_url('keywords/' . (int) $r['id'] . '/edit') : '',
+                'delete_url' => $canDelete ? site_url('keywords/' . (int) $r['id'] . '/delete') : '',
+            ],
+        ]));
     }
 
     public function create(): string|ResponseInterface
