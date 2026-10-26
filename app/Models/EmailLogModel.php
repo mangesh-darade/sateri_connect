@@ -25,6 +25,8 @@ class EmailLogModel extends Model
         'opened_at',
         'open_count',
         'clicked_at',
+        'first_opened_at',
+        'campaign_id',
         'click_count',
         'builder_id',
         'html_campaign_id',
