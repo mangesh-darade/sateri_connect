@@ -304,6 +304,13 @@ class SmartFormService
         ]);
 
         $contact = $contacts->find($contactId) ?: [];
+        if (is_array($contact) && $contact !== []) {
+            service('whatsAppConsent')->optInIfMissing($contact, 'smart_form');
+            $refreshed = $contacts->find($contactId);
+            if (is_array($refreshed)) {
+                $contact = $refreshed;
+            }
+        }
         try {
             service('automationEngine')->processTrigger('form_response', [
                 'contact_id' => $contactId,

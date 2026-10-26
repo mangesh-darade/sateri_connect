@@ -646,6 +646,36 @@ class WhatsAppConsentService
         return $ok;
     }
 
+    /**
+     * Record opt-in when missing (inbound chat, lead form, smart form create/update).
+     * Never overrides an existing STOP / opt-out.
+     *
+     * @param array<string, mixed> $contact
+     */
+    public function optInIfMissing(array $contact, string $source = 'form'): bool
+    {
+        $contactId = (int) ($contact['id'] ?? 0);
+        if ($contactId <= 0 || ! $this->hasConsentColumns()) {
+            return false;
+        }
+        if ($this->isOptedOut($contact)) {
+            return false;
+        }
+        if ($this->hasOptIn($contact)) {
+            return false;
+        }
+
+        return $this->optIn($contactId, $source !== '' ? $source : 'form');
+    }
+
+    /**
+     * @param array<string, mixed> $contact
+     */
+    public function optInFromInboundMessage(array $contact, string $source = 'whatsapp_inbound'): bool
+    {
+        return $this->optInIfMissing($contact, $source !== '' ? $source : 'whatsapp_inbound');
+    }
+
     public function optOut(int $contactId, string $source): bool
     {
         if ($contactId <= 0 || ! $this->hasConsentColumns()) {
