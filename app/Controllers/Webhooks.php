@@ -1002,6 +1002,12 @@ class Webhooks extends Controller
             return;
         }
 
+        try {
+            (new \App\Libraries\WalletService())->settleFromStatus($status);
+        } catch (Throwable $e) {
+            log_message('error', 'Wallet settle failed: {msg}', ['msg' => $e->getMessage()]);
+        }
+
         $newStatus = $map[$state];
         $messages  = model(MessageModel::class);
         $message   = $messages->findByWaMessageId($waId);

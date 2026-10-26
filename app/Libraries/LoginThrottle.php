@@ -31,8 +31,19 @@ class LoginThrottle
             || self::count(self::accountKey($email)) >= self::ACCOUNT_MAX;
     }
 
-    public static function fail(string $email, string $ip): void
+    public static function fail(string $email, string $ip, string $channel = 'web'): void
     {
+        try {
+            (new MasterTenantRepository())->recordFailedLogin(
+                $email,
+                $ip,
+                $channel,
+                (string) service('request')->getUserAgent()
+            );
+        } catch (Throwable) {
+            // audit trail is best effort
+        }
+
         foreach ([self::pairKey($email, $ip), self::accountKey($email)] as $key) {
             try {
                 cache()->save($key, ['attempts' => self::count($key) + 1], self::WINDOW);

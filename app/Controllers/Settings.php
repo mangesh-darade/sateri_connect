@@ -823,10 +823,6 @@ class Settings extends BaseController
      */
     public function embeddedSignup(): ResponseInterface
     {
-        if (! $this->platformMode) {
-            return $this->jsonResponse(false, null, 'WhatsApp signup is handled by the platform admin.', [], 403);
-        }
-
         if ($denied = $this->guardSettings('settings.edit')) {
             return $denied;
         }
@@ -848,13 +844,26 @@ class Settings extends BaseController
         }
 
         try {
-            $result = (new \App\Libraries\MetaEmbeddedSignup(service('settingsService')))->complete(
+            $signup = new \App\Libraries\MetaEmbeddedSignup(service('settingsService'));
+
+            // Client using the platform Tech Provider app: store its credentials like the platform flow
+            // does, so webhook signatures can be verified for this client.
+            $launch = $signup->resolveLaunchCredentials();
+            $providerCreds = ! empty($launch['managed']) ? [
+                'app_id'      => $launch['app_id'],
+                'app_secret'  => $launch['app_secret'],
+                'api_version' => $launch['api_version'],
+                'config_id'   => $launch['config_id'],
+            ] : null;
+
+            $result = $signup->complete(
                 $code,
                 $wabaId,
                 $phoneNumberId,
                 $businessId !== '' ? $businessId : null,
                 preg_match('/^\d{6}$/', $pin) === 1 ? $pin : null,
-                $redirectUri !== '' ? $redirectUri : null
+                $redirectUri !== '' ? $redirectUri : null,
+                $providerCreds
             );
 
             (new ActivityLogger())->log('update', 'settings', 'WhatsApp connected via Meta Embedded Signup', [
@@ -871,7 +880,9 @@ class Settings extends BaseController
 
             return $this->jsonResponse(true, $result, $msg);
         } catch (\Throwable $e) {
-            return $this->jsonResponse(false, null, $e->getMessage(), [], 500);
+            log_message('error', 'Settings::embeddedSignup failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return $this->jsonResponse(false, null, \App\Libraries\MetaApiErrorMapper::humanize($e->getMessage()), [], 502);
         }
     }
 

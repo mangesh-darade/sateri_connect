@@ -55,7 +55,9 @@ class Media extends BaseController
         try {
             $file->move($this->uploadPath, $newName);
         } catch (Throwable $e) {
-            return $this->jsonResponse(false, null, 'Upload failed: ' . $e->getMessage(), [], 500);
+            log_message('error', 'Media upload failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return $this->jsonResponse(false, null, 'Upload failed. Please try again.', [], 500);
         }
 
         $relative = 'uploads/media/' . $newName;
@@ -73,7 +75,7 @@ class Media extends BaseController
                 $result = service('whatsApp')->uploadMedia($fullPath, $mime);
                 $waMediaId = $result['id'] ?? null;
             } catch (Throwable $e) {
-                log_message('warning', 'Cheerio media upload failed: {msg}', ['msg' => $e->getMessage()]);
+                log_message('warning', 'External media upload failed: {msg}', ['msg' => $e->getMessage()]);
             }
         }
 
@@ -113,10 +115,13 @@ class Media extends BaseController
             if ($media === null) {
                 return $this->response->setStatusCode(404)->setBody('Not found');
             }
-            $path = WRITEPATH . ltrim(str_replace(['../', '..\\'], '', (string) $media['path']), '/');
-            if (! is_file($path)) {
+            // The stored path must resolve inside WRITEPATH (no traversal, whatever the DB row says).
+            $resolved = realpath(WRITEPATH . ltrim((string) $media['path'], '/\\'));
+            $root     = realpath(WRITEPATH);
+            if ($resolved === false || $root === false || ! str_starts_with($resolved, $root . DIRECTORY_SEPARATOR) || ! is_file($resolved)) {
                 return $this->response->setStatusCode(404)->setBody('Not found');
             }
+            $path = $resolved;
             $mime = (string) ($media['mime_type'] ?? 'application/octet-stream');
         } else {
             $media = model(MediaModel::class)->where('filename', $filename)->first();

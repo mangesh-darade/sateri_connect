@@ -147,6 +147,18 @@ class MetaEmbeddedSignup
             );
         }
 
+        // A number already routed to another active client must not be taken over: its webhooks would
+        // keep going to that client while this one saves a token for it.
+        $currentKey = (string) TenantContext::get();
+        if ($currentKey !== '' && MasterTenantRepository::masterConfigured()) {
+            $master = new MasterTenantRepository();
+            $route  = $master->findPhoneRoute($phoneNumberId);
+            $owner  = is_array($route) ? strtolower(trim((string) ($route['tenant_key'] ?? ''))) : '';
+            if ($owner !== '' && $owner !== strtolower($currentKey) && $master->findActiveTenant($owner) !== null) {
+                throw new RuntimeException('This WhatsApp number is already connected to another workspace.');
+            }
+        }
+
         $tokenResult = $this->exchangeCodeForToken($code, (string) $redirectUri, $providerCreds);
         $accessToken = trim((string) ($tokenResult['access_token'] ?? ''));
         if ($accessToken === '') {

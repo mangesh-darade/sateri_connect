@@ -215,8 +215,8 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                         </div>
                                     </div>
                                     <div class="wp-field">
-                                        <label class="form-label">API Base URL</label>
-                                        <div class="wp-endpoint"><?= esc($cheerio['base_url'] ?? 'https://newprod.api.cheerio.in/direct-apis') ?></div>
+                                        <label class="form-label">API endpoint</label>
+                                        <div class="wp-endpoint">External Direct API (managed by the platform)</div>
                                     </div>
                                 </div>
                                 <aside class="wp-creds-aside">

@@ -212,6 +212,35 @@ class MasterTenantRepository
         }
     }
 
+    /** Calling code of the client's country, '' when it was never set (older clients). */
+    public function tenantCountry(string $key): string
+    {
+        $this->ensureTenantOwnerColumn();
+
+        return strtolower(trim((string) ($this->findTenant($key)['country_code'] ?? '')));
+    }
+
+    public function setTenantCountry(string $key, string $countryCode): bool
+    {
+        $key = strtolower(trim($key));
+        $countryCode = strtolower(trim($countryCode));
+        if ($key === '' || $countryCode === '') {
+            return false;
+        }
+        $this->ensureTenantOwnerColumn();
+
+        try {
+            return (bool) $this->db()->table('tenants')->where('key', $key)->update([
+                'country_code' => $countryCode,
+                'updated_at'   => date('Y-m-d H:i:s'),
+            ]);
+        } catch (Throwable $e) {
+            log_message('error', 'MasterTenantRepository::setTenantCountry failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return false;
+        }
+    }
+
     public function assignTenantOwner(string $key, int $platformAdminId): bool
     {
         $key = strtolower(trim($key));
@@ -369,6 +398,10 @@ class MasterTenantRepository
                 $db->query('ALTER TABLE `tenants` ADD `platform_admin_id` INT UNSIGNED NULL DEFAULT NULL');
                 $db->query('ALTER TABLE `tenants` ADD KEY `platform_admin_id` (`platform_admin_id`)');
                 $this->assignUnownedTenantsToFirstAdmin();
+            }
+            if (! $db->fieldExists('country_code', 'tenants')) {
+                // Calling code of the client's country (see WhatsAppCountries). Drives wallet currency and timezone.
+                $db->query('ALTER TABLE `tenants` ADD `country_code` VARCHAR(8) NULL DEFAULT NULL');
             }
             self::$tenantOwnerReady = true;
         } catch (Throwable $e) {
@@ -942,6 +975,11 @@ class MasterTenantRepository
                 'updated_at'  => $now,
             ];
 
+            $country = strtolower(trim((string) ($data['country_code'] ?? '')));
+            if ($country !== '') {
+                $row['country_code'] = $country;
+            }
+
             $existing = $db->table('tenants')->where('key', $key)->get()->getRowArray();
             if (is_array($existing)) {
                 if ($password === '') {
@@ -1308,6 +1346,77 @@ class MasterTenantRepository
             self::$adminMetaReady = true;
         } catch (Throwable $e) {
             log_message('error', 'MasterTenantRepository::ensureAdminMetaTable failed: {msg}', ['msg' => $e->getMessage()]);
+        }
+    }
+
+    /** Creates master.login_attempts on first use, so no manual migration is needed. */
+    public function ensureLoginAttemptsTable(): void
+    {
+        if (! self::masterConfigured()) {
+            return;
+        }
+
+        $this->db()->query(
+            'CREATE TABLE IF NOT EXISTS `login_attempts` (
+                `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `email` VARCHAR(191) NOT NULL,
+                `ip_address` VARCHAR(45) NOT NULL,
+                `channel` VARCHAR(10) NOT NULL DEFAULT \'web\',
+                `user_agent` VARCHAR(255) NOT NULL DEFAULT \'\',
+                `created_at` DATETIME NOT NULL,
+                PRIMARY KEY (`id`),
+                KEY `idx_login_attempts_email` (`email`, `created_at`),
+                KEY `idx_login_attempts_ip` (`ip_address`, `created_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
+        );
+    }
+
+    /**
+     * Failed logins grouped by email and IP, most attempts first.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function failedLoginSummary(int $limit = 100): array
+    {
+        if (! self::masterConfigured()) {
+            return [];
+        }
+
+        try {
+            $this->ensureLoginAttemptsTable();
+
+            return $this->db()->table('login_attempts')
+                ->select('email, ip_address, COUNT(*) AS attempts, MAX(created_at) AS last_try')
+                ->groupBy('email, ip_address')
+                ->orderBy('attempts', 'DESC')
+                ->limit(max(1, $limit))
+                ->get()->getResultArray();
+        } catch (Throwable $e) {
+            log_message('error', 'MasterTenantRepository::failedLoginSummary failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return [];
+        }
+    }
+
+    /** Audit row for a failed login, kept in the master DB because the tenant is not known yet at login. */
+    public function recordFailedLogin(string $email, string $ip, string $channel, string $userAgent): void
+    {
+        if (! self::masterConfigured()) {
+            return;
+        }
+
+        try {
+            $this->ensureLoginAttemptsTable();
+            $db = $this->db();
+            $db->table('login_attempts')->insert([
+                'email'      => mb_substr(strtolower(trim($email)), 0, 191),
+                'ip_address' => mb_substr($ip, 0, 45),
+                'channel'    => $channel,
+                'user_agent' => mb_substr($userAgent, 0, 255),
+                'created_at' => date('Y-m-d H:i:s'),
+            ]);
+        } catch (Throwable $e) {
+            log_message('error', 'MasterTenantRepository::recordFailedLogin failed: {msg}', ['msg' => $e->getMessage()]);
         }
     }
 

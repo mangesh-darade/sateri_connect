@@ -101,6 +101,11 @@ class Auth extends BaseController
             );
         }
         $postedTenant = strtolower(trim((string) $this->request->getPost('tenant_key')));
+        // "_platform" is only a login-page mode. If the platform check below does not match, this is a
+        // client user who landed on the platform page, so resolve the client from the email as usual.
+        if ($postedTenant === '_platform') {
+            $postedTenant = '';
+        }
 
         // Platform super admin (master.platform_admins) — manages all clients.
         if (\App\Libraries\MasterTenantRepository::masterConfigured()) {

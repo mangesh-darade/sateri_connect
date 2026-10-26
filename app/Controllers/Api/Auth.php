@@ -48,7 +48,7 @@ class Auth extends BaseApiController
         $user = model(UserModel::class, false)->findByEmail($email);
 
         if (! LoginThrottle::verify($password, is_array($user) ? (string) ($user['password'] ?? '') : null)) {
-            LoginThrottle::fail($email, $ip);
+            LoginThrottle::fail($email, $ip, 'api');
 
             return $this->respondError('Invalid credentials.', [], 401);
         }

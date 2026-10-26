@@ -33,6 +33,17 @@ class CleanupLogs extends BaseCommand
             CLI::write('Webhook logs deleted: ' . $db->affectedRows(), 'green');
 
             // Rate limits older than the window — remove stale keys
+            // Failed-login audit rows live in the master DB and would otherwise grow without bound.
+            try {
+                $master = \App\Libraries\MasterTenantRepository::masterConnection();
+                if ($master->tableExists('login_attempts')) {
+                    $master->table('login_attempts')->where('created_at <', $cutoff)->delete();
+                    CLI::write('Failed-login rows deleted: ' . $master->affectedRows(), 'green');
+                }
+            } catch (\Throwable $e) {
+                CLI::write('Failed-login cleanup skipped: ' . $e->getMessage(), 'yellow');
+            }
+
             $rateCutoff = time() - max(3600, $days * 86400);
             $db->table('rate_limits')->where('window_start <', $rateCutoff)->delete();
             CLI::write('Rate limit rows deleted: ' . $db->affectedRows(), 'green');

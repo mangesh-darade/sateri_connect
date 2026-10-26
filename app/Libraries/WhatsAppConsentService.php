@@ -1413,7 +1413,12 @@ class WhatsAppConsentService
             || str_contains($message, 'Outside the 24-hour')
             || str_contains($message, 'Contact has no valid mobile')
             || str_contains($message, 'Contact not found')
-            || str_contains($message, 'Unsupported queue message type')) {
+            || str_contains($message, 'Unsupported queue message type')
+            || str_starts_with($message, 'Insufficient wallet balance')
+            || str_starts_with($message, 'Spending limit reached')
+            || str_starts_with($message, 'No WhatsApp rate is set')
+            || str_starts_with($message, 'No exchange rate is set')
+            || str_starts_with($message, 'Invalid WhatsApp number')) {
             return false;
         }
 
