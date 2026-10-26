@@ -50,6 +50,8 @@ $routes->get('emails/track/click/(:num)', 'Emails::trackClick/$1');
 $routes->match(['get', 'post'], 'emails/unsubscribe', 'Emails::unsubscribe');
 
 // Amazon SES bounce / complaint notifications via SNS (public, signature-verified)
+$routes->post('webhooks/razorpay', 'RazorpayWebhook::receive');
+$routes->post('webhooks/mswipe', 'MswipeWebhook::receive');
 $routes->post('webhooks/ses', 'SesWebhook::receive');
 $routes->post('webhooks/ses/(:segment)', 'SesWebhook::receive/$1');
 
@@ -61,6 +63,7 @@ $routes->post('webhooks/ses/(:segment)', 'SesWebhook::receive/$1');
 $routes->group('platform', ['filter' => 'platformAuth'], static function ($routes) {
     $routes->get('clients', 'PlatformClients::index');
     $routes->get('clients/all', 'PlatformClients::all');
+    $routes->post('clients/refresh-stats', 'PlatformClients::refreshStats', ['filter' => 'csrf']);
     $routes->get('clients/create', 'PlatformClients::create');
     $routes->post('clients', 'PlatformClients::store', ['filter' => 'csrf']);
     $routes->get('meta-tech', 'PlatformClients::metaTech');
@@ -69,12 +72,14 @@ $routes->group('platform', ['filter' => 'platformAuth'], static function ($route
     $routes->get('meta-tech/client/(:segment)', 'PlatformClients::clientWhatsAppStatus/$1');
     $routes->post('meta-tech/connect', 'PlatformClients::connectEmbeddedSignup', ['filter' => 'csrf']);
     $routes->get('admins', 'PlatformAdmins::index');
+    $routes->get('admins/data', 'PlatformAdmins::data');
     $routes->post('admins', 'PlatformAdmins::store', ['filter' => 'csrf']);
     $routes->get('settings', 'PlatformClients::settings');
     $routes->post('settings', 'PlatformClients::saveSettings', ['filter' => 'csrf']);
     $routes->get('guide', 'Guide::index');
     $routes->get('guide/(:segment)', 'Guide::show/$1');
     $routes->get('api-usage', 'PlatformApiUsage::index');
+    $routes->get('api-usage/data', 'PlatformApiUsage::clientsData');
     $routes->get('api-usage/(:segment)/calls', 'PlatformApiUsage::calls/$1');
     $routes->get('api-usage/(:segment)', 'PlatformApiUsage::client/$1');
     $routes->get('schema', 'PlatformSchema::index');
@@ -95,11 +100,32 @@ $routes->group('platform', ['filter' => 'platformAuth'], static function ($route
     $routes->post('clients/(:segment)/settings/test-ai', 'PlatformClients::clientSettingsAction/$1/test-ai', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/settings/api-tokens/generate', 'PlatformClients::clientSettingsAction/$1/api-tokens-generate', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/settings/api-tokens/(:num)/delete', 'PlatformClients::clientSettingsDeleteToken/$1/$2', ['filter' => 'csrf']);
+    $routes->get('payments', 'PlatformPayments::index');
+    $routes->post('payments', 'PlatformPayments::save', ['filter' => 'csrf']);
+    $routes->post('payments/test', 'PlatformPayments::test', ['filter' => 'csrf']);
+    $routes->post('payments/mswipe', 'PlatformPayments::saveMswipe', ['filter' => 'csrf']);
+    $routes->post('payments/mswipe/test', 'PlatformPayments::testMswipe', ['filter' => 'csrf']);
+    $routes->get('wallet-report', 'PlatformWallet::report');
+    $routes->get('wallet-report/csv', 'PlatformWallet::reportCsv');
+    $routes->get('wallet-report/transactions', 'PlatformWallet::reportTransactions');
+    $routes->get('wallet-report/clients', 'PlatformWallet::reportClients');
+    $routes->get('wa-rates/data', 'PlatformWallet::ratesData');
+    $routes->get('wa-rates', 'PlatformWallet::rates');
+    $routes->post('wa-rates', 'PlatformWallet::saveRate', ['filter' => 'csrf']);
+    $routes->post('wa-rates/import', 'PlatformWallet::importRates', ['filter' => 'csrf']);
+    $routes->post('wa-rates/bulk', 'PlatformWallet::saveRatesBulk', ['filter' => 'csrf']);
+    $routes->post('wa-rates/fx', 'PlatformWallet::saveFx', ['filter' => 'csrf']);
+    $routes->post('wa-rates/fx/refresh', 'PlatformWallet::refreshFx', ['filter' => 'csrf']);
+    $routes->post('wa-rates/(:segment)/delete', 'PlatformWallet::deleteRate/$1', ['filter' => 'csrf']);
+    $routes->get('clients/(:segment)/wallet', 'PlatformWallet::client/$1');
+    $routes->get('clients/(:segment)/wallet/transactions', 'PlatformWallet::transactionsData/$1');
+    $routes->post('clients/(:segment)/wallet', 'PlatformWallet::action/$1', ['filter' => 'csrf']);
     $routes->get('clients/(:segment)', 'PlatformClients::show/$1');
     $routes->post('clients/(:segment)/meta', 'PlatformClients::saveMeta/$1', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/login', 'PlatformClients::saveLogin/$1', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/limits', 'PlatformClients::saveLimits/$1', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/owner', 'PlatformClients::saveOwner/$1', ['filter' => 'csrf']);
+    $routes->post('clients/(:segment)/country', 'PlatformClients::saveCountry/$1', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/enter', 'PlatformClients::enter/$1', ['filter' => 'csrf']);
 });
 
@@ -123,6 +149,14 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->get('dashboard', 'Dashboard::index');
     $routes->get('guide', 'Guide::index');
     $routes->get('guide/(:segment)', 'Guide::show/$1');
+
+    $routes->get('wallet', 'Wallet::index');
+    $routes->get('wallet/transactions', 'Wallet::transactionsData');
+    $routes->get('wallet/payments', 'Wallet::paymentsData');
+    $routes->post('wallet/recharge/order', 'Wallet::rechargeOrder', ['filter' => 'csrf']);
+    $routes->post('wallet/recharge/verify', 'Wallet::rechargeVerify', ['filter' => 'csrf']);
+    $routes->get('wallet/recharge/return', 'Wallet::rechargeReturn');
+    $routes->get('wallet/invoice/(:num)', 'Wallet::invoice/$1');
 
     // Settings
     $routes->get('settings', 'Settings::index');
@@ -168,6 +202,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('contacts/(:num)/delete', 'Contacts::delete/$1', ['filter' => 'csrf']);
 
     $routes->get('smart-forms', 'SmartForms::index');
+    $routes->get('smart-forms/data', 'SmartForms::data');
     $routes->post('smart-forms/captcha', 'SmartForms::saveCaptcha', ['filter' => 'csrf']);
     $routes->get('smart-forms/create', 'SmartForms::create');
     $routes->post('smart-forms', 'SmartForms::store', ['filter' => 'csrf']);
@@ -177,16 +212,19 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
 
     // Contact attribute definitions + inbox quick replies
     $routes->get('attributes', 'Attributes::index');
+    $routes->get('attributes/data', 'Attributes::data');
     $routes->post('attributes', 'Attributes::store', ['filter' => 'csrf']);
     $routes->post('attributes/(:num)', 'Attributes::update/$1', ['filter' => 'csrf']);
     $routes->post('attributes/(:num)/delete', 'Attributes::delete/$1', ['filter' => 'csrf']);
     $routes->get('quick-replies', 'QuickReplies::index');
+    $routes->get('quick-replies/data', 'QuickReplies::data');
     $routes->post('quick-replies', 'QuickReplies::store', ['filter' => 'csrf']);
     $routes->post('quick-replies/(:num)', 'QuickReplies::update/$1', ['filter' => 'csrf']);
     $routes->post('quick-replies/(:num)/delete', 'QuickReplies::delete/$1', ['filter' => 'csrf']);
 
     // Customer Groups (campaign audience lists — backed by tags)
     $routes->get('customer-groups', 'CustomerGroups::index');
+    $routes->get('customer-groups/data', 'CustomerGroups::data');
     $routes->post('customer-groups', 'CustomerGroups::store', ['filter' => 'csrf']);
     $routes->post('customer-groups/create', 'CustomerGroups::createGroup', ['filter' => 'csrf']);
     $routes->get('customer-groups/export', 'CustomerGroups::export');
@@ -206,6 +244,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('email-manager/drips/(:num)/duplicate', 'EmailManager::duplicateDrip/$1', ['filter' => 'csrf']);
     $routes->post('email-manager/drips/send-step', 'EmailManager::sendDripStep', ['filter' => 'csrf']);
     $routes->post('email-manager/verify', 'EmailManager::verifyEmails', ['filter' => 'csrf']);
+    $routes->get('email-manager/campaigns-data', 'EmailManager::campaignsData');
     $routes->post('email-manager/campaigns', 'EmailManager::saveCampaign', ['filter' => 'csrf']);
     $routes->post('email-manager/campaigns/(:num)/send', 'EmailManager::sendCampaign/$1', ['filter' => 'csrf']);
     $routes->post('email-manager/campaigns/(:num)/delete', 'EmailManager::deleteCampaign/$1', ['filter' => 'csrf']);
@@ -244,6 +283,9 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('campaigns/wizard/(:segment)/(:num)/run', 'Campaigns::wizardRun/$1/$2', ['filter' => 'csrf']);
     $routes->post('campaigns/wizard/(:segment)/(:num)/schedule', 'Campaigns::wizardSchedule/$1/$2', ['filter' => 'csrf']);
     $routes->post('campaigns', 'Campaigns::store', ['filter' => 'csrf']);
+    $routes->get('campaigns/data', 'Campaigns::data');
+    $routes->get('campaigns/(:num)/recipients-data', 'Campaigns::recipientsData/$1');
+    $routes->get('campaigns/email/(:num)/recipients-data', 'Campaigns::emailRecipientsData/$1');
     $routes->get('campaigns/email/(:num)', 'Campaigns::showEmail/$1');
     $routes->get('campaigns/(:num)', 'Campaigns::show/$1');
     $routes->get('campaigns/(:num)/edit', 'Campaigns::edit/$1');
@@ -310,6 +352,8 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
 
     // Automations
     $routes->get('automations', 'Automations::index');
+    $routes->get('automations/data', 'Automations::data');
+    $routes->get('automations/drips-data', 'Automations::dripsData');
     $routes->post('automations/facebook/login', 'Automations::facebookLogin', ['filter' => 'csrf']);
     $routes->post('automations/facebook/accounts', 'Automations::facebookAccounts', ['filter' => 'csrf']);
     $routes->post('automations/facebook/pages', 'Automations::facebookPages', ['filter' => 'csrf']);
@@ -328,6 +372,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
 
     // Sequences (multi-step drips)
     $routes->get('sequences', 'Sequences::index');
+    $routes->get('sequences/data', 'Sequences::data');
     $routes->get('sequences/create', 'Sequences::create');
     $routes->post('sequences', 'Sequences::store', ['filter' => 'csrf']);
     $routes->get('sequences/(:num)/edit', 'Sequences::edit/$1');
@@ -337,6 +382,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
 
     // Keywords
     $routes->get('keywords', 'Keywords::index');
+    $routes->get('keywords/data', 'Keywords::data');
     $routes->get('keywords/create', 'Keywords::create');
     $routes->post('keywords', 'Keywords::store', ['filter' => 'csrf']);
     $routes->get('keywords/(:num)/edit', 'Keywords::edit/$1');
@@ -346,18 +392,35 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
 
     // Reports
     $routes->get('reports', 'Reports::index');
+    $routes->get('reports/transactions', 'Reports::transactions');
+    $routes->get('reports/transactions/export', 'Reports::transactionsExport');
+    $routes->get('reports/deposits', 'Reports::deposits');
+    $routes->get('reports/deposits/export', 'Reports::depositsExport');
+    $routes->get('reports/templates', 'Reports::templates');
+    $routes->get('reports/templates/export', 'Reports::templatesExport');
+    $routes->get('reports/email', 'Reports::email');
     $routes->get('reports/campaigns', 'Reports::campaigns');
     $routes->get('reports/delivery', 'Reports::delivery');
     $routes->get('reports/campaign-contacts', 'Reports::campaignContacts');
     $routes->get('reports/export-pdf', 'Reports::exportPdf');
     $routes->get('reports/export-excel', 'Reports::exportExcel');
+    // Server-side DataTables JSON (permission reports.view checked in the controller, like the pages)
+    $routes->get('reports/campaigns/data', 'Reports::campaignsData');
+    $routes->get('reports/campaigns/recipients-data', 'Reports::recipientsData');
+    $routes->get('reports/email/campaigns-data', 'Reports::emailCampaignsData');
+    $routes->get('reports/email/logs-data', 'Reports::emailLogsData');
+    $routes->get('reports/templates/data', 'Reports::templatesData');
+    $routes->get('reports/deposits/data', 'Reports::depositsData');
+    $routes->get('reports/transactions/data', 'Reports::transactionsData');
 
     // Activity Logs
     $routes->get('activity-logs', 'ActivityLogs::index');
+    $routes->get('activity-logs/data', 'ActivityLogs::data');
     $routes->get('activity-logs/export', 'ActivityLogs::export');
 
     // Queue
     $routes->get('queue', 'Queue::index');
+    $routes->get('queue/data', 'Queue::data');
     $routes->get('queue/stats', 'Queue::stats');
     $routes->post('queue/process', 'Queue::process', ['filter' => 'csrf']);
     $routes->post('queue/retry-all', 'Queue::retryAll', ['filter' => 'csrf']);
@@ -366,6 +429,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
 
     // Users
     $routes->get('users', 'Users::index');
+    $routes->get('users/data', 'Users::data');
     $routes->get('users/create', 'Users::create');
     $routes->post('users', 'Users::store', ['filter' => 'csrf']);
     $routes->get('users/(:num)/edit', 'Users::edit/$1');
