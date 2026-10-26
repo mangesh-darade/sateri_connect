@@ -62,8 +62,14 @@ class TenantProvision extends BaseCommand
         $skipMigrate = CLI::getOption('skip-migrate') !== null;
 
         if ($adminPass === '') {
-            $adminPass = bin2hex(random_bytes(4)) . 'Aa1!';
+            $adminPass = bin2hex(random_bytes(9)) . 'Aa1!';
             CLI::write('Generated admin password: ' . $adminPass, 'yellow');
+        }
+
+        if (preg_match('/^[A-Za-z0-9_]{1,64}$/', $database) !== 1) {
+            CLI::error('Database name may only contain letters, numbers and underscores (max 64).');
+
+            return;
         }
 
         if (! MasterTenantRepository::masterConfigured()) {

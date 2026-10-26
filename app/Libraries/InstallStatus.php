@@ -40,6 +40,21 @@ class InstallStatus
             return self::$installed = true;
         }
 
+        // Multi-client platform: a master DB that already has clients means this is a live install, even
+        // when the default DB is empty/unreachable on the portal host. Never let the public wizard reopen.
+        try {
+            if (
+                \App\Libraries\MasterTenantRepository::masterConfigured()
+                && (new \App\Libraries\MasterTenantRepository())->countActiveTenants() > 0
+            ) {
+                @file_put_contents(self::lockPath(), 'installed_at=' . date('c') . "\nsource=master\n", LOCK_EX);
+
+                return self::$installed = true;
+            }
+        } catch (Throwable) {
+            // fall through to the settings check
+        }
+
         try {
             self::$installed = service('settingsService')->isInstalled();
             // Persist the lock so a later DB outage can never reopen the public installer.

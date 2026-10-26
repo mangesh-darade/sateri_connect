@@ -171,7 +171,7 @@ class PlatformClients extends BaseController
 
             return $this->jsonResponse(true, $result, $msg);
         } catch (\Throwable $e) {
-            return $this->jsonResponse(false, null, $e->getMessage(), [], 500);
+            return $this->jsonResponse(false, null, $this->safeError($e, 'Could not complete the WhatsApp connection. See the application log for details.'), [], 500);
         }
     }
 
@@ -217,7 +217,7 @@ class PlatformClients extends BaseController
                 'webhook_verify_token' => (string) $this->request->getPost('webhook_verify_token'),
             ], $adminId);
         } catch (\Throwable $e) {
-            return redirect()->back()->withInput()->with('error', $e->getMessage());
+            return redirect()->back()->withInput()->with('error', $this->safeError($e, 'Could not save the Meta settings. See the application log for details.'));
         }
 
         log_activity('update', 'platform', 'Saved this super admin Meta App ID and Embedded Signup Config ID', [
@@ -250,6 +250,13 @@ class PlatformClients extends BaseController
             return $this->response->setStatusCode(422)->setJSON([
                 'status'  => 'error',
                 'message' => 'App ID and App Secret are required to test the Meta connection.',
+            ]);
+        }
+
+        if (preg_match('/^\d{5,32}$/', $appId) !== 1 || preg_match('/^v\d{1,2}\.\d{1,2}$/', $apiVersion) !== 1) {
+            return $this->response->setStatusCode(422)->setJSON([
+                'status'  => 'error',
+                'message' => 'App ID must be numeric and API version must look like v25.0.',
             ]);
         }
 
@@ -290,29 +297,36 @@ class PlatformClients extends BaseController
         } catch (\Throwable $e) {
             return $this->response->setStatusCode(500)->setJSON([
                 'status'  => 'error',
-                'message' => 'Failed to reach Meta servers: ' . $e->getMessage(),
+                'message' => $this->safeError($e, 'Could not reach Meta right now. Check the server internet connection and try again.'),
             ]);
         }
     }
 
     public function store(): ResponseInterface
     {
-        $result = (new TenantProvisionService())->provision([
-            'key'            => (string) $this->request->getPost('key'),
-            'name'           => (string) $this->request->getPost('name'),
-            'database'       => (string) $this->request->getPost('database'),
-            'hostname'       => (string) ($this->request->getPost('hostname') ?: 'localhost'),
-            'username'       => (string) ($this->request->getPost('username') ?: 'root'),
-            'password'       => (string) $this->request->getPost('db_password'),
-            'port'           => (int) ($this->request->getPost('port') ?: 3306),
-            'admin_email'    => (string) $this->request->getPost('admin_email'),
-            'admin_password' => (string) $this->request->getPost('admin_password'),
-            'admin_name'         => (string) ($this->request->getPost('admin_name') ?: 'Admin'),
-            'platform_admin_id'  => $this->platformAdminId(),
-        ]);
+        $dbHost = (string) ($this->request->getPost('hostname') ?: 'localhost');
+        $dbUser = (string) ($this->request->getPost('username') ?: 'root');
+        $dbPass = (string) $this->request->getPost('db_password');
+        $dbPort = (int) ($this->request->getPost('port') ?: 3306);
+
+        // Only the main platform admin may point a client at a custom MySQL server/account.
+        // Everyone else always gets this server's own database account (no arbitrary host/port/user).
+        if (! (new MasterTenantRepository())->isPrimaryPlatformAdmin($this->platformAdminId())) {
+            $tenancy = config(\Config\Tenancy::class);
+            $dbHost  = $tenancy->masterHostname;
+            $dbUser  = $tenancy->masterUsername;
+            $dbPass  = $tenancy->masterPassword;
+            $dbPort  = $tenancy->masterPort;
+        }
+
+        try {
+            $result = $this->provisionFromRequest($dbHost, $dbUser, $dbPass, $dbPort);
+        } catch (\Throwable $e) {
+            return redirect()->back()->withInput()->with('error', $this->safeError($e, 'Could not create the client. See the application log for details.'));
+        }
 
         if (! ($result['ok'] ?? false)) {
-            return redirect()->back()->withInput()->with('error', (string) ($result['message'] ?? 'Failed'));
+            return redirect()->back()->withInput()->with('error', (string) ($result['message'] ?? 'Could not create the client.'));
         }
 
         $msg = (string) ($result['message'] ?? 'Created');
@@ -325,6 +339,43 @@ class PlatformClients extends BaseController
 
         return redirect()->to('/platform/clients/' . rawurlencode((string) $result['key']))
             ->with('success', $msg);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function provisionFromRequest(string $dbHost, string $dbUser, string $dbPass, int $dbPort): array
+    {
+        return (new TenantProvisionService())->provision([
+            'key'            => (string) $this->request->getPost('key'),
+            'name'           => (string) $this->request->getPost('name'),
+            'database'       => (string) $this->request->getPost('database'),
+            'hostname'       => $dbHost,
+            'username'       => $dbUser,
+            'password'       => $dbPass,
+            'port'           => $dbPort,
+            'admin_email'    => (string) $this->request->getPost('admin_email'),
+            'admin_password' => (string) $this->request->getPost('admin_password'),
+            'admin_name'         => (string) ($this->request->getPost('admin_name') ?: 'Admin'),
+            'platform_admin_id'  => $this->platformAdminId(),
+        ]);
+    }
+
+    /**
+     * Log the real exception, show only a safe message: our own validation text, or the fallback for
+     * database/driver errors (which carry host names, accounts and SQL).
+     */
+    protected function safeError(\Throwable $e, string $fallback): string
+    {
+        log_message('error', '[PlatformClients] {class}: {msg}', ['class' => $e::class, 'msg' => $e->getMessage()]);
+
+        if ($e instanceof \CodeIgniter\Database\Exceptions\DatabaseException || $e instanceof \mysqli_sql_exception) {
+            return $fallback;
+        }
+
+        $msg = trim($e->getMessage());
+
+        return ($msg !== '' && mb_strlen($msg) <= 200 && ! preg_match('/SQLSTATE|mysql|`|SELECT|INSERT|UPDATE/i', $msg)) ? $msg : $fallback;
     }
 
     public function show(string $key): string|ResponseInterface
@@ -392,7 +443,8 @@ class PlatformClients extends BaseController
     public function saveMeta(string $key): ResponseInterface
     {
         $key = strtolower(trim($key));
-        if (! (new MasterTenantRepository())->platformAdminOwnsTenant($this->platformAdminId(), $key)) {
+        $repo = new MasterTenantRepository();
+        if ($repo->findActiveTenant($key) === null || ! $repo->platformAdminOwnsTenant($this->platformAdminId(), $key)) {
             return redirect()->to('/platform/clients')->with('error', 'Client not found.');
         }
         $meta = [
@@ -425,7 +477,8 @@ class PlatformClients extends BaseController
     public function saveLogin(string $key): ResponseInterface
     {
         $key = strtolower(trim($key));
-        if (! (new MasterTenantRepository())->platformAdminOwnsTenant($this->platformAdminId(), $key)) {
+        $repo = new MasterTenantRepository();
+        if ($repo->findActiveTenant($key) === null || ! $repo->platformAdminOwnsTenant($this->platformAdminId(), $key)) {
             return redirect()->to('/platform/clients')->with('error', 'Client not found.');
         }
         $password = trim((string) $this->request->getPost('admin_password'));
@@ -534,25 +587,39 @@ class PlatformClients extends BaseController
         }
         TenantContext::set($key, 'platform');
 
-        $email = '';
+        $emails = [];
         try {
-            $idx = MasterTenantRepository::masterConnection()
+            $rows = MasterTenantRepository::masterConnection()
                 ->table('tenant_login_index')
                 ->where('tenant_key', $key)
                 ->orderBy('id', 'ASC')
                 ->get()
-                ->getRowArray();
-            $email = is_array($idx) ? (string) ($idx['email'] ?? '') : '';
+                ->getResultArray();
+            foreach ($rows as $row) {
+                $e = trim((string) ($row['email'] ?? ''));
+                if ($e !== '') {
+                    $emails[] = $e;
+                }
+            }
         } catch (\Throwable) {
-            $email = '';
+            $emails = [];
         }
 
-        if ($email === '') {
+        if ($emails === []) {
             return redirect()->to('/platform/clients/' . rawurlencode($key))
                 ->with('error', 'No login email set for this client. Save login details first.');
         }
 
-        $user = model(UserModel::class)->findByEmail($email);
+        // Index rows can be stale; use the first email that really exists as a user in this tenant DB.
+        \CodeIgniter\Config\Factories::reset('models');
+        $users = model(UserModel::class, false);
+        $user  = null;
+        foreach ($emails as $candidate) {
+            $user = $users->findByEmail($candidate);
+            if ($user !== null) {
+                break;
+            }
+        }
         if ($user === null) {
             return redirect()->to('/platform/clients/' . rawurlencode($key))
                 ->with('error', 'Client admin user missing.');

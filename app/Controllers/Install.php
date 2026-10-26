@@ -98,7 +98,7 @@ class Install extends Controller
         $rules = [
             'hostname' => 'required',
             'username' => 'required',
-            'database' => 'required',
+            'database' => 'required|alpha_dash|max_length[64]',
             'port'     => 'permit_empty|is_natural_no_zero',
         ];
 

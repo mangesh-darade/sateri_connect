@@ -52,7 +52,10 @@ class TenantProvisionService
         }
 
         $name        = trim((string) ($input['name'] ?? $key));
-        $database    = trim((string) ($input['database'] ?? ('sateri_' . $key)));
+        $database    = trim((string) ($input['database'] ?? ''));
+        if ($database === '') {
+            $database = 'sateri_' . str_replace('-', '_', $key);
+        }
         $hostname    = trim((string) ($input['hostname'] ?? 'localhost'));
         $username    = trim((string) ($input['username'] ?? 'root'));
         $password    = (string) ($input['password'] ?? '');
@@ -64,7 +67,16 @@ class TenantProvisionService
         $skipMigrate = ! empty($input['skip_migrate']);
 
         if ($adminPass === '') {
-            $adminPass = bin2hex(random_bytes(4)) . 'Aa1!';
+            $adminPass = bin2hex(random_bytes(9)) . 'Aa1!';
+        }
+
+        $dbError = $this->validateDatabaseTarget($database, $hostname, $port, ! empty($input['allow_existing_db']));
+        if ($dbError !== null) {
+            return ['ok' => false, 'message' => $dbError];
+        }
+
+        if ($adminEmail === '' || ! filter_var($adminEmail, FILTER_VALIDATE_EMAIL)) {
+            return ['ok' => false, 'message' => 'A valid admin email is required.'];
         }
 
         if ($this->master->findTenantKeyByEmail($adminEmail) !== null) {
@@ -75,7 +87,7 @@ class TenantProvisionService
             try {
                 $this->createDatabase($hostname, $username, $password, $port, $database);
             } catch (Throwable $e) {
-                return ['ok' => false, 'message' => 'CREATE DATABASE failed: ' . $e->getMessage()];
+                return ['ok' => false, 'message' => $this->describeDbError($e, $hostname, $port)];
             }
         }
 
@@ -93,8 +105,12 @@ class TenantProvisionService
             return ['ok' => false, 'message' => 'Failed to register client in master.'];
         }
 
+        // From here on a failure must not leave a half-registered client behind (a retry would be
+        // blocked by "Client key already exists").
         if (! (new TenantConnection())->apply($key, 'provision')) {
-            return ['ok' => false, 'message' => 'Could not connect to new client database.'];
+            $this->master->deleteTenant($key);
+
+            return ['ok' => false, 'message' => 'The database was created but the app could not connect to it with the given details. Nothing was saved; check the credentials and try again.'];
         }
 
         if (! $skipMigrate) {
@@ -104,7 +120,10 @@ class TenantProvisionService
                 $migrate->latest();
                 \Config\Database::seeder()->call('DatabaseSeeder');
             } catch (Throwable $e) {
-                return ['ok' => false, 'message' => 'Migrate/seed failed: ' . $e->getMessage()];
+                log_message('error', '[TenantProvisionService::provision] migrate/seed failed for {key}: {msg}', ['key' => $key, 'msg' => $e->getMessage()]);
+                $this->master->deleteTenant($key);
+
+                return ['ok' => false, 'message' => 'Could not set up the client database tables. Nothing was saved; see the application log for details.'];
             }
         }
 
@@ -112,12 +131,18 @@ class TenantProvisionService
 
         try {
             $this->ensureAdminUser($adminEmail, $adminPass, $adminName);
-            $this->master->upsertLoginIndex($adminEmail, $key);
+            if (! $this->master->upsertLoginIndex($adminEmail, $key)) {
+                throw new RuntimeException('Login index could not be saved.');
+            }
 
             // Brand app_name for clearer UI.
             service('settingsService')->set('app_name', $name !== '' ? $name : $key, 'general', false);
         } catch (Throwable $e) {
-            return ['ok' => false, 'message' => 'Admin user failed: ' . $e->getMessage()];
+            log_message('error', '[TenantProvisionService::provision] admin user failed for {key}: {msg}', ['key' => $key, 'msg' => $e->getMessage()]);
+            $this->master->deleteTenant($key);
+            $this->master->removeLoginIndexForTenantEmail($key, $adminEmail);
+
+            return ['ok' => false, 'message' => 'Could not create the client admin login. Nothing was saved; check the admin email and password and try again.'];
         }
 
         return [
@@ -170,9 +195,11 @@ class TenantProvisionService
             }
 
             $this->ensureAdminUser($email, $password, $name !== '' ? $name : 'Admin', $password !== '', $current);
-            $this->master->upsertLoginIndex($email, $tenantKey);
+            if (! $this->master->upsertLoginIndex($email, $tenantKey)) {
+                return ['ok' => false, 'message' => 'That email is already used by another client or is not a valid email address.'];
+            }
         } catch (Throwable $e) {
-            return ['ok' => false, 'message' => $e->getMessage()];
+            return ['ok' => false, 'message' => $this->safeMessage($e, 'Could not save the client login. See the application log for details.')];
         }
 
         return ['ok' => true, 'message' => 'Client login saved.'];
@@ -216,7 +243,7 @@ class TenantProvisionService
             }
             $settings->setWhatsAppProvider('meta');
         } catch (Throwable $e) {
-            return ['ok' => false, 'message' => $e->getMessage()];
+            return ['ok' => false, 'message' => $this->safeMessage($e, 'Could not save the Meta connection. See the application log for details.')];
         }
 
         return ['ok' => true, 'message' => 'Meta settings saved for client.'];
@@ -295,6 +322,70 @@ class TenantProvisionService
         return $users->findByEmail($email);
     }
 
+    /**
+     * A tenant database must be a plain identifier, never the master or a MySQL system schema, and
+     * (unless explicitly allowed) never one that another tenant on the same server already uses.
+     */
+    protected function validateDatabaseTarget(string $database, string $hostname, int $port, bool $allowExisting): ?string
+    {
+        if (preg_match('/^[A-Za-z0-9_]{1,64}$/', $database) !== 1) {
+            return 'Database name may only contain letters, numbers and underscores (max 64).';
+        }
+        if ($port < 1 || $port > 65535) {
+            return 'Invalid database port. MySQL normally uses 3306.';
+        }
+        if (preg_match('/^[A-Za-z0-9._\-]{1,255}$/', $hostname) !== 1) {
+            return 'Invalid database host.';
+        }
+
+        $lower = strtolower($database);
+        $masterDb = strtolower(trim((string) config(\Config\Tenancy::class)->masterDatabase));
+        if ($lower === $masterDb || in_array($lower, ['mysql', 'information_schema', 'performance_schema', 'sys'], true)) {
+            return 'That database name is reserved.';
+        }
+
+        if (! $allowExisting && $this->master->databaseInUse($hostname, $port, $database)) {
+            return 'That database is already used by another client.';
+        }
+
+        return null;
+    }
+
+    /**
+     * Messages we raised ourselves (validation) are fine to show; database/driver errors are not.
+     */
+    protected function safeMessage(Throwable $e, string $fallback): string
+    {
+        log_message('error', '[TenantProvisionService] {class}: {msg}', ['class' => $e::class, 'msg' => $e->getMessage()]);
+
+        if ($e instanceof \CodeIgniter\Database\Exceptions\DatabaseException || $e instanceof \mysqli_sql_exception) {
+            return $fallback;
+        }
+
+        $msg = trim($e->getMessage());
+
+        return ($msg !== '' && mb_strlen($msg) <= 200 && ! preg_match('/SQLSTATE|mysql|`|\bSELECT\b|\bINSERT\b|\bUPDATE\b/i', $msg)) ? $msg : $fallback;
+    }
+
+    /**
+     * Turn a MySQL failure into a short, actionable message. The raw driver text (host names, account
+     * names, SQL) goes to the log only.
+     */
+    protected function describeDbError(Throwable $e, string $hostname, int $port): string
+    {
+        log_message('error', '[TenantProvisionService] database error {code}: {msg}', [
+            'code' => (string) $e->getCode(),
+            'msg'  => $e->getMessage(),
+        ]);
+
+        return match ((int) $e->getCode()) {
+            2002, 2003, 2006 => "Cannot reach the MySQL server at {$hostname}:{$port}. Check that MySQL is running and that the host and port are correct.",
+            1045             => 'MySQL rejected the database username or password.',
+            1044, 1142, 1227 => 'That MySQL user is not allowed to create or use this database. Use an account with CREATE privileges.',
+            default          => 'Could not set up the client database. Check the connection details; see the application log for details.',
+        };
+    }
+
     protected function createDatabase(
         string $hostname,
         string $username,
@@ -302,15 +393,20 @@ class TenantProvisionService
         int $port,
         string $database
     ): void {
+        if (preg_match('/^[A-Za-z0-9_]{1,64}$/', $database) !== 1) {
+            throw new RuntimeException('Invalid database name.');
+        }
+
         $mysqli = @new \mysqli($hostname, $username, $password, '', $port);
         if ($mysqli->connect_errno) {
-            throw new RuntimeException($mysqli->connect_error ?: 'MySQL connect failed');
+            throw new RuntimeException($mysqli->connect_error ?: 'MySQL connect failed', (int) $mysqli->connect_errno);
         }
         $dbName = $mysqli->real_escape_string($database);
         if (! $mysqli->query("CREATE DATABASE IF NOT EXISTS `{$dbName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci")) {
-            $err = $mysqli->error;
+            $err   = $mysqli->error;
+            $errno = (int) $mysqli->errno;
             $mysqli->close();
-            throw new RuntimeException($err ?: 'CREATE DATABASE failed');
+            throw new RuntimeException($err ?: 'CREATE DATABASE failed', $errno);
         }
         $mysqli->close();
     }

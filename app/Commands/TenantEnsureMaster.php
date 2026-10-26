@@ -20,9 +20,11 @@ class TenantEnsureMaster extends BaseCommand
     protected $group       = 'Tenancy';
     protected $name        = 'tenant:ensure-master';
     protected $description = 'Create sateri_master database (optional) and tenancy tables.';
-    protected $usage       = 'tenant:ensure-master [--create-db]';
+    protected $usage       = 'tenant:ensure-master [--create-db] [--admin-email=...] [--admin-password=...]';
     protected $options     = [
-        '--create-db' => 'CREATE DATABASE sateri_master if missing',
+        '--create-db'       => 'CREATE DATABASE sateri_master if missing',
+        '--admin-email'     => 'Platform super admin email (default platform@sateri.local)',
+        '--admin-password'  => 'Platform super admin password, min 12 chars (default: random, printed once)',
     ];
 
     public function run(array $params)
@@ -60,6 +62,7 @@ class TenantEnsureMaster extends BaseCommand
                 $this->createTenants($forge);
                 $this->createLoginIndex($forge);
                 $this->createPhoneRoutes($forge);
+                $this->createHostRoutes($forge);
                 $this->createPlatformSettings($forge);
                 $this->createPlatformAdmins($forge);
                 $this->createPlatformAdminMeta($forge);
@@ -74,12 +77,32 @@ class TenantEnsureMaster extends BaseCommand
             $repo->ensureTenantOwnerColumn();
             $repo->ensurePrimaryAdminColumn();
             $repo->ensureAdminMetaTable();
-            CLI::write('Master columns synced: tenants.platform_admin_id, platform_admins.is_primary, platform_admin_meta.', 'green');
-            if ($repo->findPlatformAdminByEmail('platform@sateri.local') === null) {
-                $repo->ensurePlatformAdmin('platform@sateri.local', 'Platform@123', 'Platform Super Admin');
-                CLI::write('Platform admin: platform@sateri.local / Platform@123', 'yellow');
+            $repo->ensureHostRoutesTable();
+            CLI::write('Master columns synced: tenants.platform_admin_id, platform_admins.is_primary, platform_admin_meta, tenant_host_routes.', 'green');
+            $adminEmail = strtolower(trim((string) (CLI::getOption('admin-email') ?? 'platform@sateri.local')));
+            if (! filter_var($adminEmail, FILTER_VALIDATE_EMAIL)) {
+                CLI::error('Invalid --admin-email.');
+
+                return;
+            }
+
+            if ($repo->findPlatformAdminByEmail($adminEmail) === null) {
+                // Never ship a known default password: use the supplied one or generate a random one.
+                $supplied = (string) (CLI::getOption('admin-password') ?? env('PLATFORM_ADMIN_PASSWORD', ''));
+                $password = $supplied !== '' ? $supplied : bin2hex(random_bytes(10));
+                if (strlen($password) < 12) {
+                    CLI::error('Platform admin password must be at least 12 characters.');
+
+                    return;
+                }
+
+                $repo->ensurePlatformAdmin($adminEmail, $password, 'Platform Super Admin');
+                CLI::write("Platform admin created: {$adminEmail}", 'green');
+                if ($supplied === '') {
+                    CLI::write("Generated password (shown once, store it safely): {$password}", 'yellow');
+                }
             } else {
-                CLI::write('Platform admin ready: platform@sateri.local', 'green');
+                CLI::write("Platform admin ready: {$adminEmail}", 'green');
             }
         } catch (Throwable $e) {
             CLI::error('Master schema failed: ' . $e->getMessage());
@@ -141,6 +164,21 @@ class TenantEnsureMaster extends BaseCommand
         $forge->addUniqueKey('phone_number_id');
         $forge->addKey('tenant_key');
         $forge->createTable('tenant_phone_routes', true);
+    }
+
+    protected function createHostRoutes($forge): void
+    {
+        $forge->addField([
+            'id' => ['type' => 'INT', 'unsigned' => true, 'auto_increment' => true],
+            'host' => ['type' => 'VARCHAR', 'constraint' => 191],
+            'tenant_key' => ['type' => 'VARCHAR', 'constraint' => 64],
+            'created_at' => ['type' => 'DATETIME', 'null' => true],
+            'updated_at' => ['type' => 'DATETIME', 'null' => true],
+        ]);
+        $forge->addKey('id', true);
+        $forge->addUniqueKey('host');
+        $forge->addKey('tenant_key');
+        $forge->createTable('tenant_host_routes', true);
     }
 
     protected function createPlatformSettings($forge): void
