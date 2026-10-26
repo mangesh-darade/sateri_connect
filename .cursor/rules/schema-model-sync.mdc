@@ -1,0 +1,11 @@
+---
+description: Every table/column change must update migration, schema snapshot and Model
+alwaysApply: true
+---
+
+# Schema + Model Sync Rule
+
+On any new table or column change, update all three in the same change:
+1. Migration in `app/Database/Migrations` (guard with `tableExists`/`fieldExists`; master tables go in `TenantEnsureMaster`).
+2. `app/Database/Schema/tables.php` (regenerate with `php spark schema:snapshot -tenant <key>`).
+3. The Model in `app/Models` (`$allowedFields`, casts, validation; new table = new Model).

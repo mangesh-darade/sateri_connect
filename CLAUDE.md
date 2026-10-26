@@ -19,7 +19,7 @@ vendor/bin/phpunit --filter testName tests/SomeTest.php
 
 - Never run `php spark migrate -g master`: it would apply all app migrations onto the master DB.
 - `phpunit.dist.xml` points at `tests/unit`, `tests/database`, `tests/session`, but most tests sit directly in `tests/`, so pass the file path. At least `tests/TenantDatabaseGuardTest.php` fails on its own bootstrap (`Constant FCPATH already defined`).
-- Background workers (cron, every minute): `queue:process`, `campaigns:process`, `automations:process`, `queue:retry`; daily: `templates:sync`, `logs:cleanup [days]`. CLI workers need a tenant: set `database.tenant = <key>` in `.env` or run once per tenant.
+- Background workers (cron, every minute): `queue:process`, `campaigns:process`, `automations:process`, `queue:retry`; every 10 minutes: `payments:reconcile` (credits paid Mswipe links); every 5 minutes: `stats:refresh` (recomputes the cached client numbers behind the All clients page); daily: `templates:sync`, `logs:cleanup [days]`, `wallet:settle` (refunds wallet charges for messages never delivered within 30 days; loops all active clients). CLI workers need a tenant: set `database.tenant = <key>` in `.env` or run once per tenant.
 - Other `app/Commands/*` are diagnostics (`schema:*`, `meta:webhook-diag`, `permissions:audit`, `*:test`); check `php spark list`.
 
 ## Architecture
@@ -54,5 +54,9 @@ Controllers (thin) → `app/Libraries/*Service` (business logic, external APIs) 
 - **Meta sending**: check `WhatsAppTemplateSendGuard::resolveApprovedTemplate()` before templates, build payloads with `WhatsAppTemplatePayload`/`WhatsAppTemplateVariables`, check `WhatsAppSendWindow` for free-form. Opt-in goes through `WhatsAppConsentService` (never overrides STOP).
 - **Frontend**: jQuery `$.ajax` only (with `beforeSend`/`complete`/`error`), `APP.toast()` for feedback, CSRF token from the page, no business logic in inline `<script>`; page JS goes in the `scripts` section or `public/assets/js/`. All UI text must be **English** even though chat with the team may be Marathi/Hinglish.
 - Every state-changing action must call `log_activity($action, $module, $description, $metadata)`.
-- Schema changes need the matching migration/schema update in the same change.
+- **Schema sync (always)**: whenever a table or column is created or changed, do all three in the same change: (1) a migration in `app/Database/Migrations`, (2) the schema snapshot `app/Database/Schema/tables.php`, (3) the matching Model (`$allowedFields`, casts, validation) or a new Model for a new table. See `.agents/rules/schema-model-sync.md`.
 - Never commit unless the user explicitly asks, and ask before committing.
+
+## WhatsApp wallet and online payments
+
+`docs/WALLET_AND_PAYMENTS.md` covers the wallet (rates, markup, GST, spending limits), Razorpay recharge, invoices and the cron jobs. Pure-logic checks: `php tests/WalletPaymentsUnitTest.php`.
