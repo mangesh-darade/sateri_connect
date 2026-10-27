@@ -63,7 +63,7 @@
                     <div class="mb-1">
                         <label class="form-label">Message</label>
                         <textarea class="form-control" name="message" rows="5" maxlength="4096" required
-                                  placeholder="Hi {{name}}, our plans start at ₹999/month."></textarea>
+                                  placeholder="Hi {{name}}, our plans start at {{price}} per month."></textarea>
                         <div class="form-text">
                             Click to insert:
                             <?php foreach (array_merge(['name', 'mobile', 'email'], array_keys($attributeDefs ?? [])) as $ph): ?>

@@ -278,7 +278,7 @@
             + '<button type="button" class="btn-close js-ai-close" aria-label="Close"></button></div>'
             + '<div class="p-3 d-flex flex-column gap-2 flex-grow-1 overflow-auto">'
             + '<label class="form-label fw-semibold small mb-0">What should the email say?</label>'
-            + '<textarea class="form-control js-ai-brief" rows="7" maxlength="2000" placeholder="e.g. Mango season sale: 20% off on Alphonso mangoes till Sunday, free delivery above ₹999, order on WhatsApp"></textarea>'
+            + '<textarea class="form-control js-ai-brief" rows="7" maxlength="2000" placeholder="e.g. Mango season sale: 20% off on Alphonso mangoes till Sunday, free delivery on big orders, order on WhatsApp"></textarea>'
             + '<div class="row g-2"><div class="col-6"><label class="form-label small text-muted mb-1">Tone</label>'
             + '<select class="form-select form-select-sm js-ai-tone"><option value="friendly">Friendly</option><option value="professional">Professional</option>'
             + '<option value="promotional">Promotional</option><option value="urgent">Urgent</option><option value="formal">Formal</option></select></div>'
