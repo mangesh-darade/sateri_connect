@@ -590,7 +590,7 @@ class PlatformClients extends BaseController
         if ((new TenantConnection())->apply($key, 'platform')) {
             TenantContext::set($key, 'platform');
             $wallet = new \App\Libraries\WalletService();
-            $result = $wallet->setCurrency(\App\Libraries\WhatsAppCountries::currencyOf($country));
+            $result = $wallet->setCurrency((new \App\Libraries\WalletRateCard())->currencyForCountry($country), true);
             $msg .= $result['ok'] ? ' Wallet currency is ' . $wallet->currency() . '.' : ' ' . $result['message'];
         }
 

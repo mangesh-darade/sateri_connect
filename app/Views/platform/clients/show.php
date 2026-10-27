@@ -24,8 +24,8 @@ $emailReady = ! empty($stats['email_ready']);
 $emailProvider = (string) ($stats['email_provider_label'] ?? '—');
 $clientUrl  = 'platform/clients/' . rawurlencode($key);
 
-$cur       = (string) ($stats['wallet_currency'] ?? 'INR');
-$symbol    = strtoupper($cur) === 'INR' ? '₹' : strtoupper($cur) . ' ';
+$cur       = (string) ($stats['wallet_currency'] ?? \App\Libraries\Currency::base());
+$symbol    = \App\Libraries\WhatsAppCountries::symbolOf((string) $cur);
 $balance   = (float) ($stats['wallet_balance'] ?? 0);
 $walletOn  = ! empty($stats['wallet_enabled']);
 $cCode     = strtolower(trim((string) ($tenant['country_code'] ?? '')));
@@ -363,7 +363,7 @@ $stat = static fn (string $label, string $value, string $sub = '', string $cls =
                 <span class="platform-badge <?= $walletOn ? 'platform-badge-ok' : 'platform-badge-warn' ?>"><?= $walletOn ? 'On' : 'Off' ?></span>
             </div>
             <div class="pfd-balance"><?= esc($symbol) ?><?= number_format($balance, 2) ?></div>
-            <p class="pfd-muted"><?= $walletOn ? 'Messages are charged from this balance.' : 'Messages are not charged until the wallet is turned on.' ?></p>
+            <p class="pfd-muted"><?= $walletOn ? 'Messages are charged from this balance.' : 'Sending is paused until the wallet is turned on. Incoming messages still arrive.' ?></p>
             <div class="pfd-row-actions">
                 <button type="button" class="btn-pf btn-pf-primary js-add-money" data-url="<?= site_url($clientUrl . '/wallet') ?>" data-name="<?= esc($name, 'attr') ?>" data-balance="<?= esc($symbol . number_format($balance, 2), 'attr') ?>" data-cur="<?= esc($cur, 'attr') ?>"><i class="fas fa-plus" aria-hidden="true"></i> Add money</button>
                 <a class="btn-pf" href="<?= site_url($clientUrl . '/wallet') ?>">Turn on/off, alerts and GST</a>

@@ -34,7 +34,7 @@ $to     = min($total, $page * $per);
 $window = array_values(array_unique(array_filter([1, $page - 2, $page - 1, $page, $page + 1, $page + 2, $pages], static fn (int $n): bool => $n >= 1 && $n <= $pages)));
 sort($window);
 
-$symbolOf = static fn (string $cur): string => strtoupper($cur) === 'INR' ? '₹' : strtoupper($cur) . ' ';
+$symbolOf = static fn (string $cur): string => \App\Libraries\WhatsAppCountries::symbolOf($cur);
 $initials = static function (string $name): string {
     $parts = preg_split('/[\s_\-]+/', trim($name)) ?: [];
     $out   = '';
@@ -83,7 +83,7 @@ $hue = static fn (string $key): int => hexdec(substr(md5($key), 0, 4)) % 360;
             <div class="pfc-kpi"><span>Wallet on</span><strong><?= $fmt($counts['walleton']) ?><small>/ <?= $fmt($counts['all']) ?></small></strong></div>
             <div class="pfc-kpi">
                 <span>Wallet balance (all)</span>
-                <strong><?= isset($walletTotal) && $walletTotal !== null ? '₹' . number_format((float) $walletTotal, 2) : '—' ?></strong>
+                <strong><?= isset($walletTotal) && $walletTotal !== null ? \App\Libraries\Currency::symbol(\App\Libraries\Currency::base()) . number_format((float) $walletTotal, 2) : '—' ?></strong>
                 <?php if (! empty($walletTotalNote)): ?><em><?= esc((string) $walletTotalNote) ?></em><?php endif; ?>
             </div>
         </div>
@@ -168,7 +168,7 @@ $hue = static fn (string $key): int => hexdec(substr(md5($key), 0, 4)) % 360;
                     $badgeClass = $health === 'ok' ? 'platform-badge-ok' : ($health === 'warn' ? 'platform-badge-warn' : 'platform-badge-down');
                     $cc         = strtolower(trim((string) ($c['country_code'] ?? '')));
                     $country    = $cc !== '' ? \App\Libraries\WhatsAppCountries::nameOf($cc) : '';
-                    $cur        = (string) ($c['wallet_currency'] ?? 'INR');
+                    $cur        = (string) ($c['wallet_currency'] ?? \App\Libraries\Currency::base());
                     $balance    = (float) ($c['wallet_balance'] ?? 0);
                     $walletOn   = ! empty($c['wallet_enabled']);
                     $failed     = (int) ($c['failed'] ?? 0);

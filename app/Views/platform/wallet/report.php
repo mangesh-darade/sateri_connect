@@ -8,8 +8,8 @@
 <?php
 $f       = $filters ?? [];
 $t       = $report['totals'] ?? [];
-$money   = static fn (float $n, int $dp = 2): string => '₹' . number_format($n, $dp);
-$native  = static fn (float $n, string $c, int $dp = 2): string => ($c === 'INR' ? '₹' : $c . ' ') . number_format($n, $dp);
+$money   = static fn (float $n, int $dp = 2): string => \App\Libraries\Currency::symbol(\App\Libraries\Currency::base()) . number_format($n, $dp);
+$native  = static fn (float $n, string $c, int $dp = 2): string => \App\Libraries\WhatsAppCountries::symbolOf($c) . number_format($n, $dp);
 $typeLabel = ['credit' => 'Recharge', 'debit' => 'Debit', 'refund' => 'Refund'];
 $typeClass = ['credit' => 'is-credit', 'debit' => 'is-debit', 'refund' => 'is-refund'];
 $catColor  = ['marketing' => '#e11d48', 'utility' => '#0e7490', 'authentication' => '#7c3aed', 'service' => '#16a34a'];
@@ -129,7 +129,7 @@ sort($window);
     <?php if (! empty($report['mixed'])): ?>
         <div class="pfw-note">
             <i class="fas fa-circle-info" aria-hidden="true"></i>
-            <span>Clients have different wallet currencies, so totals are converted to INR at the current exchange rates.
+            <span>Clients have different wallet currencies, so totals are converted to <?= esc(\App\Libraries\Currency::base()) ?> at the current exchange rates.
                 <?php if (! empty($report['unconverted'])): ?><strong> No rate for <?= esc(implode(', ', $report['unconverted'])) ?>; those clients are added as they are.</strong> <a href="<?= site_url('platform/wa-rates') ?>">Set exchange rates</a><?php endif; ?>
             </span>
         </div>

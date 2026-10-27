@@ -9,8 +9,8 @@
 $wallet   = $wallet ?? [];
 $tenant   = $tenant ?? [];
 $enabled  = (int) ($wallet['enabled'] ?? 0) === 1;
-$currency = (string) ($wallet['currency'] ?? 'INR');
-$symbol   = $currency === 'INR' ? '₹' : $currency . ' ';
+$currency = (string) ($wallet['currency'] ?? \App\Libraries\Currency::base());
+$symbol   = \App\Libraries\WhatsAppCountries::symbolOf((string) $currency);
 $money    = static fn (float $n, int $dp = 2): string => number_format($n, $dp);
 $action   = site_url('platform/clients/' . rawurlencode((string) ($tenant['key'] ?? '')) . '/wallet');
 $typeLabel = ['credit' => 'Recharge', 'debit' => 'Message / deduction', 'refund' => 'Refund'];
@@ -205,9 +205,9 @@ $typeLabel = ['credit' => 'Recharge', 'debit' => 'Message / deduction', 'refund'
             { data: 'details', orderable: true, render: function (v, t) { return t === 'display' ? esc(v) : v; } },
             { data: null, className: 'num', render: function (r, t) {
                 if (t !== 'display') return r.amount;
-                return '<span class="' + (r['in'] ? 'is-in' : 'is-out') + '">' + (r['in'] ? '+' : '−') + esc(sym) + esc(r.amount) + '</span>';
+                return '<span class="' + (r['in'] ? 'is-in' : 'is-out') + '">' + (r['in'] ? '+' : '−') + esc(r.symbol || sym) + esc(r.amount) + '</span>';
             } },
-            { data: null, className: 'num', render: function (r, t) { return t === 'display' ? esc(sym) + esc(r.balance) : r.balance; } }
+            { data: null, className: 'num', render: function (r, t) { return t === 'display' ? esc(r.symbol || sym) + esc(r.balance) : r.balance; } }
         ],
         columnDefs: [{ targets: 0, className: 'nowrap' }],
         language: {
