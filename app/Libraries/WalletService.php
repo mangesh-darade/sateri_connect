@@ -79,7 +79,7 @@ class WalletService
 
     public function currency(): string
     {
-        return (string) ($this->wallet()['currency'] ?? 'INR');
+        return (string) ($this->wallet()['currency'] ?? Currency::base());
     }
 
     /**
@@ -100,7 +100,7 @@ class WalletService
             $state = $balance <= 0 ? 'empty' : ($threshold > 0 && $balance < $threshold ? 'low' : 'ok');
         }
 
-        return ['state' => $state, 'balance' => $balance, 'threshold' => $threshold, 'currency' => (string) ($w['currency'] ?? 'INR')];
+        return ['state' => $state, 'balance' => $balance, 'threshold' => $threshold, 'currency' => (string) ($w['currency'] ?? Currency::base())];
     }
 
     /**
@@ -138,30 +138,128 @@ class WalletService
     }
 
     /**
+     * Keep the wallet in the currency of the client's country. When the country was saved (or changed) without the
+     * wallet following, the balance and limits are converted at the platform exchange rate, exactly as when the
+     * platform admin changes the country. Safe to call often: it checks at most once every few minutes per client
+     * database, does nothing when the country is unknown or already matches, and never throws.
+     *
+     * @return array{changed: bool, message: string}
+     */
+    public function alignCurrencyToCountry(): array
+    {
+        $none = ['changed' => false, 'message' => ''];
+
+        try {
+            $cache = cache();
+            $key   = 'wallet_currency_aligned_' . md5((string) $this->db()->getDatabase());
+            if ($cache->get($key)) {
+                return $none;
+            }
+
+            $tenant = (string) (TenantContext::get() ?? '');
+            if ($tenant === '' || ! MasterTenantRepository::masterConfigured()) {
+                return $none;
+            }
+            // Throws when the master database is unreachable; nothing is remembered then, so the next page retries.
+            $country = (new MasterTenantRepository())->tenantCountry($tenant);
+            // Remember the check only after the master answered. No country: look again soon, it may be set any minute.
+            $cache->save($key, 1, $country === '' ? 60 : 300);
+            if ($country === '' || $country === 'other' || WhatsAppCountries::nameOf($country) === '') {
+                return $none;
+            }
+            $target = (new WalletRateCard())->currencyForCountry($country);
+            if ($target === strtoupper($this->currency())) {
+                return $none;
+            }
+
+            $result = $this->setCurrency($target, true);
+            if ($result['ok']) {
+                log_activity('update', 'wallet', 'Wallet currency followed the client country', ['country_code' => $country, 'currency' => $target]);
+            }
+
+            return ['changed' => $result['ok'], 'message' => (string) $result['message']];
+        } catch (Throwable $e) {
+            log_message('warning', 'WalletService::alignCurrencyToCountry failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return $none;
+        }
+    }
+
+    /**
      * Wallet currency, taken from the client's country. Only while the wallet has no history, because
      * old amounts would otherwise change meaning.
      *
      * @return array{ok: bool, status: int, message: string}
      */
-    public function setCurrency(string $currency): array
+    public function setCurrency(string $currency, bool $convertBalance = false): array
     {
         $currency = strtoupper(trim($currency));
-        if (! in_array($currency, WhatsAppCountries::CURRENCIES, true)) {
+        if (! Currency::isKnown($currency)) {
             return $this->fail(422, 'Unsupported wallet currency.');
         }
         if ($currency === strtoupper($this->currency())) {
             return $this->ok('Wallet currency unchanged.');
         }
 
-        return $this->run(function () use ($currency): array {
+        return $this->run(function () use ($currency, $convertBalance): array {
             $used = (int) $this->db()->table('wallet_transactions')->countAllResults() > 0
                 || abs((float) ($this->wallet()['balance'] ?? 0)) > 0;
-            if ($used) {
+            if ($used && ! $convertBalance) {
                 return $this->fail(422, 'The wallet already has a balance or transactions in ' . $this->currency() . ', so its currency was not changed.');
             }
+            if (! $used) {
+                return $this->saveWallet(['currency' => $currency]);
+            }
 
-            return $this->saveWallet(['currency' => $currency]);
+            return $this->convertWalletCurrency(strtoupper($this->currency()), $currency);
         });
+    }
+
+    /**
+     * Move a used wallet to another currency at the platform exchange rate, in ONE statement inside a transaction.
+     * The wallet row is locked first, so a charge or recharge cannot land between reading and writing the balance,
+     * and the `WHERE currency = from` guard makes a repeated call a no-op. Every ledger row saved before currencies
+     * were recorded is stamped with the old currency, so history keeps its meaning.
+     *
+     * @return array{ok: bool, status: int, message: string}
+     */
+    protected function convertWalletCurrency(string $from, string $to): array
+    {
+        $factor = (new WalletRateCard())->convert(1.0, $from, $to);
+        if ($factor === null || $factor <= 0) {
+            return $this->fail(422, 'No exchange rate is set for ' . $from . ' to ' . $to . ', so the wallet currency was not changed. Add it under Wallet rates.');
+        }
+
+        $db = $this->db();
+        $db->transStart();
+        $row = $db->query('SELECT `currency`, `balance` FROM `wallets` WHERE `id` = 1 FOR UPDATE')->getRowArray();
+        if (strtoupper((string) ($row['currency'] ?? '')) !== $from) {
+            $db->transComplete();
+
+            return $this->ok('Wallet currency unchanged.');
+        }
+        $oldBalance = (float) ($row['balance'] ?? 0);
+
+        $db->query('UPDATE `wallet_transactions` SET `currency` = ? WHERE `currency` IS NULL', [$from]);
+        $db->query(
+            'UPDATE `wallets` SET `currency` = ?, `balance` = ROUND(`balance` * ?, 4), `low_balance_alert` = ROUND(`low_balance_alert` * ?, 2),'
+            . ' `daily_cap` = ROUND(`daily_cap` * ?, 2), `monthly_cap` = ROUND(`monthly_cap` * ?, 2), `auto_topup_amount` = ROUND(`auto_topup_amount` * ?, 2),'
+            . ' `updated_at` = ? WHERE `id` = 1 AND `currency` = ?',
+            [$to, $factor, $factor, $factor, $factor, $factor, date('Y-m-d H:i:s'), $from]
+        );
+        $changed = $db->affectedRows() > 0;
+        $db->transComplete();
+
+        if (! $db->transStatus()) {
+            return $this->fail(500, 'Could not change the wallet currency.');
+        }
+        if ($changed) {
+            log_activity('update', 'wallet', 'Wallet currency changed with balance converted', [
+                'from' => $from, 'to' => $to, 'rate' => round($factor, 6), 'old_balance' => $oldBalance, 'new_balance' => round($oldBalance * $factor, 4),
+            ]);
+        }
+
+        return $this->ok('Wallet updated.');
     }
 
     /**
@@ -211,15 +309,22 @@ class WalletService
     {
         try {
             $rows = $this->db()->table('wallet_transactions')
-                ->select('type, COALESCE(SUM(amount), 0) AS a', false)
+                ->select('type, currency, COALESCE(SUM(amount), 0) AS a', false)
                 ->whereIn('type', ['debit', 'refund'])->where('category !=', 'manual')
-                ->where('created_at >=', $from)->groupBy('type')->get()->getResultArray();
+                ->where('created_at >=', $from)->groupBy('type, currency')->get()->getResultArray();
         } catch (Throwable) {
             return 0.0;
         }
-        $net = 0.0;
+        $wallet = strtoupper($this->currency());
+        $card   = new WalletRateCard();
+        $net    = 0.0;
         foreach ($rows as $r) {
-            $net += ($r['type'] === 'refund' ? -1 : 1) * (float) $r['a'];
+            $a   = (float) $r['a'];
+            $cur = strtoupper(trim((string) ($r['currency'] ?? '')));
+            if ($cur !== '' && $cur !== $wallet) {
+                $a = $card->convert($a, $cur, $wallet) ?? $a;
+            }
+            $net += ($r['type'] === 'refund' ? -1 : 1) * $a;
         }
 
         return max(0.0, $net);
@@ -273,8 +378,8 @@ class WalletService
 
         $card = new WalletRateCard();
         $rate = $card->rateFor($digits, $category);
-        if ($rate === null || ($rate['rate'] <= 0 && $category !== 'service')) {
-            // A zero marketing, utility or authentication rate is a missing rate, never a free message.
+        if ($rate === null || $rate['rate'] <= 0) {
+            // A zero rate is a missing rate, never a free message (service replies are free only within the monthly allowance).
             return ['error' => 'No WhatsApp rate is set for this country. Ask the platform admin to add it.'];
         }
 
@@ -320,6 +425,9 @@ class WalletService
         return ['total' => round($total, 4), 'messages' => count($phones), 'unpriced' => $unpriced];
     }
 
+    /** Shown when something tries to send while the wallet is off. Receiving messages is not affected. */
+    public const OFF_MESSAGE = 'The WhatsApp wallet is off, so sending is paused. Incoming messages still arrive. Ask your platform admin to turn the wallet on.';
+
     /**
      * Debit one outbound message. Returns txn_id (0 when nothing was charged).
      *
@@ -328,7 +436,7 @@ class WalletService
     public function charge(string $phone, string $category): array
     {
         if (! $this->isEnabled()) {
-            return $this->ok('Wallet is off.', ['txn_id' => 0]);
+            return $this->fail(402, self::OFF_MESSAGE);
         }
 
         if ($category === 'service' && $this->freeServiceUsed() < self::FREE_SERVICE_PER_MONTH) {
@@ -659,6 +767,9 @@ class WalletService
                 'in'      => in_array($type, ['credit', 'refund'], true),
                 'amount'  => number_format((float) ($t['amount'] ?? 0), 4),
                 'balance' => number_format((float) ($t['balance_after'] ?? 0), 2),
+                // The currency the row was saved in; '' (older rows) means the wallet's current currency.
+                'currency' => strtoupper(trim((string) ($t['currency'] ?? ''))),
+                'symbol'   => WhatsAppCountries::symbolOf((string) ($t['currency'] ?? '')),
             ];
         }
 
@@ -727,7 +838,7 @@ class WalletService
                 ->where('u.status', 'active')->where('u.deleted_at', null)
                 ->get()->getResultArray();
 
-            $symbol  = ($w['currency'] ?? 'INR') === 'INR' ? '₹' : ($w['currency'] ?? '') . ' ';
+            $symbol  = Currency::symbol((string) ($w['currency'] ?? Currency::base()));
             $title   = $empty ? 'WhatsApp wallet is empty' : 'WhatsApp wallet balance is low';
             $message = ($empty ? 'A message could not be sent because the wallet has no balance. ' : '')
                 . 'Balance: ' . $symbol . number_format($balance, 2) . '. Contact your platform admin to recharge.';
@@ -800,9 +911,25 @@ class WalletService
             return;
         }
 
-        $db->query('UPDATE `wallets` SET `balance` = `balance` + ?, `updated_at` = ? WHERE `id` = 1', [(float) $debit['amount'], date('Y-m-d H:i:s')]);
-        $this->insertTxn('refund', (float) $debit['amount'], (string) ($debit['category'] ?? ''), (string) ($debit['country_code'] ?? ''), $reference, $reason, null,
-            ['base_amount' => $debit['base_amount'] ?? null, 'tax_amount' => $debit['tax_amount'] ?? null]);
+        // Give back what was taken, in today's wallet currency: a debit saved in another currency (before the wallet
+        // was converted) is converted at the platform rate, so an amount saved in one currency is never added as if it were another.
+        $amount = (float) $debit['amount'];
+        $base   = $debit['base_amount'] ?? null;
+        $tax    = $debit['tax_amount'] ?? null;
+        $from   = strtoupper(trim((string) ($debit['currency'] ?? '')));
+        $to     = strtoupper($this->currency());
+        if ($from !== '' && $from !== $to) {
+            $factor = (new WalletRateCard())->convert(1.0, $from, $to);
+            if ($factor !== null && $factor > 0) {
+                $amount = round($amount * $factor, 4);
+                $base   = $base !== null ? round((float) $base * $factor, 4) : null;
+                $tax    = $tax !== null ? round((float) $tax * $factor, 4) : null;
+            }
+        }
+
+        $db->query('UPDATE `wallets` SET `balance` = `balance` + ?, `updated_at` = ? WHERE `id` = 1', [$amount, date('Y-m-d H:i:s')]);
+        $this->insertTxn('refund', $amount, (string) ($debit['category'] ?? ''), (string) ($debit['country_code'] ?? ''), $reference, $reason, null,
+            ['base_amount' => $base, 'tax_amount' => $tax]);
         $db->transComplete();
     }
 
@@ -825,10 +952,13 @@ class WalletService
     protected function insertTxn(string $type, float $amount, ?string $category, ?string $country, ?string $reference, string $description, ?int $userId, array $extra = []): int
     {
         $db = $this->db();
-        $balance = (float) ($db->table('wallets')->select('balance')->where('id', 1)->get()->getRow('balance') ?? 0);
+        $w = $db->table('wallets')->select('balance, currency')->where('id', 1)->get()->getRowArray();
+        $balance = (float) ($w['balance'] ?? 0);
+        $currency = strtoupper(trim((string) ($w['currency'] ?? '')));
         $db->table('wallet_transactions')->insert([
             'type'          => $type,
             'amount'        => $amount,
+            'currency'      => $currency !== '' ? $currency : null,
             'balance_after' => $balance,
             'category'      => $category !== '' ? $category : null,
             'country_code'  => $country !== '' ? $country : null,
@@ -876,7 +1006,7 @@ class WalletService
      */
     protected function emptyWallet(): array
     {
-        return ['id' => 1, 'enabled' => 0, 'balance' => 0, 'currency' => 'INR', 'low_balance_alert' => 0, 'tax_percent' => 0, 'markup_percent' => 0, 'daily_cap' => 0, 'monthly_cap' => 0, 'auto_topup_amount' => 0, 'last_low_alert_at' => null];
+        return ['id' => 1, 'enabled' => 0, 'balance' => 0, 'currency' => Currency::base(), 'low_balance_alert' => 0, 'tax_percent' => 0, 'markup_percent' => 0, 'daily_cap' => 0, 'monthly_cap' => 0, 'auto_topup_amount' => 0, 'last_low_alert_at' => null];
     }
 
     /**

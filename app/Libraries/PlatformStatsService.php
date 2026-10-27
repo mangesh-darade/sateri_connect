@@ -364,7 +364,7 @@ class PlatformStatsService
             'wallet_state'    => 'off',
             'wallet_enabled'  => false,
             'wallet_balance'  => 0.0,
-            'wallet_currency' => 'INR',
+            'wallet_currency' => Currency::base(),
         ] + $this->emptyEmailStats();
 
         if ($key === '') {
@@ -405,7 +405,7 @@ class PlatformStatsService
             $base['wallet_state']    = $walletSvc->health($wallet)['state'];
             $base['wallet_enabled']  = (int) ($wallet['enabled'] ?? 0) === 1;
             $base['wallet_balance']  = (float) ($wallet['balance'] ?? 0);
-            $base['wallet_currency'] = (string) ($wallet['currency'] ?? 'INR');
+            $base['wallet_currency'] = (string) ($wallet['currency'] ?? Currency::base());
 
             if ($db->tableExists('messages')) {
                 $msg = $db->table('messages')

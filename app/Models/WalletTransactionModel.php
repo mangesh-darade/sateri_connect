@@ -23,6 +23,7 @@ class WalletTransactionModel extends Model
     protected $allowedFields    = [
         'type',
         'amount',
+        'currency',
         'balance_after',
         'category',
         'country_code',

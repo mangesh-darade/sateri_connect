@@ -207,10 +207,11 @@ class WalletReportService
                     continue;
                 }
                 $wallet = $db->tableExists('wallets') ? $db->table('wallets')->where('id', 1)->get()->getRowArray() : null;
-                $cur    = strtoupper((string) ($wallet['currency'] ?? 'INR'));
+                $base   = Currency::base();
+                $cur    = strtoupper((string) ($wallet['currency'] ?? $base));
                 $factor = 1.0;
-                if ($cur !== 'INR') {
-                    $conv   = $card->convert(1.0, $cur, 'INR');
+                if ($cur !== $base) {
+                    $conv   = $card->convert(1.0, $cur, $base);
                     $factor = $conv ?? 1.0;
                 }
 
@@ -314,7 +315,7 @@ class WalletReportService
         }
 
         $wallet = $db->tableExists('wallets') ? $db->table('wallets')->where('id', 1)->get()->getRowArray() : null;
-        $c = ['key' => $key, 'name' => $name, 'currency' => (string) ($wallet['currency'] ?? 'INR'), 'balance' => (float) ($wallet['balance'] ?? 0), 'enabled' => (int) ($wallet['enabled'] ?? 0),
+        $c = ['key' => $key, 'name' => $name, 'currency' => (string) ($wallet['currency'] ?? Currency::base()), 'balance' => (float) ($wallet['balance'] ?? 0), 'enabled' => (int) ($wallet['enabled'] ?? 0),
               'recharged' => 0.0, 'spent' => 0.0, 'refunded' => 0.0, 'deducted' => 0.0, 'messages' => 0,
               'sent' => 0, 'delivered' => 0, 'read' => 0, 'failed' => 0, 'replies' => 0,
               'billed' => 0.0, 'cost' => 0.0, 'tax' => 0.0, 'margin' => 0.0];
@@ -621,12 +622,12 @@ class WalletReportService
                 continue;
             }
 
-            // Clients can have different wallet currencies; platform totals are shown in INR.
+            // Clients can have different wallet currencies; platform totals are shown in the base currency.
             $factor = 1.0;
-            $cur    = strtoupper((string) ($p['client']['currency'] ?? 'INR'));
-            if ($toInr && $cur !== 'INR') {
+            $cur    = strtoupper((string) ($p['client']['currency'] ?? Currency::base()));
+            if ($toInr && $cur !== Currency::base()) {
                 $mixed = true;
-                $f = $card->convert(1.0, $cur, 'INR');
+                $f = $card->convert(1.0, $cur, Currency::base());
                 if ($f === null) {
                     $unconverted[$cur] = true;
                 } else {

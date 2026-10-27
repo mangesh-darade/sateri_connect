@@ -134,5 +134,12 @@ check('empty reply = unknown', MswipeService::parseStatus([])['state'] === 'unkn
 $st = MswipeService::parseStatus($mk(1));
 check('status fields parsed', $st['amount'] === 1180.0 && $st['order_id'] === 'WABC' && $st['ipg_id'] === 'IPG1' && $st['rrn'] === 'RRN1');
 
+// ---- currency symbols follow the client's currency
+check('INR symbol', WhatsAppCountries::symbolOf('INR') === '₹');
+check('USD / EUR / GBP symbols', WhatsAppCountries::symbolOf('USD') === '$' && WhatsAppCountries::symbolOf('EUR') === '€' && WhatsAppCountries::symbolOf('GBP') === '£');
+check('AED has no common symbol, so it shows the code and a space', WhatsAppCountries::symbolOf('AED') === 'AED ');
+check('symbol lookup ignores case and spaces', WhatsAppCountries::symbolOf(' inr ') === '₹');
+check('unknown or empty currency', WhatsAppCountries::symbolOf('XYZ') === 'XYZ ' && WhatsAppCountries::symbolOf('') === '');
+
 echo "\nPassed: {$pass}  Failed: {$fail}\n";
 exit($fail > 0 ? 1 : 0);

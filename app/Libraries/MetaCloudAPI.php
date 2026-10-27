@@ -2054,12 +2054,16 @@ class MetaCloudAPI
             'to'                => $phone,
         ], $message);
 
-        // Edits and reactions are not new billable messages. Nothing is looked up while the wallet is off.
+        // With the wallet off nothing is sent at all (receiving is unaffected). Edits and reactions are not billable,
+        // so they skip the per-message charge, but they are still stopped while the wallet is off.
         $wallet   = new WalletService();
-        $category = isset($message['message_id']) || ($message['type'] ?? '') === 'reaction' || ! $wallet->isEnabled()
+        $category = isset($message['message_id']) || ($message['type'] ?? '') === 'reaction'
             ? null
             : $this->billingCategory($message);
 
+        if (! $wallet->isEnabled()) {
+            throw new RuntimeException(WalletService::OFF_MESSAGE, 402);
+        }
         $charge = $category !== null ? $wallet->charge($phone, $category) : ['ok' => true, 'txn_id' => 0];
         if (! $charge['ok']) {
             throw new RuntimeException((string) $charge['message'], (int) $charge['status']);

@@ -182,18 +182,6 @@ class WhatsAppCountries
         return $best !== '' ? ['code' => $best, 'national' => substr($digits, strlen($best))] : ['code' => $prefer, 'national' => $digits];
     }
 
-    /** Billing currencies Meta offers for the rate card. */
-    public const CURRENCIES = ['AED', 'ARS', 'AUD', 'BRL', 'CLP', 'COP', 'EUR', 'GBP', 'IDR', 'INR', 'MXN', 'MYR', 'PEN', 'SAR', 'SGD', 'USD'];
-
-    /** @var array<string, string> calling code => local currency, where Meta offers it. Everything else is USD. */
-    protected const CURRENCY_BY_CODE = [
-        '54' => 'ARS', '55' => 'BRL', '56' => 'CLP', '57' => 'COP', '91' => 'INR', '62' => 'IDR', '60' => 'MYR',
-        '52' => 'MXN', '51' => 'PEN', '966' => 'SAR', '65' => 'SGD', '971' => 'AED', '44' => 'GBP', '61' => 'AUD',
-        '33' => 'EUR', '49' => 'EUR', '39' => 'EUR', '31' => 'EUR', '34' => 'EUR', '43' => 'EUR', '32' => 'EUR',
-        '357' => 'EUR', '372' => 'EUR', '358' => 'EUR', '30' => 'EUR', '353' => 'EUR', '371' => 'EUR', '370' => 'EUR',
-        '352' => 'EUR', '356' => 'EUR', '351' => 'EUR', '421' => 'EUR', '386' => 'EUR', '385' => 'EUR',
-    ];
-
     /** @var array<string, string> calling code => default IANA timezone (countries with several use the main one) */
     protected const TIMEZONE_BY_CODE = [
         '91' => 'Asia/Kolkata', '971' => 'Asia/Dubai', '44' => 'Europe/London', '966' => 'Asia/Riyadh', '65' => 'Asia/Singapore',
@@ -213,10 +201,19 @@ class WhatsAppCountries
         return self::TIMEZONE_BY_CODE[strtolower(trim($code))] ?? 'UTC';
     }
 
-    /** The country's own billing currency (USD when Meta has no local currency for it). */
+    /**
+     * What to print before an amount in this currency (from the currency catalogue, see Currency::symbol()).
+     * Used for every client wallet amount, so it follows the client's currency.
+     */
+    public static function symbolOf(string $currency): string
+    {
+        return Currency::symbol($currency);
+    }
+
+    /** The country's default billing currency (from the master database, see Currency::defaultForCountry()). */
     public static function currencyOf(string $code): string
     {
-        return self::CURRENCY_BY_CODE[strtolower(trim($code))] ?? 'USD';
+        return Currency::defaultForCountry($code);
     }
 
     /**

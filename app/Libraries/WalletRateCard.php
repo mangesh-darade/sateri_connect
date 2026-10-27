@@ -34,11 +34,15 @@ class WalletRateCard
         return MasterTenantRepository::masterConnection();
     }
 
+    /** True while ensureTable() is running, so a lookup it triggers (the base currency) cannot start it again. */
+    protected static bool $settingUp = false;
+
     public function ensureTable(): void
     {
-        if (self::$ready || ! MasterTenantRepository::masterConfigured()) {
+        if (self::$ready || self::$settingUp || ! MasterTenantRepository::masterConfigured()) {
             return;
         }
+        self::$settingUp = true;
 
         try {
             $db = $this->db();
@@ -46,7 +50,8 @@ class WalletRateCard
                 'CREATE TABLE IF NOT EXISTS `wa_rates` (
                     `country_code` VARCHAR(8) NOT NULL,
                     `country_name` VARCHAR(100) NOT NULL DEFAULT \'\',
-                    `currency` VARCHAR(3) NOT NULL DEFAULT \'INR\',
+                    `currency` VARCHAR(3) NOT NULL DEFAULT \'\',
+                    `default_currency` VARCHAR(3) NULL,
                     `marketing` DECIMAL(10,4) NOT NULL DEFAULT 0,
                     `utility` DECIMAL(10,4) NOT NULL DEFAULT 0,
                     `authentication` DECIMAL(10,4) NOT NULL DEFAULT 0,
@@ -63,15 +68,55 @@ class WalletRateCard
                     PRIMARY KEY (`currency`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
             );
-            $db->table('wa_fx_rates')->ignore(true)->insert(['currency' => 'INR', 'rate' => 1, 'updated_at' => date('Y-m-d H:i:s')]);
+            if (! $db->fieldExists('symbol', 'wa_fx_rates')) {
+                $db->query('ALTER TABLE `wa_fx_rates` ADD `symbol` VARCHAR(8) NULL, ADD `name` VARCHAR(60) NULL');
+            }
+            if (! $db->fieldExists('default_currency', 'wa_rates')) {
+                $db->query('ALTER TABLE `wa_rates` ADD `default_currency` VARCHAR(3) NULL');
+            }
+            $this->seedCurrencies();
 
             if ((int) $db->table('wa_rates')->countAllResults() < 5) {
                 $this->seedMarkets();
             }
+            $this->fillDefaultCurrencies();
             $this->alignDefaultCurrencies();
             self::$ready = true;
         } catch (Throwable $e) {
             log_message('error', 'WalletRateCard::ensureTable failed: {msg}', ['msg' => $e->getMessage()]);
+        } finally {
+            self::$settingUp = false;
+        }
+    }
+
+    /**
+     * First run (and any currency added to the seed later): put the catalogue in the master. Existing rows keep their
+     * exchange rate, symbol and name; only blanks are filled. The base currency gets rate 1.
+     */
+    protected function seedCurrencies(): void
+    {
+        $db  = $this->db();
+        $now = date('Y-m-d H:i:s');
+        foreach (Currency::SEED as $code => [$symbol, $name]) {
+            $db->table('wa_fx_rates')->ignore(true)->insert([
+                'currency'   => $code,
+                'rate'       => $code === Currency::INSTALL_BASE ? 1 : 0,
+                'symbol'     => $symbol,
+                'name'       => $name,
+                'updated_at' => $now,
+            ]);
+            $db->table('wa_fx_rates')->where('currency', $code)->groupStart()->where('symbol', null)->orWhere('symbol', '')->groupEnd()->update(['symbol' => $symbol]);
+            $db->table('wa_fx_rates')->where('currency', $code)->groupStart()->where('name', null)->orWhere('name', '')->groupEnd()->update(['name' => $name]);
+        }
+    }
+
+    /** Rows saved before `default_currency` existed get the first-run default for their country. */
+    protected function fillDefaultCurrencies(): void
+    {
+        $db = $this->db();
+        foreach ($db->table('wa_rates')->select('country_code')->where('default_currency', null)->get()->getResultArray() as $r) {
+            $code = (string) $r['country_code'];
+            $db->table('wa_rates')->where('country_code', $code)->update(['default_currency' => Currency::seedForCountry($code)]);
         }
     }
 
@@ -89,7 +134,8 @@ class WalletRateCard
             $db->table('wa_rates')->ignore(true)->insert([
                 'country_code'   => (string) $code,
                 'country_name'   => $name,
-                'currency'       => WhatsAppCountries::currencyOf((string) $code),
+                'currency'         => Currency::seedForCountry((string) $code),
+                'default_currency' => Currency::seedForCountry((string) $code),
                 'marketing'      => $india ? 0.8631 : 0,
                 'utility'        => $india ? 0.1150 : 0,
                 'authentication' => $india ? 0.1150 : 0,
@@ -105,22 +151,24 @@ class WalletRateCard
      */
     protected function alignDefaultCurrencies(): void
     {
-        $db = $this->db();
-        $rows = $db->table('wa_rates')->select('country_code')
-            ->where('currency', 'INR')->where('country_code !=', '91')
+        $db   = $this->db();
+        $base = Currency::INSTALL_BASE;
+        try {
+            $base = Currency::base();
+        } catch (Throwable) {
+            // keep the install default
+        }
+        $rows = $db->table('wa_rates')->select('country_code, default_currency')
+            ->where('currency', $base)->where('default_currency IS NOT NULL', null, false)->where('default_currency !=', $base)
             ->where('marketing', 0)->where('utility', 0)->where('authentication', 0)->where('service', 0)
             ->get()->getResultArray();
         foreach ($rows as $r) {
-            $code = (string) $r['country_code'];
-            $cur  = $code === 'other' ? 'USD' : WhatsAppCountries::currencyOf($code);
-            if ($cur !== 'INR') {
-                $db->table('wa_rates')->where('country_code', $code)->update(['currency' => $cur]);
-            }
+            $db->table('wa_rates')->where('country_code', (string) $r['country_code'])->update(['currency' => (string) $r['default_currency']]);
         }
     }
 
     /**
-     * Exchange rates: how many units of the wallet currency (INR) one unit of $currency is worth.
+     * Exchange rates: how many units of the base currency one unit of $currency is worth.
      *
      * @return array<string, float>
      */
@@ -135,18 +183,18 @@ class WalletRateCard
             foreach ($this->db()->table('wa_fx_rates')->get()->getResultArray() as $r) {
                 $out[(string) $r['currency']] = (float) $r['rate'];
             }
-            $out['INR'] = 1.0;
+            $out[Currency::base()] = 1.0;
 
             return self::$fxCache = $out;
         } catch (Throwable $e) {
             log_message('error', 'WalletRateCard::fxAll failed: {msg}', ['msg' => $e->getMessage()]);
 
-            return ['INR' => 1.0];
+            return [Currency::base() => 1.0];
         }
     }
 
     /**
-     * @param array<string, mixed> $rates currency => rate in INR
+     * @param array<string, mixed> $rates currency => rate in the base currency
      *
      * @return array{saved: int, bad: list<string>}
      */
@@ -156,9 +204,11 @@ class WalletRateCard
         $saved = 0;
         $bad = [];
         self::$fxCache = null;
+        Currency::flush();
+        $base = Currency::base();
         foreach ($rates as $cur => $rate) {
             $cur = strtoupper(trim((string) $cur));
-            if ($cur === 'INR' || ! in_array($cur, WhatsAppCountries::CURRENCIES, true)) {
+            if ($cur === $base || ! Currency::isKnown($cur)) {
                 continue;
             }
             $value = (float) $rate;
@@ -184,12 +234,52 @@ class WalletRateCard
         return ['saved' => $saved, 'bad' => $bad];
     }
 
+    /**
+     * Add a currency or change its symbol and name. A new currency starts with no exchange rate (0 = not set), so
+     * nothing can be converted with it until the admin enters one.
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public function saveCurrency(string $code, string $symbol, string $name): array
+    {
+        $code   = strtoupper(trim($code));
+        $symbol = trim($symbol);
+        $name   = trim($name);
+        if (preg_match('/^[A-Z]{3}$/', $code) !== 1) {
+            return ['ok' => false, 'message' => 'A currency code is three letters, like USD.'];
+        }
+        if ($symbol === '' || mb_strlen($symbol) > 8) {
+            return ['ok' => false, 'message' => 'Enter the symbol (up to 8 characters), for example $ or AED.'];
+        }
+        if (mb_strlen($name) > 60) {
+            return ['ok' => false, 'message' => 'The name is too long.'];
+        }
+
+        $this->ensureTable();
+        try {
+            $db = $this->db();
+            if ($db->table('wa_fx_rates')->where('currency', $code)->countAllResults() > 0) {
+                $db->table('wa_fx_rates')->where('currency', $code)->update(['symbol' => $symbol, 'name' => $name]);
+            } else {
+                $db->table('wa_fx_rates')->insert(['currency' => $code, 'rate' => 0, 'symbol' => $symbol, 'name' => $name, 'updated_at' => date('Y-m-d H:i:s')]);
+            }
+            self::$fxCache = null;
+            Currency::flush();
+
+            return ['ok' => true, 'message' => $code . ' saved.'];
+        } catch (Throwable $e) {
+            log_message('error', 'WalletRateCard::saveCurrency failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return ['ok' => false, 'message' => 'Could not save the currency.'];
+        }
+    }
+
     /** When the exchange rates were last saved, '' if never. */
     public function fxUpdatedAt(): string
     {
         $this->ensureTable();
         try {
-            $row = $this->db()->table('wa_fx_rates')->selectMax('updated_at', 'u')->where('currency !=', 'INR')->get()->getRowArray();
+            $row = $this->db()->table('wa_fx_rates')->selectMax('updated_at', 'u')->where('currency !=', Currency::base())->get()->getRowArray();
 
             return (string) ($row['u'] ?? '');
         } catch (Throwable) {
@@ -206,7 +296,8 @@ class WalletRateCard
     {
         try {
             $client = \Config\Services::curlrequest(['timeout' => 15, 'http_errors' => false], null, null, false);
-            $res    = $client->get('https://open.er-api.com/v6/latest/INR');
+            $base   = Currency::base();
+            $res    = $client->get('https://open.er-api.com/v6/latest/' . rawurlencode($base));
             $data   = json_decode((string) $res->getBody(), true);
         } catch (Throwable $e) {
             log_message('error', 'WalletRateCard::refreshFxFromWeb request failed: {msg}', ['msg' => $e->getMessage()]);
@@ -218,12 +309,12 @@ class WalletRateCard
             return ['ok' => false, 'saved' => 0, 'message' => 'The exchange rate service did not return rates. Try again later.'];
         }
 
-        // The feed gives units of each currency per 1 INR; we store the INR value of one unit.
+        // The feed gives units of each currency per 1 base unit; we store the base value of one unit.
         $rates = [];
-        foreach (WhatsAppCountries::CURRENCIES as $cur) {
-            $perInr = (float) ($data['rates'][$cur] ?? 0);
-            if ($cur !== 'INR' && $perInr > 0) {
-                $rates[$cur] = (string) round(1 / $perInr, 6);
+        foreach (Currency::codes() as $cur) {
+            $perBase = (float) ($data['rates'][$cur] ?? 0);
+            if ($cur !== $base && $perBase > 0) {
+                $rates[$cur] = (string) round(1 / $perBase, 6);
             }
         }
         $out = $this->saveFx($rates);
@@ -232,7 +323,7 @@ class WalletRateCard
     }
 
     /**
-     * Amount in $from converted to $to, through the saved exchange rates (each is the INR value of one
+     * Amount in $from converted to $to, through the saved exchange rates (each is the base-currency value of one
      * unit). Null when either currency has no rate.
      */
     public function convert(float $amount, string $from, string $to): ?float
@@ -268,8 +359,9 @@ class WalletRateCard
      *
      * @return array{ok: bool, imported: int, skipped: list<string>, message: string}
      */
-    public function importCsv(string $path, string $currency = 'INR'): array
+    public function importCsv(string $path, ?string $currency = null): array
     {
+        $currency = $currency !== null && $currency !== '' ? $currency : Currency::base();
         $fh = fopen($path, 'rb');
         if ($fh === false) {
             return ['ok' => false, 'imported' => 0, 'skipped' => [], 'message' => 'Could not read the file.'];
@@ -368,6 +460,26 @@ class WalletRateCard
     }
 
     /**
+     * The currency a client in this country is billed in (the client's wallet currency): the currency chosen on the
+     * country's own row in WhatsApp rates, as long as that row has rates. A country with no rates yet falls back to its
+     * default currency, so an unfinished row can never switch anyone's wallet.
+     */
+    public function currencyForCountry(string $code): string
+    {
+        $code = strtolower(trim($code));
+        foreach ($this->all() as $r) {
+            if ((string) $r['country_code'] === $code && ! self::isUnset($r)) {
+                $cur = strtoupper((string) ($r['currency'] ?? ''));
+                if (Currency::isKnown($cur)) {
+                    return $cur;
+                }
+            }
+        }
+
+        return Currency::defaultForCountry($code);
+    }
+
+    /**
      * @param array<string, mixed> $row
      */
     public function save(array $row): bool
@@ -383,8 +495,8 @@ class WalletRateCard
             'currency'     => strtoupper(substr(trim((string) ($row['currency'] ?? '')), 0, 3)),
             'updated_at'   => date('Y-m-d H:i:s'),
         ];
-        if (! in_array($data['currency'], WhatsAppCountries::CURRENCIES, true)) {
-            $data['currency'] = $code === 'other' ? 'USD' : WhatsAppCountries::currencyOf($code);
+        if (! Currency::isKnown($data['currency'])) {
+            $data['currency'] = Currency::defaultForCountry($code);
         }
         foreach (self::CATEGORIES as $cat) {
             $rate = (float) ($row[$cat] ?? 0);
@@ -405,7 +517,7 @@ class WalletRateCard
                 return (bool) $db->table('wa_rates')->where('country_code', $code)->update($data);
             }
 
-            return (bool) $db->table('wa_rates')->insert($data);
+            return (bool) $db->table('wa_rates')->insert($data + ['default_currency' => Currency::seedForCountry($code)]);
         } catch (Throwable $e) {
             log_message('error', 'WalletRateCard::save failed: {msg}', ['msg' => $e->getMessage()]);
 
@@ -466,7 +578,7 @@ class WalletRateCard
         return [
             'rate'         => (float) ($row[$category] ?? 0),
             'country_code' => (string) $row['country_code'],
-            'currency'     => (string) ($row['currency'] ?? 'INR'),
+            'currency'     => (string) ($row['currency'] ?? Currency::base()),
         ];
     }
 

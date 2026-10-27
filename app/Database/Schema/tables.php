@@ -509,7 +509,7 @@ return array (
     ),
     'options' => 'ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
   ),
-  'email_recipient_events' =>
+  'email_recipient_events' => 
   array (
     'columns' => 
     array (
@@ -537,7 +537,7 @@ return array (
     ),
     'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
   ),
-  'email_senders' =>
+  'email_senders' => 
   array (
     'columns' => 
     array (
@@ -801,7 +801,7 @@ return array (
     ),
     'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
   ),
-  'password_resets' =>
+  'password_resets' => 
   array (
     'columns' => 
     array (
@@ -1094,13 +1094,14 @@ return array (
     ),
     'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
   ),
-  'wallet_transactions' =>
+  'wallet_transactions' => 
   array (
-    'columns' =>
+    'columns' => 
     array (
       'id' => 'bigint unsigned NOT NULL AUTO_INCREMENT',
       'type' => 'varchar(10) COLLATE utf8mb4_general_ci NOT NULL',
       'amount' => 'decimal(14,4) NOT NULL DEFAULT \'0.0000\'',
+      'currency' => 'varchar(3) COLLATE utf8mb4_general_ci DEFAULT NULL',
       'balance_after' => 'decimal(14,4) NOT NULL DEFAULT \'0.0000\'',
       'category' => 'varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL',
       'country_code' => 'varchar(8) COLLATE utf8mb4_general_ci DEFAULT NULL',
@@ -1111,7 +1112,7 @@ return array (
       'created_by' => 'int unsigned DEFAULT NULL',
       'created_at' => 'datetime DEFAULT NULL',
     ),
-    'indexes' =>
+    'indexes' => 
     array (
       'PRIMARY' => 'PRIMARY KEY (`id`)',
       'uniq_wallet_tx_type_reference' => 'UNIQUE KEY `uniq_wallet_tx_type_reference` (`type`,`reference`)',
@@ -1120,9 +1121,9 @@ return array (
     ),
     'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
   ),
-  'wallet_payments' =>
+  'wallet_payments' => 
   array (
-    'columns' =>
+    'columns' => 
     array (
       'id' => 'bigint unsigned NOT NULL AUTO_INCREMENT',
       'order_id' => 'varchar(64) COLLATE utf8mb4_general_ci NOT NULL',
@@ -1143,7 +1144,7 @@ return array (
       'created_at' => 'datetime DEFAULT NULL',
       'updated_at' => 'datetime DEFAULT NULL',
     ),
-    'indexes' =>
+    'indexes' => 
     array (
       'PRIMARY' => 'PRIMARY KEY (`id`)',
       'uniq_wallet_payments_order' => 'UNIQUE KEY `uniq_wallet_payments_order` (`order_id`)',
@@ -1152,9 +1153,9 @@ return array (
     ),
     'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
   ),
-  'wallets' =>
+  'wallets' => 
   array (
-    'columns' =>
+    'columns' => 
     array (
       'id' => 'int unsigned NOT NULL AUTO_INCREMENT',
       'enabled' => 'tinyint(1) NOT NULL DEFAULT \'0\'',
@@ -1169,13 +1170,13 @@ return array (
       'last_low_alert_at' => 'datetime DEFAULT NULL',
       'updated_at' => 'datetime DEFAULT NULL',
     ),
-    'indexes' =>
+    'indexes' => 
     array (
       'PRIMARY' => 'PRIMARY KEY (`id`)',
     ),
     'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
   ),
-  'webhook_logs' =>
+  'webhook_logs' => 
   array (
     'columns' => 
     array (

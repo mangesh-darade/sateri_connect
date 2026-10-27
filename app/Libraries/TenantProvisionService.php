@@ -163,7 +163,7 @@ class TenantProvisionService
 
         // Country decides the wallet currency and the starting timezone. Neither is worth undoing the client for.
         try {
-            (new WalletService())->setCurrency(WhatsAppCountries::currencyOf($country));
+            (new WalletService())->setCurrency((new WalletRateCard())->currencyForCountry($country));
             service('settingsService')->set('timezone', WhatsAppCountries::timezoneOf($country), 'general', false);
         } catch (Throwable $e) {
             log_message('warning', '[TenantProvisionService::provision] country defaults not applied for {key}: {msg}', ['key' => $key, 'msg' => $e->getMessage()]);

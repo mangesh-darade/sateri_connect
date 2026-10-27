@@ -213,11 +213,18 @@ class MasterTenantRepository
     }
 
     /** Calling code of the client's country, '' when it was never set (older clients). */
+    /** @var array<string, string> per request, so the page layout does not query the master twice */
+    private static array $countryMemo = [];
+
     public function tenantCountry(string $key): string
     {
+        $key = strtolower(trim($key));
+        if (isset(self::$countryMemo[$key])) {
+            return self::$countryMemo[$key];
+        }
         $this->ensureTenantOwnerColumn();
 
-        return strtolower(trim((string) ($this->findTenant($key)['country_code'] ?? '')));
+        return self::$countryMemo[$key] = strtolower(trim((string) ($this->findTenant($key)['country_code'] ?? '')));
     }
 
     public function setTenantCountry(string $key, string $countryCode): bool
@@ -227,6 +234,7 @@ class MasterTenantRepository
         if ($key === '' || $countryCode === '') {
             return false;
         }
+        unset(self::$countryMemo[$key]);
         $this->ensureTenantOwnerColumn();
 
         try {

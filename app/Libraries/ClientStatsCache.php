@@ -68,7 +68,7 @@ class ClientStatsCache
                 `wallet_enabled` TINYINT(1) NOT NULL DEFAULT 0,
                 `wallet_state` VARCHAR(8) NOT NULL DEFAULT \'off\',
                 `wallet_balance` DECIMAL(16,4) NOT NULL DEFAULT 0,
-                `wallet_currency` VARCHAR(3) NOT NULL DEFAULT \'INR\',
+                `wallet_currency` VARCHAR(3) NOT NULL DEFAULT \'\',
                 `wallet_inr` DECIMAL(16,4) NOT NULL DEFAULT 0,
                 `wallet_inr_ok` TINYINT(1) NOT NULL DEFAULT 1,
                 `payload` LONGTEXT NULL,
@@ -90,9 +90,11 @@ class ClientStatsCache
     public function refresh(array $tenant): void
     {
         $snap = $this->stats->clientSnapshot($tenant);
-        $cur  = strtoupper((string) ($snap['wallet_currency'] ?? 'INR'));
+        $base = Currency::base();
+        $cur  = strtoupper((string) ($snap['wallet_currency'] ?? $base));
         $bal  = (float) ($snap['wallet_balance'] ?? 0);
-        $inr  = (new WalletRateCard())->convert($bal, $cur, 'INR');
+        // Column names say "inr" for historical reasons; the value is in the platform base currency.
+        $inr  = (new WalletRateCard())->convert($bal, $cur, $base);
         $h    = in_array((string) ($snap['health'] ?? 'down'), ['ok', 'warn'], true) ? (string) $snap['health'] : 'down';
 
         $row = [

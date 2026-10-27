@@ -152,6 +152,9 @@ class CampaignService
 
         $useCheerioBulk = $this->shouldDispatchViaCheerioBulk($campaign);
 
+        // Nothing is queued while the wallet is off, so there is nothing to clean up.
+        $this->assertWalletOn();
+
         // Bulk API sends cannot be postponed per message, so refuse to start inside quiet hours;
         // a scheduled campaign stays scheduled and starts on the next run after the window.
         $quietUntil = $useCheerioBulk ? (new WhatsAppSendWindow())->deferUntil() : null;
@@ -244,6 +247,19 @@ class CampaignService
      *
      * @param array<string, mixed> $campaign
      */
+    /**
+     * Wallet off means sending is off, for every campaign on the Meta provider (receiving is not affected).
+     */
+    protected function assertWalletOn(): void
+    {
+        if (! function_exists('is_meta_provider') || ! is_meta_provider()) {
+            return;
+        }
+        if (! (new WalletService())->isEnabled()) {
+            throw new RuntimeException(WalletService::OFF_MESSAGE, 402);
+        }
+    }
+
     protected function assertWalletCovers(int $campaignId, array $campaign): void
     {
         $wallet = new WalletService();
@@ -1128,6 +1144,12 @@ class CampaignService
                     'id'  => $campaign['id'],
                     'msg' => $e->getMessage(),
                 ]);
+                // Wallet off, no balance or over the limit (HTTP 402): pause it instead of trying again every minute.
+                // It can be resumed from Campaigns once the wallet is fixed.
+                if ($e->getCode() === 402) {
+                    $this->campaigns->update((int) $campaign['id'], ['status' => 'paused']);
+                    $this->logger->log('pause', 'campaigns', 'Scheduled campaign paused: ' . $e->getMessage(), ['campaign_id' => (int) $campaign['id']]);
+                }
             }
         }
 
