@@ -58,6 +58,7 @@
             if (function_exists('can') && can('settings.view') && function_exists('is_meta_provider') && is_meta_provider()) {
                 try {
                     $walletSvc  = new \App\Libraries\WalletService();
+                    $walletSvc->alignCurrencyToCountry(); // wallet currency follows the client country
                     $walletChip = $walletSvc->wallet();
                 } catch (\Throwable) {
                     $walletChip = null;
@@ -76,7 +77,7 @@
                     <i class="fas fa-wallet" aria-hidden="true"></i>
                     <span class="d-none d-sm-inline">Wallet</span>
                     <?php if ($walletOn): ?>
-                        <strong><?= ((string) ($walletChip['currency'] ?? 'INR')) === 'INR' ? '₹' : esc((string) $walletChip['currency']) . ' ' ?><?= number_format($walletBal, 2) ?></strong>
+                        <strong><?= esc(\App\Libraries\Currency::symbol((string) ($walletChip['currency'] ?? \App\Libraries\Currency::base()))) ?><?= number_format($walletBal, 2) ?></strong>
                     <?php endif; ?>
                 </a>
             </li>
@@ -172,6 +173,26 @@
                     : ($waPic !== '' ? $waPic : (string) ($user['avatar'] ?? base_url('assets/img/avatar.png')));
                 $menuTitle = $waName !== '' ? $waName : (string) ($user['name'] ?? session('user_name') ?? 'User');
                 $menuPhone = $waPhone !== '' ? $waPhone : (string) ($user['email'] ?? session('user_email') ?? '');
+
+                // Client country and currency for the profile menu: the country saved for the client, else the one
+                // implied by the WhatsApp number's calling code; the currency is the wallet's own, else the country's.
+                $menuCountryCode = '';
+                try {
+                    $tenantKey = (string) (\App\Libraries\TenantContext::get() ?? '');
+                    if ($tenantKey !== '' && \App\Libraries\MasterTenantRepository::masterConfigured()) {
+                        $menuCountryCode = (new \App\Libraries\MasterTenantRepository())->tenantCountry($tenantKey);
+                    }
+                } catch (\Throwable) {
+                    $menuCountryCode = '';
+                }
+                if ($menuCountryCode === '' && $waPhone !== '') {
+                    $menuCountryCode = \App\Libraries\WhatsAppCountries::splitPhone($waPhone)['code'];
+                }
+                $menuCountryName = $menuCountryCode !== '' ? \App\Libraries\WhatsAppCountries::nameOf($menuCountryCode) : '';
+                $menuCurrency = strtoupper(trim((string) (is_array($walletChip ?? null) ? ($walletChip['currency'] ?? '') : '')));
+                if ($menuCurrency === '' && $menuCountryCode !== '') {
+                    $menuCurrency = (new \App\Libraries\WalletRateCard())->currencyForCountry($menuCountryCode);
+                }
                 ?>
                 <a href="#" class="nav-link dropdown-toggle user-menu-toggle app-topbar-user" data-bs-toggle="dropdown" aria-expanded="false">
                     <img src="<?= esc($menuAvatar) ?>" class="user-image js-wa-avatar<?= $menuAvatarIsLogo ? ' is-client-logo' : ' img-circle' ?>" alt="<?= esc($menuTitle) ?>" referrerpolicy="no-referrer">
@@ -190,6 +211,16 @@
                                 <div class="wa-account-phone js-wa-phone-row"><i class="fab fa-whatsapp" aria-hidden="true"></i> <span class="js-wa-phone"><?= esc($menuPhone) ?></span></div>
                             <?php else: ?>
                                 <div class="wa-account-phone js-wa-phone-row d-none"><i class="fab fa-whatsapp" aria-hidden="true"></i> <span class="js-wa-phone"></span></div>
+                            <?php endif; ?>
+                            <?php if ($menuCountryName !== '' || $menuCurrency !== ''): ?>
+                                <div class="wa-account-phone" title="Client country and billing currency">
+                                    <?php if ($menuCountryName !== ''): ?>
+                                        <i class="fas fa-earth-asia" aria-hidden="true"></i> <?= esc($menuCountryName) ?><?= ctype_digit($menuCountryCode) ? ' (+' . esc($menuCountryCode) . ')' : '' ?>
+                                    <?php endif; ?>
+                                    <?php if ($menuCurrency !== ''): ?>
+                                        <?= $menuCountryName !== '' ? '<span class="mx-1">·</span>' : '' ?><i class="fas fa-coins" aria-hidden="true"></i> <?= esc($menuCurrency) ?><?= trim(\App\Libraries\WhatsAppCountries::symbolOf($menuCurrency)) !== $menuCurrency && trim(\App\Libraries\WhatsAppCountries::symbolOf($menuCurrency)) !== '' ? ' (' . esc(trim(\App\Libraries\WhatsAppCountries::symbolOf($menuCurrency))) . ')' : '' ?>
+                                    <?php endif; ?>
+                                </div>
                             <?php endif; ?>
                             <div class="wa-account-provider">
                                 <span class="provider-chip <?= function_exists('is_meta_provider') && is_meta_provider() ? 'is-meta' : 'is-cheerio' ?>">
@@ -525,7 +556,6 @@
                     'match' => ['reports'],
                     'children' => [
                         ['label' => 'Transaction Report', 'icon' => 'receipt', 'url' => site_url('reports/transactions'), 'match' => ['reports/transactions'], 'perm' => 'reports.view'],
-                        ['label' => 'Deposit Report', 'icon' => 'piggy-bank', 'url' => site_url('reports/deposits'), 'match' => ['reports/deposits'], 'perm' => 'reports.view'],
                         ['label' => 'Campaign Report', 'icon' => 'megaphone', 'url' => site_url('reports/campaigns'), 'match' => ['reports/campaigns'], 'perm' => 'reports.view'],
                         ['label' => 'WhatsApp Template Report', 'icon' => 'message-square-text', 'url' => site_url('reports/templates'), 'match' => ['reports/templates'], 'perm' => 'reports.view'],
                         ['label' => 'Email Report', 'icon' => 'mail', 'url' => site_url('reports/email'), 'match' => ['reports/email'], 'perm' => 'reports.view'],
