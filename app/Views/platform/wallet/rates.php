@@ -19,15 +19,17 @@ usort($rates, static function (array $a, array $b): int {
 
     return [$ao, strtolower((string) $a['country_name'])] <=> [$bo, strtolower((string) $b['country_name'])];
 });
-$fx       = $fx ?? ['INR' => 1.0];
-$allCur   = \App\Libraries\WhatsAppCountries::CURRENCIES;
+$baseCur  = \App\Libraries\Currency::base();
+$catalogue = \App\Libraries\Currency::catalogue();
+$fx       = $fx ?? [$baseCur => 1.0];
+$allCur   = array_keys($catalogue);
 $inUse    = [];
 foreach ($rates as $r) {
     if (! \App\Libraries\WalletRateCard::isUnset($r)) {
         $inUse[strtoupper((string) $r['currency'])] = true;
     }
 }
-$missingFx = array_values(array_filter(array_keys($inUse), static fn (string $c): bool => $c !== 'INR' && empty($fx[$c])));
+$missingFx = array_values(array_filter(array_keys($inUse), static fn (string $c): bool => $c !== $baseCur && empty($fx[$c])));
 $cats = ['marketing' => 'Marketing', 'utility' => 'Utility', 'authentication' => 'Authentication', 'service' => 'Service*'];
 ?>
 <style>
@@ -81,7 +83,7 @@ $cats = ['marketing' => 'Marketing', 'utility' => 'Utility', 'authentication' =>
     </div>
 
     <?php if ($unset > 0): ?>
-        <div class="platform-help" style="margin-bottom:.75rem">Countries marked <span class="platform-badge platform-badge-warn">Not set</span> have no rate yet. While a client's wallet is on, messages to them are refused. Enter Meta's rate, or import Meta's rate card.</div>
+        <div class="platform-help" style="margin-bottom:.75rem">Countries marked <span class="platform-badge platform-badge-warn">Not set</span> have no rate yet. Messages to them are refused, whether or not the client's wallet is on. Enter Meta's rate, or import Meta's rate card.</div>
     <?php endif; ?>
 
     <form method="post" action="<?= site_url('platform/wa-rates/bulk') ?>" id="rateGridForm">
@@ -129,7 +131,7 @@ $cats = ['marketing' => 'Marketing', 'utility' => 'Utility', 'authentication' =>
     <div class="platform-card-head">
         <div>
             <h2>Exchange rates</h2>
-            <p>Each country is priced in its own currency, and each client's wallet is in its own currency, so every message is converted at these rates when it is charged. Enter what <strong>1 unit</strong> of the currency is worth in INR.</p>
+            <p>Each country is priced in its own currency, and each client's wallet is in its own currency, so every message is converted at these rates when it is charged. Enter what <strong>1 unit</strong> of the currency is worth in <strong><?= esc($baseCur) ?></strong> (the base currency).</p>
             <p style="margin-top:.25rem">Last updated: <strong><?= ($fxUpdated ?? '') !== '' ? esc((string) $fxUpdated) : 'never' ?></strong></p>
         </div>
         <form method="post" action="<?= site_url('platform/wa-rates/fx/refresh') ?>" style="margin:0">
@@ -144,16 +146,51 @@ $cats = ['marketing' => 'Marketing', 'utility' => 'Utility', 'authentication' =>
         <?= csrf_field() ?>
         <div class="rg-fx">
             <?php foreach ($allCur as $cur): ?>
-                <?php if ($cur === 'INR') { continue; } ?>
+                <?php if ($cur === $baseCur) { continue; } ?>
                 <label class="rg-fx-item<?= isset($inUse[$cur]) && empty($fx[$cur]) ? ' is-missing' : '' ?>">
                     <span class="rg-fx-cur">1 <?= $cur ?></span>
-                    <span style="color:#6b7280">₹</span>
-                    <input class="platform-input" style="padding:.25rem .4rem" type="number" step="0.000001" min="0" name="fx[<?= $cur ?>]" value="<?= ! empty($fx[$cur]) ? esc(rtrim(rtrim(number_format((float) $fx[$cur], 6, '.', ''), '0'), '.'), 'attr') : '' ?>" placeholder="—" aria-label="1 <?= $cur ?> in INR">
+                    <span style="color:#6b7280"><?= esc(trim(\App\Libraries\Currency::symbol($baseCur))) ?></span>
+                    <input class="platform-input" style="padding:.25rem .4rem" type="number" step="0.000001" min="0" name="fx[<?= $cur ?>]" value="<?= ! empty($fx[$cur]) ? esc(rtrim(rtrim(number_format((float) $fx[$cur], 6, '.', ''), '0'), '.'), 'attr') : '' ?>" placeholder="—" aria-label="1 <?= $cur ?> in <?= esc($baseCur, 'attr') ?>">
                 </label>
             <?php endforeach; ?>
         </div>
         <div style="margin-top:.75rem"><button class="btn-pf btn-pf-primary" type="submit">Save exchange rates</button></div>
         <div class="platform-help" style="margin-top:.5rem">"Fetch latest rates" fills every currency from a public daily mid-market feed (not Meta's own conversion). Edit any value by hand if you bill at a different rate. Rates are not refreshed automatically.</div>
+    </form>
+</section>
+
+<section class="platform-card">
+    <div class="platform-card-head">
+        <div>
+            <h2>Currencies</h2>
+            <p>Every currency dropdown, symbol and exchange rate comes from this list. Add a currency, or change a symbol or name. The base currency (<strong><?= esc($baseCur) ?></strong>) is the one exchange rates are measured against.</p>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="platform-table">
+            <thead><tr><th>Code</th><th>Symbol</th><th>Name</th><th>Exchange rate</th><th></th></tr></thead>
+            <tbody>
+            <?php foreach ($catalogue as $code => $c): ?>
+                <tr>
+                    <form method="post" action="<?= site_url('platform/wa-rates/currency') ?>">
+                        <?= csrf_field() ?>
+                        <td><strong><?= esc($code) ?></strong><input type="hidden" name="code" value="<?= esc($code, 'attr') ?>"><?= $code === $baseCur ? ' <span class="platform-badge platform-badge-ok">base</span>' : '' ?></td>
+                        <td><input class="platform-input" style="width:5rem;padding:.25rem .4rem" name="symbol" value="<?= esc($c['symbol'], 'attr') ?>" maxlength="8" aria-label="Symbol for <?= esc($code, 'attr') ?>"></td>
+                        <td><input class="platform-input" style="min-width:11rem;padding:.25rem .4rem" name="name" value="<?= esc($c['name'], 'attr') ?>" maxlength="60" aria-label="Name of <?= esc($code, 'attr') ?>"></td>
+                        <td><?= $code === $baseCur ? '1' : ((float) $c['rate'] > 0 ? esc(rtrim(rtrim(number_format((float) $c['rate'], 6, '.', ''), '0'), '.')) : '<span class="text-muted">not set</span>') ?></td>
+                        <td><button class="btn-pf" type="submit">Save</button></td>
+                    </form>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+    <form method="post" action="<?= site_url('platform/wa-rates/currency') ?>" class="platform-form-grid" style="margin-top:.75rem">
+        <?= csrf_field() ?>
+        <div><label class="platform-label" for="curCode">New currency code</label><input class="platform-input" id="curCode" name="code" maxlength="3" placeholder="KWD" required style="text-transform:uppercase"></div>
+        <div><label class="platform-label" for="curSymbol">Symbol</label><input class="platform-input" id="curSymbol" name="symbol" maxlength="8" placeholder="KWD" required></div>
+        <div><label class="platform-label" for="curName">Name</label><input class="platform-input" id="curName" name="name" maxlength="60" placeholder="Kuwaiti dinar"></div>
+        <div class="full"><button class="btn-pf btn-pf-primary" type="submit">Add currency</button></div>
     </form>
 </section>
 
@@ -202,7 +239,7 @@ $cats = ['marketing' => 'Marketing', 'utility' => 'Utility', 'authentication' =>
             <form method="post" action="<?= site_url('platform/wa-rates/import') ?>" enctype="multipart/form-data" class="platform-form-grid">
                 <?= csrf_field() ?>
                 <div class="full"><label class="platform-label" for="rateCard">CSV file</label><input class="platform-input" id="rateCard" type="file" name="rate_card" accept=".csv,text/csv" required></div>
-                <div><label class="platform-label">Currency</label><input class="platform-input" name="currency" value="INR" maxlength="3"></div>
+                <div><label class="platform-label">Currency</label><input class="platform-input" name="currency" value="<?= esc($baseCur, 'attr') ?>" maxlength="3"></div>
                 <div class="full"><button class="btn-pf btn-pf-primary" type="submit">Import</button></div>
             </form>
         </details>
@@ -320,6 +357,23 @@ $cats = ['marketing' => 'Marketing', 'utility' => 'Utility', 'authentication' =>
     window.addEventListener('beforeunload', function (e) {
         if (!bar.hidden) { e.preventDefault(); e.returnValue = ''; }
     });
+
+    // A country whose clients already have wallet transactions keeps its currency: refuse the change straight away.
+    var currencyLocks = {};
+    fetch(<?= json_encode(site_url('platform/wa-rates/locks')) ?>, { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : { locks: {} }; })
+        .then(function (d) { currencyLocks = d.locks || {}; })
+        .catch(function () { currencyLocks = {}; });
+    document.addEventListener('change', function (e) {
+        var sel = e.target;
+        if (!sel || !sel.classList || !sel.classList.contains('rg-cur')) return;
+        var code = sel.getAttribute('data-code');
+        var o = origs[code];
+        if (!o || !currencyLocks[code] || String(sel.value).toUpperCase() === String(o.currency).toUpperCase()) return;
+        e.stopImmediatePropagation();
+        sel.value = o.currency;
+        window.alert(currencyLocks[code]);
+    }, true);
 
     // Pick the country's own currency when adding a country.
     var addCountry = document.getElementById('rateCountry');

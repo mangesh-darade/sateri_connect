@@ -8,6 +8,7 @@ use App\Libraries\DataTablesQuery;
 use App\Libraries\MasterTenantRepository;
 use App\Libraries\TenantConnection;
 use App\Libraries\TenantContext;
+use App\Libraries\WalletCurrencyGuard;
 use App\Libraries\WalletRateCard;
 use App\Libraries\WalletReportService;
 use App\Libraries\WalletService;
@@ -52,6 +53,17 @@ class PlatformWallet extends BaseController
             $row[$cat] = (string) $this->request->getPost($cat);
         }
 
+        // The currency clients in this country are billed in must not change once they have wallet history. That
+        // includes the quiet flip when a row with no rates yet gets its first rates in another currency.
+        $before = (new WalletRateCard())->currencyForCountry($code);
+        $after  = WalletRateCard::isUnset($row) ? WhatsAppCountries::currencyOf($code) : strtoupper($row['currency']);
+        if ($code !== 'other' && $after !== $before) {
+            $clients = (new WalletCurrencyGuard())->lockedFor($code);
+            if ($clients !== []) {
+                return redirect()->back()->withInput()->with('error', WalletCurrencyGuard::message($row['country_name'] ?: $code, $clients));
+            }
+        }
+
         if (! (new WalletRateCard())->save($row)) {
             return redirect()->back()->withInput()->with('error', 'Enter a calling code (digits only, or "other") and valid rates.');
         }
@@ -78,9 +90,11 @@ class PlatformWallet extends BaseController
             return redirect()->to('/platform/wa-rates')->with('error', 'No changes to save.');
         }
 
-        $card  = new WalletRateCard();
-        $saved = 0;
-        $bad   = [];
+        $card    = new WalletRateCard();
+        $guard   = new WalletCurrencyGuard();
+        $saved   = 0;
+        $bad     = [];
+        $blocked = [];
         foreach ($rows as $code => $fields) {
             $code = strtolower(trim((string) $code));
             if (! is_array($fields)) {
@@ -89,10 +103,21 @@ class PlatformWallet extends BaseController
             $row = [
                 'country_code' => $code,
                 'country_name' => WhatsAppCountries::nameOf($code),
-                'currency'     => (string) ($fields['currency'] ?? 'INR'),
+                'currency'     => (string) ($fields['currency'] ?? \App\Libraries\Currency::base()),
             ];
             foreach (WalletRateCard::CATEGORIES as $cat) {
                 $row[$cat] = (string) ($fields[$cat] ?? 0);
+            }
+            // A country whose clients already have wallet history keeps the currency they are billed in (also when a
+            // row with no rates gets its first rates in another currency). Its rates are still saved.
+            $before = $card->currencyForCountry($code);
+            $after  = WalletRateCard::isUnset($row) ? WhatsAppCountries::currencyOf($code) : strtoupper($row['currency']);
+            if ($code !== 'other' && $after !== $before) {
+                $clients = $guard->lockedFor($code);
+                if ($clients !== []) {
+                    $blocked[] = WalletCurrencyGuard::message($row['country_name'] ?: $code, $clients);
+                    $row['currency'] = $before;
+                }
             }
             if ($card->save($row)) {
                 $saved++;
@@ -109,12 +134,34 @@ class PlatformWallet extends BaseController
         if ($bad !== []) {
             return redirect()->to('/platform/wa-rates')->with('error', 'Saved ' . $saved . '. Not saved (check the rates): ' . implode(', ', $bad) . '.');
         }
+        if ($blocked !== []) {
+            return redirect()->to('/platform/wa-rates')->with('error', 'Rates saved, but the currency was not changed. ' . implode(' ', $blocked));
+        }
 
         return redirect()->to('/platform/wa-rates')->with('success', $saved . ' ' . ($saved === 1 ? 'country' : 'countries') . ' updated.');
     }
 
+    /** Add a currency or change its symbol and name (the catalogue behind every currency dropdown and symbol). */
+    public function saveCurrency(): ResponseInterface
+    {
+        if ($denied = $this->denyUnlessPrimary()) {
+            return $denied;
+        }
+
+        $result = (new WalletRateCard())->saveCurrency(
+            (string) $this->request->getPost('code'),
+            (string) $this->request->getPost('symbol'),
+            (string) $this->request->getPost('name')
+        );
+        if ($result['ok']) {
+            log_activity('update', 'platform', 'Saved currency ' . strtoupper(trim((string) $this->request->getPost('code'))), ['platform_admin_id' => (int) session('platform_admin_id')]);
+        }
+
+        return redirect()->to('/platform/wa-rates')->with($result['ok'] ? 'success' : 'error', $result['message'] . ($result['ok'] ? ' Enter its exchange rate below before using it.' : ''));
+    }
+
     /**
-     * Exchange rates: what one unit of each rate-card currency is worth in the wallet currency (INR).
+     * Exchange rates: what one unit of each currency is worth in the base currency.
      */
     public function saveFx(): ResponseInterface
     {
@@ -168,7 +215,7 @@ class PlatformWallet extends BaseController
             return redirect()->back()->with('error', 'Choose the Meta rate card CSV (up to 1 MB).');
         }
 
-        $currency = strtoupper(substr(trim((string) $this->request->getPost('currency')), 0, 3)) ?: 'INR';
+        $currency = strtoupper(substr(trim((string) $this->request->getPost('currency')), 0, 3)) ?: \App\Libraries\Currency::base();
         $result   = (new WalletRateCard())->importCsv($file->getTempName(), $currency);
         if (! $result['ok']) {
             return redirect()->back()->with('error', $result['message']);
@@ -219,6 +266,27 @@ class PlatformWallet extends BaseController
             'query'        => http_build_query(array_filter($filters, static fn (string $v): bool => $v !== '')),
             'exportQuery'  => http_build_query(array_filter(array_diff_key($filters, array_flip(['page', 'per', 'csort', 'cdir'])), static fn (string $v): bool => $v !== '')),
         ]);
+    }
+
+    /** Countries whose rate currency is locked because clients there already have wallet history (for the rates page). */
+    public function currencyLocks(): ResponseInterface
+    {
+        if (! (new MasterTenantRepository())->isPrimaryPlatformAdmin((int) session('platform_admin_id'))) {
+            return $this->response->setStatusCode(403)->setJSON(['error' => 'Not allowed.']);
+        }
+        session_write_close();
+
+        // One minute of cache: the sweep visits every client database. Saving always checks fresh in that request.
+        $out = cache('wa_rate_locks');
+        if (! is_array($out)) {
+            $out = [];
+            foreach ((new WalletCurrencyGuard())->lockedCountries() as $code => $clients) {
+                $out[(string) $code] = WalletCurrencyGuard::message(WhatsAppCountries::nameOf((string) $code) ?: (string) $code, $clients);
+            }
+            cache()->save('wa_rate_locks', $out, 60);
+        }
+
+        return $this->response->setJSON(['locks' => (object) $out]);
     }
 
     /** Rate card rows for the rates grid (DataTables protocol). Primary platform admin only, like the page. */
@@ -281,11 +349,11 @@ class PlatformWallet extends BaseController
             (string) ($get['order'][0]['dir'] ?? 'desc')
         );
 
-        $native = static fn (float $n, string $c, int $dp = 2): string => ($c === 'INR' ? '₹' : $c . ' ') . number_format($n, $dp);
+        $native = static fn (float $n, string $c, int $dp = 2): string => \App\Libraries\WhatsAppCountries::symbolOf($c) . number_format($n, $dp);
         $data   = array_map(static function (array $r) use ($native): array {
             $cc  = (string) ($r['country_code'] ?? '');
             $cn  = $cc !== '' ? WhatsAppCountries::nameOf($cc) : '';
-            $cur = (string) ($r['currency'] ?? 'INR');
+            $cur = (string) ($r['currency'] ?? \App\Libraries\Currency::base());
             $ts  = strtotime((string) $r['created_at']) ?: 0;
 
             return [
@@ -350,7 +418,7 @@ class PlatformWallet extends BaseController
 
         $start  = max(0, (int) ($get['start'] ?? 0));
         $length = max(1, min(100, (int) ($get['length'] ?? 25)));
-        $native = static fn (float $n, string $c): string => ($c === 'INR' ? '₹' : $c . ' ') . number_format($n, 2);
+        $native = static fn (float $n, string $c): string => \App\Libraries\WhatsAppCountries::symbolOf($c) . number_format($n, 2);
         $data   = array_map(static function (array $c) use ($native, $max): array {
             $cur = (string) $c['currency'];
 

@@ -110,11 +110,13 @@ $routes->group('platform', ['filter' => 'platformAuth'], static function ($route
     $routes->get('wallet-report/transactions', 'PlatformWallet::reportTransactions');
     $routes->get('wallet-report/clients', 'PlatformWallet::reportClients');
     $routes->get('wa-rates/data', 'PlatformWallet::ratesData');
+    $routes->get('wa-rates/locks', 'PlatformWallet::currencyLocks');
     $routes->get('wa-rates', 'PlatformWallet::rates');
     $routes->post('wa-rates', 'PlatformWallet::saveRate', ['filter' => 'csrf']);
     $routes->post('wa-rates/import', 'PlatformWallet::importRates', ['filter' => 'csrf']);
     $routes->post('wa-rates/bulk', 'PlatformWallet::saveRatesBulk', ['filter' => 'csrf']);
     $routes->post('wa-rates/fx', 'PlatformWallet::saveFx', ['filter' => 'csrf']);
+    $routes->post('wa-rates/currency', 'PlatformWallet::saveCurrency', ['filter' => 'csrf']);
     $routes->post('wa-rates/fx/refresh', 'PlatformWallet::refreshFx', ['filter' => 'csrf']);
     $routes->post('wa-rates/(:segment)/delete', 'PlatformWallet::deleteRate/$1', ['filter' => 'csrf']);
     $routes->get('clients/(:segment)/wallet', 'PlatformWallet::client/$1');
