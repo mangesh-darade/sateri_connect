@@ -9,8 +9,8 @@
 $wallet   = $wallet ?? [];
 $f        = $filters ?? [];
 $t        = $report['totals'] ?? [];
-$currency = (string) ($wallet['currency'] ?? 'INR');
-$symbol   = $currency === 'INR' ? '₹' : $currency . ' ';
+$currency = (string) ($wallet['currency'] ?? \App\Libraries\Currency::base());
+$symbol   = \App\Libraries\WhatsAppCountries::symbolOf((string) $currency);
 $money    = static fn (float $n, int $dp = 2): string => number_format($n, $dp);
 $typeLabel = ['credit' => 'Recharge', 'debit' => 'Message / deduction', 'refund' => 'Refund'];
 ?>

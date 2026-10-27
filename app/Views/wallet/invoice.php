@@ -7,8 +7,8 @@
  * @var string $client
  * @var bool $autoPrint
  */
-$cur = (string) ($p['currency'] ?? 'INR');
-$sym = $cur === 'INR' ? '₹' : $cur . ' ';
+$cur = (string) ($p['currency'] ?? \App\Libraries\Currency::base());
+$sym = \App\Libraries\WhatsAppCountries::symbolOf((string) $cur);
 $m   = static fn ($n): string => number_format((float) $n, 2);
 ?><!DOCTYPE html>
 <html lang="en">

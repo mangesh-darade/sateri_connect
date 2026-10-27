@@ -43,12 +43,14 @@ class Wallet extends BaseController
         $wallet = new WalletService();
         $rzp    = new RazorpayService();
         $cfg    = $rzp->config();
-        $inr    = strtoupper($wallet->currency()) === 'INR';
+        $cur     = strtoupper($wallet->currency());
+        $rzpFits = $cur === \App\Libraries\RazorpayService::CURRENCY;
+        $mswFits = $cur === \App\Libraries\MswipeService::CURRENCY;
         $gateways = [];
-        if ($rzp->isConfigured() && $inr) {
+        if ($rzp->isConfigured() && $rzpFits) {
             $gateways['razorpay'] = 'Razorpay (UPI, cards, netbanking)';
         }
-        if ($msw->isConfigured() && $inr) {
+        if ($msw->isConfigured() && $mswFits) {
             $gateways['mswipe'] = 'Mswipe (pay by link)';
         }
 
@@ -63,8 +65,8 @@ class Wallet extends BaseController
                 'available' => $gateways !== [],
                 'gateways'  => $gateways,
                 // Why "Add money" is not usable, shown to the client instead of hiding the card.
-                'reason'    => ! $inr
-                    ? 'Online payment is available for INR wallets only. Ask your platform admin to add money.'
+                'reason'    => ! ($rzpFits || $mswFits)
+                    ? 'Online payment is available for ' . implode(' and ', array_unique([\App\Libraries\RazorpayService::CURRENCY, \App\Libraries\MswipeService::CURRENCY])) . ' wallets only. Ask your platform admin to add money.'
                     : ($gateways === [] ? 'Online payment is not set up yet. Ask your platform admin to add money, or to enable online payments.' : ''),
                 'gst'       => $rzp->gstPercent(),
                 'min'       => (float) $cfg['recharge_min'],

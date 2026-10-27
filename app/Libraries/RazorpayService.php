@@ -18,6 +18,9 @@ use Throwable;
  */
 class RazorpayService
 {
+    /** The currency this gateway collects in. A wallet in another currency cannot be topped up through it. */
+    public const CURRENCY = 'INR';
+
     public const API = 'https://api.razorpay.com/v1';
 
     /** Platform setting keys (master DB `platform_settings`). Secrets are stored encrypted. */
@@ -156,18 +159,18 @@ class RazorpayService
             return $this->fail(503, 'Online recharge is not available. Contact your platform admin.');
         }
         $currency = strtoupper($wallet->currency());
-        if ($currency !== 'INR') {
-            return $this->fail(422, 'Online recharge is available for INR wallets only. Contact your platform admin to add money.');
+        if ($currency !== self::CURRENCY) {
+            return $this->fail(422, 'Online recharge is available for ' . self::CURRENCY . ' wallets only. Contact your platform admin to add money.');
         }
         $c = $this->config();
         if (! is_finite($credit) || $credit < (float) $c['recharge_min'] || $credit > (float) $c['recharge_max']) {
-            return $this->fail(422, 'Enter an amount between ₹' . number_format((float) $c['recharge_min']) . ' and ₹' . number_format((float) $c['recharge_max']) . '.');
+            return $this->fail(422, 'Enter an amount between ' . Currency::symbol(self::CURRENCY) . number_format((float) $c['recharge_min']) . ' and ' . Currency::symbol(self::CURRENCY) . number_format((float) $c['recharge_max']) . '.');
         }
 
         $t = self::totals($credit, $this->gstPercent());
         $res = $this->http('POST', '/orders', [
             'amount'   => $t['paise'],
-            'currency' => 'INR',
+            'currency' => self::CURRENCY,
             'receipt'  => substr('w-' . $tenantKey . '-' . time(), 0, 40),
             'notes'    => ['tenant_key' => $tenantKey, 'purpose' => 'wallet', 'credit' => (string) $t['credit']],
         ]);
@@ -183,12 +186,12 @@ class RazorpayService
         $orderId = (string) $res['data']['id'];
         $now = date('Y-m-d H:i:s');
         model(WalletPaymentModel::class)->insert([
-            'order_id' => $orderId, 'source' => 'checkout', 'status' => 'created', 'currency' => 'INR',
+            'order_id' => $orderId, 'source' => 'checkout', 'status' => 'created', 'currency' => self::CURRENCY,
             'credit_amount' => $t['credit'], 'tax_percent' => $this->gstPercent(), 'tax_amount' => $t['tax'], 'total_amount' => $t['total'],
             'created_by' => $userId, 'created_at' => $now, 'updated_at' => $now,
         ]);
 
-        return $this->ok('Order created.', ['order_id' => $orderId, 'key_id' => $this->keyId(), 'amount' => $t['paise'], 'currency' => 'INR', 'total' => $t['total'], 'tax' => $t['tax']]);
+        return $this->ok('Order created.', ['order_id' => $orderId, 'key_id' => $this->keyId(), 'amount' => $t['paise'], 'currency' => self::CURRENCY, 'total' => $t['total'], 'tax' => $t['tax']]);
     }
 
     /**
@@ -199,7 +202,7 @@ class RazorpayService
     public function createPaymentLink(string $tenantKey, float $credit, string $clientName = ''): array
     {
         $wallet = new WalletService();
-        if (! $this->isConfigured() || strtoupper($wallet->currency()) !== 'INR') {
+        if (! $this->isConfigured() || strtoupper($wallet->currency()) !== self::CURRENCY) {
             return $this->fail(503, 'Online payments are not available.');
         }
         $c = $this->config();
@@ -208,7 +211,7 @@ class RazorpayService
 
         $res = $this->http('POST', '/payment_links', [
             'amount'      => $t['paise'],
-            'currency'    => 'INR',
+            'currency'    => self::CURRENCY,
             'description' => 'WhatsApp wallet top-up' . ($clientName !== '' ? ' - ' . $clientName : ''),
             'reference_id' => substr($tenantKey . '-' . time(), 0, 40),
             'notes'       => ['tenant_key' => $tenantKey, 'purpose' => 'wallet', 'credit' => (string) $t['credit']],
@@ -221,7 +224,7 @@ class RazorpayService
 
         $now = date('Y-m-d H:i:s');
         model(WalletPaymentModel::class)->insert([
-            'order_id' => (string) $res['data']['id'], 'source' => 'link', 'status' => 'created', 'currency' => 'INR',
+            'order_id' => (string) $res['data']['id'], 'source' => 'link', 'status' => 'created', 'currency' => self::CURRENCY,
             'credit_amount' => $t['credit'], 'tax_percent' => $this->gstPercent(), 'tax_amount' => $t['tax'], 'total_amount' => $t['total'],
             'created_at' => $now, 'updated_at' => $now,
         ]);

@@ -23,6 +23,9 @@ use Throwable;
  */
 class MswipeService
 {
+    /** The currency this gateway collects in. A wallet in another currency cannot be topped up through it. */
+    public const CURRENCY = 'INR';
+
     public const UAT  = 'https://dcuat.mswipetech.co.in';
     public const LIVE = 'https://pbl.mswipe.com';
 
@@ -157,8 +160,8 @@ class MswipeService
         if (! $this->isConfigured()) {
             return $this->fail(503, 'Online recharge is not available. Contact your platform admin.');
         }
-        if (strtoupper($wallet->currency()) !== 'INR') {
-            return $this->fail(422, 'Online recharge is available for INR wallets only. Contact your platform admin to add money.');
+        if (strtoupper($wallet->currency()) !== self::CURRENCY) {
+            return $this->fail(422, 'Online recharge is available for ' . self::CURRENCY . ' wallets only. Contact your platform admin to add money.');
         }
         $rz  = new RazorpayService($this->master); // shared recharge limits and GST
         $cfg = $rz->config();
@@ -217,7 +220,7 @@ class MswipeService
         $now = date('Y-m-d H:i:s');
         model(WalletPaymentModel::class)->insert([
             'order_id' => $orderId, 'gateway' => 'mswipe', 'gateway_ref' => $transId, 'gateway_txn' => mb_substr((string) ($res['data']['txn_id'] ?? ''), 0, 64),
-            'source' => 'link', 'status' => 'created', 'currency' => 'INR',
+            'source' => 'link', 'status' => 'created', 'currency' => self::CURRENCY,
             'credit_amount' => $t['credit'], 'tax_percent' => $rz->gstPercent(), 'tax_amount' => $t['tax'], 'total_amount' => $t['total'],
             'created_by' => $userId, 'created_at' => $now, 'updated_at' => $now,
         ]);

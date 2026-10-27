@@ -57,9 +57,9 @@
                 { data: 'details', render: function (v, t) { return t === 'display' ? esc(v) : v; } },
                 { data: null, className: 'text-end text-nowrap', render: function (r, t) {
                     if (t !== 'display') return r.amount;
-                    return '<span class="' + (r['in'] ? 'text-success' : 'text-danger') + ' fw-semibold">' + (r['in'] ? '+' : '−') + esc(sym) + esc(r.amount) + '</span>';
+                    return '<span class="' + (r['in'] ? 'text-success' : 'text-danger') + ' fw-semibold">' + (r['in'] ? '+' : '−') + esc(r.symbol || sym) + esc(r.amount) + '</span>';
                 } },
-                { data: null, className: 'text-end text-nowrap', render: function (r, t) { return t === 'display' ? esc(sym) + esc(r.balance) : r.balance; } }
+                { data: null, className: 'text-end text-nowrap', render: function (r, t) { return t === 'display' ? esc(r.symbol || sym) + esc(r.balance) : r.balance; } }
             ],
             language: $.extend({}, LANG, {
                 searchPlaceholder: 'Search note or amount',
@@ -92,10 +92,7 @@
                 { data: 'invoice', render: function (v, t) { return t === 'display' ? esc(v) : v; } },
                 { data: 'credit', className: 'text-end text-nowrap', render: function (v, t) { return t === 'display' ? esc(psym) + esc(v) : v; } },
                 { data: 'tax', className: 'text-end text-nowrap', render: function (v, t) { return t === 'display' ? esc(psym) + esc(v) : v; } },
-                { data: 'total', className: 'text-end text-nowrap', render: function (v, t) { return t === 'display' ? '<strong>' + esc(psym) + esc(v) + '</strong>' : v; } },
-                { data: null, orderable: false, className: 'text-end', render: function (r) {
-                    return '<a class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener" href="' + esc(r.url) + '"><i class="fas fa-file-pdf me-1"></i> Invoice</a>';
-                } }
+                { data: 'total', className: 'text-end text-nowrap', render: function (v, t) { return t === 'display' ? '<strong>' + esc(psym) + esc(v) + '</strong>' : v; } }
             ],
             language: $.extend({}, LANG, {
                 searchPlaceholder: 'Search invoice or amount',
