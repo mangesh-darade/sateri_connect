@@ -223,6 +223,7 @@ class Contacts extends BaseController
         if (is_string($customFields)) {
             return redirect()->back()->withInput()->with('error', $customFields);
         }
+        $customFields = $this->withSource($customFields);
 
         $countryName = $this->request->getPost('country') ?: ($validated['country']['name'] ?? 'India');
 
@@ -392,6 +393,7 @@ class Contacts extends BaseController
         if (is_string($customFields)) {
             return redirect()->back()->withInput()->with('error', $customFields);
         }
+        $customFields = $this->withSource($customFields);
 
         $countryName = $this->request->getPost('country') ?: ($validated['country']['name'] ?? ($contact['country'] ?? 'India'));
 
@@ -1026,6 +1028,26 @@ class Contacts extends BaseController
         }
 
         return array_filter($result['fields'], static fn ($v): bool => $v !== '' && $v !== null);
+    }
+
+    /**
+     * Source field of the contact form is stored as custom_fields.source (synced to ElintOm lead source).
+     *
+     * @param array<string, mixed>|null $fields
+     *
+     * @return array<string, mixed>
+     */
+    protected function withSource(?array $fields): array
+    {
+        $fields = $fields ?? [];
+        $source = trim((string) $this->request->getPost('contact_source'));
+        if ($source !== '') {
+            $fields['source'] = $source;
+        } else {
+            unset($fields['source']);
+        }
+
+        return $fields;
     }
 
     protected function parseCustomFields(): ?array

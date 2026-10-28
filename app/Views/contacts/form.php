@@ -35,7 +35,7 @@ if (is_array($oldKeys)) {
         $cf[(string) $k] = is_array($oldVals) ? (string) ($oldVals[$i] ?? '') : '';
     }
 }
-$extraFields = array_filter($cf, static fn ($v, $k) => ! str_starts_with((string) $k, '_') && ! isset($attributeDefs[$k]), ARRAY_FILTER_USE_BOTH);
+$extraFields = array_filter($cf, static fn ($v, $k) => ! str_starts_with((string) $k, '_') && ! isset($attributeDefs[$k]) && (string) $k !== 'source', ARRAY_FILTER_USE_BOTH);
 $isCreate    = empty($contact['id']);
 
 $countries = $countries ?? countries_list();
@@ -249,6 +249,12 @@ if ($selectedDialCode !== '' && str_starts_with($localMobileVal, $selectedDialCo
                         <input type="date" name="birthday" class="form-control compact-input py-1" value="<?= $getVal('birthday') ?>">
                     </div>
 
+                    <!-- Source -->
+                    <div class="col-md-4 col-sm-6">
+                        <label class="compact-label">Source</label>
+                        <input type="text" name="contact_source" maxlength="100" class="form-control compact-input py-1" placeholder="e.g. Website, Facebook, Referral" value="<?= esc((string) old('contact_source', $cf['source'] ?? '')) ?>">
+                    </div>
+
                     <!-- Customer Groups -->
                     <div class="col-md-4 col-sm-6">
                         <div class="d-flex align-items-center justify-content-between mb-1">
@@ -331,6 +337,9 @@ if ($selectedDialCode !== '' && str_starts_with($localMobileVal, $selectedDialCo
                                 <div class="row g-2">
                                     <?php foreach ($attributeDefs as $key => $def): ?>
                                         <?php
+                                        if ((string) $key === 'source') {
+                                            continue; // has its own Source field above
+                                        }
                                         $attrVal = $cf[$key] ?? '';
                                         $attrVal = is_scalar($attrVal) ? (string) $attrVal : json_encode($attrVal);
                                         $type    = (string) $def['type'];
