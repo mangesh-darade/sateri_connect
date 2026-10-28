@@ -215,6 +215,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     // Contact attribute definitions + inbox quick replies
     $routes->get('attributes', 'Attributes::index');
     $routes->get('attributes/data', 'Attributes::data');
+    $routes->post('attributes/elintom-mapping', 'Attributes::saveElintOmMapping', ['filter' => 'csrf']);
     $routes->post('attributes', 'Attributes::store', ['filter' => 'csrf']);
     $routes->post('attributes/(:num)', 'Attributes::update/$1', ['filter' => 'csrf']);
     $routes->post('attributes/(:num)/delete', 'Attributes::delete/$1', ['filter' => 'csrf']);

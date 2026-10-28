@@ -7,6 +7,7 @@ namespace App\Controllers;
 use App\Libraries\ActivityLogger;
 use App\Libraries\ContactAttributeService;
 use App\Libraries\DataTablesQuery;
+use App\Libraries\ElintOmLeadPushService;
 use CodeIgniter\HTTP\ResponseInterface;
 use InvalidArgumentException;
 
@@ -28,7 +29,13 @@ class Attributes extends BaseController
             return $this->jsonResponse(true, ['attributes' => $rows, 'types' => ContactAttributeService::TYPES]);
         }
 
+        $push     = new ElintOmLeadPushService();
+        $elintom  = $service->tableReady() && $push->isConfigured();
+
         return $this->render('attributes/index', [
+            'elintomFields' => $elintom ? $push->leadFields() : null,
+            'elintomMap'    => $elintom ? $push->mapping() : [],
+            'elintomAttrs'  => $elintom ? array_filter($service->definitions(), static fn ($d) => ! in_array($d['attr_key'], ['source'], true)) : [],
             'pageTitle'  => 'Attributes',
             'types'      => ContactAttributeService::TYPES,
             'tableReady' => $service->tableReady(),
@@ -64,6 +71,22 @@ class Attributes extends BaseController
                 return $row;
             },
         ]));
+    }
+
+    /** Save attribute => ElintOm lead column mapping (only when ElintOm URL + key are set). */
+    public function saveElintOmMapping(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('contacts.edit')) {
+            return $denied;
+        }
+        $push = new ElintOmLeadPushService();
+        if (! $push->isConfigured()) {
+            return $this->jsonResponse(false, null, 'ElintOm URL and private key are not set.', [], 422);
+        }
+        $map = $this->request->getPost('map', FILTER_UNSAFE_RAW);
+        $push->saveMapping(is_array($map) ? $map : []);
+
+        return $this->jsonResponse(true, null, 'ElintOm lead mapping saved.');
     }
 
     public function store(): ResponseInterface

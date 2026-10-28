@@ -62,6 +62,60 @@
     </div>
 </div>
 <?php endif; ?>
+
+<?php if (is_array($elintomFields ?? null)): ?>
+<div class="card mt-3">
+    <div class="card-header">
+        <h2 class="card-title mb-0">ElintOm lead mapping</h2>
+        <div class="small text-muted">Choose which ElintOm lead column each attribute goes to when a contact is pushed to ElintOm. Name, mobile, email and source are always mapped. Leave empty to not send.</div>
+    </div>
+    <div class="card-body py-3">
+        <?php if ($elintomFields === []): ?>
+            <div class="alert alert-warning mb-0">Could not load ElintOm lead columns. Check the ElintOm URL and key in Settings → ElintOm.</div>
+        <?php elseif ($elintomAttrs === []): ?>
+            <div class="text-muted">No attributes to map yet. Add an attribute first.</div>
+        <?php else: ?>
+        <form id="elintomMapForm" autocomplete="off">
+            <?= csrf_field() ?>
+            <table class="table table-sm align-middle mb-3">
+                <thead><tr><th>Attribute</th><th style="width:40%">ElintOm lead column</th></tr></thead>
+                <tbody>
+                <?php foreach ($elintomAttrs as $key => $def): ?>
+                    <tr>
+                        <td><?= esc($def['label']) ?> <code class="small"><?= esc($key) ?></code></td>
+                        <td>
+                            <select class="form-select form-select-sm" name="map[<?= esc($key, 'attr') ?>]" <?= $canEdit ? '' : 'disabled' ?>>
+                                <option value="">— not sent —</option>
+                                <?php foreach ($elintomFields as $col): ?>
+                                    <option value="<?= esc($col, 'attr') ?>" <?= ($elintomMap[$key] ?? '') === $col ? 'selected' : '' ?>><?= esc($col) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+            <?php if ($canEdit): ?>
+                <button type="submit" class="btn btn-wa btn-sm">Save mapping</button>
+                <span class="small ms-2" id="elintomMapMsg"></span>
+            <?php endif; ?>
+        </form>
+        <script>
+        document.getElementById('elintomMapForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+            var msg = document.getElementById('elintomMapMsg');
+            fetch('<?= site_url('attributes/elintom-mapping') ?>', {
+                method: 'POST', body: new FormData(this), headers: {'X-Requested-With': 'XMLHttpRequest'}
+            }).then(function (r) { return r.json(); }).then(function (j) {
+                msg.textContent = j.message || (j.success ? 'Saved.' : 'Failed.');
+                msg.className = 'small ms-2 ' + (j.success ? 'text-success' : 'text-danger');
+            }).catch(function () { msg.textContent = 'Request failed.'; msg.className = 'small ms-2 text-danger'; });
+        });
+        </script>
+        <?php endif; ?>
+    </div>
+</div>
+<?php endif; ?>
 </div>
 
 <?php if ($canEdit): ?>

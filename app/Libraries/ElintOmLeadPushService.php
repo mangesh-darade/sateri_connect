@@ -13,6 +13,76 @@ use Throwable;
 class ElintOmLeadPushService
 {
 
+    /** Mapping is offered only when ElintOm URL and private key are both set. */
+    public function isConfigured(): bool
+    {
+        $cfg = (new ElintOmCustomerSyncService())->getConfig();
+
+        return $cfg['base_url'] !== '' && $cfg['private_key'] !== '';
+    }
+
+    /**
+     * Saved mapping: attribute key => ElintOm lead column.
+     *
+     * @return array<string, string>
+     */
+    public function mapping(): array
+    {
+        if (! $this->isConfigured()) {
+            return [];
+        }
+        $raw = json_decode((string) service('settingsService')->get('elintom_lead_mapping', ''), true);
+
+        return is_array($raw) ? array_map('strval', $raw) : [];
+    }
+
+    /** @param array<string, string> $map */
+    public function saveMapping(array $map): void
+    {
+        $clean = [];
+        foreach ($map as $attr => $col) {
+            $attr = (string) $attr;
+            $col  = trim((string) $col);
+            if ($col !== '' && preg_match(ContactAttributeService::KEY_PATTERN, $attr) === 1 && preg_match('/^\w+$/', $col) === 1) {
+                $clean[$attr] = $col;
+            }
+        }
+        service('settingsService')->set('elintom_lead_mapping', json_encode($clean), 'elintom', false);
+    }
+
+    /**
+     * Lead columns available in ElintOm (Api3 sateri_lead_fields).
+     *
+     * @return list<string>
+     */
+    public function leadFields(): array
+    {
+        $res = $this->post('sateri_lead_fields', [], 8);
+
+        return array_values(array_filter((array) ($res['fields'] ?? []), 'is_string'));
+    }
+
+    /**
+     * Mapped attribute values of a contact => [lead column => value].
+     *
+     * @param array<string, mixed> $custom
+     * @param array<string, string> $map
+     *
+     * @return array<string, string>
+     */
+    protected function mappedFields(array $custom, array $map): array
+    {
+        $out = [];
+        foreach ($map as $attr => $col) {
+            $val = $custom[$attr] ?? '';
+            if (is_scalar($val) && trim((string) $val) !== '') {
+                $out[$col] = trim((string) $val);
+            }
+        }
+
+        return $out;
+    }
+
     /**
      * @param array<string, mixed> $contact
      */
@@ -37,6 +107,7 @@ class ElintOmLeadPushService
                 'mobile' => $mobile,
                 'email'  => (string) ($contact['email'] ?? ''),
                 'source' => is_array($custom) ? (string) ($custom['source'] ?? '') : '',
+                'fields' => json_encode($this->mappedFields(is_array($custom) ? $custom : [], $this->mapping())),
             ], 5);
         } catch (Throwable $e) {
             log_message('error', 'ElintOm lead push failed: ' . $e->getMessage());
@@ -56,6 +127,7 @@ class ElintOmLeadPushService
             ->findAll();
 
         $list = [];
+        $map  = $this->mapping();
         foreach ($rows as $r) {
             $custom = $r['custom_fields'] ?? [];
             if (is_array($custom) && ! empty($custom['elintom_lead_id'])) {
@@ -64,7 +136,7 @@ class ElintOmLeadPushService
             if ($this->isPlaceholderMobile(normalize_phone((string) $r['mobile']))) {
                 continue;
             }
-            $list[] = ['name' => (string) ($r['name'] ?? ''), 'mobile' => (string) $r['mobile'], 'email' => (string) ($r['email'] ?? ''), 'source' => is_array($custom) ? (string) ($custom['source'] ?? '') : ''];
+            $list[] = ['name' => (string) ($r['name'] ?? ''), 'mobile' => (string) $r['mobile'], 'email' => (string) ($r['email'] ?? ''), 'source' => is_array($custom) ? (string) ($custom['source'] ?? '') : '', 'fields' => $this->mappedFields(is_array($custom) ? $custom : [], $map)];
         }
 
         $out = ['created' => 0, 'updated' => 0, 'skipped' => 0];
