@@ -1167,8 +1167,19 @@ class AutomationEngine
             ->orderBy('id', 'DESC')
             ->get(1)
             ->getRowArray();
-        if (! is_array($job)) {
-            $job = $this->reopenAnsweredQuestion($contactId, (string) ($inbound['reply_id'] ?? ''));
+        $replyId = (string) ($inbound['reply_id'] ?? '');
+        if (is_array($job) && $replyId !== '') {
+            // A button/list tap that is not an option of the open question (e.g. a later "Response message"
+            // waiting for text) may belong to an older, already answered question.
+            $openRule = $this->rules->find((int) $job['resume_rule_id']);
+            $openOpts = is_array($openRule) ? self::questionOptions($this->decodeJson($openRule['config'] ?? null)) : [];
+            if (! isset($openOpts[$replyId]) && ($reopened = $this->reopenAnsweredQuestion($contactId, $replyId)) !== null) {
+                $db->table('automation_delayed_jobs')->where('id', (int) $job['id'])->where('status', 'awaiting_reply')
+                    ->update(['status' => 'cancelled', 'updated_at' => date('Y-m-d H:i:s')]);
+                $job = $reopened;
+            }
+        } elseif (! is_array($job)) {
+            $job = $this->reopenAnsweredQuestion($contactId, $replyId);
             if (! is_array($job)) {
                 return false;
             }
