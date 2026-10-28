@@ -1168,7 +1168,10 @@ class AutomationEngine
             ->get(1)
             ->getRowArray();
         if (! is_array($job)) {
-            return false;
+            $job = $this->reopenAnsweredQuestion($contactId, (string) ($inbound['reply_id'] ?? ''));
+            if (! is_array($job)) {
+                return false;
+            }
         }
 
         $jobId = (int) $job['id'];
@@ -1256,6 +1259,48 @@ class AutomationEngine
         }
 
         return true;
+    }
+
+    /**
+     * Tap on an old button/list message after its question was already answered:
+     * reopen the contact's latest answered question (last 24h) when the tapped id is one of its options.
+     *
+     * @return array<string, mixed>|null the new awaiting_reply job row
+     */
+    protected function reopenAnsweredQuestion(int $contactId, string $replyId): ?array
+    {
+        if ($replyId === '') {
+            return null;
+        }
+        $db   = db_connect();
+        $last = $db->table('automation_delayed_jobs')
+            ->where('contact_id', $contactId)
+            ->where('status', 'done')
+            ->where('updated_at >', date('Y-m-d H:i:s', time() - 86400))
+            ->orderBy('id', 'DESC')
+            ->get(1)
+            ->getRowArray();
+        if (! is_array($last)) {
+            return null;
+        }
+        $rule = $this->rules->find((int) $last['resume_rule_id']);
+        if (! is_array($rule) || ! isset($this->questionOptions($this->decodeJson($rule['config'] ?? null))[$replyId])) {
+            return null;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $db->table('automation_delayed_jobs')->insert([
+            'automation_id'  => $last['automation_id'],
+            'contact_id'     => $contactId,
+            'resume_rule_id' => $last['resume_rule_id'],
+            'context_json'   => $last['context_json'],
+            'run_at'         => date('Y-m-d H:i:s', time() + 3600),
+            'status'         => 'awaiting_reply',
+            'created_at'     => $now,
+            'updated_at'     => $now,
+        ]);
+
+        return $db->table('automation_delayed_jobs')->where('id', (int) $db->insertID())->get(1)->getRowArray() ?: null;
     }
 
     /**
