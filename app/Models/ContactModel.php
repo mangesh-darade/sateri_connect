@@ -64,7 +64,31 @@ class ContactModel extends Model
 
     protected $beforeInsert = ['applyAttributeDefaults', 'encodeCustomFields'];
     protected $beforeUpdate = ['encodeCustomFields'];
+    protected $afterInsert  = ['pushToElintOm'];
+    protected $afterUpdate  = ['pushToElintOm'];
     protected $afterFind    = ['decodeCustomFields'];
+
+    /**
+     * Create/update the matching lead in ElintOm (only when ElintOm is configured).
+     *
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    protected function pushToElintOm(array $data): array
+    {
+        $ids = $data['id'] ?? [];
+        foreach ((array) $ids as $id) {
+            if (! $id) {
+                continue;
+            }
+            $row = $this->builder()->select('name, mobile, email, custom_fields')->where('id', (int) $id)->get()->getRowArray();
+            if ($row) {
+                (new \App\Libraries\ElintOmLeadPushService())->push($row);
+            }
+        }
+
+        return $data;
+    }
 
     /**
      * New contacts get the default value of each defined attribute (Settings → Attributes).

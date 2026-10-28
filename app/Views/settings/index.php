@@ -1041,8 +1041,8 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                             </div>
                         </div>
                         <div class="alert alert-light border settings-note">
-                            Pull customers from ElintOm (<code>sma_companies</code> via Api3 <code>sateri_contacts</code>) into
-                            <a href="<?= site_url('contacts') ?>">Contacts</a>.
+                            Two-way sync: ElintOm Leads (<code>sma_leads</code> via Api3 <code>sateri_leads</code>) ⇄
+                            <a href="<?= site_url('contacts') ?>">Contacts</a> (new/changed contacts also go to ElintOm Leads on save).
                             ElintOm madhe <strong>API access</strong> on asava ani <code>api_privatekey</code> match hova.
                         </div>
                         <div class="row g-3">
@@ -1072,7 +1072,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                     <?php endif; ?>
                                     <?php if ($canEditSettings || (function_exists('can') && can('contacts.import'))): ?>
                                         <button type="button" class="btn btn-wa" id="btnSyncElintOmSettings">
-                                            <i class="fas fa-cash-register me-1"></i> Sync customers now
+                                            <i class="fas fa-cash-register me-1"></i> Sync leads now
                                         </button>
                                     <?php endif; ?>
                                     <a class="btn btn-outline-secondary" href="<?= site_url('contacts') ?>">
@@ -1088,7 +1088,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                         <li>ElintOm → enable API access + copy private key</li>
                                         <li>Paste domain URL + key here → Save Settings</li>
                                         <li>Test connection</li>
-                                        <li>Sync customers (or use Contacts page button)</li>
+                                        <li>Sync leads (Leads ⇄ Contacts)</li>
                                     </ol>
                                 </aside>
                             </div>

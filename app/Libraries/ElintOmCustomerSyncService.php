@@ -58,12 +58,12 @@ class ElintOmCustomerSyncService
     public function testConnection(): array
     {
         try {
-            $payload = $this->fetchCustomers();
+            $payload = $this->fetchCustomers('sateri_leads', 'leads');
             $count   = count($payload);
 
             return [
                 'ok'      => true,
-                'message' => "Connected. {$count} syncable customer(s) from ElintOm.",
+                'message' => "Connected. {$count} lead(s) in ElintOm.",
                 'count'   => $count,
             ];
         } catch (Throwable $e) {
@@ -79,7 +79,8 @@ class ElintOmCustomerSyncService
      */
     public function sync(): array
     {
-        $rows = $this->fetchCustomers();
+        // Customers pull is off: sync is leads <-> contacts only (see pullLeads / ElintOmLeadPushService::pushAll).
+        $rows = [];
 
         $created = 0;
         $updated = 0;
@@ -118,6 +119,20 @@ class ElintOmCustomerSyncService
             }
         }
 
+        $leadStats = ['created' => 0, 'updated' => 0, 'failed' => 0];
+        $pushStats = ['created' => 0, 'updated' => 0, 'skipped' => 0];
+        // Push first so a contact's own source reaches ElintOm before leads are pulled back.
+        try {
+            $pushStats = (new ElintOmLeadPushService())->pushAll();
+        } catch (Throwable $e) {
+            $errors[] = 'leads push: ' . $e->getMessage();
+        }
+        try {
+            $leadStats = $this->pullLeads();
+        } catch (Throwable $e) {
+            $errors[] = 'leads pull: ' . $e->getMessage();
+        }
+
         if ($created + $updated > 0) {
             log_activity('sync', 'contacts', sprintf('ElintOm customers sync: %d created, %d updated, %d deleted-in-app skipped', $created, $updated, $deleted), [
                 'source'    => 'elintom',
@@ -138,13 +153,95 @@ class ElintOmCustomerSyncService
             'deleted' => $deleted,
             'total'   => count($rows),
             'errors'  => $errors,
+            'leads_pulled' => $leadStats,
+            'leads_pushed' => $pushStats,
         ];
+    }
+
+    /**
+     * ElintOm leads (Api3 action=sateri_leads) -> contacts. Only name/email are refreshed on existing contacts.
+     *
+     * @return array{created: int, updated: int, failed: int}
+     */
+    protected function pullLeads(): array
+    {
+        $out = ['created' => 0, 'updated' => 0, 'failed' => 0];
+
+        foreach ($this->fetchCustomers('sateri_leads', 'leads') as $row) {
+            $mobile = normalize_phone((string) ($row['mobile'] ?? ''));
+            if ($mobile === '') {
+                continue;
+            }
+
+            try {
+                $existing = $this->contacts->findByMobile($mobile) ?? $this->contacts->findByMobile($mobile, true);
+                if ($existing !== null && ! empty($existing['deleted_at'])) {
+                    continue;
+                }
+
+                $name   = trim((string) ($row['name'] ?? ''));
+                $email  = trim((string) ($row['email'] ?? ''));
+                $source = trim((string) ($row['source'] ?? ''));
+
+                if ($existing === null) {
+                    $id = $this->contacts->insert([
+                        'channel'       => 'whatsapp',
+                        'external_id'   => $mobile,
+                        'mobile'        => $mobile,
+                        'name'          => $name !== '' ? $name : null,
+                        'email'         => $email !== '' ? $email : null,
+                        'country'       => 'IN',
+                        'status'        => 'active',
+                        'notes'         => 'Synced from ElintOm lead',
+                        'wa_opt_in'        => 1,
+                        'wa_opt_in_at'     => date('Y-m-d H:i:s'),
+                        'wa_opt_in_source' => 'elintom_lead',
+                        'custom_fields' => ['source' => $source !== '' ? $source : 'ElintOM', 'elintom_lead_id' => (int) ($row['id'] ?? 0)],
+                    ]);
+                    if (! $id) {
+                        throw new RuntimeException(implode(' ', $this->contacts->errors() ?: ['Insert failed']));
+                    }
+                    $out['created']++;
+                    continue;
+                }
+
+                $upd = [];
+                $cf  = is_array($existing['custom_fields'] ?? null) ? $existing['custom_fields'] : [];
+                if (! empty($cf['elintom_lead_id']) && empty($existing['wa_opt_in'])) {
+                    $upd['wa_opt_in']        = 1;
+                    $upd['wa_opt_in_at']     = date('Y-m-d H:i:s');
+                    $upd['wa_opt_in_source'] = 'elintom_lead';
+                }
+                // An existing contact keeps its own source; only fill it when empty.
+                $curSource = (string) ($cf['source'] ?? '');
+                $newSource = $curSource === '' || $curSource === 'elintom_lead' ? ($source !== '' ? $source : 'ElintOM') : '';
+                if ($newSource !== '' && $newSource !== $curSource) {
+                    $upd['custom_fields'] = array_merge($cf, ['source' => $newSource]);
+                }
+                if ($name !== '' && $name !== (string) ($existing['name'] ?? '')) {
+                    $upd['name'] = $name;
+                }
+                if ($email !== '' && $email !== (string) ($existing['email'] ?? '')) {
+                    $upd['email'] = $email;
+                }
+                if ($upd !== []) {
+                    if (! $this->contacts->update((int) $existing['id'], $upd)) {
+                        throw new RuntimeException(implode(' ', $this->contacts->errors() ?: ['Update failed']));
+                    }
+                    $out['updated']++;
+                }
+            } catch (Throwable $e) {
+                $out['failed']++;
+            }
+        }
+
+        return $out;
     }
 
     /**
      * @return list<array<string, mixed>>
      */
-    protected function fetchCustomers(): array
+    protected function fetchCustomers(string $action = 'sateri_contacts', string $listKey = 'customers'): array
     {
         $cfg = $this->getConfig();
         if ($cfg['base_url'] === '') {
@@ -161,7 +258,7 @@ class ElintOmCustomerSyncService
         $endpoint = $this->resolveEshopEndpoint($cfg['base_url']);
         $body     = http_build_query([
             'privatekey' => $cfg['private_key'],
-            'action'     => 'sateri_contacts',
+            'action'     => $action,
         ]);
 
         $ch = curl_init($endpoint);
@@ -199,7 +296,7 @@ class ElintOmCustomerSyncService
             throw new RuntimeException($msg . ' (HTTP ' . $http . ')');
         }
 
-        $customers = $decoded['customers'] ?? [];
+        $customers = $decoded[$listKey] ?? [];
         if (! is_array($customers)) {
             return [];
         }

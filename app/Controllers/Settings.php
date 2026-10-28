@@ -796,21 +796,27 @@ class Settings extends BaseController
 
     public function syncElintOm(): ResponseInterface
     {
-        if ($denied = $this->requireAnyPermission(['contacts.import', 'settings.edit'])) {
+        $platformAdmin = $this->platformMode && (int) session('platform_admin_id') > 0;
+        if (! $platformAdmin && ($denied = $this->requireAnyPermission(['contacts.import', 'settings.edit']))) {
             return $denied;
         }
 
         try {
             $stats = (new \App\Libraries\ElintOmCustomerSyncService())->sync();
+            $pulled = $stats['leads_pulled'] ?? [];
+            $pushed = $stats['leads_pushed'] ?? [];
             $msg = sprintf(
-                'ElintOm sync done: %d created, %d updated, %d skipped, %d deleted in app (not restored), %d failed (of %d).',
-                (int) ($stats['created'] ?? 0),
-                (int) ($stats['updated'] ?? 0),
-                (int) ($stats['skipped'] ?? 0),
-                (int) ($stats['deleted'] ?? 0),
-                (int) ($stats['failed'] ?? 0),
-                (int) ($stats['total'] ?? 0)
+                'ElintOm sync done. Leads → Contacts: %d created, %d updated, %d failed. Contacts → Leads: %d created, %d updated, %d skipped.',
+                (int) ($pulled['created'] ?? 0),
+                (int) ($pulled['updated'] ?? 0),
+                (int) ($pulled['failed'] ?? 0),
+                (int) ($pushed['created'] ?? 0),
+                (int) ($pushed['updated'] ?? 0),
+                (int) ($pushed['skipped'] ?? 0)
             );
+            if (! empty($stats['errors'])) {
+                $msg .= ' Errors: ' . implode('; ', array_slice($stats['errors'], 0, 3));
+            }
 
             return $this->jsonResponse(true, $stats, $msg);
         } catch (\Throwable $e) {
