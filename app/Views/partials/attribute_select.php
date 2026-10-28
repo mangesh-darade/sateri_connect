@@ -12,7 +12,7 @@
 $selected      = (string) ($selected ?? '');
 $attributeDefs = $attributeDefs ?? service('contactAttributes')->definitions();
 $noMobile      = $noMobile ?? true;
-$core          = ['name' => 'Name', 'mobile' => 'Mobile', 'email' => 'Email', 'country' => 'Country', 'notes' => 'Notes', 'status' => 'Status', 'birthday' => 'Birthday'];
+$core          = ['name' => 'Name', 'mobile' => 'Mobile', 'email' => 'Email', 'country' => 'Country', 'notes' => 'Notes', 'status' => 'Status', 'birthday' => 'Birthday', 'source' => 'Source'];
 if ($noMobile) {
     unset($core['mobile']);
 }
@@ -24,13 +24,14 @@ $opt = static fn (string $value, string $label): string => '<option value="' . e
     <?php if ($attributeDefs !== []): ?>
         <optgroup label="Attributes">
             <?php foreach ($attributeDefs as $key => $def): ?>
+                <?php if ((string) $key === 'source') { continue; } // listed under Contact fields ?>
                 <?= $opt((string) $key, (string) $def['label']) ?>
             <?php endforeach; ?>
         </optgroup>
     <?php endif; ?>
     <optgroup label="Contact fields">
         <?php foreach ($core as $key => $label): ?>
-            <?php if (! isset($attributeDefs[$key])): ?><?= $opt($key, $label) ?><?php endif; ?>
+            <?php if (! isset($attributeDefs[$key]) || $key === 'source'): ?><?= $opt($key, $label) ?><?php endif; ?>
         <?php endforeach; ?>
     </optgroup>
     <?php if ($selected !== '' && ! in_array($selected, $shown, true)): ?>

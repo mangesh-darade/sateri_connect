@@ -56,7 +56,18 @@ class ContactAttributeService
         if (! $this->tableReady()) {
             return $this->cache;
         }
-        foreach (model(ContactAttributeModel::class)->orderBy('label', 'ASC')->findAll() as $row) {
+        $model = model(ContactAttributeModel::class);
+        $rows  = $model->orderBy('label', 'ASC')->findAll();
+        // "source" is a standard attribute (synced with ElintOm lead source); create it once if missing.
+        if (! in_array('source', array_column($rows, 'attr_key'), true)) {
+            try {
+                $model->insert(['attr_key' => 'source', 'label' => 'Source', 'type' => 'text', 'options' => null, 'default_value' => null]);
+                $rows = $model->orderBy('label', 'ASC')->findAll();
+            } catch (\Throwable) {
+                // Attributes still work without it.
+            }
+        }
+        foreach ($rows as $row) {
             $row['options'] = $this->decodeOptions($row['options'] ?? null);
             $this->cache[(string) $row['attr_key']] = $row;
         }

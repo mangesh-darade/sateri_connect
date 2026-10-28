@@ -753,7 +753,7 @@
         });
     }
 
-    var CORE_ATTR_LABELS = { name: 'Name', mobile: 'Mobile', email: 'Email', country: 'Country', notes: 'Notes', status: 'Status', birthday: 'Birthday' };
+    var CORE_ATTR_LABELS = { name: 'Name', mobile: 'Mobile', email: 'Email', country: 'Country', notes: 'Notes', status: 'Status', birthday: 'Birthday', source: 'Source' };
 
     /** Allowed values for dropdown / Yes-No attributes (and contact status); [] = free value. */
     function attrOptions(key) {
@@ -783,7 +783,7 @@
         var defKeys = Object.keys(defs);
         if (defKeys.length) {
             html += '<optgroup label="Attributes">';
-            defKeys.forEach(function (k) { html += opt(k, defs[k].label + (defs[k].label.toLowerCase() !== k.toLowerCase() ? ' (' + k + ')' : '')); });
+            defKeys.forEach(function (k) { if (k === 'source') return; html += opt(k, defs[k].label + (defs[k].label.toLowerCase() !== k.toLowerCase() ? ' (' + k + ')' : '')); });
             html += '</optgroup>';
         }
         html += '<optgroup label="Contact fields">';
