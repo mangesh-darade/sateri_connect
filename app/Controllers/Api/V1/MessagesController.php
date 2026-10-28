@@ -279,6 +279,9 @@ class MessagesController extends BaseV1Controller
     {
         $rawPhone = trim((string) ($this->request->getGet('phone') ?? ''));
         $digits   = preg_replace('/\D/', '', $rawPhone);
+        if ($rawPhone === '' && strtolower((string) ($this->request->getGet('direction') ?? '')) === 'inbound') {
+            return $this->unreadInbound();
+        }
         if (strlen($digits) < 7 || strlen($digits) > 15) {
             return $this->respondValidationError(['phone' => 'A valid phone number is required (7 to 15 digits with country code).']);
         }
@@ -312,6 +315,7 @@ class MessagesController extends BaseV1Controller
             'status'     => (string) ($m['status'] ?? ''),
             'error'      => $m['error_message'] ?? null,
             'created_at' => (string) ($m['created_at'] ?? ''),
+            'is_read'    => (int) ($m['is_read'] ?? 0),
         ], $rows);
 
         return $this->respondSuccess([
@@ -324,6 +328,38 @@ class MessagesController extends BaseV1Controller
             ],
             'messages' => $messages,
         ], 'Conversation retrieved.');
+    }
+
+    /**
+     * Unread inbound WhatsApp messages of all contacts in one call (ElintOm bell).
+     * GET /api/v1/messages?direction=inbound&limit=80
+     */
+    protected function unreadInbound(): ResponseInterface
+    {
+        $limit = min(100, max(1, (int) ($this->request->getGet('limit') ?? 80)));
+
+        $rows = db_connect()->table('messages m')
+            ->select('m.id, m.direction, m.message_type, m.content, m.status, m.created_at, c.mobile AS phone')
+            ->join('contacts c', 'c.id = m.contact_id AND c.deleted_at IS NULL')
+            ->where('m.channel', 'whatsapp')
+            ->where('m.direction', 'inbound')
+            ->where('m.is_read', 0)
+            ->orderBy('m.id', 'DESC')
+            ->limit($limit)
+            ->get()->getResultArray();
+
+        $messages = array_map(static fn (array $m): array => [
+            'id'         => (int) $m['id'],
+            'direction'  => (string) $m['direction'],
+            'type'       => (string) ($m['message_type'] ?? 'text'),
+            'content'    => (string) ($m['content'] ?? ''),
+            'status'     => (string) ($m['status'] ?? ''),
+            'created_at' => (string) ($m['created_at'] ?? ''),
+            'phone'      => (string) ($m['phone'] ?? ''),
+            'is_read'    => 0,
+        ], $rows);
+
+        return $this->respondSuccess(['messages' => $messages], 'Unread inbound messages retrieved.');
     }
 
     /**

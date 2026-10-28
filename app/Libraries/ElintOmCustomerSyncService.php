@@ -165,7 +165,8 @@ class ElintOmCustomerSyncService
      */
     protected function pullLeads(): array
     {
-        $out = ['created' => 0, 'updated' => 0, 'failed' => 0];
+        $out     = ['created' => 0, 'updated' => 0, 'failed' => 0];
+        $pushMap = (new ElintOmLeadPushService())->mapping();
 
         foreach ($this->fetchCustomers('sateri_leads', 'leads') as $row) {
             $mobile = normalize_phone((string) ($row['mobile'] ?? ''));
@@ -212,11 +213,20 @@ class ElintOmCustomerSyncService
                     $upd['wa_opt_in_at']     = date('Y-m-d H:i:s');
                     $upd['wa_opt_in_source'] = 'elintom_lead';
                 }
-                // An existing contact keeps its own source; only fill it when empty.
+                // ElintOm is primary for an existing number: source follows ElintOm.
                 $curSource = (string) ($cf['source'] ?? '');
-                $newSource = $curSource === '' || $curSource === 'elintom_lead' ? ($source !== '' ? $source : 'ElintOM') : '';
+                $newSource = $source !== '' ? $source : ($curSource === '' || $curSource === 'elintom_lead' ? 'ElintOM' : '');
                 if ($newSource !== '' && $newSource !== $curSource) {
                     $upd['custom_fields'] = array_merge($cf, ['source' => $newSource]);
+                }
+                // mapped attributes (e.g. status) follow ElintOm
+                $cfNow = $upd['custom_fields'] ?? $cf;
+                foreach ($pushMap as $attr => $col) {
+                    $val = $row[$col] ?? null;
+                    if (is_scalar($val) && trim((string) $val) !== '' && (string) ($cfNow[$attr] ?? '') !== trim((string) $val)) {
+                        $cfNow[$attr] = trim((string) $val);
+                        $upd['custom_fields'] = $cfNow;
+                    }
                 }
                 if ($name !== '' && $name !== (string) ($existing['name'] ?? '')) {
                     $upd['name'] = $name;
@@ -259,7 +269,7 @@ class ElintOmCustomerSyncService
         $body     = http_build_query([
             'privatekey' => $cfg['private_key'],
             'action'     => $action,
-        ]);
+        ] + ($action === 'sateri_leads' ? ['columns' => json_encode(array_values((new ElintOmLeadPushService())->mapping()))] : []));
 
         $ch = curl_init($endpoint);
         curl_setopt_array($ch, [
