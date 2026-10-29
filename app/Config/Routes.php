@@ -403,6 +403,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->get('reports/templates/export', 'Reports::templatesExport');
     $routes->get('reports/email', 'Reports::email');
     $routes->get('reports/campaigns', 'Reports::campaigns');
+    $routes->post('reports/campaigns/retarget', 'Reports::retarget', ['filter' => 'csrf']);
     $routes->get('reports/delivery', 'Reports::delivery');
     $routes->get('reports/campaign-contacts', 'Reports::campaignContacts');
     $routes->get('reports/export-pdf', 'Reports::exportPdf');

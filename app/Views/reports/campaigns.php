@@ -47,12 +47,34 @@ $kpis = [
     ['Pending', number_format((int) ($sum['pending'] ?? 0)), 'Still in queue', '#f59e0b'],
     ['Replies', number_format($replies), 'After the campaign send', '#7c3aed'],
 ];
-$funnel = [
-    ['Sent', $sent, 100.0, '#0d9488'],
-    ['Delivered', $delivered, $pct($delivered, $sent), '#16a34a'],
-    ['Read', $read, $pct($read, $sent), '#0284c7'],
-    ['Replied', $replies, $pct($replies, $sent), '#7c3aed'],
+$fn     = $funnel ?? ['total' => 0, 'sent' => 0, 'delivered' => 0, 'read' => 0];
+$fTotal = (int) $fn['total'];
+$fPct   = static fn (int $n): float => $fTotal > 0 ? round(($n / $fTotal) * 100, 1) : 0.0;
+$canRetarget = function_exists('can') && can('campaigns.create');
+$fStages = [
+    ['label' => 'Total', 'count' => $fTotal, 'pct' => $fPct($fTotal), 'segments' => []],
+    ['label' => 'Sent', 'count' => (int) $fn['sent'], 'pct' => $fPct((int) $fn['sent']),
+        'segments' => ['sent' => 'WhatsApp contacts sent', 'unsent' => 'WhatsApp contacts not sent']],
+    ['label' => 'Delivered', 'count' => (int) $fn['delivered'], 'pct' => $fPct((int) $fn['delivered']),
+        'segments' => ['delivered' => 'WhatsApp contacts delivered', 'undelivered' => 'WhatsApp contacts undelivered']],
+    ['label' => 'Opened', 'count' => (int) $fn['read'], 'pct' => $fPct((int) $fn['read']),
+        'segments' => ['read' => 'WhatsApp contacts who opened', 'unread' => 'WhatsApp contacts who did not open']],
+    ['label' => 'Clicks', 'count' => null, 'pct' => null, 'segments' => []],
 ];
+// Funnel shape: stage i to stage i+1 is a polygon whose height follows the share of total; Clicks is a thin line.
+$fW = 1000; $fH = 240; $fMid = $fH / 2;
+$fHeights = array_map(static fn (array $st): float => max(1.0, ($st['pct'] ?? 0.0) / 100 * $fH), $fStages);
+$fColors  = ['var(--brand-800)', 'var(--brand-600)', 'var(--brand-500)', 'var(--brand-400)', 'var(--brand-400)'];
+$fPolys   = [];
+$colW     = $fW / count($fStages);
+foreach ($fStages as $i => $st) {
+    $x0 = $i * $colW;
+    $x1 = ($i + 1) * $colW;
+    $h0 = $fHeights[$i];
+    $h1 = $fHeights[$i + 1] ?? $h0;
+    $pt = static fn (float $x, float $y): string => round($x, 1) . ',' . round($y, 1);
+    $fPolys[] = [implode(' ', [$pt($x0, $fMid - $h0 / 2), $pt($x1, $fMid - $h1 / 2), $pt($x1, $fMid + $h1 / 2), $pt($x0, $fMid + $h0 / 2)]), $fColors[$i]];
+}
 ?>
 <div class="page-list">
 
@@ -85,26 +107,52 @@ $funnel = [
 </div>
 
 <div class="row g-3 mb-3">
-    <div class="col-lg-5">
+    <div class="col-12">
         <div class="rpt-panel">
-            <h2>Delivery funnel</h2>
-            <?php if ($sent > 0): ?>
-                <div class="rpt-funnel">
-                    <?php foreach ($funnel as [$label, $count, $share, $color]): ?>
-                        <div class="rpt-funnel-row">
-                            <span class="name"><?= esc($label) ?></span>
-                            <div class="rpt-funnel-track"><div class="rpt-funnel-fill" style="width:<?= number_format(min(100, $share), 2, '.', '') ?>%;--c:<?= $color ?>"></div></div>
-                            <span class="rpt-funnel-val"><strong><?= number_format($count) ?></strong><small><?= esc((string) $share) ?>%</small></span>
-                        </div>
-                    <?php endforeach; ?>
+            <h2>Campaign performance funnel</h2>
+            <?php if ($fTotal > 0): ?>
+                <div class="rpt-fn" id="rptFunnel"
+                     data-url="<?= esc(site_url('reports/campaigns/retarget'), 'attr') ?>"
+                     data-from="<?= esc($from, 'attr') ?>" data-to="<?= esc($to, 'attr') ?>"
+                     data-campaign="<?= (int) ($campaignId ?? 0) ?>">
+                    <div class="rpt-fn-stats">
+                        <?php foreach ($fStages as $st): ?>
+                            <div class="rpt-fn-stat">
+                                <div class="rpt-fn-head">
+                                    <span class="rpt-fn-label"><?= esc($st['label']) ?></span>
+                                    <span class="rpt-fn-count"><?= $st['count'] === null ? '—' : number_format($st['count']) ?></span>
+                                    <?php if ($canRetarget): ?>
+                                        <div class="dropdown">
+                                            <button type="button" class="rpt-fn-dots" data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-label="Retarget <?= esc($st['label'], 'attr') ?>"><i class="fas fa-ellipsis-v"></i></button>
+                                            <div class="dropdown-menu dropdown-menu-end rpt-fn-menu">
+                                                <div class="rpt-fn-menu-title"><i class="fas fa-bullhorn me-1"></i>Choose who to retarget</div>
+                                                <?php if ($st['segments'] === []): ?>
+                                                    <span class="dropdown-item disabled">Not tracked for WhatsApp</span>
+                                                <?php endif; ?>
+                                                <?php foreach ($st['segments'] as $seg => $text): ?>
+                                                    <button type="button" class="dropdown-item js-retarget" data-segment="<?= esc($seg, 'attr') ?>"><?= esc($text) ?></button>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                                <strong class="rpt-fn-pct"><?= $st['pct'] === null ? '—' : esc((string) $st['pct']) . '%' ?></strong>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <svg class="rpt-fn-svg" viewBox="0 0 <?= $fW ?> <?= $fH ?>" preserveAspectRatio="none" role="img" aria-label="Campaign performance funnel">
+                        <?php foreach ($fPolys as [$points, $fill]): ?>
+                            <polygon points="<?= esc($points, 'attr') ?>" style="fill:<?= $fill ?>"/>
+                        <?php endforeach; ?>
+                    </svg>
                 </div>
-                <p class="rpt-note mt-3 mb-0">Each bar is shown as a share of messages sent.</p>
+                <p class="rpt-note mt-3 mb-0">Each stage is shown as a share of total recipients. Click tracking is not available for WhatsApp.</p>
             <?php else: ?>
                 <div class="rpt-empty"><i class="fas fa-filter"></i>No campaign messages sent in this period.</div>
             <?php endif; ?>
         </div>
     </div>
-    <div class="col-lg-7">
+    <div class="col-12">
         <div class="rpt-panel">
             <h2>Daily delivery</h2>
             <div class="rpt-chart">
@@ -157,4 +205,5 @@ $funnel = [
 <?= $this->section('scripts') ?>
 <script src="<?= asset_url('assets/js/analytics.js') ?>"></script>
 <script src="<?= asset_url('assets/js/reports-tables.js') ?>"></script>
+<script src="<?= asset_url('assets/js/campaign-retarget.js') ?>"></script>
 <?= $this->endSection() ?>

@@ -798,6 +798,56 @@ class ReportService
         return $out;
     }
 
+    /** Recipient statuses behind each retarget segment. Unread means delivered but not read. */
+    private const RETARGET_SEGMENTS = [
+        'sent'        => ['sent', 'delivered', 'read'],
+        'unsent'      => ['pending', 'queued', 'failed'],
+        'delivered'   => ['delivered', 'read'],
+        'undelivered' => ['pending', 'queued', 'sent', 'failed'],
+        'read'        => ['read'],
+        'unread'      => ['delivered'],
+    ];
+
+    /**
+     * Campaign recipient funnel for the period: total, sent, delivered, opened (read).
+     *
+     * @return array{total:int,sent:int,delivered:int,read:int}
+     */
+    public function whatsappRecipientFunnel(string $fromUtc, string $toUtc, ?int $campaignId): array
+    {
+        $row = $this->recipientBuilder($fromUtc, $toUtc, $campaignId)
+            ->select("COUNT(*) AS total,
+                SUM(CASE WHEN campaign_contacts.status IN ('sent','delivered','read') THEN 1 ELSE 0 END) AS sent,
+                SUM(CASE WHEN campaign_contacts.status IN ('delivered','read') THEN 1 ELSE 0 END) AS delivered,
+                SUM(CASE WHEN campaign_contacts.status = 'read' THEN 1 ELSE 0 END) AS read_count", false)
+            ->get()->getRowArray() ?: [];
+
+        return [
+            'total'     => (int) ($row['total'] ?? 0),
+            'sent'      => (int) ($row['sent'] ?? 0),
+            'delivered' => (int) ($row['delivered'] ?? 0),
+            'read'      => (int) ($row['read_count'] ?? 0),
+        ];
+    }
+
+    /** @return list<int> Distinct contact ids for a retarget segment, or [] for an unknown segment. */
+    public function whatsappRetargetContactIds(string $fromUtc, string $toUtc, ?int $campaignId, string $segment): array
+    {
+        $statuses = self::RETARGET_SEGMENTS[$segment] ?? null;
+        if ($statuses === null) {
+            return [];
+        }
+
+        $rows = $this->recipientBuilder($fromUtc, $toUtc, $campaignId)
+            ->select('campaign_contacts.contact_id')
+            ->distinct()
+            ->whereIn('campaign_contacts.status', $statuses)
+            ->where('campaign_contacts.contact_id >', 0)
+            ->get()->getResultArray();
+
+        return array_map(static fn (array $r): int => (int) $r['contact_id'], $rows);
+    }
+
     private function recipientBuilder(string $fromUtc, string $toUtc, ?int $campaignId)
     {
         $builder = db_connect()->table('campaign_contacts')

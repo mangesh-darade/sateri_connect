@@ -46,6 +46,7 @@ class Reports extends BaseController
             'to'         => $range['to'],
             'campaignId' => $id,
             'wa'         => $service->whatsappReport($range, $id, false),
+            'funnel'     => $service->whatsappRecipientFunnel($range['from_utc'], $range['to_utc'], $id),
         ]);
     }
 
@@ -689,6 +690,86 @@ class Reports extends BaseController
             ->setHeader('Content-Type', 'text/csv; charset=UTF-8')
             ->setHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
             ->setBody($csv);
+    }
+
+    /**
+     * Retarget a funnel segment: put those contacts in a Customer Group (label) and return the
+     * campaign wizard URL with that group preselected.
+     */
+    public function retarget(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('reports.view')) {
+            return $denied;
+        }
+        if (! function_exists('can') || ! can('campaigns.create')) {
+            return $this->jsonResponse(false, null, 'You do not have permission to create campaigns.', [], 403);
+        }
+
+        $segment  = strtolower(trim((string) $this->request->getPost('segment')));
+        $labels   = [
+            'sent' => 'Sent', 'unsent' => 'Not sent', 'delivered' => 'Delivered', 'undelivered' => 'Undelivered',
+            'read' => 'Opened', 'unread' => 'Not opened',
+        ];
+        if (! isset($labels[$segment])) {
+            return $this->jsonResponse(false, null, 'Choose a valid retarget segment.', [], 422);
+        }
+
+        $service = new ReportService();
+        $range   = $service->dateRange((string) $this->request->getPost('from'), (string) $this->request->getPost('to'));
+        $id      = (int) $this->request->getPost('campaign_id');
+        $id      = $id > 0 ? $id : null;
+
+        try {
+            $contactIds = $service->whatsappRetargetContactIds($range['from_utc'], $range['to_utc'], $id, $segment);
+            if ($contactIds === []) {
+                return $this->jsonResponse(false, null, 'No contacts in this segment.', [], 422);
+            }
+
+            $campaignName = 'All campaigns';
+            if ($id !== null) {
+                $row          = model(CampaignModel::class)->find($id);
+                $campaignName = trim((string) ($row['name'] ?? '')) ?: ('Campaign #' . $id);
+            }
+
+            $tagName = mb_substr('Retarget: ' . $campaignName, 0, 70) . ' - ' . $labels[$segment]
+                . ' (' . $range['from'] . ' to ' . $range['to'] . ')';
+            $tagName = mb_substr($tagName, 0, 100);
+
+            $tagModel = model(\App\Models\TagModel::class);
+            $tag      = $tagModel->where('name', $tagName)->first();
+            $tagId    = is_array($tag) ? (int) $tag['id'] : (int) $tagModel->insert(['name' => $tagName, 'color' => '#0284C7']);
+            if ($tagId <= 0) {
+                return $this->jsonResponse(false, null, 'Could not create the customer group.', [], 500);
+            }
+
+            $db = db_connect();
+            $db->transStart();
+            $db->table('contact_tags')->where('tag_id', $tagId)->delete();
+            foreach (array_chunk($contactIds, 500) as $chunk) {
+                $db->table('contact_tags')->insertBatch(array_map(
+                    static fn (int $cid): array => ['contact_id' => $cid, 'tag_id' => $tagId],
+                    $chunk
+                ));
+            }
+            $db->transComplete();
+            if (! $db->transStatus()) {
+                return $this->jsonResponse(false, null, 'Could not save the contacts to the group.', [], 500);
+            }
+
+            log_activity('create', 'campaigns', 'Retarget group created from campaign report', [
+                'tag_id' => $tagId, 'segment' => $segment, 'campaign_id' => $id, 'contacts' => count($contactIds),
+            ]);
+
+            return $this->jsonResponse(true, [
+                'tag_id'   => $tagId,
+                'contacts' => count($contactIds),
+                'url'      => site_url('campaigns?' . http_build_query(['new' => 'whatsapp', 'label' => $tagId])),
+            ], count($contactIds) . ' contacts added to "' . $tagName . '".');
+        } catch (\Throwable $e) {
+            log_message('error', 'Reports::retarget failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return $this->jsonResponse(false, null, 'Could not build the retarget group.', [], 500);
+        }
     }
 
     /**
