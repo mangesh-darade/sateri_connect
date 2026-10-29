@@ -103,6 +103,8 @@ class Sequences extends BaseController
             (int) $this->request->getPost('is_active') === 1
         );
 
+        log_activity('create', 'sequences', 'Sequence "' . $name . '" created', ['sequence_id' => (int) $id, 'steps' => count($steps)]);
+
         return redirect()->to(site_url('sequences/' . $id . '/edit'))->with('success', 'Sequence created.');
     }
 
@@ -151,6 +153,8 @@ class Sequences extends BaseController
             (new SequenceService())->replaceSteps($id, $steps);
         }
 
+        log_activity('update', 'sequences', 'Sequence "' . ($name !== '' ? $name : (string) $sequence['name']) . '" updated', ['sequence_id' => $id, 'steps_replaced' => $steps !== []]);
+
         return redirect()->to(site_url('sequences/' . $id . '/edit'))->with('success', 'Sequence saved.');
     }
 
@@ -171,6 +175,8 @@ class Sequences extends BaseController
             return redirect()->back()->with('error', $e->getMessage());
         }
 
+        log_activity('enroll', 'sequences', 'Contact enrolled in a sequence', ['sequence_id' => $id, 'contact_id' => $contactId]);
+
         return redirect()->back()->with('success', 'Contact enrolled.');
     }
 
@@ -181,9 +187,12 @@ class Sequences extends BaseController
         }
 
         $db = db_connect();
+        $gone = $db->table('message_sequences')->select('name')->where('id', $id)->get()->getRowArray();
         $db->table('sequence_enrollments')->where('sequence_id', $id)->delete();
         $db->table('sequence_steps')->where('sequence_id', $id)->delete();
         $db->table('message_sequences')->where('id', $id)->delete();
+
+        log_activity('delete', 'sequences', 'Sequence "' . (string) ($gone['name'] ?? ('#' . $id)) . '" deleted', ['sequence_id' => $id]);
 
         return redirect()->to(site_url('sequences'))->with('success', 'Sequence deleted.');
     }
