@@ -1,0 +1,17 @@
+---
+description: MANDATORY UI consistency: page skeleton, button colours/alignment, feedback dialogs, shared partials
+globs: app/Views/**/*.php, public/assets/js/**/*.js
+alwaysApply: true
+---
+
+# UI Consistency Standard (MANDATORY)
+
+Full text: `.agents/rules/ui-consistency-standard.md`. Run `php tests/UiConsistencyTest.php` after any view/JS change.
+
+- Content inside one `<div class="page-list">` (fullBleed tools excepted). Title/breadcrumb come from the layout: no own `<h1>`.
+- Page actions only in `header_actions`, right aligned, secondary first, primary last. Card title = `h2.card-title`.
+- Primary action = `btn btn-wa` (`btn-sm` in header and table rows); secondary/cancel = `btn-outline-secondary`; destructive = `btn-outline-danger` + `APP.confirm`/`APP.deleteConfirm`.
+- Never `btn-primary`, `btn-success`, `btn-info`, `btn-dark`, `btn-outline-primary` for actions.
+- Feedback only via `APP.toast`; confirmations only via `APP.confirm`. Never native `alert()`/`confirm()`/`prompt()`.
+- Reuse `partials/status_badge`, `partials/empty_state`, `partials/alerts`; shared JS goes in `APP.*`.
+- All UI text English.
