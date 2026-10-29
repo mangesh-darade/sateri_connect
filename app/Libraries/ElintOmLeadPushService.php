@@ -12,6 +12,8 @@ use Throwable;
  */
 class ElintOmLeadPushService
 {
+    /** Why the last post() failed ('' = it reached ElintOm and got a JSON answer). */
+    protected string $lastError = '';
 
     /** Mapping is offered only when ElintOm URL and private key are both set. */
     public function isConfigured(): bool
@@ -113,6 +115,10 @@ class ElintOmLeadPushService
                 'source' => is_array($custom) ? (string) ($custom['source'] ?? '') : '',
                 'fields' => json_encode($this->mappedFields(is_array($custom) ? $custom : [], $this->mapping())),
             ], 5);
+            // Not retried here: the next ElintOm sync runs pushAll(), which sends this contact again.
+            if ($this->lastError !== '') {
+                log_message('warning', 'ElintOm lead push failed for contact {id}: {err}', ['id' => $contact['id'] ?? '?', 'err' => $this->lastError]);
+            }
         } catch (Throwable $e) {
             log_message('error', 'ElintOm lead push failed: ' . $e->getMessage());
         }
@@ -121,12 +127,12 @@ class ElintOmLeadPushService
     /**
      * Push every app-native contact (not synced from ElintOm) in batches.
      *
-     * @return array{created: int, updated: int, skipped: int}
+     * @return array{created: int, updated: int, skipped: int, failed: int} failed = contacts in batches ElintOm did not accept
      */
     public function pushAll(): array
     {
         if (! (new ElintOmCustomerSyncService())->isActive()) {
-            return ['created' => 0, 'updated' => 0, 'skipped' => 0];
+            return ['created' => 0, 'updated' => 0, 'skipped' => 0, 'failed' => 0];
         }
 
         $rows = model(\App\Models\ContactModel::class)
@@ -141,16 +147,22 @@ class ElintOmLeadPushService
             if (is_array($custom) && ! empty($custom['elintom_lead_id'])) {
                 continue;
             }
-            if ($this->isPlaceholderMobile(normalize_phone((string) $r['mobile']))) {
+            $mobile = normalize_phone((string) $r['mobile']);
+            if ($this->isPlaceholderMobile($mobile)) {
                 continue;
             }
-            $list[] = ['name' => (string) ($r['name'] ?? ''), 'mobile' => (string) $r['mobile'], 'email' => (string) ($r['email'] ?? ''), 'source' => is_array($custom) ? (string) ($custom['source'] ?? '') : '', 'fields' => $this->mappedFields(is_array($custom) ? $custom : [], $map)];
+            $list[] = ['name' => (string) ($r['name'] ?? ''), 'mobile' => $mobile, 'email' => (string) ($r['email'] ?? ''), 'source' => is_array($custom) ? (string) ($custom['source'] ?? '') : '', 'fields' => $this->mappedFields(is_array($custom) ? $custom : [], $map)];
         }
 
-        $out = ['created' => 0, 'updated' => 0, 'skipped' => 0];
+        $out = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'failed' => 0];
         foreach (array_chunk($list, 200) as $chunk) {
             $res = $this->post('sateri_leads_bulk', ['contacts' => json_encode($chunk)], 60);
-            foreach (array_keys($out) as $k) {
+            if ($this->lastError !== '') {
+                $out['failed'] += count($chunk);
+                log_message('warning', 'ElintOm bulk lead push failed for {n} contacts: {err}', ['n' => count($chunk), 'err' => $this->lastError]);
+                continue;
+            }
+            foreach (['created', 'updated', 'skipped'] as $k) {
                 $out[$k] += (int) ($res[$k] ?? 0);
             }
         }
@@ -171,8 +183,11 @@ class ElintOmLeadPushService
      */
     protected function post(string $action, array $fields, int $timeout): array
     {
+        $this->lastError = '';
         $cfg = (new ElintOmCustomerSyncService())->getConfig();
         if ($cfg['base_url'] === '' || $cfg['private_key'] === '') {
+            $this->lastError = 'ElintOm URL or private key is not set';
+
             return [];
         }
 
@@ -187,10 +202,21 @@ class ElintOmLeadPushService
             CURLOPT_TIMEOUT        => $timeout,
             CURLOPT_CONNECTTIMEOUT => 3,
         ]);
-        $raw = curl_exec($ch);
+        $raw    = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr = curl_error($ch);
         curl_close($ch);
 
         $decoded = is_string($raw) ? json_decode(ltrim($raw, "\xEF\xBB\xBF \t\r\n"), true) : null;
+        if ($curlErr !== '') {
+            $this->lastError = 'network error: ' . $curlErr;
+        } elseif ($status < 200 || $status >= 300) {
+            $this->lastError = 'HTTP ' . $status;
+        } elseif (! is_array($decoded)) {
+            $this->lastError = 'ElintOm sent no JSON answer';
+        } elseif (! empty($decoded['error'])) {
+            $this->lastError = 'ElintOm said: ' . (is_scalar($decoded['error']) ? (string) $decoded['error'] : 'error');
+        }
 
         return is_array($decoded) ? $decoded : [];
     }

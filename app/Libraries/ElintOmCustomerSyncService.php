@@ -144,7 +144,7 @@ class ElintOmCustomerSyncService
         }
 
         $leadStats = ['created' => 0, 'updated' => 0, 'failed' => 0];
-        $pushStats = ['created' => 0, 'updated' => 0, 'skipped' => 0];
+        $pushStats = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'failed' => 0];
         // Push first so a contact's own source reaches ElintOm before leads are pulled back.
         try {
             $pushStats = (new ElintOmLeadPushService())->pushAll();
