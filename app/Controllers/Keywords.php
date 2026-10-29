@@ -275,6 +275,8 @@ class Keywords extends BaseController
             $i++;
         }
 
+        log_activity('update', 'keywords', 'Keyword order changed', ['keywords' => $i]);
+
         return $this->jsonResponse(true, null, 'Order updated.');
     }
 
