@@ -46,10 +46,24 @@ class Settings extends BaseController
         }
     }
 
-    private function guardSettings(string $permission): ?ResponseInterface
+    /**
+     * Settings belong to the platform admin: a client's own users never open them, whatever role they have.
+     * Allowed: the platform admin editing the client (platform mode), or working inside the client workspace.
+     * $tenantAllowed lets one client-facing action through (the profile menu's Connect WhatsApp).
+     */
+    private function guardSettings(string $permission, bool $tenantAllowed = false): ?ResponseInterface
     {
         if ($this->platformMode && (int) session('platform_admin_id') > 0) {
             return null;
+        }
+
+        $platformAdminInside = (bool) session('platform_impersonating') && (int) session('platform_admin_id') > 0;
+        if (! $platformAdminInside && ! $tenantAllowed) {
+            if ($this->request->isAJAX()) {
+                return $this->jsonResponse(false, null, 'Settings are managed by your platform administrator.', [], 403);
+            }
+
+            return permission_denied_response();
         }
 
         return $this->requirePermission($permission);
@@ -211,7 +225,8 @@ class Settings extends BaseController
      */
     public function email(): string|ResponseInterface
     {
-        if ($denied = $this->guardSettings('settings.view')) {
+        // Client users keep Email Settings: the marketing footer address (email compliance) is theirs to set.
+        if ($denied = $this->guardSettings('settings.view', true)) {
             return $denied;
         }
 
@@ -247,7 +262,9 @@ class Settings extends BaseController
 
     public function save(): ResponseInterface
     {
-        if ($denied = $this->guardSettings('settings.edit')) {
+        // A client user may save only the email compliance address; every other section is the platform admin's.
+        $clientSection = (string) ($this->request->getPost('section') ?? '') === 'email_compliance';
+        if ($denied = $this->guardSettings('settings.edit', $clientSection)) {
             return $denied;
         }
 
@@ -836,7 +853,7 @@ class Settings extends BaseController
      */
     public function embeddedSignup(): ResponseInterface
     {
-        if ($denied = $this->guardSettings('settings.edit')) {
+        if ($denied = $this->guardSettings('settings.edit', true)) {
             return $denied;
         }
 

@@ -161,7 +161,8 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->get('wallet/invoice/(:num)', 'Wallet::invoice/$1');
 
     // Settings
-    $routes->get('settings', 'Settings::index');
+    // The client-side Settings screen is gone: the platform admin edits a client under /platform/clients/<key>/settings.
+    $routes->get('settings', static fn () => redirect()->to(site_url('dashboard'))->with('error', 'Settings are managed by your platform administrator.'));
     $routes->get('settings/email', 'Settings::email');
     $routes->post('settings/save', 'Settings::save', ['filter' => 'csrf']);
     $routes->post('settings/test-smtp', 'Settings::testSmtp', ['filter' => 'csrf']);
