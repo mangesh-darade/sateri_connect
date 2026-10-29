@@ -649,7 +649,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                         <label class="form-check-label" for="waAutoConsent">Automatically ask new contacts for WhatsApp opt-in (once per contact)</label>
                                     </div>
                                     <div class="form-text">
-                                        Off (recommended): ask only from a contact's page with "Request opt-in". Unrequested opt-in messages can lower your WhatsApp quality rating.
+                                        On (recommended): a customer's first message is not marketing consent, so they get Agree / Stop buttons once, inside the 24h window. Off: ask only from a contact's page with "Request opt-in".
                                     </div>
                                 </div>
                             </div>

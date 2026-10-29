@@ -114,12 +114,13 @@ class WhatsApp extends BaseConfig
     public string $consentStopLabel = 'Stop';
 
     /**
-     * Default for automatically asking contacts who have neither agreed nor stopped (buttons inside
-     * the 24h window, otherwise the MARKETING consent template). Off: unsolicited consent templates
-     * hurt quality rating. Per tenant via settings key `wa_auto_consent_request`; even when on, each
-     * contact is asked at most once automatically. The manual "Request opt-in" action always works.
+     * Default for automatically asking contacts who have not agreed to marketing (buttons inside the
+     * 24h window, which is where a customer's first message lands). A first inbound message is not
+     * marketing consent, so this is on by default. Per tenant via settings key
+     * `wa_auto_consent_request`; each contact is asked at most once automatically. The manual
+     * "Request opt-in" action always works.
      */
-    public bool $autoConsentRequest = false;
+    public bool $autoConsentRequest = true;
 
     /** Auto-created per tenant on Meta; quick replies use the Agree / Stop labels above. */
     public string $consentTemplateName = 'wa_consent_request';

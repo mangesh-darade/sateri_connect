@@ -45,6 +45,13 @@ class WhatsAppConsentService
     public const INTENT_HUMAN   = 'human';
 
     /** @var array<string, string> */
+    /**
+     * Stored when a customer simply messaged us first. It covers replying inside the 24h window and
+     * utility/service templates, but is not an agreement to marketing messages (see hasMarketingOptIn()).
+     * Not in OPT_IN_SOURCES on purpose: operators cannot pick it as a documented consent source.
+     */
+    public const SOURCE_INBOUND = 'whatsapp_inbound';
+
     public const OPT_IN_SOURCES = [
         'direct_input'      => 'Direct input / Admin',
         'website_form'      => 'Website / landing page form',
@@ -150,7 +157,8 @@ class WhatsAppConsentService
             return $this->deny('suppressed', $contact);
         }
 
-        if ($this->hasOptIn($contact)) {
+        // Marketing / campaigns need explicit consent; a first inbound message is not enough.
+        if ($kind === self::KIND_CAMPAIGN ? $this->hasMarketingOptIn($contact) : $this->hasOptIn($contact)) {
             return $this->allow();
         }
 
@@ -570,6 +578,18 @@ class WhatsAppConsentService
     }
 
     /**
+     * Explicit opt-in (form, keyword, button, import...). A contact whose only record is that they
+     * messaged us first (SOURCE_INBOUND) is not opted in to marketing.
+     *
+     * @param array<string, mixed> $contact
+     */
+    public function hasMarketingOptIn(array $contact): bool
+    {
+        return $this->hasOptIn($contact)
+            && strtolower((string) ($contact['wa_opt_in_source'] ?? '')) !== self::SOURCE_INBOUND;
+    }
+
+    /**
      * @param array<string, mixed> $contact
      */
     public function isOptedOut(array $contact): bool
@@ -661,7 +681,7 @@ class WhatsAppConsentService
         if ($this->isOptedOut($contact)) {
             return false;
         }
-        if ($this->hasOptIn($contact)) {
+        if ($this->hasOptIn($contact) && ($source === self::SOURCE_INBOUND || $this->hasMarketingOptIn($contact))) {
             return false;
         }
 
@@ -671,9 +691,9 @@ class WhatsAppConsentService
     /**
      * @param array<string, mixed> $contact
      */
-    public function optInFromInboundMessage(array $contact, string $source = 'whatsapp_inbound'): bool
+    public function optInFromInboundMessage(array $contact, string $source = self::SOURCE_INBOUND): bool
     {
-        return $this->optInIfMissing($contact, $source !== '' ? $source : 'whatsapp_inbound');
+        return $this->optInIfMissing($contact, self::SOURCE_INBOUND);
     }
 
     public function optOut(int $contactId, string $source): bool
@@ -783,6 +803,10 @@ class WhatsAppConsentService
     public function normalizeSource(string $source): string
     {
         $source = strtolower(trim($source));
+
+        if ($source === self::SOURCE_INBOUND) {
+            return $source;
+        }
 
         return array_key_exists($source, self::OPT_IN_SOURCES) ? $source : 'other';
     }
@@ -908,7 +932,7 @@ class WhatsAppConsentService
             $this->optOut($contactId, $source . ($label !== '' ? ': ' . $label : ''));
             $replyText = $this->config->optOutReply;
         } else {
-            if ($this->isOptedOut($contact) || ! $this->hasOptIn($contact)) {
+            if ($this->isOptedOut($contact) || ! $this->hasMarketingOptIn($contact)) {
                 $this->optIn($contactId, $source);
             }
             $replyText = $this->config->optInReply;
@@ -1055,7 +1079,7 @@ class WhatsAppConsentService
         if ($this->isOptedOut($contact)) {
             return 'contact opted out (STOP) — only they can opt back in by sending START';
         }
-        if ($this->hasOptIn($contact)) {
+        if ($this->hasMarketingOptIn($contact)) {
             return 'contact already opted in';
         }
         if ($this->isSuppressed($contact)) {

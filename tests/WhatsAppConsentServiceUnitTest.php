@@ -68,6 +68,11 @@ check('expired suppression allows campaign', $svc->eligibility($expired, Consent
 check('blocked contact is refused', $svc->eligibility($blocked, Consent::KIND_CAMPAIGN)['reason'] === 'blocked');
 check('template without opt-in allowed inside 24h window', $svc->eligibility($noOptIn, Consent::KIND_TEMPLATE, true)['ok']);
 check('template without opt-in blocked outside 24h window', $svc->eligibility($noOptIn, Consent::KIND_TEMPLATE, false)['reason'] === 'no_opt_in');
+$inboundOnly = ['status' => 'active', 'wa_opt_in' => 1, 'wa_opt_in_source' => Consent::SOURCE_INBOUND, 'wa_opted_out_at' => null];
+check('first inbound message does not allow marketing campaigns', $svc->eligibility($inboundOnly, Consent::KIND_CAMPAIGN)['reason'] === 'no_opt_in');
+check('first inbound message still allows replies and utility templates', $svc->eligibility($inboundOnly, Consent::KIND_SESSION)['ok'] && $svc->eligibility($inboundOnly, Consent::KIND_TEMPLATE, false)['ok']);
+check('inbound-only contact still needs a consent request', ! $svc->hasMarketingOptIn($inboundOnly));
+check('explicit opt-in counts for marketing', $svc->hasMarketingOptIn(['wa_opt_in' => 1, 'wa_opt_in_source' => 'whatsapp_button']));
 check('session reply to non-opted-in contact allowed', $svc->eligibility($noOptIn, Consent::KIND_SESSION)['ok']);
 
 $threw = false;
