@@ -777,8 +777,11 @@ EOT;
             $curlOpts[CURLOPT_SSL_VERIFYPEER] = true;
             $curlOpts[CURLOPT_SSL_VERIFYHOST] = 2;
             $curlOpts[CURLOPT_CAINFO]         = $caBundle;
+        } elseif (ENVIRONMENT === 'production') {
+            $curlOpts[CURLOPT_SSL_VERIFYPEER] = true;
+            $curlOpts[CURLOPT_SSL_VERIFYHOST] = 2;
         } else {
-            // Local development fallback
+            // Local development fallback (never in production)
             $curlOpts[CURLOPT_SSL_VERIFYPEER] = false;
             $curlOpts[CURLOPT_SSL_VERIFYHOST] = 0;
         }
