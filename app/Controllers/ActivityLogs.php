@@ -42,10 +42,12 @@ class ActivityLogs extends BaseController
 
         $modules = $this->activityLogs->getDistinctModules();
 
-        $users = model(UserModel::class)
-            ->select('id, name, email')
-            ->orderBy('name', 'ASC')
-            ->findAll();
+        // Admins can filter by any user; everyone else only ever sees their own activity.
+        $userQuery = model(UserModel::class)->select('id, name, email')->orderBy('name', 'ASC');
+        if (! ActivityLogModel::viewerSeesAll()) {
+            $userQuery->where('id', (int) (session('user_id') ?? 0));
+        }
+        $users = $userQuery->findAll();
 
         return $this->render('activity_logs/index', [
             'pageTitle'  => 'Activity & Audit Logs',
@@ -70,8 +72,7 @@ class ActivityLogs extends BaseController
                 ->select('activity_logs.id, activity_logs.user_id, activity_logs.action, activity_logs.module, activity_logs.description, '
                     . 'activity_logs.ip_address, activity_logs.user_agent, activity_logs.metadata, activity_logs.created_at, '
                     . 'users.name AS user_name, users.email AS user_email')
-                ->join('users', 'users.id = activity_logs.user_id', 'left')
-                ->where(ActivityLogModel::HIDE_PLATFORM_ADMIN_SQL, null, false),
+                ->join('users', 'users.id = activity_logs.user_id', 'left'),
             'columns'  => [0 => 'activity_logs.created_at', 1 => 'users.name', 2 => 'activity_logs.module', 3 => 'activity_logs.action', 5 => 'activity_logs.ip_address'],
             'search'   => ['activity_logs.description', 'activity_logs.action', 'activity_logs.module', 'users.name', 'users.email'],
             'order'    => [0, 'desc'],

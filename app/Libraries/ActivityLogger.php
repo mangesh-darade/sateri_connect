@@ -17,6 +17,25 @@ class ActivityLogger
     }
 
     /**
+     * Keep only the last ActivityLogModel::RETENTION_DAYS days. Runs at most once a day per client on the
+     * first write after the day changes, so it works without the logs:cleanup cron.
+     */
+    protected function pruneOncePerDay(): void
+    {
+        try {
+            $key   = 'activity_prune_' . preg_replace('/[^A-Za-z0-9_]/', '_', (string) (\App\Libraries\TenantContext::get() ?? 'default'));
+            $cache = cache();
+            if ($cache->get($key) !== null) {
+                return;
+            }
+            $cache->save($key, 1, 86400);
+            $this->logs->pruneExpired();
+        } catch (\Throwable) {
+            // retention must never break the action being logged
+        }
+    }
+
+    /**
      * Log an application activity event.
      *
      * @param array<string, mixed> $metadata
@@ -30,7 +49,8 @@ class ActivityLogger
 
         // A platform admin inside a client workspace acts as that client's admin user. Tag the row so the
         // client's own activity log can leave it out (see ActivityLogModel::HIDE_PLATFORM_ADMIN_SQL).
-        if ($session->get('platform_impersonating') && (int) $session->get('platform_admin_id') > 0) {
+        // Covers both modes: working inside the workspace and editing the client from the platform screens.
+        if ((int) $session->get('platform_admin_id') > 0) {
             $metadata['by_platform_admin'] = (int) $session->get('platform_admin_id');
         }
 
@@ -61,7 +81,10 @@ class ActivityLogger
         }
 
         try {
-            return (bool) $this->logs->insert($data);
+            $saved = (bool) $this->logs->insert($data);
+            $this->pruneOncePerDay();
+
+            return $saved;
         } catch (\Throwable $e) {
             log_message('error', 'ActivityLogger failed: {msg}', ['msg' => $e->getMessage()]);
 

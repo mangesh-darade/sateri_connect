@@ -35,6 +35,44 @@ class ActivityLogModel extends Model
     public const HIDE_PLATFORM_ADMIN_SQL = "activity_logs.action <> 'impersonate' "
         . "AND (activity_logs.metadata IS NULL OR activity_logs.metadata NOT LIKE '%\"by_platform_admin\"%')";
 
+    /** Activity logs are kept for one month; older rows are removed automatically (see ActivityLogger). */
+    public const RETENTION_DAYS = 30;
+
+    /**
+     * Delete rows older than the retention period.
+     */
+    public function pruneExpired(): int
+    {
+        $cutoff = date('Y-m-d H:i:s', strtotime('-' . self::RETENTION_DAYS . ' days'));
+        $this->builder()->where('created_at <', $cutoff)->delete();
+
+        return (int) $this->db->affectedRows();
+    }
+
+    /** Role slugs that see every user's activity; anyone else sees only their own. */
+    private const ADMIN_ROLE_SLUGS = ['super-admin', 'super_admin', 'admin'];
+
+    /**
+     * The signed-in user is a client admin (sees all users' activity) rather than a regular user (own only).
+     */
+    public static function viewerSeesAll(): bool
+    {
+        $slug = strtolower((string) (session('role_slug') ?? ''));
+
+        return in_array($slug, self::ADMIN_ROLE_SLUGS, true) || (function_exists('can') && can('*'));
+    }
+
+    /**
+     * What the signed-in user may see: never the platform admin's rows, and only their own rows unless they are an admin.
+     */
+    public static function applyViewerScope(\CodeIgniter\Database\BaseBuilder $builder): void
+    {
+        $builder->where(self::HIDE_PLATFORM_ADMIN_SQL, null, false);
+        if (! self::viewerSeesAll()) {
+            $builder->where('activity_logs.user_id', (int) (session('user_id') ?? 0));
+        }
+    }
+
     protected bool $allowEmptyInserts = false;
     protected bool $updateOnlyChanged = true;
 
@@ -192,7 +230,7 @@ class ActivityLogModel extends Model
      */
     public function applyFilters(\CodeIgniter\Database\BaseBuilder $builder, array $filters): void
     {
-        $builder->where(self::HIDE_PLATFORM_ADMIN_SQL, null, false);
+        self::applyViewerScope($builder);
 
         if (! empty($filters['module'])) {
             $builder->where('activity_logs.module', (string) $filters['module']);
