@@ -131,6 +131,9 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
             <div class="palette-item" draggable="true" data-palette="action" data-action="set_attribute">
                 <i class="fas fa-pen"></i> Update attribute
             </div>
+            <div class="palette-item" draggable="true" data-palette="action" data-action="set_attributes">
+                <i class="fas fa-pen-to-square"></i> Update attributes (bulk)
+            </div>
             <div class="palette-item" draggable="true" data-palette="action" data-action="add_tag">
                 <i class="fas fa-tag"></i> Add tag
             </div>

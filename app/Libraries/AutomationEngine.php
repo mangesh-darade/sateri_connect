@@ -718,6 +718,15 @@ class AutomationEngine
                 );
                 break;
 
+            case 'set_attributes':
+                if ($contactId <= 0) {
+                    break;
+                }
+                foreach ($this->bulkAttributeRows($config) as $row) {
+                    $this->saveContactAttribute($contactId, $row['attribute'], $this->interpolate($row['value'], $context), $context);
+                }
+                break;
+
             case 'ask_question':
                 $this->askQuestion($config, $context);
                 break;
@@ -974,6 +983,29 @@ class AutomationEngine
      *
      * @param array<string, mixed> $context
      */
+    /**
+     * Rows of a bulk "Update attributes" action; rows without an attribute are skipped.
+     *
+     * @param array<string, mixed> $config
+     *
+     * @return list<array{attribute: string, value: string}>
+     */
+    public function bulkAttributeRows(array $config): array
+    {
+        $rows = [];
+        foreach ((array) ($config['attributes'] ?? []) as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $attr = trim((string) ($row['attribute'] ?? ''));
+            if ($attr !== '') {
+                $rows[] = ['attribute' => $attr, 'value' => (string) ($row['value'] ?? $row['text'] ?? '')];
+            }
+        }
+
+        return $rows;
+    }
+
     protected function saveContactAttribute(int $contactId, string $attr, string $value, array &$context): void
     {
         if ($contactId <= 0 || $attr === '') {

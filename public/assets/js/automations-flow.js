@@ -66,6 +66,7 @@
         webhook: 'Webhook',
         webhook_call: 'Webhook',
         set_attribute: 'Update attribute',
+        set_attributes: 'Update attributes',
         end: 'End'
     };
 
@@ -89,7 +90,7 @@
         birthday: '#ec4899', campaign_replied: '#06b6d4', schedule: '#0ea5e9',
         system_initiated: '#0ea5e9', response_message: '#22c55e', ask_question: '#10b981', send_media: '#06b6d4',
         collect_images: '#0891b2', send_template: '#16a34a', send_text: '#22c55e', send_email: '#f97316',
-        set_attribute: '#e11d48', add_tag: '#14b8a6', remove_tag: '#64748b', assign_agent: '#2563eb', assign_bot: '#0ea5e9',
+        set_attribute: '#e11d48', set_attributes: '#be123c', add_tag: '#14b8a6', remove_tag: '#64748b', assign_agent: '#2563eb', assign_bot: '#0ea5e9',
         update_chat_status: '#6366f1', add_note: '#eab308', delay: '#f59e0b', webhook: '#f43f5e', webhook_call: '#f43f5e',
         end: '#ef4444'
     };
@@ -314,6 +315,10 @@
             return (d.url ? String(d.url).replace(/^https?:\/\//, '').slice(0, 28) : 'URL…') + (n ? (' · ' + n + ' params') : '');
         }
         if (d.action_type === 'set_attribute') return (d.attribute || '') + (d.text ? (' = ' + d.text) : '');
+        if (d.action_type === 'set_attributes') {
+            var bulk = (Array.isArray(d.attributes) ? d.attributes : []).filter(function (r) { return r && r.attribute; });
+            return bulk.length ? (bulk.length + ' attribute' + (bulk.length > 1 ? 's' : '') + ': ' + bulk.slice(0, 2).map(function (r) { return r.attribute; }).join(', ') + (bulk.length > 2 ? '…' : '')) : '';
+        }
         if (node.type === 'end' || d.action_type === 'end') return '';
         if (d.cheerio_type) return String(d.cheerio_type);
         return (!d.label || /\snode$/i.test(String(d.label))) ? '' : String(d.label);
@@ -797,6 +802,27 @@
         return html;
     }
 
+    /** Rows editor of the bulk "Update attributes" action: data.attributes = [{attribute, value}]. */
+    function bulkAttributeRows(d) {
+        return Array.isArray(d.attributes) ? d.attributes : [];
+    }
+
+    function bulkAttributesHtml(d) {
+        var rows = bulkAttributeRows(d);
+        var html = '<label>Attributes to set</label>';
+        if (!rows.length) html += '<p class="text-muted small mb-1">No rows yet. Add the first attribute below.</p>';
+        rows.forEach(function (r, i) {
+            html += '<div class="border rounded p-2 mb-2">';
+            html += attrDropdownHtml({ k: 'bulk_attribute', cur: r.attribute || '', label: 'Attribute ' + (i + 1), noMobile: true })
+                .replace('class="form-select insp" data-k="bulk_attribute"', 'class="form-select insp-bulk" data-bk="attribute" data-row="' + i + '"');
+            html += '<label>New value</label><input class="form-control insp-bulk" data-bk="value" data-row="' + i + '" value="' + esc(r.value || '') + '" placeholder="Value or {{contact.name}}">';
+            html += '<button type="button" class="btn btn-sm btn-outline-danger mt-2 insp-bulk-remove" data-row="' + i + '"><i class="fas fa-trash"></i> Remove</button></div>';
+        });
+        html += '<button type="button" class="btn btn-sm btn-outline-primary" id="inspBulkAdd"><i class="fas fa-plus"></i> Add attribute</button>';
+        html += inspHint('Sets or adds every listed attribute in one step. Variables like {{contact.name}} work in values.');
+        return html;
+    }
+
     function attributeSelectHtml(d, extra) {
         return attrDropdownHtml($.extend({ k: 'attribute', cur: d.attribute || '' }, extra || {}));
     }
@@ -1087,6 +1113,8 @@
             html += '<datalist id="inspAttrValueList"></datalist><div class="small text-muted mt-1" id="inspAttrTypeHint"></div>';
             html += varPickerHtml('text');
             html += inspHint('Core fields (name, email…) update the contact row; others go into custom attributes. Use "+ Variable" for dynamic values.');
+        } else if (a === 'set_attributes') {
+            html += bulkAttributesHtml(d);
         } else if (a === 'assign_agent') {
             html += agentSelectHtml(d);
         } else if (a === 'assign_bot') {
@@ -1380,6 +1408,9 @@
             if (node.data.action_type === 'set_attribute') {
                 node.data.attribute = '';
                 node.data.text = '';
+            }
+            if (node.data.action_type === 'set_attributes') {
+                node.data.attributes = [{ attribute: '', value: '' }];
             }
             if (node.data.action_type === 'ask_question') applyAskQuestionDefaults(node);
             if (node.data.action_type === 'send_media') node.data.media_type = 'image';
@@ -1737,13 +1768,13 @@
                 return;
             }
             var configId = String((Flow.meta && Flow.meta.fb_config_id) || '');
-            var loginOptions = {
-                scope: 'pages_show_list,pages_read_engagement,pages_manage_metadata,pages_manage_ads,leads_retrieval,business_management,ads_read',
-                auth_type: 'rerequest',
-                return_scopes: true
-            };
+            var loginOptions = { return_scopes: true };
             if (configId) {
+                // Login for Business takes its permissions from the configuration; scope and auth_type are classic-login options.
                 loginOptions.config_id = configId;
+            } else {
+                loginOptions.auth_type = 'rerequest';
+                loginOptions.scope = 'pages_show_list,pages_read_engagement,pages_manage_metadata,pages_manage_ads,leads_retrieval,business_management,ads_read';
             }
             FB.login(function (response) {
                 var auth = response && response.authResponse;
@@ -1969,6 +2000,30 @@
             list.splice(parseInt($(this).data('i'), 10), 1);
             node.data.options = list;
             pruneChoiceEdges(node);
+            renderInspector();
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+        });
+        $('#inspectorBody').on('change input', '.insp-bulk', function () {
+            var node = findNode(Flow.selectedId);
+            if (!node) return;
+            node.data = node.data || {};
+            var rows = bulkAttributeRows(node.data);
+            var row = rows[parseInt($(this).data('row'), 10)];
+            if (!row) return;
+            row[$(this).data('bk')] = $(this).val();
+            node.data.attributes = rows;
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+        });
+        $('#inspectorBody').on('click', '#inspBulkAdd, .insp-bulk-remove', function () {
+            var node = findNode(Flow.selectedId);
+            if (!node) return;
+            node.data = node.data || {};
+            var rows = bulkAttributeRows(node.data).slice();
+            if (this.id === 'inspBulkAdd') rows.push({ attribute: '', value: '' });
+            else rows.splice(parseInt($(this).data('row'), 10), 1);
+            node.data.attributes = rows;
             renderInspector();
             renderNodes();
             $('.flow-node[data-id="' + node.id + '"]').addClass('selected');

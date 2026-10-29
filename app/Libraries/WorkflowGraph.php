@@ -223,6 +223,29 @@ class WorkflowGraph
                 }
             }
 
+            if ($action === 'set_attributes') {
+                $rows = array_values(array_filter((array) ($data['attributes'] ?? []), 'is_array'));
+                if ($rows === []) {
+                    $errors[] = 'Update attributes: add at least one attribute.';
+                }
+                $seen = [];
+                foreach ($rows as $row) {
+                    $attr  = trim((string) ($row['attribute'] ?? ''));
+                    $value = (string) ($row['value'] ?? '');
+                    if ($attr === '') {
+                        $errors[] = 'Update attributes: choose an attribute for every row.';
+                    } elseif (isset($seen[$attr])) {
+                        $errors[] = 'Update attributes: "' . $attr . '" is listed twice.';
+                    } elseif (! str_contains($value, '{{') && preg_match(ContactAttributeService::KEY_PATTERN, $attr) === 1) {
+                        $check = service('contactAttributes')->normalizeValue($attr, $value);
+                        if (! $check['ok']) {
+                            $errors[] = 'Update attributes: ' . service('contactAttributes')->label($attr) . ' — ' . $check['error'];
+                        }
+                    }
+                    $seen[$attr] = true;
+                }
+            }
+
             if ($action === 'send_template' || $action === 'system_initiated') {
                 $name = trim((string) ($data['template_name'] ?? ''));
                 if ($name === '') {
@@ -658,7 +681,7 @@ class WorkflowGraph
         $knownActions = [
             'send_text', 'response_message', 'send_template', 'system_initiated',
             'collect_images', 'add_tag', 'remove_tag', 'assign_agent', 'add_note',
-            'delay', 'webhook', 'webhook_call', 'set_attribute', 'end',
+            'delay', 'webhook', 'webhook_call', 'set_attribute', 'set_attributes', 'end',
         ];
         if ($action !== '' && in_array($action, $knownActions, true)) {
             return $action;
