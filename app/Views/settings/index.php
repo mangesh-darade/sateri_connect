@@ -22,6 +22,11 @@ $canEditSettings = $platformMode || (function_exists('can') && can('settings.edi
         font-family: "DM Sans", system-ui, sans-serif;
         color: var(--text, #1a1228);
     }
+    /* platform.css restyles every .row/.col-* inside .platform-content; give this page its Bootstrap grid back. */
+    .platform-content .client-settings-host .row { gap: 0; margin-bottom: 0; }
+    .platform-content .client-settings-host .col-6 { flex: 0 0 auto; width: 50%; }
+    .platform-content .client-settings-host .col-4 { flex: 0 0 auto; width: 33.33333333%; }
+    .platform-content .client-settings-host .col-md { flex: 1 0 0%; }
 </style>
 <?= $this->endSection() ?>
 <?php endif; ?>
@@ -487,17 +492,17 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                         <div class="settings-panel mb-3">
                             <h6 class="settings-panel-label">Branding</h6>
                             <div class="row">
-                                <div class="col-md-6 mb-3">
+                                <div class="col-6 mb-2">
                                     <label class="form-label">Site Name</label>
                                     <input type="text" name="app_name" class="form-control" value="<?= $val($app, 'app_name', 'WhatsApp Automation Platform') ?>" placeholder="Your company or product name">
                                     <div class="form-text">Shown in browser title, sidebar, login, and emails.</div>
                                 </div>
-                                <div class="col-md-6 mb-3">
+                                <div class="col-6 mb-2">
                                     <label class="form-label">Tagline</label>
                                     <input type="text" name="app_tagline" class="form-control" value="<?= $val($app, 'app_tagline', 'Automation console') ?>" placeholder="Automation console">
                                     <div class="form-text">Short line under the site name.</div>
                                 </div>
-                                <div class="col-md-6 mb-3">
+                                <div class="col-6 mb-2">
                                     <label class="form-label">Site Logo</label>
                                     <input type="file" name="site_logo" class="form-control" accept=".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif">
                                     <div class="form-text">PNG, JPG, WebP, SVG or GIF · max 2 MB. Used in sidebar and login.</div>
@@ -511,7 +516,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                         </div>
                                     <?php endif; ?>
                                 </div>
-                                <div class="col-md-6 mb-3">
+                                <div class="col-6 mb-2">
                                     <label class="form-label">Favicon</label>
                                     <input type="file" name="site_favicon" class="form-control" accept=".ico,.png,.jpg,.jpeg,.webp,.gif,image/png,image/x-icon,image/jpeg,image/webp,image/gif">
                                     <div class="form-text">ICO or PNG · max 512 KB. Browser tab icon. If empty, the first letter of the page title is shown.</div>
@@ -546,17 +551,17 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                 </div>
                             </div>
                             <div class="row">
-                                <div class="col-md-6 mb-3">
+                                <div class="col-6 mb-2">
                                     <label class="form-label">Brand / Provider Name</label>
                                     <input type="text" name="powered_by_name" id="tenantPoweredByName" class="form-control" value="<?= esc($pbName) ?>" placeholder="e.g. Sateri Technologies">
                                     <div class="form-text">Company or product name displayed after &quot;Powered by&quot;. Leave blank to use platform default.</div>
                                 </div>
-                                <div class="col-md-6 mb-3">
+                                <div class="col-6 mb-2">
                                     <label class="form-label">Destination Website Link</label>
                                     <input type="url" name="powered_by_url" id="tenantPoweredByUrl" class="form-control" value="<?= esc($pbUrl) ?>" placeholder="https://sateritechnologies.com">
                                     <div class="form-text">Clickable link for the powered by attribution badge.</div>
                                 </div>
-                                <div class="col-md-6 mb-3">
+                                <div class="col-6 mb-2">
                                     <label class="form-label">Provider Micro-Logo / Icon</label>
                                     <input type="file" name="powered_by_logo" id="tenantPoweredByLogoInput" class="form-control" accept=".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif">
                                     <div class="form-text">Small brand logo (max 1 MB, PNG/JPG/WebP). Displayed next to the provider name.</div>
@@ -570,7 +575,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                         </div>
                                     <?php endif; ?>
                                 </div>
-                                <div class="col-md-6 mb-3">
+                                <div class="col-6 mb-2">
                                     <label class="form-label">Attribution Preview</label>
                                     <div class="p-2 border rounded bg-light d-flex align-items-center gap-2" style="min-height:38px">
                                         <span class="text-muted small">Powered by</span>
@@ -588,19 +593,21 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                         <div class="settings-panel">
                             <h6 class="settings-panel-label">Application</h6>
                             <div class="row">
-                                <div class="col-md-6 mb-3">
+                                <div class="col-6 col-lg-4 mb-2">
                                     <label class="form-label" for="appTimezoneSearch">Timezone</label>
                                     <?php $selectedTimezone = (string) (old('app_timezone') ?? ($app['app_timezone'] ?? 'UTC')); ?>
                                     <?= view('partials/timezone_select', ['selectedTimezone' => $selectedTimezone, 'timezoneOptions' => $timezoneOptions], ['saveData' => false]) ?>
                                     <div class="form-text">All dates/times across the app (chat, campaigns, reports, schedules) use this timezone.</div>
                                 </div>
-                                <div class="col-md-6 mb-3">
+                                <div class="col-6 col-lg-4 mb-2">
                                     <label class="form-label">Support / App Email</label>
-                                    <input type="email" name="app_email" class="form-control" value="<?= $val($app, 'app_email') ?>">
+                                    <input type="email" name="app_email" class="form-control" value="<?= $val($app, 'app_email') ?>" placeholder="support@yourcompany.com">
+                                    <div class="form-text">Shown to customers as the support contact.</div>
                                 </div>
-                                <div class="col-md-6 mb-3">
+                                <div class="col-6 col-lg-4 mb-2">
                                     <label class="form-label">App URL</label>
-                                    <input type="url" name="app_url" class="form-control" value="<?= $val($app, 'app_url') ?>">
+                                    <input type="url" name="app_url" class="form-control" value="<?= $val($app, 'app_url') ?>" placeholder="https://app.yourcompany.com">
+                                    <div class="form-text">Public address of this console.</div>
                                 </div>
                             </div>
                         </div>
@@ -608,16 +615,16 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                         <div class="settings-panel mt-3">
                             <h6 class="settings-panel-label">WhatsApp quiet hours</h6>
                             <div class="row">
-                                <div class="col-md-3 mb-3">
+                                <div class="col-6 col-lg-3 mb-2">
                                     <label class="form-label" for="waQuietStart">No marketing from</label>
                                     <input type="time" id="waQuietStart" name="wa_quiet_hours_start" class="form-control" value="<?= $val($app, 'wa_quiet_hours_start') ?>">
                                 </div>
-                                <div class="col-md-3 mb-3">
+                                <div class="col-6 col-lg-3 mb-2">
                                     <label class="form-label" for="waQuietEnd">Until</label>
                                     <input type="time" id="waQuietEnd" name="wa_quiet_hours_end" class="form-control" value="<?= $val($app, 'wa_quiet_hours_end') ?>">
                                 </div>
-                                <div class="col-md-6 mb-3 d-flex align-items-end">
-                                    <div class="form-text mb-2">
+                                <div class="col-12">
+                                    <div class="form-text">
                                         Broadcast campaign messages are held during these hours (timezone above) and go out automatically when the window ends.
                                         Replies, chat and automations are not affected. Example: 21:00 → 09:00. Leave both empty to turn off.
                                     </div>
@@ -628,7 +635,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                         <div class="settings-panel mt-3">
                             <h6 class="settings-panel-label">WhatsApp marketing limits</h6>
                             <div class="row">
-                                <div class="col-md-3 mb-3">
+                                <div class="col-6 col-lg-4 mb-2">
                                     <label class="form-label" for="waMarketingCapDays">Max 1 marketing message per contact every</label>
                                     <div class="input-group">
                                         <input type="number" id="waMarketingCapDays" name="wa_marketing_frequency_cap_days" class="form-control"
@@ -636,12 +643,12 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                         <span class="input-group-text">day(s)</span>
                                     </div>
                                 </div>
-                                <div class="col-md-9 mb-3 d-flex align-items-end">
-                                    <div class="form-text mb-2">
+                                <div class="col-12 col-lg-8 mb-2 d-flex align-items-end">
+                                    <div class="form-text mb-1">
                                         Contacts are not skipped for a recent marketing message. Opt-in is still required. Meta can still pause one contact if it hits its own limit (error 131049).
                                     </div>
                                 </div>
-                                <div class="col-12">
+                                <div class="col-12 border-top pt-3 mt-2">
                                     <input type="hidden" name="wa_auto_consent_request" value="0">
                                     <div class="form-check form-switch">
                                         <input class="form-check-input" type="checkbox" role="switch" id="waAutoConsent" name="wa_auto_consent_request" value="1"
