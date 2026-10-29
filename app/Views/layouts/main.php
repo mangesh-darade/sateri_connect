@@ -266,12 +266,10 @@
                     </li>
                     <?php endif; ?>
                     <li class="user-footer">
-                        <?php if (function_exists('can') && can('settings.view')): ?>
-                            <a href="<?= site_url('settings') ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-gear me-1"></i> Settings</a>
-                        <?php endif; ?>
-                        <form action="<?= site_url('logout') ?>" method="post" class="d-inline">
+                        <?php // Settings stays in the sidebar; the profile menu only signs out. ?>
+                        <form action="<?= site_url('logout') ?>" method="post" class="d-block w-100">
                             <?= csrf_field() ?>
-                            <button type="submit" class="btn btn-wa btn-sm"><i class="fas fa-right-from-bracket me-1"></i> Sign out</button>
+                            <button type="submit" class="btn btn-wa btn-sm w-100"><i class="fas fa-right-from-bracket me-1"></i> Sign out</button>
                         </form>
                     </li>
                 </ul>
