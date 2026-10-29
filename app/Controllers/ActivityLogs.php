@@ -70,7 +70,8 @@ class ActivityLogs extends BaseController
                 ->select('activity_logs.id, activity_logs.user_id, activity_logs.action, activity_logs.module, activity_logs.description, '
                     . 'activity_logs.ip_address, activity_logs.user_agent, activity_logs.metadata, activity_logs.created_at, '
                     . 'users.name AS user_name, users.email AS user_email')
-                ->join('users', 'users.id = activity_logs.user_id', 'left'),
+                ->join('users', 'users.id = activity_logs.user_id', 'left')
+                ->where(ActivityLogModel::HIDE_PLATFORM_ADMIN_SQL, null, false),
             'columns'  => [0 => 'activity_logs.created_at', 1 => 'users.name', 2 => 'activity_logs.module', 3 => 'activity_logs.action', 5 => 'activity_logs.ip_address'],
             'search'   => ['activity_logs.description', 'activity_logs.action', 'activity_logs.module', 'users.name', 'users.email'],
             'order'    => [0, 'desc'],

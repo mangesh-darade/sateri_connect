@@ -77,6 +77,7 @@ class Dashboard extends BaseController
         $recentActivity = model(ActivityLogModel::class)
             ->select('activity_logs.*, users.name AS user_name')
             ->join('users', 'users.id = activity_logs.user_id', 'left')
+            ->where(ActivityLogModel::HIDE_PLATFORM_ADMIN_SQL, null, false)
             ->orderBy('activity_logs.created_at', 'DESC')
             ->findAll(8);
 

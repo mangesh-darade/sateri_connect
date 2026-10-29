@@ -28,6 +28,13 @@ class ActivityLogModel extends Model
         'created_at',
     ];
 
+    /**
+     * Rows written by a platform admin working inside the client's workspace (tagged `by_platform_admin`),
+     * plus the older "impersonate" rows that were written before the tag existed.
+     */
+    public const HIDE_PLATFORM_ADMIN_SQL = "activity_logs.action <> 'impersonate' "
+        . "AND (activity_logs.metadata IS NULL OR activity_logs.metadata NOT LIKE '%\"by_platform_admin\"%')";
+
     protected bool $allowEmptyInserts = false;
     protected bool $updateOnlyChanged = true;
 
@@ -185,6 +192,8 @@ class ActivityLogModel extends Model
      */
     public function applyFilters(\CodeIgniter\Database\BaseBuilder $builder, array $filters): void
     {
+        $builder->where(self::HIDE_PLATFORM_ADMIN_SQL, null, false);
+
         if (! empty($filters['module'])) {
             $builder->where('activity_logs.module', (string) $filters['module']);
         }

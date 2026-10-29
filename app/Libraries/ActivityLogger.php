@@ -28,6 +28,12 @@ class ActivityLogger
 
         $resolvedUserId = $userId ?? ($session->get('user_id') ?: $session->get('api_user_id') ?: null);
 
+        // A platform admin inside a client workspace acts as that client's admin user. Tag the row so the
+        // client's own activity log can leave it out (see ActivityLogModel::HIDE_PLATFORM_ADMIN_SQL).
+        if ($session->get('platform_impersonating') && (int) $session->get('platform_admin_id') > 0) {
+            $metadata['by_platform_admin'] = (int) $session->get('platform_admin_id');
+        }
+
         $data = [
             'user_id'     => $resolvedUserId,
             'action'      => $action,
