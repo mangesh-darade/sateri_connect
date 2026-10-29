@@ -105,6 +105,7 @@ class Chat extends BaseController
             return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
         }
         $label = service('contactAttributes')->label($key);
+        log_activity('update', 'contacts', 'Contact attribute "' . $key . '" ' . ($value === '' ? 'cleared' : 'saved') . ' from chat', ['contact_id' => $contactId, 'attribute' => $key]);
 
         return $this->jsonResponse(true, ['key' => $key, 'value' => $value], $value === '' ? "{$label} cleared." : "{$label} saved.");
     }
@@ -1021,6 +1022,7 @@ class Chat extends BaseController
             return $this->jsonResponse(false, null, 'Failed to save note.', model(InternalNoteModel::class)->errors(), 422);
         }
 
+        log_activity('create', 'contacts', 'Internal note added from chat', ['contact_id' => $contactId, 'note_id' => (int) $id]);
         $saved = model(InternalNoteModel::class)->find((int) $id);
 
         return $this->jsonResponse(true, $saved, 'Note added.');
