@@ -20,6 +20,9 @@ class FacebookLeadConnectService
 
     private const SESSION_PAGES = 'fb_lead_profile_pages';
 
+    /** @var array{app_id: string, secret: string, version: string, config_id: string, verify_token: string, source: string}|null */
+    private ?array $leadApp = null;
+
     public function appId(): string
     {
         return $this->credentials()['app_id'];
@@ -32,23 +35,92 @@ class FacebookLeadConnectService
 
     public function leadConfigId(): string
     {
-        $id = trim((string) ((new SettingsService())->getMetaConfig()['lead_config_id'] ?? ''));
-        if (preg_match('/^\d{5,32}$/', $id) === 1) {
-            return $id;
+        return $this->leadApp()['config_id'];
+    }
+
+    /**
+     * The Meta app behind the whole Lead Ads connect flow: login, token exchange and leadgen subscribe.
+     * A Login for Business configuration belongs to one app, so app and configuration are picked together.
+     *
+     * The platform app wins unless the tenant runs its own app with its own configuration. WhatsApp keeps
+     * using the tenant's app, only Lead Ads move to the platform app.
+     *
+     * @return array{app_id: string, secret: string, version: string, config_id: string, verify_token: string, source: string}
+     */
+    public function leadApp(): array
+    {
+        if ($this->leadApp !== null) {
+            return $this->leadApp;
         }
 
-        if (! MasterTenantRepository::masterConfigured()) {
-            return '';
+        $meta   = (new SettingsService())->getMetaConfig();
+        $tenant = [
+            'app_id'    => trim((string) ($meta['app_id'] ?? '')),
+            'secret'    => trim((string) ($meta['app_secret'] ?? '')),
+            'config_id' => trim((string) ($meta['lead_config_id'] ?? '')),
+            'version'   => (string) ($meta['api_version'] ?? ''),
+        ];
+        $platform = ['app_id' => '', 'secret' => '', 'config_id' => '', 'version' => '', 'verify_token' => ''];
+
+        if (MasterTenantRepository::masterConfigured()) {
+            try {
+                $tech     = (new MasterTenantRepository())->getPlatformMetaTechProvider();
+                $platform = [
+                    'app_id'       => trim((string) ($tech['app_id'] ?? '')),
+                    'secret'       => trim((string) ($tech['app_secret'] ?? '')),
+                    'config_id'    => trim((string) ($tech['lead_config_id'] ?? '')),
+                    'version'      => trim((string) ($tech['api_version'] ?? '')),
+                    'verify_token' => trim((string) ($tech['webhook_verify_token'] ?? '')),
+                ];
+            } catch (Throwable) {
+                // platform values stay empty
+            }
+        }
+        return $this->leadApp = self::pickLeadApp($tenant, $platform);
+    }
+
+    /**
+     * Pure choice between the tenant's own Meta app and the platform app for Lead Ads.
+     *
+     * @param array{app_id: string, secret: string, config_id: string, version: string}                          $tenant
+     * @param array{app_id: string, secret: string, config_id: string, version: string, verify_token: string}    $platform
+     *
+     * @return array{app_id: string, secret: string, version: string, config_id: string, verify_token: string, source: string}
+     */
+    public static function pickLeadApp(array $tenant, array $platform): array
+    {
+        $isConfigId = static fn (string $id): bool => preg_match('/^\d{5,32}$/', $id) === 1;
+        $version    = static fn (string $v): string => preg_match('/^v\d{1,3}\.\d{1,3}$/', trim($v)) === 1 ? trim($v) : 'v21.0';
+
+        $tenantConfig   = $isConfigId($tenant['config_id']) ? $tenant['config_id'] : '';
+        $platformConfig = $isConfigId($platform['config_id']) ? $platform['config_id'] : '';
+
+        $platformReady = $platform['app_id'] !== '' && $platform['secret'] !== '' && $platformConfig !== '';
+        // A tenant configuration equal to the platform one is a platform configuration, not a tenant app of its own.
+        $tenantOwn = $tenant['app_id'] !== '' && $tenant['secret'] !== '' && $tenantConfig !== ''
+            && $tenantConfig !== $platformConfig;
+
+        if ($platformReady && ! $tenantOwn) {
+            return [
+                'app_id'       => $platform['app_id'],
+                'secret'       => $platform['secret'],
+                'version'      => $version($platform['version'] !== '' ? $platform['version'] : $tenant['version']),
+                'config_id'    => $platformConfig,
+                'verify_token' => $platform['verify_token'],
+                'source'       => 'platform',
+            ];
         }
 
-        try {
-            $tech = (new MasterTenantRepository())->getPlatformMetaTechProvider();
-            $id = trim((string) ($tech['lead_config_id'] ?? ''));
-        } catch (Throwable) {
-            return '';
-        }
+        $useTenantApp = $tenant['app_id'] !== '' && $tenant['secret'] !== '';
 
-        return preg_match('/^\d{5,32}$/', $id) === 1 ? $id : '';
+        return [
+            'app_id'       => $useTenantApp ? $tenant['app_id'] : $platform['app_id'],
+            'secret'       => $useTenantApp ? $tenant['secret'] : $platform['secret'],
+            'version'      => $version(! $useTenantApp && $platform['version'] !== '' ? $platform['version'] : $tenant['version']),
+            'config_id'    => $tenantConfig !== '' ? $tenantConfig : $platformConfig,
+            'verify_token' => $useTenantApp ? '' : $platform['verify_token'],
+            'source'       => $useTenantApp ? 'tenant' : 'platform',
+        ];
     }
 
     /**
@@ -494,32 +566,12 @@ class FacebookLeadConnectService
      */
     protected function credentials(): array
     {
-        $meta    = (new SettingsService())->getMetaConfig();
-        $appId   = trim((string) ($meta['app_id'] ?? ''));
-        $secret  = trim((string) ($meta['app_secret'] ?? ''));
-        $version = $this->apiVersionOrDefault((string) ($meta['api_version'] ?? ''));
-
-        if ($appId === '' || $secret === '') {
-            $appId  = '';
-            $secret = '';
-            if (MasterTenantRepository::masterConfigured()) {
-                try {
-                    $tech    = (new MasterTenantRepository())->getPlatformMetaTechProvider();
-                    $appId   = trim((string) ($tech['app_id'] ?? ''));
-                    $secret  = trim((string) ($tech['app_secret'] ?? ''));
-                    $techVer = trim((string) ($tech['api_version'] ?? ''));
-                    $version = $this->apiVersionOrDefault($techVer !== '' ? $techVer : $version);
-                } catch (Throwable) {
-                    $appId  = '';
-                    $secret = '';
-                }
-            }
-        }
+        $app = $this->leadApp();
 
         return [
-            'app_id'  => $appId,
-            'secret'  => $secret,
-            'version' => $version !== '' ? $version : 'v21.0',
+            'app_id'  => $app['app_id'],
+            'secret'  => $app['secret'],
+            'version' => $app['version'] !== '' ? $app['version'] : 'v21.0',
         ];
     }
 

@@ -431,15 +431,16 @@ class Webhooks extends Controller
             return;
         }
 
-        $settings = new \App\Libraries\SettingsService();
+        $settings    = new \App\Libraries\SettingsService();
+        $failedLeads = [];
 
         foreach ($entries as $entry) {
             if (! is_array($entry)) {
                 continue;
             }
 
-            $pageId = (string) ($entry['id'] ?? '');
-            $this->processFacebookLeadChanges($entry, $pageId);
+            $pageId      = (string) ($entry['id'] ?? '');
+            $failedLeads = array_merge($failedLeads, $this->processFacebookLeadChanges($entry, $pageId));
 
             $events = $entry['messaging'] ?? [];
             if (! is_array($events)) {
@@ -454,21 +455,30 @@ class Webhooks extends Controller
                 $this->handlePageMessagingEvent($event, $pageId, $forcedChannel, $settings);
             }
         }
+
+        // Meta does not retry a 200 response: flag the log row so `facebook:retry-leads` can replay it.
+        // Raised after every entry and messaging event is handled, so a failed lead never drops a message.
+        if ($failedLeads !== []) {
+            throw new \RuntimeException(\App\Commands\FacebookRetryLeads::ERROR_PREFIX . ' ' . implode(',', $failedLeads));
+        }
     }
 
     /**
      * Facebook Lead Ads use entry.changes with field "leadgen", not entry.messaging.
      *
      * @param array<string, mixed> $entry
+     *
+     * @return list<string> leadgen ids whose lead could not be loaded and can be retried
      */
-    protected function processFacebookLeadChanges(array $entry, string $pageId): void
+    protected function processFacebookLeadChanges(array $entry, string $pageId): array
     {
         $changes = $entry['changes'] ?? [];
         if (! is_array($changes)) {
-            return;
+            return [];
         }
 
-        $leads = new \App\Libraries\FacebookLeadService();
+        $leads  = new \App\Libraries\FacebookLeadService();
+        $failed = [];
         foreach ($changes as $change) {
             if (! is_array($change) || (string) ($change['field'] ?? '') !== 'leadgen') {
                 continue;
@@ -478,11 +488,17 @@ class Webhooks extends Controller
                 $value['page_id'] = $pageId;
             }
             try {
-                $leads->ingest($value);
+                $result = $leads->ingest($value);
+                if (empty($result['ok']) && ! empty($result['retryable'])) {
+                    $failed[] = (string) ($value['leadgen_id'] ?? '?');
+                }
             } catch (Throwable $e) {
                 log_message('error', 'Facebook lead webhook failed: {msg}', ['msg' => $e->getMessage()]);
+                $failed[] = (string) ($value['leadgen_id'] ?? '?');
             }
         }
+
+        return $failed;
     }
 
     /**

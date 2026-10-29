@@ -100,7 +100,13 @@ class MetaPageMessagingAPI
 
         // App-level Page webhook (object=page, field=leadgen). Without this Meta never
         // delivers leadgen POSTs even when the Page is subscribed to the app.
-        $appSub = (new MetaCloudAPI($this->settings))->ensurePageLeadgenAppSubscription();
+        // Lead Ads run on the platform app when the tenant has no app and configuration of its own.
+        $leadApp = (new FacebookLeadConnectService())->leadApp();
+        $appSub  = (new MetaCloudAPI($this->settings))->ensurePageLeadgenAppSubscription(
+            null,
+            null,
+            $leadApp['source'] === 'platform' ? $leadApp : null
+        );
         if (empty($appSub['ok'])) {
             $detail = trim((string) ($appSub['error'] ?? $appSub['detail'] ?? 'leadgen app subscribe failed'));
             throw new RuntimeException($detail !== '' ? $detail : 'Could not subscribe Page leadgen on the Meta app.');

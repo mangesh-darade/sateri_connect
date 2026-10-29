@@ -1421,9 +1421,14 @@ class MetaCloudAPI
      * Page /subscribed_apps alone is not enough — without this app subscription Meta never
      * POSTs leadgen events to our callback URL.
      *
+     * With $platformApp (app_id, secret, verify_token) the platform's shared app is used instead of the
+     * tenant's, and an existing leadgen subscription is left alone so one tenant cannot repoint the shared callback.
+     *
+     * @param array{app_id?: string, secret?: string, verify_token?: string}|null $platformApp
+     *
      * @return array{ok: bool, detail: string, error: ?string, app_id: string}
      */
-    public function ensurePageLeadgenAppSubscription(?string $callbackUrl = null, ?string $verifyToken = null): array
+    public function ensurePageLeadgenAppSubscription(?string $callbackUrl = null, ?string $verifyToken = null, ?array $platformApp = null): array
     {
         $this->loadCredentials();
         $meta      = $this->settings->getMetaConfig();
@@ -1431,6 +1436,12 @@ class MetaCloudAPI
         $appSecret = trim((string) ($meta['app_secret'] ?? ''));
         $verify    = trim((string) ($verifyToken ?: ($meta['verify_token'] ?? '')));
         $callback  = trim((string) ($callbackUrl ?? ''));
+
+        if ($platformApp !== null) {
+            $appId     = trim((string) ($platformApp['app_id'] ?? ''));
+            $appSecret = trim((string) ($platformApp['secret'] ?? ''));
+            $verify    = trim((string) ($verifyToken ?: ($platformApp['verify_token'] ?? '')));
+        }
 
         if ($callback === '') {
             $resolved = $this->settings->resolveWebhookPublicConfig();
@@ -1483,15 +1494,28 @@ class MetaCloudAPI
             $fields = ['leadgen'];
             $current = $this->appGraphRequest('GET', $appId . '/subscriptions', [], $appId, $appSecret);
             $rows = is_array($current['data'] ?? null) ? $current['data'] : [];
+            $alreadySubscribed = false;
             foreach ($rows as $row) {
                 if (! is_array($row) || strtolower((string) ($row['object'] ?? '')) !== 'page') {
                     continue;
                 }
                 foreach ($this->extractSubscriptionFieldNames(['data' => [$row]]) as $name) {
+                    if ($name === 'leadgen') {
+                        $alreadySubscribed = true;
+                    }
                     if ($name !== '' && ! in_array($name, $fields, true)) {
                         $fields[] = $name;
                     }
                 }
+            }
+
+            if ($platformApp !== null && $alreadySubscribed) {
+                return [
+                    'ok'     => true,
+                    'detail' => 'Page leadgen already subscribed on the platform app',
+                    'error'  => null,
+                    'app_id' => $appId,
+                ];
             }
 
             $this->appGraphRequest('POST', $appId . '/subscriptions', [

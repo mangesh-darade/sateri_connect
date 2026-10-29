@@ -113,7 +113,7 @@ class FacebookLeadService
     /**
      * @param array<string, mixed> $value Webhook change.value
      *
-     * @return array{ok: bool, duplicate?: bool, contact_id?: int, matched?: int, message?: string}
+     * @return array{ok: bool, duplicate?: bool, retryable?: bool, contact_id?: int, matched?: int, message?: string}
      */
     public function ingest(array $value): array
     {
@@ -140,24 +140,47 @@ class FacebookLeadService
                 $cacheKey = '';
             }
 
+            // Meta can deliver the same lead twice at once; the cache check alone would let both through.
+            $lockName = 'fb_lead_' . substr(sha1((TenantContext::get() ?? 'default') . ':' . $leadId), 0, 40);
+            $lockDb   = null;
             try {
-                $lead = (new MetaPageMessagingAPI())->fetchLead($leadId);
-            } catch (Throwable $e) {
-                log_message('error', 'Facebook lead fetch failed: {msg}', ['msg' => $e->getMessage()]);
-
-                return ['ok' => false, 'message' => $e->getMessage()];
+                $lockDb = db_connect();
+                $row    = $lockDb->query('SELECT GET_LOCK(?, 0) AS got', [$lockName])->getRowArray();
+                if ((int) ($row['got'] ?? 0) !== 1) {
+                    return ['ok' => true, 'duplicate' => true, 'contact_id' => 0];
+                }
+            } catch (Throwable) {
+                $lockDb = null; // lock unavailable: fall back to the cache check only
             }
 
-            $result = $this->applyLead($lead, $value);
-            if ($cacheKey !== '' && ($result['ok'] ?? false)) {
+            try {
                 try {
-                    cache()->save($cacheKey, 1, 7 * 86400);
-                } catch (Throwable) {
-                    // A retry may run the workflow again. The contact match stays the same.
+                    $lead = (new MetaPageMessagingAPI())->fetchLead($leadId);
+                } catch (Throwable $e) {
+                    log_message('error', 'Facebook lead fetch failed: {msg}', ['msg' => $e->getMessage()]);
+
+                    return ['ok' => false, 'retryable' => true, 'message' => $e->getMessage()];
+                }
+
+                $result = $this->applyLead($lead, $value);
+                if ($cacheKey !== '' && ($result['ok'] ?? false)) {
+                    try {
+                        cache()->save($cacheKey, 1, 7 * 86400);
+                    } catch (Throwable) {
+                        // A retry may run the workflow again. The contact match stays the same.
+                    }
+                }
+
+                return $result;
+            } finally {
+                if ($lockDb !== null) {
+                    try {
+                        $lockDb->query('SELECT RELEASE_LOCK(?)', [$lockName]);
+                    } catch (Throwable) {
+                        // the lock is released when the connection closes
+                    }
                 }
             }
-
-            return $result;
         } finally {
             $connection->restoreIfChanged($snapshot);
         }
@@ -309,7 +332,7 @@ class FacebookLeadService
             $raw = trim((string) ($fields[$key] ?? ''));
             $digits = preg_replace('/\D+/', '', $raw) ?? '';
             if (strlen($digits) >= 8 && strlen($digits) <= 16) {
-                return $digits;
+                return $this->withIndianCountryCode($digits);
             }
         }
 
@@ -324,19 +347,28 @@ class FacebookLeadService
                 continue;
             }
 
-            // Normalization for Indian mobile numbers:
-            // 1) 10-digit standard Indian mobile starting with 6, 7, 8, or 9: prepend 91
-            if (strlen($digits) === 10 && preg_match('/^[6-9]\d{9}$/', $digits)) {
-                $digits = '91' . $digits;
-            } elseif (strlen($digits) === 11 && str_starts_with($digits, '0') && preg_match('/^0[6-9]\d{9}$/', $digits)) {
-                // 2) 11-digit starting with 0 (e.g. 09822012345): replace 0 with 91
-                $digits = '91' . substr($digits, 1);
-            }
-
-            return $digits;
+            return $this->withIndianCountryCode($digits);
         }
 
         return '';
+    }
+
+    /**
+     * Indian mobiles typed without a country code would otherwise become a second contact
+     * next to the 91-prefixed one and fail on WhatsApp.
+     */
+    protected function withIndianCountryCode(string $digits): string
+    {
+        // 10-digit mobile starting with 6-9: prepend 91
+        if (strlen($digits) === 10 && preg_match('/^[6-9]\d{9}$/', $digits)) {
+            return '91' . $digits;
+        }
+        // 11 digits with a leading 0 (e.g. 09822012345): replace 0 with 91
+        if (strlen($digits) === 11 && preg_match('/^0[6-9]\d{9}$/', $digits)) {
+            return '91' . substr($digits, 1);
+        }
+
+        return $digits;
     }
 
     /**

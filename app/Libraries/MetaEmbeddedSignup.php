@@ -340,34 +340,48 @@ class MetaEmbeddedSignup
             'verify'          => $this->resolveSslVerify(),
         ], null, null, false);
 
-        $query = [
-            'client_id'     => $appId,
-            'client_secret' => $appSecret,
-            'code'          => $code,
-        ];
+        // The popup's redirect_uri carries a per-login fragment the browser cannot always hand over,
+        // so after a redirect_uri rejection the exchange is tried once more without it (Meta's own
+        // Embedded Signup token call sends none).
         $redirectUri = $this->oauthRedirectUri($redirectUri);
-        if ($redirectUri !== '') {
-            $query['redirect_uri'] = $redirectUri;
-        }
+        $attempts    = $redirectUri !== '' ? [$redirectUri, ''] : [''];
 
-        $response = $client->request('POST', $url, [
-            'headers'     => ['Accept' => 'application/json'],
-            'form_params' => $query,
-        ]);
+        $msg = '';
+        foreach ($attempts as $i => $attemptRedirect) {
+            $query = [
+                'client_id'     => $appId,
+                'client_secret' => $appSecret,
+                'code'          => $code,
+            ];
+            if ($attemptRedirect !== '') {
+                $query['redirect_uri'] = $attemptRedirect;
+            }
 
-        $status  = $response->getStatusCode();
-        $body    = (string) $response->getBody();
-        $decoded = json_decode($body, true);
-        if (! is_array($decoded)) {
-            $decoded = ['raw' => $body];
-        }
+            $response = $client->request('POST', $url, [
+                'headers'     => ['Accept' => 'application/json'],
+                'form_params' => $query,
+            ]);
 
-        if ($status < 200 || $status >= 300 || empty($decoded['access_token'])) {
+            $status  = $response->getStatusCode();
+            $body    = (string) $response->getBody();
+            $decoded = json_decode($body, true);
+            if (! is_array($decoded)) {
+                $decoded = ['raw' => $body];
+            }
+
+            if ($status >= 200 && $status < 300 && ! empty($decoded['access_token'])) {
+                return $decoded;
+            }
+
             $msg = $this->extractError($decoded) ?: ('HTTP ' . $status);
-            throw new RuntimeException('Token exchange failed: ' . $msg);
+            $isLast = $i === array_key_last($attempts);
+            if ($isLast || preg_match('/redirect_uri|verification code/i', $msg) !== 1) {
+                break;
+            }
+            log_message('warning', 'Embedded Signup token exchange rejected the redirect_uri, retrying without it.');
         }
 
-        return $decoded;
+        throw new RuntimeException('Token exchange failed: ' . $msg);
     }
 
     /**
