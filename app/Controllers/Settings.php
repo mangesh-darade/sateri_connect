@@ -190,6 +190,7 @@ class Settings extends BaseController
         $data['elintom'] = [
             'base_url'    => (string) ($elintomCfg['base_url'] ?? ''),
             'private_key' => $this->maskSecret((string) ($elintomCfg['private_key'] ?? '')),
+            'enabled'     => ! empty($elintomCfg['enabled']),
         ];
 
         $aiCfg = $settings->getAiConfig();
@@ -364,9 +365,12 @@ class Settings extends BaseController
                     $cheerio['webhook_secret'] = $secret;
                 }
 
+                // Keep only fields actually present in the request. Empty strings are allowed through
+                // so the user can clear the display number / verify token; masked secrets (api_key,
+                // webhook_secret) are added above only when non-blank, so blanks never overwrite them.
                 $settings->setCheerioConfig(array_filter(
                     $cheerio,
-                    static fn ($v) => $v !== null && $v !== ''
+                    static fn ($v) => $v !== null
                 ));
             }
 
@@ -559,6 +563,9 @@ class Settings extends BaseController
                 $payload = [
                     'base_url' => trim((string) $this->request->getPost('elintom_base_url')),
                 ];
+                if ($this->request->getPost('elintom_enabled') !== null) {
+                    $payload['enabled'] = (string) $this->request->getPost('elintom_enabled') === '1';
+                }
                 $privateKey = trim((string) $this->request->getPost('elintom_api_private_key'));
                 if ($privateKey !== '' && ! str_contains($privateKey, '•')) {
                     $payload['private_key'] = $privateKey;
@@ -937,6 +944,14 @@ class Settings extends BaseController
             $result = $api->testConnection();
             $ok     = (bool) ($result['ok'] ?? false);
             $detail = trim((string) ($result['message'] ?? ''));
+            if (! $ok && $detail === '') {
+                foreach ((array) ($result['checklist'] ?? []) as $item) {
+                    if (empty($item['ok'])) {
+                        $detail = trim((string) ($item['label'] ?? '') . ' — ' . (string) ($item['detail'] ?? ''), ' —');
+                        break;
+                    }
+                }
+            }
             $msg    = $ok
                 ? ($detail !== '' ? $detail : ($label . ' connection OK.'))
                 : ($detail !== ''

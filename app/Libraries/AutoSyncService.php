@@ -32,12 +32,22 @@ class AutoSyncService
     {
         $out = [];
         foreach (self::JOBS as $key => [$label, $permission]) {
-            if ($can($permission)) {
+            if ($can($permission) && $this->isAvailable($key)) {
                 $out[] = ['key' => $key, 'label' => $label];
             }
         }
 
         return $out;
+    }
+
+    /** Jobs that depend on an integration are hidden and skipped until it is configured. */
+    protected function isAvailable(string $job): bool
+    {
+        if ($job === 'elintom') {
+            return (new ElintOmCustomerSyncService())->isActive();
+        }
+
+        return true;
     }
 
     public static function permissionFor(string $job): ?string
@@ -54,6 +64,10 @@ class AutoSyncService
         $base  = ['job' => $job, 'label' => $label, 'ran' => false, 'ok' => true, 'message' => '', 'changed' => 0, 'ms' => 0, 'next_in' => 0];
         if (! isset(self::JOBS[$job])) {
             return array_merge($base, ['ok' => false, 'message' => 'Unknown sync job.']);
+        }
+
+        if (! $this->isAvailable($job)) {
+            return array_merge($base, ['message' => 'Not configured.']);
         }
 
         $cache = cache();

@@ -1033,11 +1033,16 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                     </div>
 
                     <div class="tab-pane fade" id="tabElintOm" role="tabpanel">
-                        <?php $elintom = $elintom ?? ['base_url' => '', 'private_key' => '']; ?>
+                        <?php $elintom = $elintom ?? ['base_url' => '', 'private_key' => '', 'enabled' => true]; ?>
                         <div class="settings-section-head">
                             <div>
                                 <p class="settings-section-kicker">POS integration</p>
                                 <h3 class="settings-section-title">ElintOm POS</h3>
+                            </div>
+                            <div class="form-check form-switch mb-0">
+                                <input type="hidden" name="elintom_enabled" value="0">
+                                <input class="form-check-input" type="checkbox" role="switch" id="elintom_enabled" name="elintom_enabled" value="1" <?= ! empty($elintom['enabled']) ? 'checked' : '' ?>>
+                                <label class="form-check-label" for="elintom_enabled" id="elintomEnabledLabel"><?= ! empty($elintom['enabled']) ? 'Active' : 'Inactive' ?></label>
                             </div>
                         </div>
                         <div class="alert alert-light border settings-note">
@@ -1780,9 +1785,14 @@ $(function () {
     function elintomPayload() {
         return {
             elintom_base_url: ($('#elintom_base_url').val() || '').toString().trim(),
-            elintom_api_private_key: ($('#elintom_api_private_key').val() || '').toString()
+            elintom_api_private_key: ($('#elintom_api_private_key').val() || '').toString(),
+            elintom_enabled: $('#elintom_enabled').is(':checked') ? '1' : '0'
         };
     }
+
+    $('#elintom_enabled').on('change', function () {
+        $('#elintomEnabledLabel').text(this.checked ? 'Active' : 'Inactive');
+    });
 
     $('#btnTestElintOm').on('click', function () {
         var $btn = $(this);

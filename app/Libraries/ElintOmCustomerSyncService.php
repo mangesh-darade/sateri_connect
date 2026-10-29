@@ -22,7 +22,7 @@ class ElintOmCustomerSyncService
     }
 
     /**
-     * @return array{base_url: string, private_key: string}
+     * @return array{base_url: string, private_key: string, enabled: bool}
      */
     public function getConfig(): array
     {
@@ -31,7 +31,23 @@ class ElintOmCustomerSyncService
         return [
             'base_url'    => rtrim(trim((string) $s->get('elintom_base_url', '')), '/'),
             'private_key' => (string) $s->get('elintom_api_private_key', ''),
+            // Unset means active, so installs that already have credentials keep syncing.
+            'enabled'     => (string) $s->get('elintom_enabled', '1') !== '0',
         ];
+    }
+
+    /** True when both the domain URL and the Api3 private key are saved. */
+    public function isConfigured(): bool
+    {
+        $cfg = $this->getConfig();
+
+        return $cfg['base_url'] !== '' && $cfg['private_key'] !== '';
+    }
+
+    /** Switched on in settings AND both the URL and the key are saved. */
+    public function isActive(): bool
+    {
+        return $this->getConfig()['enabled'] && $this->isConfigured();
     }
 
     /**
@@ -42,6 +58,10 @@ class ElintOmCustomerSyncService
         if (array_key_exists('base_url', $config)) {
             $url = rtrim(trim((string) $config['base_url']), '/');
             $this->settings->set('elintom_base_url', $url, 'elintom', false);
+        }
+
+        if (array_key_exists('enabled', $config)) {
+            $this->settings->set('elintom_enabled', $config['enabled'] ? '1' : '0', 'elintom', false);
         }
 
         if (array_key_exists('private_key', $config)) {
@@ -79,6 +99,10 @@ class ElintOmCustomerSyncService
      */
     public function sync(): array
     {
+        if (! $this->isActive()) {
+            throw new RuntimeException('ElintOm integration is inactive. Turn it on in Settings > ElintOm POS.');
+        }
+
         // Customers pull is off: sync is leads <-> contacts only (see pullLeads / ElintOmLeadPushService::pushAll).
         $rows = [];
 

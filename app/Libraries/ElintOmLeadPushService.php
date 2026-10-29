@@ -88,6 +88,10 @@ class ElintOmLeadPushService
      */
     public function push(array $contact): void
     {
+        if (! (new ElintOmCustomerSyncService())->isActive()) {
+            return;
+        }
+
         try {
             $custom = $contact['custom_fields'] ?? [];
             if (is_string($custom)) {
@@ -121,6 +125,10 @@ class ElintOmLeadPushService
      */
     public function pushAll(): array
     {
+        if (! (new ElintOmCustomerSyncService())->isActive()) {
+            return ['created' => 0, 'updated' => 0, 'skipped' => 0];
+        }
+
         $rows = model(\App\Models\ContactModel::class)
             ->select('name, mobile, email, custom_fields')
             ->where('mobile !=', '')
