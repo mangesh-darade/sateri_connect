@@ -85,6 +85,7 @@ class Attributes extends BaseController
         }
         $map = $this->request->getPost('map', FILTER_UNSAFE_RAW);
         $push->saveMapping(is_array($map) ? $map : []);
+        log_activity('update', 'attributes', 'ElintOm lead mapping saved', ['mapped_fields' => is_array($map) ? count($map) : 0]);
 
         return $this->jsonResponse(true, null, 'ElintOm lead mapping saved.');
     }
