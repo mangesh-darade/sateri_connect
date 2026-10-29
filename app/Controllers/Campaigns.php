@@ -833,6 +833,8 @@ class Campaigns extends BaseController
             return $this->jsonResponse(false, null, (string) (reset($errors) ?: 'Unable to create label.'), $errors ?: [], 422);
         }
 
+        log_activity('create', 'tags', 'Label "' . $name . '" created from a campaign', ['tag_id' => $id]);
+
         return $this->jsonResponse(true, [
             'id'            => $id,
             'name'          => $name,
