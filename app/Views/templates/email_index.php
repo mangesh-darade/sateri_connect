@@ -268,6 +268,9 @@ $statusCounts = $statusCounts ?? ['total' => 0, 'active' => 0, 'draft' => 0, 'ar
                     <div class="alert alert-danger py-2 small d-none mb-0" id="tplModalError"></div>
                 </div>
                 <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-outline-info me-auto" id="btnPreviewEmailTpl">
+                        <i class="fas fa-eye me-1"></i> Preview
+                    </button>
                     <button type="button" class="btn btn-sm btn-light border" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-wa btn-sm px-3" id="btnSaveEmailTpl">
                         <i class="fas fa-save me-1"></i> Save Template
@@ -324,6 +327,23 @@ $(function () {
         editModal.show();
     });
 
+    // Preview of the email as recipients will receive it
+    function showPreview(name, subj, html) {
+        $('#previewModalTitle').text(name || 'Template Preview');
+        $('#previewModalSubject').text('Subject: ' + (subj || '(No Subject)'));
+        document.getElementById('previewEmailIframe').srcdoc = String(html || '<p style="padding:24px;color:#64748b;font-family:Arial,sans-serif;">No content to preview.</p>');
+        prevModal.show();
+    }
+
+    // Preview from the editor modal (unsaved content); stacked above the editor
+    $('#btnPreviewEmailTpl').on('click', function () {
+        showPreview($('#tpl_name').val(), $('#tpl_subject').val(), $('#tpl_html').val());
+    });
+    $('#previewEmailTemplateModal').on('show.bs.modal', function () {
+        $(this).css('z-index', 1070);
+        setTimeout(function () { $('.modal-backdrop').last().css('z-index', 1065); }, 0);
+    });
+
     // Submit Form
     $('#emailTemplateModalForm').on('submit', function (e) {
         e.preventDefault();
@@ -343,6 +363,7 @@ $(function () {
         APP.post(APP.baseUrl + '/email-manager/builders', payload).done(function (res) {
             APP.toast(res.message || 'Template saved successfully', 'success');
             editModal.hide();
+            try { sessionStorage.setItem('emailTplPreview', JSON.stringify({ name: payload.name, subject: payload.subject, html: payload.html_content })); } catch (e) {}
             setTimeout(function () { window.location.reload(); }, 600);
         }).fail(function (xhr) {
             var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to save template';
@@ -351,19 +372,20 @@ $(function () {
         });
     });
 
-    // Preview
+    // Preview from the list
     $(document).on('click', '.js-preview-email-template', function () {
-        var name = $(this).data('name');
-        var subj = $(this).data('subject');
-        var html = $(this).data('html') || '<p class="text-muted p-4">No HTML content in this template.</p>';
-
-        $('#previewModalTitle').text(name);
-        $('#previewModalSubject').text('Subject: ' + (subj || '(No Subject)'));
-
-        document.getElementById('previewEmailIframe').srcdoc = String(html);
-
-        prevModal.show();
+        showPreview($(this).data('name'), $(this).data('subject'), $(this).data('html') || '<p class="text-muted p-4">No HTML content in this template.</p>');
     });
+
+    // After saving, show the saved email once the page reloads
+    try {
+        var saved = sessionStorage.getItem('emailTplPreview');
+        if (saved) {
+            sessionStorage.removeItem('emailTplPreview');
+            var s = JSON.parse(saved);
+            showPreview(s.name, s.subject, s.html);
+        }
+    } catch (e) {}
 
     // Delete
     $(document).on('click', '.js-delete-email-template', function () {
