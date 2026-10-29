@@ -9,7 +9,7 @@
         channel: 'whatsapp',
         step: 1,
         data: null,
-        labelId: 0,
+        labelIds: [],
         labelName: '',
         templateId: 0,
         template: null,
@@ -204,20 +204,75 @@
     }
 
     function populateLabels() {
-        var $sel = $('#cwLabel');
-        var current = $sel.val();
-        $sel.empty().append('<option value="">Select segment</option>');
-        (state.data.labels || []).forEach(function (label) {
-            $sel.append(
-                $('<option>')
-                    .val(label.id)
-                    .text(label.name + ' (' + (label.contact_count || 0) + ')')
-                    .attr('data-name', label.name)
+        var $wrap = $('#cwLabelOptions');
+        var checked = selectedLabelIds();
+        $wrap.empty();
+        var labels = state.data.labels || [];
+        $('#cwLabelEmpty').toggleClass('d-none', labels.length > 0);
+        labels.forEach(function (label) {
+            var id = parseInt(label.id, 10);
+            var isOn = checked.indexOf(id) !== -1;
+            var $row = $(
+                // No d-flex here: AdminLTE loads after Bootstrap 5 and its .d-flex beats .d-none, so search could never hide a row.
+                '<label class="cw-label-opt" style="cursor:pointer;">' +
+                    '<input type="checkbox" class="form-check-input cw-label-check" value="' + id + '">' +
+                    '<span class="cw-label-name flex-grow-1 text-truncate"></span>' +
+                    '<span class="badge rounded-pill cw-label-count"></span>' +
+                '</label>'
             );
+            $row.find('.cw-label-check').prop('checked', isOn);
+            $row.find('.cw-label-name').text(label.name).attr('data-name', label.name);
+            $row.find('.cw-label-count').text(label.contact_count || 0);
+            $wrap.append($row);
         });
-        if (current) {
-            $sel.val(current);
+        updateLabelSummary();
+    }
+
+    function selectedLabelIds() {
+        var ids = [];
+        $('#cwLabelOptions .cw-label-check:checked').each(function () {
+            var id = parseInt($(this).val(), 10);
+            if (id > 0) { ids.push(id); }
+        });
+        return ids;
+    }
+
+    function selectedLabelNames() {
+        var names = [];
+        $('#cwLabelOptions .cw-label-check:checked').each(function () {
+            names.push($(this).closest('.cw-label-opt').find('.cw-label-name').data('name') || '');
+        });
+        return names.filter(Boolean);
+    }
+
+    function updateLabelSummary() {
+        var names = selectedLabelNames();
+        var $sum = $('#cwLabelSummary');
+        if (!names.length) {
+            $sum.text('Select contact group(s)').addClass('text-muted');
+        } else if (names.length <= 2) {
+            $sum.text(names.join(', ')).removeClass('text-muted');
+        } else {
+            $sum.text(names.slice(0, 2).join(', ') + ' +' + (names.length - 2) + ' more').removeClass('text-muted');
         }
+        // Keep the selected highlight, counter and the Select-all tri-state in sync.
+        $('#cwLabelOptions .cw-label-opt').each(function () {
+            $(this).toggleClass('is-checked', $(this).find('.cw-label-check').prop('checked'));
+        });
+        $('#cwLabelSelectedCount').text(names.length);
+        var $all = $('#cwLabelOptions .cw-label-check');
+        var $on = $all.filter(':checked');
+        var $allBox = $('#cwLabelSelectAll');
+        $allBox.prop('checked', $all.length > 0 && $on.length === $all.length);
+        $allBox.prop('indeterminate', $on.length > 0 && $on.length < $all.length);
+    }
+
+    function filterLabels(term) {
+        term = String(term || '').toLowerCase().trim();
+        $('#cwLabelOptions .cw-label-opt').each(function () {
+            var name = String($(this).find('.cw-label-name').data('name') || '').toLowerCase();
+            $(this).toggleClass('d-none', term !== '' && name.indexOf(term) === -1);
+        });
     }
 
     function populateEmailBuilders() {
@@ -265,8 +320,7 @@
     }
 
     function selectedLabelName() {
-        var $opt = $('#cwLabel option:selected');
-        return $opt.data('name') || $opt.text() || '';
+        return selectedLabelNames().join(', ');
     }
 
     function collectAttributes() {
@@ -337,14 +391,14 @@
     }
 
     function previewAudience() {
-        var tagId = parseInt($('#cwLabel').val() || '0', 10);
-        if (!tagId) {
-            toast('Select a label first.', 'error');
+        var tagIds = selectedLabelIds();
+        if (!tagIds.length) {
+            toast('Select at least one contact group.', 'error');
             return $.Deferred().reject().promise();
         }
         collectAttributes();
         return APP.post(base() + '/campaigns/audience-preview', {
-            tag_id: tagId,
+            tag_ids: tagIds,
             attributes: state.attributes
         }).done(function (res) {
             var data = (res && res.data) ? res.data : {};
@@ -765,17 +819,18 @@
 
         if (step === 1) {
             var name = String($('#cwName').val() || '').trim();
-            var labelId = parseInt($('#cwLabel').val() || '0', 10);
+            var labelIds = selectedLabelIds();
             if (!name) {
                 return showWizardError('Enter a campaign name.', $('#cwName'));
             }
             if (name.length > 30) {
                 return showWizardError('Campaign name must be 30 characters or less.', $('#cwName'));
             }
-            if (!labelId) {
-                return showWizardError('Select a label / segment.', $('#cwLabel'));
+            if (!labelIds.length) {
+                $('#cwLabelError').removeClass('d-none');
+                return showWizardError('Select at least one contact group.', $('#cwLabelToggle'));
             }
-            state.labelId = labelId;
+            state.labelIds = labelIds;
             state.labelName = selectedLabelName();
             return true;
         }
@@ -913,7 +968,7 @@
         var payload = {
             channel: state.channel,
             name: String($('#cwName').val() || '').trim(),
-            tag_id: state.labelId,
+            tag_ids: state.labelIds,
             attributes: state.attributes
         };
         if (state.channel === 'whatsapp') {
@@ -1085,7 +1140,12 @@
         $('#cwCampaignId').val('');
         $('#cwName').val('');
         $('#cwNameCount').text('0');
-        $('#cwLabel').val('');
+        state.labelIds = [];
+        $('#cwLabelOptions .cw-label-check').prop('checked', false);
+        $('#cwLabelSearch').val('');
+        filterLabels('');
+        updateLabelSummary();
+        $('#cwLabelError').addClass('d-none');
         $('#cwAttrRows').empty();
         $('#cwMediaUrl').val('');
         $('#cwMediaFile').val('');
@@ -1102,6 +1162,11 @@
         $('#cwAudienceCounts').text('Phone Numbers fetched: 0 | Emails fetched: 0');
 
         loadWizardData(true).done(function () {
+            var preset = parseInt($('#campaignHub').data('preset-label') || '0', 10);
+            if (preset > 0) {
+                $('#cwLabelOptions .cw-label-check[value="' + preset + '"]').prop('checked', true);
+                updateLabelSummary();
+            }
             setStep(1);
             showModal();
         }).fail(function () {
@@ -1197,8 +1262,29 @@
             $(this).removeClass('is-invalid');
             clearWizardErrors();
         });
-        $('#cwLabel, #cwEmailSubject, #cwMediaUrl, #cwScheduledAt').on('change input', function () {
+        $('#cwEmailSubject, #cwMediaUrl, #cwScheduledAt').on('change input', function () {
             $(this).removeClass('is-invalid');
+        });
+        $('#cwLabelOptions').on('change', '.cw-label-check', function () {
+            updateLabelSummary();
+            $('#cwLabelError').addClass('d-none');
+        });
+        // "Select all" toggles only the rows currently visible (respects the search filter).
+        $('#cwLabelSelectAll').on('change', function () {
+            var on = $(this).prop('checked');
+            $('#cwLabelOptions .cw-label-opt:not(.d-none) .cw-label-check').prop('checked', on);
+            updateLabelSummary();
+            $('#cwLabelError').addClass('d-none');
+        });
+        $('#cwLabelClear').on('click', function (e) {
+            e.preventDefault();
+            $('#cwLabelOptions .cw-label-check').prop('checked', false);
+            updateLabelSummary();
+        });
+        $('#cwLabelSearch').on('input', function () {
+            filterLabels($(this).val());
+        }).on('click', function (e) {
+            e.stopPropagation();
         });
 
         $('#cwBackBtn').on('click', function (e) {
@@ -1231,7 +1317,8 @@
                 var label = (res && res.data) ? res.data : {};
                 toast(res.message || 'Label created.');
                 loadWizardData(true).done(function () {
-                    $('#cwLabel').val(String(label.id || ''));
+                    $('#cwLabelOptions .cw-label-check[value="' + parseInt(label.id || 0, 10) + '"]').prop('checked', true);
+                    updateLabelSummary();
                     $('#cwNewLabelWrap').addClass('d-none');
                     $('#cwNewLabelName').val('');
                 });

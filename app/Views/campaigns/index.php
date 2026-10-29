@@ -54,6 +54,7 @@ $openChannel = (string) ($openChannel ?? '');
 ?>
 <div class="page-list campaign-hub" id="campaignHub"
      data-open-channel="<?= esc($openChannel, 'attr') ?>"
+     data-preset-label="<?= (int) ($presetLabel ?? 0) ?>"
      data-can-wa="<?= $canCreateWa ? '1' : '0' ?>"
      data-can-email="<?= $canCreateEmail ? '1' : '0' ?>">
 

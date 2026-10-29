@@ -1,8 +1,46 @@
 <?php
 /** Multi-step New Campaign wizard (WhatsApp + Email). */
 ?>
+<style>
+    /* Render the picker in-flow (not an absolute dropdown) so the scrollable modal never clips it. */
+    .campaign-wizard .cw-label-menu {
+        position: static !important; transform: none !important; inset: auto !important;
+        float: none; width: 100%; margin-top: .4rem;
+    }
+    .cw-label-menu { --cw-accent: var(--bs-primary, #e5195f); border-radius: .6rem; box-shadow: 0 .5rem 1.5rem rgba(16,24,40,.08); border-color: rgba(16,24,40,.12); }
+    #cwLabelToggle[aria-expanded="true"] { border-color: var(--bs-primary, #e5195f); box-shadow: 0 0 0 .2rem rgba(229,25,95,.15); }
+    .cw-label-menu .cw-label-head { background: #fff; }
+    .cw-label-menu #cwLabelOptions { display: flex; flex-direction: column; gap: 2px; }
+    .cw-label-menu .cw-label-opt {
+        display: flex; align-items: center; gap: .65rem;
+        padding: .5rem .65rem; margin: 0; border-radius: .45rem;
+        transition: background-color .12s ease; min-height: 42px;
+    }
+    .cw-label-menu .cw-label-opt:hover { background-color: #f6f7f9; }
+    .cw-label-menu .cw-label-opt.is-checked { background-color: rgba(229,25,95,.07); }
+    .cw-label-menu .cw-label-name { font-size: .9rem; color: #1f2733; }
+    /* AdminLTE (Bootstrap 4) makes .form-check-input position:absolute with a negative left margin;
+       reset it so the box stays in the row and is clipped/scrolled with the list. */
+    .cw-label-menu .cw-label-check {
+        position: static; float: none; margin: 0; flex: 0 0 auto;
+        width: 1.1rem; height: 1.1rem;
+        border-color: #c4cbd4; cursor: pointer;
+    }
+    .cw-label-menu .cw-selectall { gap: .65rem; }
+    .cw-label-menu .cw-selectall-text { white-space: nowrap; }
+    .cw-label-menu .cw-label-check:checked,
+    .cw-label-menu #cwLabelSelectAll:checked,
+    .cw-label-menu #cwLabelSelectAll:indeterminate {
+        background-color: var(--bs-primary, #e5195f); border-color: var(--bs-primary, #e5195f);
+    }
+    .cw-label-menu .cw-label-count {
+        flex: 0 0 auto; background: #eef1f5; color: #566070;
+        font-weight: 600; min-width: 2.2rem; text-align: center;
+    }
+    .cw-label-menu .cw-label-opt.is-checked .cw-label-count { background: rgba(229,25,95,.12); color: var(--bs-primary, #e5195f); }
+</style>
 <div class="modal fade campaign-wizard" id="campaignWizardModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" id="campaignWizardDialog">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable" id="campaignWizardDialog">
         <div class="modal-content">
             <div class="modal-header border-0 pb-0">
                 <div class="d-flex align-items-center gap-2">
@@ -39,12 +77,30 @@
                         <div class="invalid-feedback" id="cwNameError">Enter a campaign name (max 30 characters).</div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-semibold" for="cwLabel">Select a Label</label>
-                        <select id="cwLabel" class="form-select">
-                            <option value="">Select segment</option>
-                        </select>
-                        <div class="invalid-feedback" id="cwLabelError">Select a label / segment.</div>
-                        <div class="form-text">Labels are customer groups (tags) used as campaign audience.</div>
+                        <label class="form-label fw-semibold" for="cwLabelToggle">Select contact group(s)</label>
+                        <div class="dropdown cw-label-dd" id="cwLabelDropdown">
+                            <button type="button" class="form-select text-start d-flex align-items-center" id="cwLabelToggle"
+                                    data-bs-toggle="dropdown" data-bs-auto-close="outside" data-bs-display="static" aria-expanded="false">
+                                <span id="cwLabelSummary" class="text-muted text-truncate">Select contact group(s)</span>
+                            </button>
+                            <div class="dropdown-menu w-100 p-0 cw-label-menu" id="cwLabelMenu">
+                                <div class="p-2 border-bottom cw-label-head">
+                                    <input type="text" class="form-control form-control-sm mb-2" id="cwLabelSearch" placeholder="Search groups…" autocomplete="off">
+                                    <div class="d-flex align-items-center justify-content-between px-1">
+                                        <label class="cw-selectall d-flex align-items-center mb-0 fw-semibold small" style="cursor:pointer;">
+                                            <input type="checkbox" class="form-check-input cw-label-check" id="cwLabelSelectAll">
+                                            <span class="cw-selectall-text">Select all</span>
+                                        </label>
+                                        <span class="small text-muted text-nowrap"><span id="cwLabelSelectedCount">0</span> selected ·
+                                            <a href="#" id="cwLabelClear" class="text-decoration-none">Clear</a></span>
+                                    </div>
+                                </div>
+                                <div id="cwLabelOptions" class="p-2" style="max-height:320px;min-height:120px;overflow-y:auto;"></div>
+                                <div class="text-muted small px-3 py-3 d-none" id="cwLabelEmpty">No contact groups yet.</div>
+                            </div>
+                        </div>
+                        <div class="text-danger small mt-1 d-none" id="cwLabelError">Select at least one contact group.</div>
+                        <div class="form-text">Contact groups (tags) used as campaign audience. The campaign is sent to contacts in any of the selected groups.</div>
                     </div>
                     <div class="d-flex flex-wrap gap-2">
                         <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" id="cwCreateLabelBtn">

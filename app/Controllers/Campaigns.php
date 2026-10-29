@@ -49,6 +49,7 @@ class Campaigns extends BaseController
             'canCreateWa'     => function_exists('can') && can('campaigns.create'),
             'canCreateEmail'  => function_exists('can') && can('emails.send'),
             'openChannel'     => strtolower(trim((string) ($this->request->getGet('new') ?? ''))),
+            'presetLabel'     => (int) $this->request->getGet('label'),
             'isCheerioEmail'  => $settings->getEmailProvider() === SettingsService::EMAIL_PROVIDER_CHEERIO,
             'waHealth'        => service('whatsAppConsent')->getHealth(),
         ]);
@@ -765,12 +766,11 @@ class Campaigns extends BaseController
         }
 
         $input      = $this->requestInput();
-        $tagId      = (int) ($input['tag_id'] ?? $input['label_id'] ?? 0);
         $attributes = $this->parseAttributesFromInput($input);
-        $tagIds     = $tagId > 0 ? [$tagId] : [];
+        $tagIds     = $this->audienceTagIds($input);
 
         if ($tagIds === []) {
-            return $this->jsonResponse(false, null, 'Select a label first.', [], 422);
+            return $this->jsonResponse(false, null, 'Select a contact group first.', [], 422);
         }
 
         try {
@@ -892,7 +892,7 @@ class Campaigns extends BaseController
 
         $name       = trim((string) ($input['name'] ?? ''));
         $templateId = (int) ($input['template_id'] ?? 0);
-        $tagId      = (int) ($input['tag_id'] ?? $input['label_id'] ?? 0);
+        $tagIds     = $this->audienceTagIds($input);
         $attributes = $this->parseAttributesFromInput($input);
         $variables  = is_array($input['variables'] ?? null) ? $input['variables'] : [];
         $mediaUrl   = trim((string) ($input['header_media_url'] ?? $input['media_url'] ?? ''));
@@ -905,8 +905,8 @@ class Campaigns extends BaseController
         if ($templateId <= 0) {
             return $this->jsonResponse(false, null, 'Select a WhatsApp template.', [], 422);
         }
-        if ($tagId <= 0) {
-            return $this->jsonResponse(false, null, 'Select a label.', [], 422);
+        if ($tagIds === []) {
+            return $this->jsonResponse(false, null, 'Select at least one contact group.', [], 422);
         }
 
         $template = model(TemplateModel::class)->find($templateId);
@@ -938,9 +938,9 @@ class Campaigns extends BaseController
             );
         }
 
-        $preview = service('campaignService')->previewAudience([$tagId], [], $attributes, false);
+        $preview = service('campaignService')->previewAudience($tagIds, [], $attributes, false);
         if ($preview['total'] === 0) {
-            return $this->jsonResponse(false, null, 'No contacts matched this label/filters.', [], 422);
+            return $this->jsonResponse(false, null, 'No contacts matched these groups/filters.', [], 422);
         }
         if ((int) ($preview['wa_eligible_count'] ?? 0) === 0) {
             return $this->jsonResponse(false, null, 'No contact in this audience can receive a WhatsApp campaign. '
@@ -948,7 +948,7 @@ class Campaigns extends BaseController
                 . 'Record WhatsApp opt-in on the contacts first.', [], 422);
         }
 
-        $label = model(TagModel::class)->find($tagId);
+        $labelName = $this->tagNames($tagIds);
         $payload = [
             'template_name' => (string) ($template['name'] ?? ''),
             'language'      => (string) ($template['language'] ?? 'en_US'),
@@ -956,9 +956,9 @@ class Campaigns extends BaseController
             '_audience'     => [
                 'all'         => false,
                 'contact_ids' => $preview['contact_ids'],
-                'tag_ids'     => [$tagId],
-                'label_id'    => $tagId,
-                'label_name'  => (string) ($label['name'] ?? ''),
+                'tag_ids'     => $tagIds,
+                'label_id'    => $tagIds[0] ?? null,
+                'label_name'  => $labelName,
                 'attributes'  => $attributes,
             ],
         ];
@@ -1048,9 +1048,9 @@ class Campaigns extends BaseController
             service('campaignService')->saveAudience($id, [
                 'all'         => false,
                 'contact_ids' => $preview['contact_ids'],
-                'tag_ids'     => [$tagId],
-                'label_id'    => $tagId,
-                'label_name'  => (string) ($label['name'] ?? ''),
+                'tag_ids'     => $tagIds,
+                'label_id'    => $tagIds[0] ?? null,
+                'label_name'  => $labelName,
                 'attributes'  => $attributes,
             ]);
 
@@ -1068,7 +1068,7 @@ class Campaigns extends BaseController
                 'total'        => $preview['total'],
                 'phone_count'  => $preview['phone_count'],
                 'email_count'  => $preview['email_count'],
-                'label_name'   => (string) ($label['name'] ?? ''),
+                'label_name'   => $labelName,
                 'template'     => [
                     'id'   => $templateId,
                     'name' => (string) ($template['name'] ?? ''),
@@ -1094,15 +1094,15 @@ class Campaigns extends BaseController
         $subject    = trim((string) ($input['subject'] ?? ''));
         $html       = (string) ($input['html_content'] ?? '');
         $builderId  = (int) ($input['builder_id'] ?? 0);
-        $tagId      = (int) ($input['tag_id'] ?? $input['label_id'] ?? 0);
+        $tagIds     = $this->audienceTagIds($input);
         $attributes = $this->parseAttributesFromInput($input);
         $cheerioBuilderId = trim((string) ($input['cheerio_builder_id'] ?? ''));
 
         if ($name === '' || mb_strlen($name) > 30) {
             return $this->jsonResponse(false, null, 'Campaign name is required (max 30 characters).', [], 422);
         }
-        if ($tagId <= 0) {
-            return $this->jsonResponse(false, null, 'Select a label.', [], 422);
+        if ($tagIds === []) {
+            return $this->jsonResponse(false, null, 'Select at least one contact group.', [], 422);
         }
 
         try {
@@ -1130,7 +1130,7 @@ class Campaigns extends BaseController
             return $this->jsonResponse(false, null, 'Email subject is required.', [], 422);
         }
 
-        $preview = service('campaignService')->previewAudience([$tagId], [], $attributes, false);
+        $preview = service('campaignService')->previewAudience($tagIds, [], $attributes, false);
         $emails  = [];
         foreach ($preview['contacts'] as $contact) {
             $email = strtolower(trim((string) ($contact['email'] ?? '')));
@@ -1141,10 +1141,10 @@ class Campaigns extends BaseController
         $emails = array_values(array_unique($emails));
 
         if ($emails === []) {
-            return $this->jsonResponse(false, null, 'No contacts with email matched this label/filters.', [], 422);
+            return $this->jsonResponse(false, null, 'No contacts with email matched these groups/filters.', [], 422);
         }
 
-        $label = model(TagModel::class)->find($tagId);
+        $labelName = $this->tagNames($tagIds);
         $settings = new SettingsService();
         $isCheerio = $settings->getEmailProvider() === SettingsService::EMAIL_PROVIDER_CHEERIO;
 
@@ -1157,7 +1157,7 @@ class Campaigns extends BaseController
             'cheerio_builder_id' => $cheerioBuilderId !== '' ? $cheerioBuilderId : null,
             'sender_id'          => $senderId,
             'mode'               => 'recipients',
-            'label_name'         => (string) ($label['name'] ?? ''),
+            'label_name'         => $labelName,
             'recipients_json'    => $emails,
             'status'             => 'draft',
             'created_by'         => $this->userId(),
@@ -1191,7 +1191,7 @@ class Campaigns extends BaseController
                 'total'       => count($emails),
                 'email_count' => count($emails),
                 'phone_count' => $preview['phone_count'],
-                'label_name'  => (string) ($label['name'] ?? ''),
+                'label_name'  => $labelName,
                 'subject'     => $subject,
                 'redirect'    => site_url('email-manager?tab=campaigns'),
             ], 'Email campaign draft saved.');
@@ -1753,6 +1753,48 @@ class Campaigns extends BaseController
             'contact_ids'  => $this->optionalIdList('contact_ids') ?? [],
             'tag_ids'      => $this->optionalIdList('tag_ids') ?? [],
         ];
+    }
+
+    /**
+     * One or more audience group (label/tag) ids from a wizard request.
+     * Accepts tag_ids (array or CSV) and falls back to a single tag_id/label_id.
+     *
+     * @param array<string, mixed> $input
+     *
+     * @return list<int>
+     */
+    protected function audienceTagIds(array $input): array
+    {
+        $raw = $input['tag_ids'] ?? null;
+        if ($raw === null || $raw === '') {
+            $single = (int) ($input['tag_id'] ?? $input['label_id'] ?? 0);
+
+            return $single > 0 ? [$single] : [];
+        }
+        if (! is_array($raw)) {
+            $raw = explode(',', (string) $raw);
+        }
+
+        return array_values(array_filter(
+            array_unique(array_map('intval', $raw)),
+            static fn (int $id): bool => $id > 0
+        ));
+    }
+
+    /**
+     * Comma-joined group names for the audience summary chip.
+     *
+     * @param list<int> $tagIds
+     */
+    protected function tagNames(array $tagIds): string
+    {
+        if ($tagIds === []) {
+            return '';
+        }
+        $rows  = model(TagModel::class)->whereIn('id', $tagIds)->findAll();
+        $names = array_filter(array_map(static fn ($r): string => (string) ($r['name'] ?? ''), $rows));
+
+        return implode(', ', $names);
     }
 
     /**
