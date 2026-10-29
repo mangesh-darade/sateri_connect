@@ -747,8 +747,10 @@ class EmailManager extends BaseController
                     unset($row['dns_records'], $row['status'], $row['type'], $row['domain']);
                 }
                 $model->update($id, $row);
+                log_activity('email_sender_updated', 'emails', 'Updated ' . $type . ' ' . ($row['email'] ?? $row['domain'] ?? $name), ['id' => $id, 'type' => $type]);
             } else {
                 $id = (int) $model->insert($row, true);
+                log_activity('email_sender_created', 'emails', 'Added ' . $type . ' ' . ($row['email'] ?? $row['domain'] ?? $name), ['id' => $id, 'type' => $type]);
             }
 
             return $this->jsonResponse(true, $model->find($id), 'Saved. Verify this Sender/Domain in External Dashboard for delivery.');
