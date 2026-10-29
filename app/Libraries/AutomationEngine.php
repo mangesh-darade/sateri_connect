@@ -727,6 +727,13 @@ class AutomationEngine
                 }
                 break;
 
+            case 'ai_reply':
+                if ($contactId <= 0) {
+                    break;
+                }
+                $this->aiReply($contactId, $config, $context);
+                break;
+
             case 'ask_question':
                 $this->askQuestion($config, $context);
                 break;
@@ -983,6 +990,53 @@ class AutomationEngine
      *
      * @param array<string, mixed> $context
      */
+    /**
+     * AI Reply node: Gemini answers the customer's last message. Same safety gate as the global AI bot
+     * (opt-out, 24h window, human takeover, cooldown, consecutive cap) plus the WhatsApp consent check.
+     * A skipped reply is not a failure: the flow simply moves on.
+     *
+     * @param array<string, mixed> $config
+     * @param array<string, mixed> $context
+     */
+    protected function aiReply(int $contactId, array $config, array &$context): void
+    {
+        try {
+            $ai = service('aiService');
+            if (! $ai->isConfigured()) {
+                log_message('notice', 'AI Reply node skipped for contact #{id}: AI is not configured.', ['id' => $contactId]);
+
+                return;
+            }
+            $contact = $this->contacts->find($contactId);
+            if (! is_array($contact)) {
+                return;
+            }
+            $channel      = (string) ($context['channel'] ?? 'whatsapp');
+            $conversation = model(\App\Models\ConversationModel::class)->findOrCreateForContact($contactId, $channel);
+            $conversation = is_array($conversation) ? $conversation : [];
+            $userMessage  = trim((string) ($context['content'] ?? $context['text'] ?? ''));
+
+            $consent = service('whatsAppConsent')->eligibility($contact, \App\Libraries\WhatsAppConsentService::KIND_SESSION);
+            if (empty($consent['ok'])) {
+                return;
+            }
+            $gate = $ai->canReply($contact, $conversation, $userMessage);
+            if (empty($gate['allowed'])) {
+                log_message('notice', 'AI Reply node skipped for contact #{id}: {reason}', ['id' => $contactId, 'reason' => $gate['reason'] ?? '']);
+
+                return;
+            }
+            $recent = array_reverse(model(\App\Models\MessageModel::class)->where('contact_id', $contactId)->orderBy('id', 'DESC')->findAll(4));
+            $reply  = $ai->generateReply($userMessage, $contact, $conversation, $recent, (string) ($config['text'] ?? ''));
+            if ($reply === null || trim($reply) === '') {
+                return;
+            }
+            $this->queue->enqueue($contactId, 'text', ['text' => $reply], null, (int) ($config['priority'] ?? 3));
+        } catch (\Throwable $e) {
+            log_message('error', 'AI Reply node failed for contact #{id}: {msg}', ['id' => $contactId, 'msg' => $e->getMessage()]);
+        }
+    }
+
     /**
      * Rows of a bulk "Update attributes" action; rows without an attribute are skipped.
      *

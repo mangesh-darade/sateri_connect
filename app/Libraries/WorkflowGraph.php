@@ -223,6 +223,10 @@ class WorkflowGraph
                 }
             }
 
+            if ($action === 'ai_reply' && mb_strlen((string) ($data['text'] ?? '')) > 500) {
+                $errors[] = 'AI reply: the extra instruction can be at most 500 characters.';
+            }
+
             if ($action === 'set_attributes') {
                 $rows = array_values(array_filter((array) ($data['attributes'] ?? []), 'is_array'));
                 if ($rows === []) {
@@ -681,7 +685,7 @@ class WorkflowGraph
         $knownActions = [
             'send_text', 'response_message', 'send_template', 'system_initiated',
             'collect_images', 'add_tag', 'remove_tag', 'assign_agent', 'add_note',
-            'delay', 'webhook', 'webhook_call', 'set_attribute', 'set_attributes', 'end',
+            'delay', 'webhook', 'webhook_call', 'set_attribute', 'set_attributes', 'ai_reply', 'send_email', 'end',
         ];
         if ($action !== '' && in_array($action, $knownActions, true)) {
             return $action;

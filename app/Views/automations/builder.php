@@ -134,6 +134,11 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
             <div class="palette-item" draggable="true" data-palette="action" data-action="set_attributes">
                 <i class="fas fa-pen-to-square"></i> Update attributes (bulk)
             </div>
+            <?php if (function_exists('is_ai_enabled') && is_ai_enabled()): ?>
+            <div class="palette-item" draggable="true" data-palette="action" data-action="ai_reply">
+                <i class="fas fa-wand-magic-sparkles"></i> AI reply
+            </div>
+            <?php endif; ?>
             <div class="palette-item" draggable="true" data-palette="action" data-action="add_tag">
                 <i class="fas fa-tag"></i> Add tag
             </div>

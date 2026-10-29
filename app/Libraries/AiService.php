@@ -23,6 +23,16 @@ use Throwable;
  */
 class AiService
 {
+    /** A generated workflow may be large: caps only guard against runaway output. */
+    public const COPILOT_MAX_NODES = 300;
+
+    public const COPILOT_MAX_EDGES = 600;
+
+    public const COPILOT_MAX_OUTPUT_TOKENS = 32768;
+
+    /** Seconds a workflow generation may take (big flows are slow). */
+    public const COPILOT_TIMEOUT = 150;
+
     protected SettingsService $settings;
 
     public function __construct(?SettingsService $settings = null)
@@ -62,7 +72,7 @@ class AiService
 
         // 1. Opt-Out & Consent Check (Strict Meta Policy)
         $consentStatus = strtolower(trim((string) ($contact['consent_status'] ?? '')));
-        if ($consentStatus === 'opted_out') {
+        if ($consentStatus === 'opted_out' || ! empty($contact['wa_opted_out_at'])) {
             return ['allowed' => false, 'reason' => 'contact_opted_out'];
         }
 
@@ -124,7 +134,7 @@ class AiService
     /**
      * Generate an AI response using Google Gemini API.
      */
-    public function generateReply(string $userMessage, array $contact, array $conversation, array $recentChatHistory = []): ?string
+    public function generateReply(string $userMessage, array $contact, array $conversation, array $recentChatHistory = [], string $extraInstruction = ''): ?string
     {
         $config = $this->settings->getAiConfig();
         $apiKey = trim((string) $config['api_key']);
@@ -148,6 +158,10 @@ STRICT WHATSAPP OPERATING RULES:
    - If unsure about specific product pricing or details, politely state: "I have shared this information with our team, and our representative will connect with you shortly."
 5. Output plain WhatsApp formatted text only (*bold* and _italic_ are allowed, no markdown headers or HTML tags).
 PROMPT;
+        $extraInstruction = trim(mb_substr($extraInstruction, 0, 500));
+        if ($extraInstruction !== '') {
+            $instructions .= "\n6. Extra instruction for this step (the rules above still win): " . $extraInstruction;
+        }
 
         $contents = [];
 
@@ -522,6 +536,11 @@ Include this reasoning in the "thinking" field in the user's language (Marathi/H
 - assign_bot: Assign to AI/Bot (data: { action_type: "assign_bot", label: "Assign to Bot" })
 - update_chat_status: Update chat status (data: { action_type: "update_chat_status", status: "open", label: "Open Chat" })
 - send_media: Send media/image/catalog (data: { action_type: "send_media", media_type: "image", media_url: "https://...", label: "Send Media" })
+- set_attributes: Set several attributes in ONE node (data: { action_type: "set_attributes", attributes: [{ attribute: "stage", value: "interested" }, { attribute: "city", value: "Pune" }], label: "Set stage and city" }); prefer this over several set_attribute nodes in a row
+- send_template: Send an approved WhatsApp template (data: { action_type: "send_template", template_name: "order_update", language: "en", label: "Send Template" })
+- send_email: Send email to the contact (data: { action_type: "send_email", subject: "Thanks", text: "Body text...", label: "Send Email" })
+- add_note: Internal note on the contact (data: { action_type: "add_note", text: "Asked for a callback", label: "Add Note" })
+- ai_reply: AI writes and sends the reply inside the 24h window; use it for open questions, never for fixed answers (data: { action_type: "ai_reply", text: "Optional extra instruction, e.g. answer only about delivery", label: "AI Reply" })
 - end: End workflow gracefully (type: "end", data: { action_type: "end", label: "End Flow" })
 
 ### Layout & Coordinates Rules:
@@ -621,12 +640,12 @@ EOT;
             ],
             'generationConfig' => [
                 'temperature'      => 0.2,
-                'maxOutputTokens'  => 5000,
+                'maxOutputTokens'  => self::COPILOT_MAX_OUTPUT_TOKENS,
                 'responseMimeType' => 'application/json',
             ],
         ];
 
-        $res = $this->requestGemini($apiKey, $model, $payload);
+        $res = $this->requestGemini($apiKey, $model, $payload, false, self::COPILOT_TIMEOUT);
         if (! $res['success'] || empty($res['text'])) {
             return [
                 'success' => false,
@@ -643,17 +662,8 @@ EOT;
 
         $parsed = json_decode($rawText, true);
         if (! is_array($parsed)) {
-            // Attempt graceful JSON completion if truncated
-            $repaired = $rawText;
-            $openBrackets = substr_count($repaired, '[') - substr_count($repaired, ']');
-            for ($i = 0; $i < $openBrackets; $i++) {
-                $repaired .= ']';
-            }
-            $openBraces = substr_count($repaired, '{') - substr_count($repaired, '}');
-            for ($i = 0; $i < $openBraces; $i++) {
-                $repaired .= '}';
-            }
-            $parsed = json_decode($repaired, true);
+            // Output cut off mid-way (a very large flow): keep every complete node/edge before the cut.
+            $parsed = self::repairTruncatedJson($rawText);
         }
 
         if (! is_array($parsed) || empty($parsed['reply'])) {
@@ -668,8 +678,8 @@ EOT;
         $actionData = $parsed['action_data'] ?? null;
         if (is_array($actionData)) {
             if (! empty($actionData['nodes']) && is_array($actionData['nodes'])) {
-                // Limit to 50 nodes max
-                $actionData['nodes'] = array_slice($actionData['nodes'], 0, 50);
+                // Cap runaway output, not real flows
+                $actionData['nodes'] = array_slice($actionData['nodes'], 0, self::COPILOT_MAX_NODES);
                 foreach ($actionData['nodes'] as &$node) {
                     $node['id'] = (string) ($node['id'] ?? uniqid('node_'));
                     $node['type'] = (string) ($node['type'] ?? 'action');
@@ -686,8 +696,7 @@ EOT;
                 unset($node);
             }
             if (! empty($actionData['edges']) && is_array($actionData['edges'])) {
-                // Limit to 100 edges max
-                $actionData['edges'] = array_slice($actionData['edges'], 0, 100);
+                $actionData['edges'] = array_slice($actionData['edges'], 0, self::COPILOT_MAX_EDGES);
                 foreach ($actionData['edges'] as &$edge) {
                     $edge['from'] = (string) ($edge['from'] ?? '');
                     $edge['to'] = (string) ($edge['to'] ?? '');
@@ -704,6 +713,58 @@ EOT;
             'action_type' => (string) ($parsed['action_type'] ?? 'none'),
             'action_data' => $actionData,
         ];
+    }
+
+    /**
+     * Parse JSON that was cut off: drop the unfinished tail back to the last complete value, then close
+     * the open brackets in the right order. Returns null when nothing usable is left.
+     *
+     * @return array<string, mixed>|null
+     */
+    public static function repairTruncatedJson(string $raw): ?array
+    {
+        $raw = rtrim($raw);
+        for ($cut = 0; $cut < 400 && $raw !== ''; $cut++) {
+            $stack = [];
+            $inStr = false;
+            $esc   = false;
+            $len   = strlen($raw);
+            for ($i = 0; $i < $len; $i++) {
+                $c = $raw[$i];
+                if ($inStr) {
+                    if ($esc) {
+                        $esc = false;
+                    } elseif ($c === '\\') {
+                        $esc = true;
+                    } elseif ($c === '"') {
+                        $inStr = false;
+                    }
+                    continue;
+                }
+                if ($c === '"') {
+                    $inStr = true;
+                } elseif ($c === '{' || $c === '[') {
+                    $stack[] = $c === '{' ? '}' : ']';
+                } elseif ($c === '}' || $c === ']') {
+                    array_pop($stack);
+                }
+            }
+            if (! $inStr) {
+                $candidate = rtrim(rtrim($raw), ',') . implode('', array_reverse($stack));
+                $decoded   = json_decode($candidate, true);
+                if (is_array($decoded)) {
+                    return $decoded;
+                }
+            }
+            // Cut back to just before the previous comma (a whole value is dropped), then try again.
+            $pos = strrpos($raw, ',');
+            if ($pos === false) {
+                return null;
+            }
+            $raw = substr($raw, 0, $pos);
+        }
+
+        return null;
     }
 
     /**
@@ -747,7 +808,7 @@ EOT;
      *
      * @return array{success: bool, text: ?string, error: ?string, http_code: int}
      */
-    public function requestGemini(string $apiKey, string $model, array $payload, bool $isRetry = false): array
+    public function requestGemini(string $apiKey, string $model, array $payload, bool $isRetry = false, int $timeout = 30): array
     {
         $apiKey = trim($apiKey, " \t\n\r\0\x0B\"'");
         $model = trim($model, " \t\n\r\0\x0B\"'") ?: 'gemini-flash-latest';
@@ -767,7 +828,7 @@ EOT;
                 'x-goog-api-key: ' . $apiKey,
             ],
             CURLOPT_POSTFIELDS     => json_encode($payload),
-            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_TIMEOUT        => max(10, $timeout),
             CURLOPT_CONNECTTIMEOUT => 8,
         ];
 
@@ -815,7 +876,7 @@ EOT;
                 $fallbackModel = ($model === 'gemini-flash-latest') ? 'gemini-flash-lite-latest' : 'gemini-flash-latest';
                 log_message('notice', "Gemini model {$model} busy, auto-retrying with {$fallbackModel}");
 
-                return $this->requestGemini($apiKey, $fallbackModel, $payload, true);
+                return $this->requestGemini($apiKey, $fallbackModel, $payload, true, $timeout);
             }
 
             log_message('error', 'Gemini API returned HTTP {code}: {body}', [

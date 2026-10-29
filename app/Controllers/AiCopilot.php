@@ -57,19 +57,40 @@ class AiCopilot extends BaseController
         }
 
         // Prevent excessively large prompts (token exhaustion / DoS defense)
-        if (mb_strlen($prompt) > 1000) {
-            return $this->jsonResponse(false, null, 'Prompt exceeds maximum limit of 1000 characters.', [], 422);
+        if (mb_strlen($prompt) > 4000) {
+            return $this->jsonResponse(false, null, 'Prompt exceeds maximum limit of 4000 characters.', [], 422);
         }
 
         // Validate context payload
         $context = is_array($input['context'] ?? null) ? $input['context'] : [];
         if (! empty($context['current_flow']['nodes']) && is_array($context['current_flow']['nodes'])) {
-            // Cap nodes array to 60 to prevent payload stuffing / memory overload
-            $context['current_flow']['nodes'] = array_slice($context['current_flow']['nodes'], 0, 60);
+            // Cap the nodes array against payload stuffing; large real flows still fit
+            $context['current_flow']['nodes'] = array_slice($context['current_flow']['nodes'], 0, \App\Libraries\AiService::COPILOT_MAX_NODES);
         }
+
+        // A large workflow can take a while to generate (plus one validation retry).
+        @set_time_limit(\App\Libraries\AiService::COPILOT_TIMEOUT * 2 + 30);
 
         $aiService = service('aiService');
         $res = $aiService->copilotAssist($prompt, $context);
+
+        // A generated workflow goes through the same checks as a manual save. One automatic retry feeds the
+        // problems back to the model; anything still wrong is reported, never applied silently.
+        $problems = $this->workflowProblems($res);
+        if ($problems !== [] && ! empty($res['success'])) {
+            $retry = $aiService->copilotAssist(
+                $prompt . "\n\nYour previous workflow failed validation. Fix every problem and return the complete corrected workflow:\n- " . implode("\n- ", $problems),
+                $context
+            );
+            if (! empty($retry['success'])) {
+                $res      = $retry;
+                $problems = $this->workflowProblems($res);
+            }
+        }
+        if ($problems !== []) {
+            $res['validation_errors'] = $problems;
+            $res['reply']             = trim((string) ($res['reply'] ?? '')) . "\n\nCheck before saving:\n- " . implode("\n- ", $problems);
+        }
 
         $userId = (int) session('user_id');
 
@@ -102,6 +123,35 @@ class AiCopilot extends BaseController
         }
 
         return $this->jsonResponse(false, $res, $res['reply'] ?? 'Failed to process request.', [], 400);
+    }
+
+    /**
+     * Problems in a workflow the model generated (empty when none, or when the reply holds no workflow).
+     *
+     * @param array<string, mixed> $res
+     *
+     * @return list<string>
+     */
+    protected function workflowProblems(array $res): array
+    {
+        $data = $res['action_data'] ?? null;
+        if (($res['action_type'] ?? '') !== 'apply_workflow' || ! is_array($data) || empty($data['nodes']) || ! is_array($data['nodes'])) {
+            return [];
+        }
+        $problems = (new \App\Libraries\WorkflowGraph())->validate(['nodes' => $data['nodes'], 'edges' => $data['edges'] ?? []]);
+
+        $ids = [];
+        foreach ($data['nodes'] as $node) {
+            $ids[(string) ($node['id'] ?? '')] = true;
+        }
+        foreach ((array) ($data['edges'] ?? []) as $edge) {
+            if (! isset($ids[(string) ($edge['from'] ?? '')]) || ! isset($ids[(string) ($edge['to'] ?? '')])) {
+                $problems[] = 'An edge points to a node that does not exist (' . ($edge['from'] ?? '?') . ' to ' . ($edge['to'] ?? '?') . ').';
+                break;
+            }
+        }
+
+        return array_values(array_unique($problems));
     }
 
     /**

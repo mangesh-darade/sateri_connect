@@ -67,6 +67,7 @@
         webhook_call: 'Webhook',
         set_attribute: 'Update attribute',
         set_attributes: 'Update attributes',
+        ai_reply: 'AI reply',
         end: 'End'
     };
 
@@ -90,7 +91,7 @@
         birthday: '#ec4899', campaign_replied: '#06b6d4', schedule: '#0ea5e9',
         system_initiated: '#0ea5e9', response_message: '#22c55e', ask_question: '#10b981', send_media: '#06b6d4',
         collect_images: '#0891b2', send_template: '#16a34a', send_text: '#22c55e', send_email: '#f97316',
-        set_attribute: '#e11d48', set_attributes: '#be123c', add_tag: '#14b8a6', remove_tag: '#64748b', assign_agent: '#2563eb', assign_bot: '#0ea5e9',
+        set_attribute: '#e11d48', set_attributes: '#be123c', ai_reply: '#8b5cf6', add_tag: '#14b8a6', remove_tag: '#64748b', assign_agent: '#2563eb', assign_bot: '#0ea5e9',
         update_chat_status: '#6366f1', add_note: '#eab308', delay: '#f59e0b', webhook: '#f43f5e', webhook_call: '#f43f5e',
         end: '#ef4444'
     };
@@ -1113,6 +1114,9 @@
             html += '<datalist id="inspAttrValueList"></datalist><div class="small text-muted mt-1" id="inspAttrTypeHint"></div>';
             html += varPickerHtml('text');
             html += inspHint('Core fields (name, email…) update the contact row; others go into custom attributes. Use "+ Variable" for dynamic values.');
+        } else if (a === 'ai_reply') {
+            html += '<label>Extra instruction (optional)</label><textarea class="form-control insp" data-k="text" rows="3" maxlength="500" placeholder="e.g. Answer only about delivery and pricing">' + esc(d.text || '') + '</textarea>';
+            html += inspHint('Gemini writes the reply from the last customer message, in their language. It follows the AI Bot settings and is skipped for opted-out contacts, outside the 24h window, during human takeover and past the consecutive-reply cap. The flow then continues.');
         } else if (a === 'set_attributes') {
             html += bulkAttributesHtml(d);
         } else if (a === 'assign_agent') {
