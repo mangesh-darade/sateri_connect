@@ -1885,12 +1885,22 @@ class AutomationEngine
             throw new RuntimeException('webhook_call/http_request requires url.');
         }
 
+        // A workflow author must not be able to reach the server's own network (loopback, private ranges,
+        // cloud metadata) through this node, and the response can be saved into contact attributes.
+        if (! $this->isPublicHttpUrl($url)) {
+            $context['_action_failed'] = true;
+            log_message('warning', 'Automation HTTP blocked: URL is not a public http(s) address ({url}).', ['url' => mb_substr($url, 0, 200)]);
+
+            return;
+        }
+
         $body = $this->buildWebhookBody($config, $context);
         $headers = $this->normalizeWebhookHeaders($config, $context);
 
         $client = Services::curlrequest([
-            'timeout'     => (int) ($config['timeout'] ?? 15),
-            'http_errors' => false,
+            'timeout'         => min(30, max(1, (int) ($config['timeout'] ?? 15))),
+            'http_errors'     => false,
+            'allow_redirects' => false, // a redirect could point back at an internal address
         ], null, null, false);
 
         $options = ['headers' => $headers];
@@ -1918,6 +1928,40 @@ class AutomationEngine
             $context['_action_failed'] = true;
             log_message('error', 'Automation HTTP failed: {error}', ['error' => $e->getMessage()]);
         }
+    }
+
+    /**
+     * http(s) URL whose host resolves only to public addresses. Local development may use localhost.
+     */
+    protected function isPublicHttpUrl(string $url): bool
+    {
+        $parts = parse_url(trim($url));
+        if (! is_array($parts) || ! isset($parts['scheme'], $parts['host']) || ! in_array(strtolower((string) $parts['scheme']), ['http', 'https'], true)) {
+            return false;
+        }
+        $host = strtolower(trim((string) $parts['host'], '[]'));
+        if ($host === '') {
+            return false;
+        }
+        $isLocalName = $host === 'localhost' || str_ends_with($host, '.local') || str_ends_with($host, '.internal');
+        if ($isLocalName) {
+            return ENVIRONMENT === 'development';
+        }
+
+        $ips = filter_var($host, FILTER_VALIDATE_IP) ? [$host] : (array) (@gethostbynamel($host) ?: []);
+        if ($ips === []) {
+            return false;
+        }
+        foreach ($ips as $ip) {
+            if (ENVIRONMENT === 'development' && in_array($ip, ['127.0.0.1', '::1'], true)) {
+                continue;
+            }
+            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
