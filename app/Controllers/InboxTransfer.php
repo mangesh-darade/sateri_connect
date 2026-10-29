@@ -169,6 +169,12 @@ class InboxTransfer extends BaseController
             return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
         }
 
+        log_activity('restore', 'inbox_transfer', 'Chat backup restored', [
+            'messages_restored' => (int) ($result['messages_restored'] ?? 0),
+            'contacts_created'  => (int) ($result['contacts_created'] ?? 0),
+            'media_restored'    => (int) ($result['media_restored'] ?? 0),
+        ]);
+
         return $this->jsonResponse(true, $result, 'Backup restored: ' . $result['messages_restored'] . ' message(s), '
             . $result['contacts_created'] . ' new contact(s), ' . $result['media_restored'] . ' media file(s).');
     }
