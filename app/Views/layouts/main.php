@@ -167,19 +167,22 @@
                 $waPic = trim((string) ($waAccount['profile_picture_url'] ?? ''));
                 $waConnected = ! empty($waAccount['connected']);
                 $clientLogo = function_exists('setting_asset_url') ? setting_asset_url('site_logo') : '';
-                $menuAvatarIsLogo = $clientLogo !== '';
-                $menuAvatar = $menuAvatarIsLogo
-                    ? $clientLogo
-                    : ($waPic !== '' ? $waPic : (string) ($user['avatar'] ?? base_url('assets/img/avatar.png')));
+                // Only the connected number's own verified WhatsApp picture is shown; never the branding logo or the user's avatar.
+                $menuAvatarIsLogo = false;
+                $menuAvatar = $waPic !== '' ? $waPic : base_url('assets/img/avatar.png');
                 $menuTitle = $waName !== '' ? $waName : (string) ($user['name'] ?? session('user_name') ?? 'User');
                 $menuPhone = $waPhone !== '' ? $waPhone : (string) ($user['email'] ?? session('user_email') ?? '');
 
                 // Client country and currency for the profile menu: the country saved for the client, else the one
                 // implied by the WhatsApp number's calling code; the currency is the wallet's own, else the country's.
                 $menuCountryCode = '';
+                if ($waConnected && $waPhone !== '') {
+                    // The connected number's own country wins over the client's saved one.
+                    $menuCountryCode = \App\Libraries\WhatsAppCountries::splitPhone($waPhone)['code'];
+                }
                 try {
                     $tenantKey = (string) (\App\Libraries\TenantContext::get() ?? '');
-                    if ($tenantKey !== '' && \App\Libraries\MasterTenantRepository::masterConfigured()) {
+                    if ($menuCountryCode === '' && $tenantKey !== '' && \App\Libraries\MasterTenantRepository::masterConfigured()) {
                         $menuCountryCode = (new \App\Libraries\MasterTenantRepository())->tenantCountry($tenantKey);
                     }
                 } catch (\Throwable) {
@@ -251,7 +254,7 @@
                         }
                     }
                     ?>
-                    <?php if (! empty($waSignup['ready'])): ?>
+                    <?php if (! empty($waSignup['ready']) && ! $waConnected): ?>
                     <li class="wa-connect-row">
                         <button type="button" class="wa-connect-btn" id="btnConnectWhatsApp"
                                 data-app-id="<?= esc((string) $waSignup['app_id']) ?>"

@@ -1543,7 +1543,7 @@ class CheerioDirectAPI
         return [
             'id'                   => (string) $this->settings->get('cheerio_phone_number_id', ''),
             'display_phone_number' => (string) $this->settings->get('cheerio_display_phone', ''),
-            'verified_name'        => (string) $this->settings->get('app_name', 'External Direct API'),
+            'verified_name'        => (string) $this->settings->get('cheerio_verified_name', ''),
             'provider'             => 'cheerio',
         ];
     }
@@ -1633,7 +1633,7 @@ class CheerioDirectAPI
         }
 
         $this->settings->cacheWhatsAppIdentity([
-            'display_name' => (string) ($phone['verified_name'] ?? $this->settings->get('app_name', 'WhatsApp')),
+            'display_name' => (string) ($phone['verified_name'] ?? ''),
             'phone'        => (string) ($phone['display_phone_number'] ?? ''),
         ]);
 

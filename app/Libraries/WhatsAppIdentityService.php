@@ -40,7 +40,9 @@ class WhatsAppIdentityService
         $fetchedAt = (int) $this->settings->get('wa_identity_fetched_at', '0');
         $localUrl  = $this->localAvatarPublicUrl();
 
-        if ($localUrl !== '') {
+        if (($base['provider'] ?? '') !== 'meta') {
+            $base['profile_picture_url'] = ''; // the mirrored avatar belongs to the Meta account
+        } elseif ($localUrl !== '') {
             $base['profile_picture_url'] = $localUrl;
         } else {
             $remote = trim((string) ($base['profile_picture_url'] ?? ''));

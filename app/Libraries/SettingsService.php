@@ -428,26 +428,22 @@ class SettingsService
     public function getWhatsAppIdentity(): array
     {
         $provider = $this->getWhatsAppProvider();
-        $name     = trim((string) $this->get('wa_display_name', ''));
-        $phone    = trim((string) $this->get('wa_display_phone', ''));
-        $picture  = trim((string) $this->get('wa_profile_picture_url', ''));
+        $name     = '';
+        $phone    = '';
+        $picture  = '';
 
+        // Each provider shows ONLY its own account. The shared wa_* cache is written by whichever provider
+        // last saved/refreshed, so reading it as a fallback leaks the other provider's number and name.
         if ($provider === 'meta') {
-            if ($phone === '') {
-                $phone = trim((string) $this->get('meta_display_phone', ''));
-            }
-            if ($name === '') {
-                $name = trim((string) $this->get('meta_verified_name', ''));
-            }
+            $name    = trim((string) $this->get('meta_verified_name', ''));
+            $phone   = trim((string) $this->get('meta_display_phone', ''));
+            $picture = trim((string) $this->get('wa_profile_picture_url', '')); // only a Meta refresh ever writes a picture
             $connected = trim((string) $this->get('meta_phone_number_id', '')) !== ''
                 && trim((string) $this->get('meta_access_token', '')) !== '';
         } else {
-            if ($phone === '') {
-                $phone = trim((string) $this->get('cheerio_display_phone', ''));
-            }
-            if ($name === '') {
-                $name = trim((string) $this->get('app_name', 'WhatsApp'));
-            }
+            $phone = trim((string) $this->get('cheerio_display_phone', ''));
+            // External has no profile endpoint: show only what was entered by hand, otherwise leave it blank.
+            $name  = trim((string) $this->get('cheerio_verified_name', ''));
             $connected = $phone !== '' || trim((string) $this->get('cheerio_api_key', '')) !== '';
         }
 
@@ -475,6 +471,8 @@ class SettingsService
             $this->set('wa_display_name', $name, 'whatsapp', false);
             if ($this->isMetaProvider()) {
                 $this->set('meta_verified_name', $name, 'meta', false);
+            } else {
+                $this->set('cheerio_verified_name', $name, 'cheerio', false);
             }
         }
         if ($phone !== '') {
