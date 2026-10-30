@@ -193,8 +193,8 @@ class ElintOmCustomerSyncService
         $out     = ['created' => 0, 'updated' => 0, 'failed' => 0];
         $pushMap = (new ElintOmLeadPushService())->mapping();
 
-        $this->contacts->skipElintOmPush = true; // leads come from ElintOm; pushing each one back is a wasted HTTP call
         $leads = $this->fetchCustomers('sateri_leads', 'leads');
+        $this->contacts->skipElintOmPush = true; // leads come from ElintOm; pushing each one back is a wasted HTTP call
         foreach ($leads as $row) {
             $mobile = normalize_phone((string) ($row['mobile'] ?? ''));
             if ($mobile === '') {

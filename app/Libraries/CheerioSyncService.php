@@ -89,8 +89,12 @@ class CheerioSyncService
             // Source shown in the Contacts "All sources" filter; an existing source is kept.
             $prev    = $byMobile[$mobile] ?? null;
             $prevCf  = is_array($prev['custom_fields'] ?? null) ? $prev['custom_fields'] : [];
-            $custom  = array_merge($custom ?? [], $prevCf['source'] ?? '' ? ['source' => $prevCf['source']] : []);
-            if (trim((string) ($custom['source'] ?? '')) === '') {
+            // Platform values win, but attributes set only in this app (e.g. elintom_lead_id) are not wiped.
+            $custom  = array_merge($prevCf, $custom ?? []);
+            $prevSrc = trim((string) ($prevCf['source'] ?? ''));
+            if ($prevSrc !== '') {
+                $custom['source'] = $prevSrc;
+            } elseif (trim((string) ($custom['source'] ?? '')) === '') {
                 $custom['source'] = 'External Platform';
             }
 
