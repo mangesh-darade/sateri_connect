@@ -48,9 +48,9 @@ class CustomerGroups extends BaseController
                 ->select('t.id, t.name, t.created_at, '
                     . '(SELECT COUNT(DISTINCT ct.contact_id) FROM contact_tags ct '
                     . 'JOIN contacts c ON c.id = ct.contact_id AND c.deleted_at IS NULL WHERE ct.tag_id = t.id) AS contact_count', false),
-            'columns'  => [0 => 't.name', 1 => 'contact_count', 2 => 't.created_at'],
+            'columns'  => [1 => 't.name', 2 => 'contact_count', 3 => 't.created_at'],
             'search'   => ['t.name'],
-            'order'    => [2, 'desc'],
+            'order'    => [3, 'desc'],
             'tiebreak' => 't.id',
             'map'      => static fn (array $r): array => [
                 'id'            => (int) $r['id'],
@@ -318,6 +318,36 @@ class CustomerGroups extends BaseController
         }
 
         return redirect()->to('/customer-groups')->with('success', 'Customer group deleted.');
+    }
+
+    /** Delete several groups at once. Only the groups go; the contacts in them stay. */
+    public function bulkDelete(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('contacts.delete')) {
+            return $denied;
+        }
+
+        $input = $this->request->getJSON(true) ?: $this->request->getPost();
+        $ids   = array_values(array_unique(array_filter(array_map('intval', (array) ($input['ids'] ?? [])))));
+        if ($ids === []) {
+            return $this->jsonResponse(false, null, 'No groups selected.', [], 422);
+        }
+
+        $tagModel = model(TagModel::class);
+        $groups   = $tagModel->whereIn('id', $ids)->findAll();
+        if ($groups === []) {
+            return $this->jsonResponse(false, null, 'Customer groups not found.', [], 404);
+        }
+
+        $found = array_map(static fn (array $g): int => (int) $g['id'], $groups);
+        $tagModel->whereIn('id', $found)->delete();
+
+        (new ActivityLogger())->log('bulk_delete', 'customer_groups', 'Customer groups bulk deleted', [
+            'group_ids' => $found,
+            'names'     => array_column($groups, 'name'),
+        ]);
+
+        return $this->jsonResponse(true, ['deleted' => count($found)], count($found) . ' customer group(s) deleted.');
     }
 
     public function removeContact(int $id, int $contactId): ResponseInterface

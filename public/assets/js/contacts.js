@@ -191,11 +191,21 @@
             }
         });
 
+        // The cards at the top follow every reload (delete, archive, restore, import) without a page refresh.
+        Contacts.table.on('xhr.dt', function (e, settings, json) {
+            var stats = json && json.stats;
+            if (!stats) return;
+            Object.keys(stats).forEach(function (k) {
+                $('[data-kpi="' + k + '"]').text(Number(stats[k] || 0).toLocaleString());
+            });
+        });
+
         if (!$table.parent().hasClass('contacts-table-scroll')) {
             $table.wrap('<div class="contacts-table-scroll"></div>');
         }
 
         Contacts.table.on('draw', function () {
+            Contacts.allMatching = false;
             $('#checkAllContacts').prop('checked', false);
             if (typeof Contacts.updateBulkBar === 'function') {
                 Contacts.updateBulkBar();
@@ -231,16 +241,7 @@
             if (e.key === 'Enter') Contacts.table.ajax.reload();
         });
         $('#btnExportContacts').on('click', function () {
-            var params = $.extend({
-                status: $('#filterStatus').val(),
-                tag_id: $('#filterTag').val(),
-                assigned_to: $('#filterAssigned').val(),
-                consent: $('#filterConsent').val(),
-                source: $('#filterSource').val(),
-                archived: $('#filterArchived').val(),
-                search: Contacts.table ? Contacts.table.search() : ''
-            }, Contacts.attributeFilter());
-            Object.keys(params).forEach(function (k) { if (!params[k]) delete params[k]; });
+            var params = Contacts.filterParams();
             this.href = base() + '/contacts/export' + ($.isEmptyObject(params) ? '' : '?' + $.param(params));
         });
     };
@@ -394,7 +395,38 @@
 
     // Bulk actions send ids as JSON: a form POST with thousands of ids[] is cut off by PHP max_input_vars.
     Contacts.postJson = function (url, data) {
+        data = $.extend({}, data);
+        if (Contacts.allMatching && data.ids) {
+            // "Select all N matching": the server resolves the contacts from the filters.
+            data.all = true;
+            data.filters = Contacts.filterParams();
+            data.ids = [];
+        }
         return APP.post(url, JSON.stringify(data), { contentType: 'application/json' });
+    };
+
+    /** Current filters of the list (also used by Export and by "select all matching"). */
+    Contacts.filterParams = function () {
+        var params = $.extend({
+            status: $('#filterStatus').val(),
+            tag_id: $('#filterTag').val(),
+            assigned_to: $('#filterAssigned').val(),
+            consent: $('#filterConsent').val(),
+            source: $('#filterSource').val(),
+            archived: $('#filterArchived').val(),
+            search: Contacts.table ? Contacts.table.search() : ''
+        }, Contacts.attributeFilter());
+        Object.keys(params).forEach(function (k) { if (!params[k]) delete params[k]; });
+        return params;
+    };
+
+    Contacts.matchingTotal = function () {
+        return Contacts.table ? (Contacts.table.page.info().recordsDisplay || 0) : 0;
+    };
+
+    /** How many contacts a bulk action will touch. */
+    Contacts.selectionCount = function (ids) {
+        return Contacts.allMatching ? Contacts.matchingTotal() : (ids ? ids.length : 0);
     };
 
     Contacts.bulkArchive = function () {
@@ -406,8 +438,8 @@
         var restore = $('#filterArchived').val() === '1';
         APP.confirm({
             title: (restore ? 'Restore' : 'Archive') + ' selected?',
-            text: restore ? ids.length + ' contact(s) will be restored and synced to LMS again.'
-                : ids.length + ' contact(s) will be archived and will not sync to LMS.',
+            text: restore ? Contacts.selectionCount(ids) + ' contact(s) will be restored and synced to LMS again.'
+                : Contacts.selectionCount(ids) + ' contact(s) will be archived and will not sync to LMS.',
             confirmText: restore ? 'Restore' : 'Archive'
         }).then(function (r) {
             if (!r.isConfirmed) return;
@@ -426,7 +458,7 @@
             APP.toast('Select at least one contact', 'warning');
             return;
         }
-        APP.confirm({ title: 'Delete selected?', text: ids.length + ' contact(s) will be deleted.', confirmText: 'Delete' })
+        APP.confirm({ title: 'Delete selected?', text: Contacts.selectionCount(ids) + ' contact(s) will be deleted.', confirmText: 'Delete' })
             .then(function (r) {
                 if (!r.isConfirmed) return;
                 Contacts.postJson(base() + '/contacts/bulk-delete', { ids: ids }).done(function (res) {
@@ -536,7 +568,7 @@
                 });
         };
         if (String(value).trim() === '') {
-            APP.confirm({ title: 'Clear this attribute?', text: 'The value will be removed from ' + ids.length + ' contact(s).', confirmText: 'Clear' })
+            APP.confirm({ title: 'Clear this attribute?', text: 'The value will be removed from ' + Contacts.selectionCount(ids) + ' contact(s).', confirmText: 'Clear' })
                 .then(function (r) { if (r.isConfirmed) run(); });
             return;
         }
@@ -649,21 +681,255 @@
                 if (!allowedImportFile(file)) {
                     APP.toast('Please choose a CSV or XLSX file.', 'error');
                     this.value = '';
-                    $('#importFileName').text('Max size: 5 MB · up to 5,000 rows · .csv or .xlsx');
+                    $('#importFileName').text('Max size: 5 MB · up to 20,000 rows · .csv or .xlsx');
                     return;
                 }
                 if (file.size > 5 * 1024 * 1024) {
                     APP.toast('File exceeds 5MB limit.', 'error');
                     this.value = '';
-                    $('#importFileName').text('Max size: 5 MB · up to 5,000 rows · .csv or .xlsx');
+                    $('#importFileName').text('Max size: 5 MB · up to 20,000 rows · .csv or .xlsx');
                     return;
                 }
                 $('#importFileName').text(file.name + ' (' + Math.round(file.size / 1024) + ' KB)');
             }
         });
 
+        // ---- ZIP / many files: the file name becomes the customer group -------------------------------------------
+        var mode = 'single';
+        var batch = null;
+
+        function setMode(next) {
+            mode = next;
+            $('.import-mode-btn').each(function () {
+                var on = $(this).data('mode') === next;
+                $(this).toggleClass('active', on).attr('aria-selected', on ? 'true' : 'false');
+            });
+            var isBatch = next === 'batch';
+            $('#singleFileWrap, #singleGroupWrap').toggleClass('d-none', isBatch);
+            $('#batchFileWrap').toggleClass('d-none', !isBatch);
+            $('#importFile').prop('required', !isBatch);
+            $('#btnImportContinue').html(isBatch
+                ? '<i class="fas fa-arrow-right me-1"></i> Read files'
+                : '<i class="fas fa-arrow-right me-1"></i> Continue to mapping');
+        }
+
+        $('.import-mode-btn').on('click', function () { setMode($(this).data('mode')); });
+
+        function batchPicked() {
+            var input = document.getElementById('batchFiles');
+            return input && input.files ? Array.prototype.slice.call(input.files) : [];
+        }
+
+        $('#batchFiles').on('change', function () {
+            var files = batchPicked();
+            var $drop = $('#batchDrop').toggleClass('has-files', files.length > 0);
+            if (!files.length) {
+                $('#batchDropTitle').text('Choose a ZIP, or select several CSV / XLSX files');
+                return;
+            }
+            $('#batchDropTitle').text(files.length === 1
+                ? files[0].name + ' (' + Math.round(files[0].size / 1024) + ' KB)'
+                : files.length + ' files selected');
+        });
+
+        function groupIsNew(name) {
+            var n = String(name || '').trim().toLowerCase();
+            var list = (batch && batch.existing_groups) || [];
+            return n !== '' && !list.some(function (g) { return String(g).toLowerCase() === n; });
+        }
+
+        function columnChips(mapping) {
+            var html = '';
+            Object.keys(mapping || {}).forEach(function (h) {
+                var d = String(mapping[h] || 'skip');
+                if (d === 'skip') return;
+                var isNew = d.indexOf('new:') === 0;
+                html += '<span class="batch-chip' + (isNew ? ' batch-chip-new' : '') + '" title="' + esc(h) + ' → ' + esc(d) + '">'
+                    + esc(isNew ? d.slice(4) : d) + '</span>';
+            });
+            return html || '<span class="text-muted small">No columns mapped</span>';
+        }
+
+        function refreshBatchSummary() {
+            var files = 0, rows = 0, groups = {};
+            $('#batchTable tbody tr').each(function () {
+                var $tr = $(this);
+                var on = $tr.find('.batch-check').is(':checked');
+                var g = $.trim($tr.find('.batch-group').val());
+                $tr.toggleClass('batch-off', !on);
+                if (g !== '') {
+                    $tr.find('.batch-badge').text(groupIsNew(g) ? 'New group' : 'Existing group')
+                        .toggleClass('batch-badge-new', groupIsNew(g));
+                }
+                if (!on) return;
+                files++;
+                rows += parseInt($tr.data('rows'), 10) || 0;
+                if (g !== '') groups[g.toLowerCase()] = true;
+            });
+            $('#batchSummary').html(
+                '<span class="batch-pill"><strong>' + files + '</strong> files</span>'
+                + '<span class="batch-pill"><strong>' + rows.toLocaleString() + '</strong> rows</span>'
+                + '<span class="batch-pill"><strong>' + Object.keys(groups).length + '</strong> groups</span>'
+            );
+            $('#btnBatchCommitLabel').text(files ? 'Import ' + files + (files === 1 ? ' file' : ' files') : 'Import');
+        }
+
+        function renderBatch() {
+            var $tb = $('#batchTable tbody').empty();
+            (batch.items || []).forEach(function (it, idx) {
+                var bad = !!it.error || !it.has_mobile;
+                var note = it.error
+                    ? '<div class="text-danger small mt-1"><i class="fas fa-circle-exclamation me-1"></i>' + esc(it.error) + '</div>'
+                    : (!it.has_mobile ? '<div class="text-danger small mt-1"><i class="fas fa-circle-exclamation me-1"></i>No mobile column found</div>' : '')
+                    + (it.warning ? '<div class="text-warning small mt-1">' + esc(it.warning) + '</div>' : '');
+                $tb.append(
+                    '<tr data-idx="' + idx + '" data-rows="' + (it.rows || 0) + '"' + (bad ? ' class="batch-bad"' : '') + '>'
+                    + '<td><input type="checkbox" class="form-check-input batch-check"' + (bad ? ' disabled' : ' checked') + '></td>'
+                    + '<td><div class="fw-semibold text-break"><i class="fas fa-file-lines text-muted me-1"></i>' + esc(it.filename) + '</div>' + note + '</td>'
+                    + '<td><input type="text" class="form-control form-control-sm batch-group" maxlength="100" value="' + esc(it.group) + '"' + (bad ? ' disabled' : '') + '>'
+                    + '<span class="batch-badge">' + '</span></td>'
+                    + '<td class="text-end">' + (it.rows || 0).toLocaleString() + '</td>'
+                    + '<td class="batch-cols">' + columnChips(it.mapping) + '</td>'
+                    + '</tr>'
+                );
+            });
+            var ign = batch.ignored || [];
+            var $ig = $('#batchIgnored');
+            if (ign.length) {
+                $ig.html('<strong>' + ign.length + ' file(s) left out:</strong> '
+                    + ign.map(function (x) { return esc(x.name) + ' (' + esc(x.reason) + ')'; }).join(', ')).removeClass('d-none');
+            } else {
+                $ig.addClass('d-none').empty();
+            }
+            refreshBatchSummary();
+        }
+
+        $(document).on('input change', '#batchTable .batch-group, #batchTable .batch-check', refreshBatchSummary);
+        $('#batchCheckAll').on('change', function () {
+            $('#batchTable .batch-check:not(:disabled)').prop('checked', this.checked);
+            refreshBatchSummary();
+        });
+
+        function batchPreview() {
+            var files = batchPicked();
+            if (!files.length) {
+                APP.toast('Choose a ZIP or select the CSV / XLSX files.', 'error');
+                return;
+            }
+            var fd = new FormData();
+            var zip = files.length === 1 && /\.zip$/i.test(files[0].name) ? files[0] : null;
+            if (zip) {
+                if (zip.size > 25 * 1024 * 1024) { APP.toast('ZIP exceeds 25 MB.', 'error'); return; }
+                fd.append('zip', zip);
+            } else {
+                var bad = files.filter(function (f) { return !allowedImportFile(f); });
+                if (bad.length) { APP.toast('Only CSV, XLSX or one ZIP: ' + bad[0].name, 'error'); return; }
+                files.forEach(function (f) { fd.append('files[]', f); });
+            }
+
+            var $btn = $('#btnImportContinue').prop('disabled', true);
+            $btn.data('html', $btn.html()).html('<i class="fas fa-spinner fa-spin me-1"></i> Reading files…');
+            $.ajax({
+                url: base() + '/contacts/import/batch-preview', method: 'POST', data: fd,
+                processData: false, contentType: false, headers: csrfHeaders()
+            }).done(function (res) {
+                if (!res || res.success === false) {
+                    APP.toast((res && res.message) || 'Could not read the files.', 'error');
+                    return;
+                }
+                batch = res.data || {};
+                renderBatch();
+                $('#importStepUpload').addClass('d-none');
+                $('#importStepBatch').removeClass('d-none');
+            }).fail(function (xhr) {
+                APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Could not read the files.', 'error');
+            }).always(function () {
+                $btn.prop('disabled', false).html($btn.data('html') || 'Read files');
+            });
+        }
+
+        $('#btnBatchBack').on('click', function () {
+            $('#importStepBatch').addClass('d-none');
+            $('#importStepUpload').removeClass('d-none');
+        });
+
+        $('#btnBatchCommit').on('click', function () {
+            var items = [];
+            var names = {};
+            var invalid = false;
+            $('#batchTable tbody tr').each(function () {
+                var $tr = $(this);
+                if (!$tr.find('.batch-check').is(':checked')) return;
+                var it = batch.items[parseInt($tr.attr('data-idx'), 10)];
+                var g = $.trim($tr.find('.batch-group').val());
+                if (!g) { invalid = true; $tr.find('.batch-group').addClass('is-invalid'); return; }
+                $tr.find('.batch-group').removeClass('is-invalid');
+                names[g.toLowerCase()] = (names[g.toLowerCase()] || 0) + 1;
+                items.push({ token: it.token, filename: it.filename, group: g, mapping: it.mapping });
+            });
+            if (invalid) { APP.toast('Enter a group name for every selected file.', 'error'); return; }
+            if (!items.length) { APP.toast('Select at least one file.', 'error'); return; }
+            var optIn = $('#importOptIn').is(':checked');
+            if (optIn && !$('#importOptInSource').val()) {
+                APP.toast('Choose how WhatsApp consent was collected.', 'error');
+                return;
+            }
+
+            var $btn = $(this).prop('disabled', true);
+            $btn.data('html', $btn.html()).html('<i class="fas fa-spinner fa-spin me-1"></i> Importing ' + items.length + ' file(s)…');
+            $.ajax({
+                url: base() + '/contacts/import/batch-commit', method: 'POST', contentType: 'application/json',
+                headers: csrfHeaders(), timeout: 0,
+                data: JSON.stringify({
+                    items: items,
+                    default_country_code: $('#importDefaultCountry').val(),
+                    skip_duplicates: $('#skipDup').is(':checked'),
+                    extra_fields: $('#batchExtraFields').is(':checked'),
+                    wa_opt_in: optIn,
+                    wa_opt_in_source: optIn ? $('#importOptInSource').val() : ''
+                })
+            }).done(function (res) {
+                if (!res || res.success === false) {
+                    APP.toast((res && res.message) || 'Import failed.', 'error');
+                    return;
+                }
+                var d = res.data || {};
+                var $rt = $('#batchResultTable tbody').empty();
+                (d.results || []).forEach(function (r) {
+                    var notes = r.error
+                        ? '<span class="text-danger small">' + esc(r.error) + '</span>'
+                        : (r.errors || []).map(function (m) { return '<div class="small text-muted">' + esc(m) + '</div>'; }).join('');
+                    $rt.append('<tr class="' + (r.error ? 'batch-bad' : '') + '"><td class="text-break">' + esc(r.filename) + '</td><td>' + esc(r.group) + '</td>'
+                        + '<td class="text-end">' + r.imported + '</td><td class="text-end">' + r.updated + '</td><td class="text-end">' + r.skipped + '</td>'
+                        + '<td>' + (notes || '<span class="text-success small"><i class="fas fa-check me-1"></i>Done</span>') + '</td></tr>');
+                });
+                var t = d.totals || {};
+                $('#batchDoneSummary').html(
+                    '<span class="batch-pill"><strong>' + (t.imported || 0).toLocaleString() + '</strong> new</span>'
+                    + '<span class="batch-pill"><strong>' + (t.updated || 0).toLocaleString() + '</strong> updated</span>'
+                    + '<span class="batch-pill"><strong>' + (t.skipped || 0).toLocaleString() + '</strong> skipped</span>'
+                    + (t.files_failed ? '<span class="batch-pill batch-pill-bad"><strong>' + t.files_failed + '</strong> failed</span>' : '')
+                );
+                $('#importStepBatch').addClass('d-none');
+                $('#importStepBatchDone').removeClass('d-none');
+                APP.toast(res.message || 'Import complete.', t.files_failed ? 'warning' : 'success');
+                // Everything imported: go to All Contacts. When a file failed, stay so its error can be read.
+                if (!t.files_failed) {
+                    setTimeout(function () { window.location.href = d.redirect || (base() + '/contacts'); }, 1500);
+                }
+            }).fail(function (xhr) {
+                APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Import failed.', 'error');
+            }).always(function () {
+                $btn.prop('disabled', false).html($btn.data('html') || 'Import');
+            });
+        });
+
         $form.on('submit', function (e) {
             e.preventDefault();
+            if (mode === 'batch') {
+                batchPreview();
+                return;
+            }
             var fileInput = document.getElementById('importFile');
             var file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
             if (!file) {
@@ -743,7 +1009,7 @@
                 method: 'POST',
                 data: {
                     token: preview.token,
-                    default_country_code: $('#importDefaultCountry').val() || '91',
+                    default_country_code: $('#importDefaultCountry').val(),
                     group_id: $('#importGroupId').val() || '',
                     skip_duplicates: $('#skipDup').is(':checked') ? 1 : 0,
                     wa_opt_in: optIn ? 1 : 0,
@@ -773,11 +1039,25 @@
     Contacts.updateBulkBar = function () {
         var total = $('.contact-check').length;
         var checked = $('.contact-check:checked').length;
-        $('#checkAllContacts').prop('checked', total > 0 && total === checked);
+        var pageAll = total > 0 && total === checked;
+        $('#checkAllContacts').prop('checked', pageAll);
+        if (!pageAll) Contacts.allMatching = false;
+        var matching = Contacts.matchingTotal();
         var $bar = $('#contactsBulkBar');
         if ($bar.length) {
-            if (checked > 0) {
+            var $hint = $('#selectAllHint').empty();
+            if (Contacts.allMatching) {
+                $('#selectedContactsCount').text(matching.toLocaleString());
+                $hint.append('All ' + matching.toLocaleString() + ' matching contacts are selected. ')
+                    .append($('<a href="#" class="select-all-clear">Clear selection</a>'));
+            } else {
                 $('#selectedContactsCount').text(checked);
+                if (pageAll && matching > total) {
+                    $hint.append('All ' + total + ' on this page are selected. ')
+                        .append($('<a href="#" class="select-all-matching">Select all ' + matching.toLocaleString() + ' contacts</a>'));
+                }
+            }
+            if (checked > 0) {
                 $bar.stop(true, true).slideDown(150);
             } else {
                 $bar.stop(true, true).slideUp(150);
@@ -787,13 +1067,26 @@
 
     $(function () {
         $(document).on('change', '#checkAllContacts', function () {
+            Contacts.allMatching = false;
             $('.contact-check').prop('checked', this.checked);
+            Contacts.updateBulkBar();
+        });
+        $(document).on('click', '.select-all-matching', function (e) {
+            e.preventDefault();
+            Contacts.allMatching = true;
+            Contacts.updateBulkBar();
+        });
+        $(document).on('click', '.select-all-clear', function (e) {
+            e.preventDefault();
+            Contacts.allMatching = false;
+            $('#checkAllContacts, .contact-check').prop('checked', false);
             Contacts.updateBulkBar();
         });
         $(document).on('change', '.contact-check', function () {
             Contacts.updateBulkBar();
         });
         $(document).on('click', '#btnDeselectAllContacts', function () {
+            Contacts.allMatching = false;
             $('#checkAllContacts, .contact-check').prop('checked', false);
             Contacts.updateBulkBar();
         });

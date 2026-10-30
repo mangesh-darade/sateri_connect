@@ -5610,3 +5610,47 @@ body.chat-page-active .content-wrapper {
 .wallet-dt.dataTable { margin: 0 !important; }
 .wallet-dt thead th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: #667085; font-weight: 700; white-space: nowrap; }
 .wallet-dt td small { font-size: 0.74rem; }
+
+/* Contacts import: ZIP / many files, file name = customer group */
+.import-mode { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: .75rem; }
+.import-mode-btn {
+    display: flex; align-items: center; gap: .75rem; text-align: left;
+    padding: .75rem 1rem; border: 1px solid var(--bs-border-color, #e5e7eb); border-radius: 12px;
+    background: #fff; color: inherit; cursor: pointer; transition: border-color .15s, box-shadow .15s;
+}
+.import-mode-btn i { font-size: 1.4rem; color: var(--wa-green-dark, #be123c); }
+.import-mode-btn span { display: flex; flex-direction: column; line-height: 1.25; }
+.import-mode-btn small { color: #6b7280; font-size: .78rem; }
+.import-mode-btn:hover { border-color: var(--wa-green-dark, #be123c); }
+.import-mode-btn.active { border-color: var(--wa-green-dark, #be123c); box-shadow: 0 0 0 3px rgba(190, 18, 60, .12); background: var(--wa-mist, #fff1f2); }
+.batch-drop {
+    display: flex; flex-direction: column; align-items: center; gap: .25rem; text-align: center;
+    padding: 1.75rem 1rem; border: 2px dashed #d1d5db; border-radius: 14px; background: #fafafa; cursor: pointer;
+    transition: border-color .15s, background .15s;
+}
+.batch-drop:hover, .batch-drop.has-files { border-color: var(--wa-green-dark, #be123c); background: var(--wa-mist, #fff1f2); }
+.batch-drop i { font-size: 2rem; color: var(--wa-green-dark, #be123c); }
+.batch-drop-title { font-weight: 600; word-break: break-word; }
+.batch-drop-sub { font-size: .82rem; color: #6b7280; }
+.batch-pill { display: inline-flex; gap: .3rem; align-items: baseline; padding: .2rem .65rem; border-radius: 999px; background: #f3f4f6; font-size: .8rem; }
+.batch-pill-bad { background: #fee2e2; color: #991b1b; }
+.batch-table th { font-size: .75rem; text-transform: none; color: #6b7280; font-weight: 600; white-space: nowrap; }
+.batch-table tbody tr.batch-off { opacity: .45; }
+.batch-table tbody tr.batch-bad { background: #fff7f7; }
+.batch-badge { display: inline-block; margin-top: .25rem; font-size: .72rem; color: #6b7280; }
+.batch-badge.batch-badge-new { color: #047857; font-weight: 600; }
+.batch-cols { max-width: 360px; }
+.batch-chip { display: inline-block; margin: 0 .25rem .25rem 0; padding: .1rem .5rem; border-radius: 6px; background: #eef2ff; color: #3730a3; font-size: .72rem; }
+.batch-chip-new { background: #ecfdf5; color: #065f46; }
+
+/* Customer groups: bulk action bar */
+.groups-bulk-bar {
+    display: none; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem;
+    background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: .55rem .9rem; margin-bottom: .75rem;
+}
+
+/* Checkbox column in data tables: centred, no float/offset from the form-check styles */
+table.dataTable th.dt-check, table.dataTable td.dt-check, #customerGroupsTable th.dt-check, #customerGroupsTable td.dt-check {
+    padding-left: .5rem; padding-right: .5rem; vertical-align: middle; text-align: center;
+}
+.dt-check .form-check-input { float: none; margin: 0; vertical-align: middle; }

@@ -275,11 +275,14 @@
 
         AppDT.table($table, {
             url: $table.data('url'),
-            order: [[2, 'desc']],
+            order: [[3, 'desc']],
             pageLength: 25,
             emptyText: 'No customer groups yet. Click Add Group to create your first audience list for campaigns.',
             language: { searchPlaceholder: 'Search in groups' },
             columns: [
+                { data: null, orderable: false, searchable: false, visible: canDelete, width: '44px', className: 'dt-check text-center align-middle', render: function (r) {
+                    return '<input type="checkbox" class="form-check-input group-check" value="' + encodeURIComponent(r.id) + '" aria-label="Select group">';
+                } },
                 { data: null, render: function (r) { return '<span class="fw-medium">' + AppDT.esc(r.name) + '</span>'; } },
                 { data: null, className: 'text-center', render: function (r) { return AppDT.esc(r.contact_count); } },
                 { data: null, className: 'text-muted small', render: function (r) { return r.created_at ? AppDT.esc(r.created_at) : '—'; } },
@@ -299,7 +302,54 @@
         });
     }
 
+    function selectedGroupIds() {
+        return $('.group-check:checked').map(function () { return decodeURIComponent($(this).val()); }).get();
+    }
+
+    function updateGroupsBulkBar() {
+        var total = $('.group-check').length;
+        var checked = $('.group-check:checked').length;
+        $('#checkAllGroups').prop('checked', total > 0 && total === checked);
+        $('#selectedGroupsCount').text(checked);
+        $('#groupsBulkBar').css('display', checked > 0 ? 'flex' : 'none');
+    }
+
+    function bulkDeleteGroups() {
+        var ids = selectedGroupIds();
+        if (!ids.length) {
+            APP.toast('Select at least one group', 'warning');
+            return;
+        }
+        APP.confirm({ title: 'Delete selected groups?', text: ids.length + ' group(s) will be deleted. Contacts in them are not deleted.', confirmText: 'Delete' })
+            .then(function (r) {
+                if (!r.isConfirmed) return;
+                APP.post(base() + '/customer-groups/bulk-delete', JSON.stringify({ ids: ids }), { contentType: 'application/json' })
+                    .done(function (res) {
+                        APP.toast((res && res.message) || 'Deleted');
+                        $('#checkAllGroups').prop('checked', false);
+                        $('#customerGroupsTable').DataTable().ajax.reload(updateGroupsBulkBar, false);
+                    })
+                    .fail(function (xhr) {
+                        APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Bulk delete failed', 'error');
+                    });
+            });
+    }
+
     $(function () {
+        $(document).on('change', '#checkAllGroups', function () {
+            $('.group-check').prop('checked', this.checked);
+            updateGroupsBulkBar();
+        });
+        $(document).on('change', '.group-check', updateGroupsBulkBar);
+        $('#btnBulkDeleteGroups').on('click', bulkDeleteGroups);
+        $('#btnDeselectAllGroups').on('click', function () {
+            $('#checkAllGroups, .group-check').prop('checked', false);
+            updateGroupsBulkBar();
+        });
+        $('#customerGroupsTable').on('draw.dt', function () {
+            $('#checkAllGroups').prop('checked', false);
+            updateGroupsBulkBar();
+        });
         $(document).on('change', 'input[name="mode"]', toggleModeFields);
         $(document).on('input', '#newGroupName', updateNameCount);
         $(document).on('input change', '#addContactGroupForm input, #addContactGroupForm select', function () {

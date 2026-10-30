@@ -39,7 +39,7 @@
                         <?= csrf_field() ?>
                         <button type="submit" class="dropdown-item small py-2 d-flex align-items-center gap-2" id="btnSyncCheerioContacts">
                             <i class="fas fa-cloud-download-alt text-success"></i>
-                            <span><?= esc(function_exists('whatsapp_sync_label') ? whatsapp_sync_label() : 'Sync WhatsApp Contacts') ?></span>
+                            <span>Sync External Platform contacts</span>
                         </button>
                     </form>
                 </li>
@@ -295,7 +295,7 @@
         <div class="contacts-kpi-card">
             <div>
                 <div class="contacts-kpi-label">Total Audience</div>
-                <div class="contacts-kpi-val"><?= esc(number_format((int) ($stats['total'] ?? 0))) ?></div>
+                <div class="contacts-kpi-val" data-kpi="total"><?= esc(number_format((int) ($stats['total'] ?? 0))) ?></div>
                 <div class="contacts-kpi-sub">Registered contacts</div>
             </div>
             <div class="contacts-kpi-icon kpi-purple">
@@ -306,7 +306,7 @@
         <div class="contacts-kpi-card">
             <div>
                 <div class="contacts-kpi-label">WhatsApp Opt-in</div>
-                <div class="contacts-kpi-val text-success"><?= esc(number_format((int) ($stats['opted_in'] ?? 0))) ?></div>
+                <div class="contacts-kpi-val text-success" data-kpi="opted_in"><?= esc(number_format((int) ($stats['opted_in'] ?? 0))) ?></div>
                 <div class="contacts-kpi-sub">Consented for messaging</div>
             </div>
             <div class="contacts-kpi-icon kpi-green">
@@ -317,7 +317,7 @@
         <div class="contacts-kpi-card">
             <div>
                 <div class="contacts-kpi-label">Active Contacts</div>
-                <div class="contacts-kpi-val text-primary"><?= esc(number_format((int) ($stats['active'] ?? 0))) ?></div>
+                <div class="contacts-kpi-val text-primary" data-kpi="active"><?= esc(number_format((int) ($stats['active'] ?? 0))) ?></div>
                 <div class="contacts-kpi-sub">Ready for campaigns</div>
             </div>
             <div class="contacts-kpi-icon kpi-blue">
@@ -328,7 +328,7 @@
         <div class="contacts-kpi-card">
             <div>
                 <div class="contacts-kpi-label">Customer Groups</div>
-                <div class="contacts-kpi-val text-warning"><?= esc(number_format((int) ($stats['groups'] ?? 0))) ?></div>
+                <div class="contacts-kpi-val text-warning" data-kpi="groups"><?= esc(number_format((int) ($stats['groups'] ?? 0))) ?></div>
                 <div class="contacts-kpi-sub">Audience segments</div>
             </div>
             <div class="contacts-kpi-icon kpi-amber">
@@ -339,7 +339,7 @@
         <div class="contacts-kpi-card" id="kpiArchived" role="button" style="cursor:pointer" title="Show archived leads">
             <div>
                 <div class="contacts-kpi-label">Archived Leads</div>
-                <div class="contacts-kpi-val text-secondary"><?= esc(number_format((int) ($stats['archived'] ?? 0))) ?></div>
+                <div class="contacts-kpi-val text-secondary" data-kpi="archived"><?= esc(number_format((int) ($stats['archived'] ?? 0))) ?></div>
                 <div class="contacts-kpi-sub">Not synced to LMS</div>
             </div>
             <div class="contacts-kpi-icon kpi-slate">
@@ -383,7 +383,7 @@
                     <?php endforeach; ?>
                 </select>
 
-                <select id="filterConsent"class="form-select form-select-sm filter-pill-select" style="max-width:160px" title="WhatsApp consent">
+                <select id="filterConsent" class="form-select form-select-sm filter-pill-select" style="max-width:160px" title="WhatsApp consent">
                     <option value="">All WhatsApp consent</option>
                     <option value="opted_in">Opted in</option>
                     <option value="no_opt_in">No opt-in</option>
@@ -430,6 +430,7 @@
                         <i class="fas fa-check-circle me-1"></i> <span id="selectedContactsCount">0</span> selected
                     </span>
                     <span class="text-muted small" style="font-size:0.8rem;">Apply bulk actions to selected contacts:</span>
+                    <span id="selectAllHint" class="small" style="font-size:0.8rem;"></span>
                 </div>
                 <div class="d-flex align-items-center gap-1 flex-wrap">
                     <?php if (can('contacts.edit')): ?>

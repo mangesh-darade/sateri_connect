@@ -7,7 +7,7 @@ namespace App\Libraries;
 use Throwable;
 
 /**
- * Background sync run when the app is opened: provider contacts, ElintOm customers and templates.
+ * Background sync run when the app is opened: ElintOm customers and templates. External platform contacts are synced only by hand (Contacts > More).
  * Each job runs on its own (so one failure never stops the others) and is throttled per tenant database.
  */
 class AutoSyncService
@@ -16,7 +16,6 @@ class AutoSyncService
 
     /** job => [label, permission] */
     protected const JOBS = [
-        'contacts'  => ['Contacts', 'contacts.import'],
         'elintom'   => ['ElintOm customers', 'contacts.import'],
         'templates' => ['Templates', 'templates.sync'],
     ];
@@ -106,11 +105,6 @@ class AutoSyncService
     protected function execute(string $job): array
     {
         switch ($job) {
-            case 'contacts':
-                $s = (new CheerioSyncService())->syncContacts();
-
-                return [(int) $s['created'] + (int) $s['updated'], sprintf('%d created, %d updated.', $s['created'], $s['updated'])];
-
             case 'elintom':
                 $s = (new ElintOmCustomerSyncService())->sync();
                 $msg = sprintf('%d created, %d updated, %d unchanged, %d deleted in app (skipped).', $s['created'], $s['updated'], $s['unchanged'] ?? 0, $s['deleted'] ?? 0);

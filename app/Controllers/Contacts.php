@@ -30,13 +30,9 @@ class Contacts extends BaseController
             return $this->datatable();
         }
 
-        $db = db_connect();
-        $archivedCount = (int) $db->table('contacts')->where('deleted_at', null)->where('archived_at IS NOT NULL', null, false)->countAllResults();
-        $totalContacts = (int) $db->table('contacts')->where('deleted_at', null)->where('archived_at', null)->countAllResults();
-        $optedInCount  = (int) $db->table('contacts')->where('deleted_at', null)->where('archived_at', null)->where('wa_opt_in', 1)->countAllResults();
-        $activeCount   = (int) $db->table('contacts')->where('deleted_at', null)->where('archived_at', null)->where('status', 'active')->countAllResults();
-        $tags          = model(TagModel::class)->orderBy('name', 'ASC')->findAll();
-        $agents        = model(\App\Models\UserModel::class)->where('status', 'active')->orderBy('name', 'ASC')->findAll();
+        $db     = db_connect();
+        $tags   = model(TagModel::class)->orderBy('name', 'ASC')->findAll();
+        $agents = model(\App\Models\UserModel::class)->where('status', 'active')->orderBy('name', 'ASC')->findAll();
 
         $sources = array_column($db->query(
             "SELECT DISTINCT TRIM(JSON_UNQUOTE(JSON_EXTRACT(custom_fields, '$.source'))) AS src
@@ -49,18 +45,37 @@ class Contacts extends BaseController
             'sources'        => $sources,
             'tags'           => $tags,
             'agents'         => $agents,
-            'stats'          => [
-                'total'    => $totalContacts,
-                'opted_in' => $optedInCount,
-                'active'   => $activeCount,
-                'archived' => $archivedCount,
-                'groups'   => count($tags),
-            ],
+            'stats'          => $this->contactStats(),
             'attributeKeys'  => ContactAttributes::knownKeys(),
             'attributeDefs'  => service('contactAttributes')->definitions(),
             'attrColumns'    => service('contactAttributes')->listColumns(),
             'attributeOps'   => ContactListFilter::ATTRIBUTE_OPS,
         ]);
+    }
+
+    /**
+     * Numbers on the Contacts cards. Also sent with every table reload so they follow deletes, archives and imports.
+     *
+     * @return array{total:int,opted_in:int,active:int,archived:int,groups:int}
+     */
+    protected function contactStats(): array
+    {
+        $db  = db_connect();
+        $row = $db->table('contacts')
+            ->select('SUM(archived_at IS NULL) AS total, '
+                . 'SUM(archived_at IS NULL AND wa_opt_in = 1) AS opted_in, '
+                . 'SUM(archived_at IS NULL AND status = \'active\') AS active, '
+                . 'SUM(archived_at IS NOT NULL) AS archived', false)
+            ->where('deleted_at', null)
+            ->get()->getRowArray() ?: [];
+
+        return [
+            'total'    => (int) ($row['total'] ?? 0),
+            'opted_in' => (int) ($row['opted_in'] ?? 0),
+            'active'   => (int) ($row['active'] ?? 0),
+            'archived' => (int) ($row['archived'] ?? 0),
+            'groups'   => (int) $db->table('tags')->countAllResults(),
+        ];
     }
 
     protected function datatable(): ResponseInterface
@@ -75,7 +90,10 @@ class Contacts extends BaseController
 
         $db = db_connect();
 
-        $total = $db->table('contacts')->where('deleted_at', null)->countAllResults();
+        // Footer "filtered from N total": the same set the list shows (active leads, or archived leads).
+        $total = (int) $db->table('contacts')->where('deleted_at', null)
+            ->where('archived_at ' . (($filters['archived'] ?? '') === '1' ? 'IS NOT NULL' : 'IS NULL'), null, false)
+            ->countAllResults();
 
         $applyFilters = static fn ($builder) => ContactListFilter::apply($builder, $filters);
 
@@ -85,12 +103,11 @@ class Contacts extends BaseController
         $applyFilters($countBuilder);
         $recordsFiltered = (int) $countBuilder->countAllResults();
 
+        // No tag join / GROUP BY here: it made "Show all" take seconds. The group names of the rows on this page
+        // are read in one query below.
         $builder = $db->table('contacts c')
-            ->select('c.*, GROUP_CONCAT(DISTINCT CONCAT(t.name, "\x1f", IFNULL(t.color, "#667085")) ORDER BY t.name SEPARATOR "\x1e") AS tags_raw')
-            ->join('contact_tags ct', 'ct.contact_id = c.id', 'left')
-            ->join('tags t', 't.id = ct.tag_id', 'left')
-            ->where('c.deleted_at', null)
-            ->groupBy('c.id');
+            ->select('c.*')
+            ->where('c.deleted_at', null);
         $applyFilters($builder);
 
         // Match contacts.js column indices: id, name, mobile, email, tags, status, last_message_at, actions
@@ -123,23 +140,22 @@ class Contacts extends BaseController
             ->get()
             ->getResultArray();
 
-        foreach ($rows as &$row) {
-            $tags = [];
-            $raw  = (string) ($row['tags_raw'] ?? '');
-            if ($raw !== '') {
-                foreach (explode("\x1e", $raw) as $part) {
-                    if ($part === '') {
-                        continue;
-                    }
-                    $bits = explode("\x1f", $part, 2);
-                    $tags[] = [
-                        'name'  => $bits[0],
-                        'color' => $bits[1] ?? '#667085',
-                    ];
-                }
+        $tagsByContact = [];
+        $pageIds       = array_map(static fn (array $r): int => (int) $r['id'], $rows);
+        foreach (array_chunk($pageIds, 2000) as $idChunk) {
+            $links = $db->table('contact_tags ct')
+                ->select('ct.contact_id, t.name, t.color')
+                ->join('tags t', 't.id = ct.tag_id')
+                ->whereIn('ct.contact_id', $idChunk)
+                ->orderBy('t.name', 'ASC')
+                ->get()->getResultArray();
+            foreach ($links as $l) {
+                $tagsByContact[(int) $l['contact_id']][] = ['name' => (string) $l['name'], 'color' => $l['color'] ?: '#667085'];
             }
-            $row['tags'] = $tags;
-            unset($row['tags_raw']);
+        }
+
+        foreach ($rows as &$row) {
+            $row['tags'] = $tagsByContact[(int) $row['id']] ?? [];
 
             $cf = $row['custom_fields'] ?? null;
             if (is_string($cf) && $cf !== '') {
@@ -172,6 +188,7 @@ class Contacts extends BaseController
         return $this->response->setJSON([
             'draw'            => $draw,
             'recordsTotal'    => $total,
+            'stats'           => $this->contactStats(),
             'recordsFiltered' => $recordsFiltered,
             'data'            => $rows,
         ]);
@@ -515,17 +532,39 @@ class Contacts extends BaseController
             return $denied;
         }
 
-        $ids = $this->request->getPost('ids') ?? $this->request->getJSON(true)['ids'] ?? [];
-        if (! is_array($ids) || $ids === []) {
+        $ids = $this->bulkContactIds($this->request->getJSON(true) ?: $this->request->getPost());
+        if ($ids === []) {
             return $this->jsonResponse(false, null, 'No contacts selected.', [], 422);
         }
 
-        $ids = array_map('intval', $ids);
-        model(ContactModel::class)->whereIn('id', $ids)->delete();
+        foreach (array_chunk($ids, 2000) as $chunk) {
+            model(ContactModel::class)->whereIn('id', $chunk)->delete();
+        }
 
         (new ActivityLogger())->log('bulk_delete', 'contacts', 'Contacts bulk deleted', ['ids' => $ids]);
 
         return $this->jsonResponse(true, ['deleted' => count($ids)], 'Contacts deleted.');
+    }
+
+    /**
+     * Contact ids for a bulk action: the ticked ids, or - when "select all N matching" was used - every contact that
+     * matches the filters on screen, resolved here so thousands of ids never travel through the browser.
+     *
+     * @param array<string, mixed> $input
+     *
+     * @return list<int>
+     */
+    protected function bulkContactIds(array $input): array
+    {
+        if (! empty($input['all'])) {
+            $filters = ContactListFilter::fromInput(is_array($input['filters'] ?? null) ? $input['filters'] : []);
+            $builder = db_connect()->table('contacts c')->select('c.id')->where('c.deleted_at', null);
+            ContactListFilter::apply($builder, $filters);
+
+            return array_map('intval', array_column($builder->limit(20000)->get()->getResultArray(), 'id'));
+        }
+
+        return array_values(array_unique(array_filter(array_map('intval', (array) ($input['ids'] ?? [])))));
     }
 
     /** Archive / restore contacts. Archived contacts leave the main list and are not synced to ElintOm (LMS). */
@@ -536,7 +575,7 @@ class Contacts extends BaseController
         }
 
         $input = $this->request->getJSON(true) ?: $this->request->getPost();
-        $ids   = array_values(array_filter(array_map('intval', (array) ($input['ids'] ?? []))));
+        $ids   = $this->bulkContactIds($input);
         if ($ids === []) {
             return $this->jsonResponse(false, null, 'No contacts selected.', [], 422);
         }
@@ -559,7 +598,7 @@ class Contacts extends BaseController
         }
 
         $input  = $this->request->getJSON(true) ?: $this->request->getPost();
-        $ids    = array_map('intval', (array) ($input['ids'] ?? []));
+        $ids    = $this->bulkContactIds($input);
         $tagIds = array_map('intval', (array) ($input['tag_ids'] ?? []));
         $mode   = (string) ($input['mode'] ?? 'add'); // add|replace|remove
 
@@ -686,7 +725,7 @@ class Contacts extends BaseController
         }
 
         $input  = $this->request->getJSON(true) ?: $this->request->getPost();
-        $ids    = array_map('intval', (array) ($input['ids'] ?? []));
+        $ids    = $this->bulkContactIds($input);
         $action = (string) ($input['action'] ?? '');
         $source = (string) ($input['source'] ?? '');
 
@@ -729,7 +768,7 @@ class Contacts extends BaseController
             return $denied;
         }
         $input = $this->request->getJSON(true) ?: $this->request->getPost();
-        $ids   = array_map('intval', (array) ($input['ids'] ?? []));
+        $ids   = $this->bulkContactIds($input);
         $key   = trim((string) ($input['attribute'] ?? ''));
         $value = (string) ($input['value'] ?? '');
         if ($key === '') {
@@ -829,7 +868,7 @@ class Contacts extends BaseController
             $optInSource = service('whatsAppConsent')->normalizeSource((string) ($this->request->getPost('wa_opt_in_source') ?: 'import'));
         }
 
-        $defaultCountryCode = (string) ($this->request->getPost('default_country_code') ?: '91');
+        $defaultCountryCode = (string) ($this->request->getPost('default_country_code') ?? '91');
 
         try {
             $result = (new \App\Libraries\ContactImportService())->commit(
@@ -838,7 +877,8 @@ class Contacts extends BaseController
                 $tagId > 0 ? $tagId : null,
                 $skipDuplicates,
                 $optInSource,
-                $defaultCountryCode
+                $defaultCountryCode,
+                'External Platform'
             );
         } catch (\Throwable $e) {
             return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
@@ -869,6 +909,161 @@ class Contacts extends BaseController
         return $this->jsonResponse(true, array_merge($result, [
             'redirect' => site_url('contacts'),
         ]), $msg);
+    }
+
+    /**
+     * ZIP / multiple files import, step 1: stage every CSV/XLSX and suggest a customer group named after the file.
+     */
+    public function importBatchPreview(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('contacts.import')) {
+            return $denied;
+        }
+
+        $svc     = new \App\Libraries\ContactImportService();
+        $files   = [];
+        $ignored = [];
+        $dir     = '';
+
+        try {
+            $zip = $this->request->getFile('zip');
+            if ($zip !== null && $zip->isValid()) {
+                if (strtolower((string) $zip->getClientExtension()) !== 'zip') {
+                    return $this->jsonResponse(false, null, 'Please choose a .zip file.', [], 422);
+                }
+                $x       = $svc->extractZip($zip->getTempName());
+                $files   = $x['files'];
+                $ignored = $x['ignored'];
+                $dir     = $x['dir'];
+            } else {
+                foreach ($this->request->getFileMultiple('files') ?: [] as $f) {
+                    if (! $f->isValid()) {
+                        $ignored[] = ['name' => (string) $f->getClientName(), 'reason' => $f->getErrorString()];
+                        continue;
+                    }
+                    if (! in_array(strtolower((string) $f->getClientExtension()), ['csv', 'xlsx'], true)) {
+                        $ignored[] = ['name' => (string) $f->getClientName(), 'reason' => 'Not a CSV or XLSX file'];
+                        continue;
+                    }
+                    $files[] = ['path' => $f->getTempName(), 'name' => (string) $f->getClientName()];
+                }
+            }
+
+            if ($files === []) {
+                return $this->jsonResponse(false, ['ignored' => $ignored], 'No CSV or XLSX files found. Choose a ZIP with CSV / XLSX files, or select the files.', [], 422);
+            }
+            if (count($files) > \App\Libraries\ContactImportService::MAX_BATCH_FILES) {
+                return $this->jsonResponse(false, null, 'Up to ' . \App\Libraries\ContactImportService::MAX_BATCH_FILES . ' files at a time.', [], 422);
+            }
+
+            $items = [];
+            foreach ($files as $f) {
+                try {
+                    $p       = $svc->parseUpload($f['path'], $f['name']);
+                    $mapping = $p['suggested_mapping'];
+                    $items[] = [
+                        'token'      => $p['token'],
+                        'filename'   => $f['name'],
+                        'group'      => $svc->groupNameFromFile($f['name']),
+                        'rows'       => $p['row_count'],
+                        'mapping'    => $mapping,
+                        'has_mobile' => in_array('mobile', $mapping, true),
+                        'warning'    => $p['warning'],
+                        'error'      => null,
+                    ];
+                } catch (\Throwable $e) {
+                    $items[] = ['token' => '', 'filename' => $f['name'], 'group' => '', 'rows' => 0, 'mapping' => [], 'has_mobile' => false, 'warning' => null, 'error' => $e->getMessage()];
+                }
+            }
+        } catch (\Throwable $e) {
+            return $this->jsonResponse(false, null, $e->getMessage(), [], 422);
+        } finally {
+            if ($dir !== '') {
+                $svc->cleanupDir($dir);
+            }
+        }
+
+        $existing = array_column(model(TagModel::class)->select('name')->findAll(), 'name');
+
+        return $this->jsonResponse(true, [
+            'items'           => $items,
+            'ignored'         => $ignored,
+            'existing_groups' => $existing,
+        ], count($items) . ' file(s) ready. Check the group names, then import.');
+    }
+
+    /**
+     * ZIP / multiple files import, step 2: import each staged file into the customer group named after it.
+     */
+    public function importBatchCommit(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('contacts.import')) {
+            return $denied;
+        }
+
+        $in    = $this->request->getJSON(true) ?: $this->request->getPost();
+        $items = is_array($in['items'] ?? null) ? $in['items'] : [];
+        if ($items === []) {
+            return $this->jsonResponse(false, null, 'No files to import.', [], 422);
+        }
+        if (count($items) > \App\Libraries\ContactImportService::MAX_BATCH_FILES) {
+            return $this->jsonResponse(false, null, 'Too many files.', [], 422);
+        }
+
+        $skipDuplicates = ! empty($in['skip_duplicates']);
+        $extraFields    = ! empty($in['extra_fields']);
+        $optInSource    = null;
+        if (! empty($in['wa_opt_in'])) {
+            $optInSource = service('whatsAppConsent')->normalizeSource((string) (($in['wa_opt_in_source'] ?? '') ?: 'import'));
+        }
+        $country = (string) ($in['default_country_code'] ?? '91');
+
+        $svc      = new \App\Libraries\ContactImportService();
+        $tagModel = model(TagModel::class);
+        $results  = [];
+        $totals   = ['imported' => 0, 'updated' => 0, 'skipped' => 0, 'files_failed' => 0];
+
+        foreach ($items as $item) {
+            $file    = (string) ($item['filename'] ?? 'file');
+            $group   = trim((string) ($item['group'] ?? ''));
+            $token   = (string) ($item['token'] ?? '');
+            $mapping = is_array($item['mapping'] ?? null) ? array_map(static fn ($v) => (string) $v, $item['mapping']) : [];
+            $row     = ['filename' => $file, 'group' => $group, 'imported' => 0, 'updated' => 0, 'skipped' => 0, 'errors' => [], 'error' => null];
+
+            try {
+                if ($group === '' || mb_strlen($group) > 100) {
+                    throw new \RuntimeException('Group name must be 1-100 characters.');
+                }
+                if (! $extraFields) {
+                    $mapping = array_map(static fn ($d) => str_starts_with($d, 'new:') ? 'skip' : $d, $mapping);
+                }
+                $tag = $tagModel->findOrCreateByName($group, '#25D366');
+                if (! is_array($tag) || empty($tag['id'])) {
+                    throw new \RuntimeException('Could not create the customer group.');
+                }
+                $r = $svc->commit($token, $mapping, (int) $tag['id'], $skipDuplicates, $optInSource, $country, 'External Platform');
+                $row['imported'] = (int) $r['imported'];
+                $row['updated']  = (int) $r['updated'];
+                $row['skipped']  = (int) $r['skipped'];
+                $row['errors']   = array_slice($r['errors'] ?? [], 0, 5);
+            } catch (\Throwable $e) {
+                $row['error'] = $e->getMessage();
+                $totals['files_failed']++;
+            }
+            foreach (['imported', 'updated', 'skipped'] as $k) {
+                $totals[$k] += $row[$k];
+            }
+            $results[] = $row;
+        }
+
+        log_activity('import', 'contacts', 'Imported ' . count($results) . ' file(s) into customer groups', $totals);
+
+        $msg = sprintf('Imported %d new, updated %d, skipped %d across %d file(s).', $totals['imported'], $totals['updated'], $totals['skipped'], count($results));
+        if ($totals['files_failed'] > 0) {
+            $msg .= ' ' . $totals['files_failed'] . ' file(s) failed.';
+        }
+
+        return $this->jsonResponse(true, ['results' => $results, 'totals' => $totals, 'redirect' => site_url('contacts')], $msg);
     }
 
     public function exportCsv(): ResponseInterface

@@ -116,7 +116,7 @@ class CheerioSyncService
                     $changed   = false;
                     if (! empty($existing['deleted_at'])) {
                         // The External platform still has this contact: bring it back and refresh its values.
-                        db_connect()->table('contacts')->where('id', $contactId)->update(['deleted_at' => null]);
+                        db_connect()->table('contacts')->where('id', $contactId)->update(['deleted_at' => null, 'archived_at' => null]);
                         $changed = true;
                     }
                     foreach (['name', 'email', 'status', 'notes'] as $k) {

@@ -22,12 +22,29 @@
         <span class="small text-muted">Use groups as campaign audiences</span>
     </div>
     <div class="card-body py-3">
+        <?php if (function_exists('can') && can('contacts.delete')): ?>
+            <div id="groupsBulkBar" class="groups-bulk-bar" role="region" aria-label="Bulk actions">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-success text-white small px-2 py-1">
+                        <i class="fas fa-check-circle me-1"></i> <span id="selectedGroupsCount">0</span> selected
+                    </span>
+                    <span class="text-muted small">Apply to selected groups. Contacts in the groups are not deleted.</span>
+                </div>
+                <div class="d-flex align-items-center gap-1">
+                    <button type="button" id="btnBulkDeleteGroups" class="btn btn-sm btn-outline-danger bg-white py-1 px-2">
+                        <i class="fas fa-trash me-1"></i> Bulk delete
+                    </button>
+                    <button type="button" id="btnDeselectAllGroups" class="btn btn-sm btn-link text-muted py-1 px-2 text-decoration-none">Cancel</button>
+                </div>
+            </div>
+        <?php endif; ?>
         <table id="customerGroupsTable" class="table table-sm table-hover align-middle w-100"
                data-url="<?= esc(site_url('customer-groups/data'), 'attr') ?>"
                data-can-delete="<?= (function_exists('can') && can('contacts.delete')) ? '1' : '0' ?>"
                data-can-export="<?= (function_exists('can') && can('contacts.export')) ? '1' : '0' ?>">
             <thead>
                 <tr>
+                    <th class="dt-check text-center align-middle" style="width:44px"><input type="checkbox" class="form-check-input" id="checkAllGroups" title="Select all" aria-label="Select all groups"></th>
                     <th>Group</th>
                     <th class="text-center" style="width:110px">Contacts</th>
                     <th style="width:220px">Added on</th>

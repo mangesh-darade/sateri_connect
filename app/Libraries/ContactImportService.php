@@ -16,7 +16,9 @@ use RuntimeException;
 class ContactImportService
 {
     public const MAX_BYTES = 5 * 1024 * 1024;
-    public const MAX_ROWS  = 5000;
+    public const MAX_ROWS  = 20000;
+    public const MAX_ZIP_BYTES = 25 * 1024 * 1024;
+    public const MAX_BATCH_FILES = 50;
 
     private const ALLOWED_EXTENSIONS = ['csv', 'xlsx'];
 
@@ -43,7 +45,7 @@ class ContactImportService
             ['value' => 'email', 'label' => 'Email'],
             ['value' => 'country', 'label' => 'Country'],
             ['value' => 'notes', 'label' => 'Notes'],
-            ['value' => 'tags', 'label' => 'Tags (comma-separated)'],
+            ['value' => 'tags', 'label' => 'Customer groups / labels (comma-separated)'],
         ];
 
         foreach (ContactAttributes::knownKeys() as $key) {
@@ -84,6 +86,17 @@ class ContactImportService
             'tag'               => 'tags',
             'group'             => 'tags',
             'groups'            => 'tags',
+            'phonenumber'       => 'mobile',
+            'customername'      => 'name',
+            'customer_name'     => 'name',
+            'createdat'         => 'skip',
+            'updatedat'         => 'skip',
+            'created_at'        => 'skip',
+            'updated_at'        => 'skip',
+            'label'             => 'tags',
+            'labels'            => 'tags',
+            'customer_group'    => 'tags',
+            'customer_groups'   => 'tags',
         ];
 
         if (isset($aliases[$h])) {
@@ -215,7 +228,7 @@ class ContactImportService
      *
      * @return array{imported:int,skipped:int,updated:int,errors:list<string>,custom_fields_created:list<string>,truncated:bool}
      */
-    public function commit(string $token, array $mapping, ?int $tagId, bool $skipDuplicates, ?string $optInSource = null, ?string $defaultCountryCode = '91'): array
+    public function commit(string $token, array $mapping, ?int $tagId, bool $skipDuplicates, ?string $optInSource = null, ?string $defaultCountryCode = '91', ?string $sourceLabel = null): array
     {
         $consent = $optInSource !== null && $optInSource !== '' ? service('whatsAppConsent') : null;
         $token = preg_replace('/[^a-f0-9]/', '', strtolower($token)) ?? '';
@@ -253,6 +266,8 @@ class ContactImportService
 
         $model    = model(ContactModel::class);
         $tagModel = model(TagModel::class);
+        $model->skipElintOmPush = true; // one HTTP push per row would crawl; ElintOm sync sends them in batches
+        $tagCache = [];
         $newIds   = [];
         $imported = 0;
         $skipped  = 0;
@@ -260,7 +275,21 @@ class ContactImportService
         $errors   = [];
         $rowNum   = 0;
         $truncated = false;
-        $createdCustom = $resolved['new_custom_keys'];
+        $createdCustom = [];
+
+        // New columns become real attributes (Contacts > Attributes) so the values show up and can be used in filters.
+        $attrService = service('contactAttributes');
+        foreach (array_unique($resolved['new_custom_keys']) as $newKey) {
+            try {
+                if ($attrService->tableReady() && $attrService->definition($newKey) === null) {
+                    $attrService->saveDefinition(['attr_key' => $newKey, 'label' => ucwords(str_replace('_', ' ', $newKey)), 'type' => 'text']);
+                    $createdCustom[] = $newKey;
+                }
+            } catch (\Throwable $e) {
+                // The values are still saved on the contacts; only the attribute definition could not be created.
+                $errors[] = 'Attribute "' . $newKey . '" not created: ' . $e->getMessage();
+            }
+        }
 
         while (($row = fgetcsv($handle, 0, ',', '"', '\\')) !== false) {
             if ($this->rowIsEmpty($row)) {
@@ -277,14 +306,40 @@ class ContactImportService
             $rawMobile = (string) ($values['mobile'] ?? '');
             $rowCountryCode = (string) ($values['country_code'] ?? $defaultCountryCode ?? '91');
             $validated = validate_phone_with_country($rawMobile, $rowCountryCode);
-            if (! $validated['valid']) {
-                $skipped++;
-                if (count($errors) < 20) {
-                    $errors[] = 'Row ' . $rowNum . ' (' . ($rawMobile !== '' ? $rawMobile : 'empty') . '): ' . $validated['error'];
+            if (! $validated['valid'] && $rowCountryCode !== '') {
+                // The chosen default does not fit (e.g. +91 chosen but the number is 9715…): try the number's own country code.
+                $auto = validate_phone_with_country($rawMobile, '');
+                if ($auto['valid']) {
+                    $validated = $auto;
                 }
-                continue;
             }
-            $mobile = $validated['phone'];
+            // A row without a usable mobile is still imported when it has a valid email or at least a name, so no
+            // person in the file is lost: the raw values go to notes and the problem is reported below.
+            $noMobile  = false;
+            $extKey    = null;
+            $rawNote   = null;
+            $emailIn   = trim((string) ($values['email'] ?? ''));
+            $emailOk   = $emailIn !== '' && filter_var($emailIn, FILTER_VALIDATE_EMAIL) !== false;
+            if (! $validated['valid']) {
+                if ($rawMobile === '' && ! $emailOk && trim((string) ($values['name'] ?? '')) === '') {
+                    $skipped++;
+                    if (count($errors) < 20) {
+                        $errors[] = 'Row ' . $rowNum . ': no mobile, email or name';
+                    }
+                    continue;
+                }
+                $noMobile = true;
+                if (count($errors) < 20) {
+                    $errors[] = 'Row ' . $rowNum . ' (' . ($rawMobile !== '' ? $rawMobile : 'empty') . '): ' . ($validated['error'] ?? 'invalid mobile') . ' — imported without a mobile';
+                }
+                if (! $emailOk) {
+                    $extKey = 'import:' . substr(md5(strtolower((string) ($values['name'] ?? '') . '|' . $rawMobile . '|' . $emailIn)), 0, 24);
+                    $rawNote = 'Imported without a valid mobile/email. Raw mobile: "' . $rawMobile . '", raw email: "' . $emailIn . '".';
+                } elseif ($rawMobile !== '') {
+                    $rawNote = 'Original mobile in file: "' . $rawMobile . '" (not a valid number).';
+                }
+            }
+            $mobile = $noMobile ? '' : $validated['phone'];
 
             $name = (string) ($values['name'] ?? '');
             if ($name !== '' && (
@@ -296,13 +351,78 @@ class ContactImportService
                 $name = "'" . $name;
             }
 
-            $existing = $model->findByMobile($mobile);
-            if ($existing !== null && $skipDuplicates) {
-                $skipped++;
+            if ($mobile !== '') {
+                $existing = $model->findByMobile($mobile);
+            } elseif ($extKey !== null) {
+                $existing = $model->where('external_id', $extKey)->first();
+            } else {
+                $existing = $model->where('email', $emailIn)->where('mobile', null)->first();
+            }
+            $restore = false;
+            if ($existing === null) {
+                // Same person deleted earlier: bring that contact back instead of creating a second one.
+                if ($mobile !== '') {
+                    $existing = $model->findByMobile($mobile, true);
+                } elseif ($extKey !== null) {
+                    $existing = $model->withDeleted()->where('external_id', $extKey)->first();
+                } else {
+                    $existing = $model->withDeleted()->where('email', $emailIn)->where('mobile', null)->first();
+                }
+                $restore = $existing !== null;
+            }
+            if ($existing !== null && $skipDuplicates && ! $restore) {
+                // The contact itself is left as it is, but it still joins the group(s) of this file.
+                $dupId = (int) $existing['id'];
+                if ($tagId !== null && $tagId > 0) {
+                    $tagModel->attachContact($tagId, $dupId);
+                }
+                foreach ($values['tag_names'] as $tagName) {
+                    if (! isset($tagCache[$tagName])) {
+                        $tag = $tagModel->findOrCreateByName($tagName);
+                        $tagCache[$tagName] = is_array($tag) ? (int) ($tag['id'] ?? 0) : 0;
+                    }
+                    if ($tagCache[$tagName] > 0) {
+                        $tagModel->attachContact($tagCache[$tagName], $dupId);
+                    }
+                }
+                // Values the contact does not have yet (a new column, a missing email or name) are still filled in.
+                $prevCf = $existing['custom_fields'] ?? [];
+                if (is_string($prevCf)) {
+                    $prevCf = json_decode($prevCf, true);
+                }
+                $prevCf = is_array($prevCf) ? $prevCf : [];
+                $add    = [];
+                foreach ((array) ($values['custom_fields'] ?? []) as $cfKey => $cfValue) {
+                    $cfValue = trim((string) $cfValue);
+                    if ($cfValue !== '' && trim((string) ($prevCf[$cfKey] ?? '')) === '') {
+                        $add[$cfKey] = $cfValue;
+                    }
+                }
+                $upd = [];
+                if ($add !== []) {
+                    $upd['custom_fields'] = array_merge($prevCf, $add);
+                }
+                $fileEmail = $this->validEmailOrNull($values['email'] ?? null);
+                if ($fileEmail !== null && trim((string) ($existing['email'] ?? '')) === '') {
+                    $upd['email'] = $fileEmail;
+                }
+                $curName = trim((string) ($existing['name'] ?? ''));
+                $fileName = trim((string) ($values['name'] ?? ''));
+                if ($fileName !== '' && ($curName === '' || $curName === (string) ($existing['mobile'] ?? ''))) {
+                    $upd['name'] = $fileName;
+                }
+                if ($upd !== []) {
+                    $model->skipValidation(true)->update($dupId, $upd);
+                    $model->skipValidation(false);
+                    $updated++;
+                } else {
+                    $skipped++;
+                }
                 continue;
             }
 
             $customFields = is_array($values['custom_fields'] ?? null) ? $values['custom_fields'] : [];
+            $fileSource   = trim((string) ($customFields['source'] ?? ''));
             if ($customFields !== []) {
                 $attrSvc = service('contactAttributes');
                 foreach ($customFields as $cfKey => $cfValue) {
@@ -318,6 +438,9 @@ class ContactImportService
                     }
                 }
             }
+            if ($restore) {
+                db_connect()->table('contacts')->where('id', (int) $existing['id'])->update(['deleted_at' => null, 'archived_at' => null]);
+            }
             if ($existing !== null) {
                 $prev = $existing['custom_fields'] ?? [];
                 if (is_string($prev)) {
@@ -330,13 +453,24 @@ class ContactImportService
                 $customFields = array_merge($prev, $customFields);
             }
 
+            // Shown in the Contacts "All sources" filter.
+            if ($sourceLabel !== null && $fileSource !== '') {
+                // The file has its own source: keep that name, marked as coming from the platform ("External Platform - Facebook").
+                $customFields['source'] = str_starts_with($fileSource, $sourceLabel) ? $fileSource : $sourceLabel . ' - ' . $fileSource;
+            } elseif (trim((string) ($customFields['source'] ?? '')) === '') {
+                // No source in the file or on the contact.
+                $customFields['source'] = $sourceLabel ?? 'External Platform';
+            }
+
             $payload = [
                 'channel'       => $existing['channel'] ?? 'whatsapp',
+                'external_id'   => $existing['external_id'] ?? $extKey,
                 'name'          => $name !== '' ? $name : ($existing['name'] ?? null),
-                'mobile'        => $mobile,
-                'email'         => $values['email'] ?? ($existing['email'] ?? null),
-                'country'       => $values['country'] ?? ($validated['country']['name'] ?? ($existing['country'] ?? null)),
-                'notes'         => $values['notes'] ?? ($existing['notes'] ?? null),
+                'mobile'        => $mobile !== '' ? $mobile : ($existing['mobile'] ?? null),
+                // Never write an invalid email (older contacts hold values like "NA" that would fail validation).
+                'email'         => $this->validEmailOrNull($noMobile ? ($emailOk ? $emailIn : ($existing['email'] ?? null)) : ($values['email'] ?? ($existing['email'] ?? null))),
+                'country'       => $values['country'] ?? ($noMobile ? ($existing['country'] ?? null) : ($validated['country']['name'] ?? ($existing['country'] ?? null))),
+                'notes'         => trim((string) ($values['notes'] ?? ($existing['notes'] ?? '')) . ($rawNote !== null && ! str_contains((string) ($existing['notes'] ?? ''), $rawNote) ? ' ' . $rawNote : '')) ?: null,
                 'status'        => $existing['status'] ?? 'active',
                 'custom_fields' => $customFields !== [] ? $customFields : ($existing['custom_fields'] ?? null),
             ];
@@ -355,7 +489,9 @@ class ContactImportService
                 $contactId = (int) $model->insert($payload);
                 if ($contactId > 0) {
                     $imported++;
-                    $newIds[] = $contactId;
+                    if (! $noMobile) {
+                        $newIds[] = $contactId;
+                    }
                 } else {
                     $skipped++;
                     $errors[] = $mobile . ': ' . implode(', ', $model->errors());
@@ -364,7 +500,7 @@ class ContactImportService
             }
 
             // Opt-in only on a new insert. An existing customer is left as they are.
-            if ($consent !== null && $existing === null) {
+            if ($consent !== null && $existing === null && ! $noMobile) {
                 $consent->optIn($contactId, $optInSource, null, false);
             }
 
@@ -373,15 +509,19 @@ class ContactImportService
             }
 
             foreach ($values['tag_names'] as $tagName) {
-                $tag = $tagModel->findOrCreateByName($tagName);
-                if (is_array($tag) && ! empty($tag['id'])) {
-                    $tagModel->attachContact((int) $tag['id'], $contactId);
+                if (! isset($tagCache[$tagName])) {
+                    $tag = $tagModel->findOrCreateByName($tagName);
+                    $tagCache[$tagName] = is_array($tag) ? (int) ($tag['id'] ?? 0) : 0;
+                }
+                if ($tagCache[$tagName] > 0) {
+                    $tagModel->attachContact($tagCache[$tagName], $contactId);
                 }
             }
         }
 
         fclose($handle);
         @unlink($path);
+        $model->skipElintOmPush = false;
 
         // Only when the tenant enabled automatic opt-in requests (once per contact).
         $consentRequested = 0;
@@ -411,6 +551,110 @@ class ContactImportService
      *
      * @throws RuntimeException
      */
+    /**
+     * File name -> customer group name: "Replied To (1).csv" => "Replied To", "Opened - 6a06...b4d1.csv" => "Opened".
+     */
+    public function groupNameFromFile(string $filename): string
+    {
+        $n = pathinfo($filename, PATHINFO_FILENAME);
+        $n = preg_replace('/\s*\(\d+\)\s*$/', '', $n) ?? $n;
+        $n = preg_replace('/\s+-\s+[a-f0-9]{24}\s*$/i', '', $n) ?? $n;
+        $n = trim(preg_replace('/\s+/', ' ', $n) ?? $n);
+
+        return mb_substr($n !== '' ? $n : 'Imported file', 0, 100);
+    }
+
+    /**
+     * Unpack a ZIP into a private folder and list the CSV/XLSX files in it. Only the base name of each entry is
+     * used (no path traversal), hidden / __MACOSX entries and other file types are reported in "ignored".
+     *
+     * @return array{dir: string, files: list<array{path: string, name: string}>, ignored: list<array{name: string, reason: string}>}
+     */
+    public function extractZip(string $zipPath): array
+    {
+        if (! class_exists(\ZipArchive::class)) {
+            throw new RuntimeException('ZIP support is not available on this server (PHP zip extension).');
+        }
+        if (filesize($zipPath) > self::MAX_ZIP_BYTES) {
+            throw new RuntimeException('ZIP exceeds ' . (self::MAX_ZIP_BYTES / 1024 / 1024) . ' MB.');
+        }
+        $zip = new \ZipArchive();
+        if ($zip->open($zipPath) !== true) {
+            throw new RuntimeException('Could not open the ZIP file.');
+        }
+
+        $dir = WRITEPATH . 'uploads/imports/zip_' . bin2hex(random_bytes(8));
+        if (! mkdir($dir, 0755, true) && ! is_dir($dir)) {
+            $zip->close();
+            throw new RuntimeException('Unable to create import staging directory.');
+        }
+
+        $files   = [];
+        $ignored = [];
+        $total   = 0;
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $entry = (string) $zip->getNameIndex($i);
+            if ($entry === '' || str_ends_with($entry, '/')) {
+                continue;
+            }
+            $base = basename(str_replace('\\', '/', $entry));
+            if ($base === '' || $base[0] === '.' || str_contains($entry, '__MACOSX')) {
+                continue;
+            }
+            $ext = strtolower(pathinfo($base, PATHINFO_EXTENSION));
+            if (! in_array($ext, self::ALLOWED_EXTENSIONS, true)) {
+                $ignored[] = ['name' => $base, 'reason' => 'Not a CSV or XLSX file'];
+                continue;
+            }
+            if (count($files) >= self::MAX_BATCH_FILES) {
+                $ignored[] = ['name' => $base, 'reason' => 'More than ' . self::MAX_BATCH_FILES . ' files in the ZIP'];
+                continue;
+            }
+            $stat = $zip->statIndex($i);
+            $size = (int) ($stat['size'] ?? 0);
+            $total += $size;
+            if ($size > self::MAX_BYTES || $total > self::MAX_ZIP_BYTES * 4) {
+                $ignored[] = ['name' => $base, 'reason' => 'File is larger than 5 MB'];
+                continue;
+            }
+            $dest = $dir . DIRECTORY_SEPARATOR . count($files) . '_' . preg_replace('/[^A-Za-z0-9._-]+/', '_', $base);
+            $in   = $zip->getStream($entry);
+            $out  = $in !== false ? fopen($dest, 'wb') : false;
+            if ($in === false || $out === false) {
+                $ignored[] = ['name' => $base, 'reason' => 'Could not be read from the ZIP'];
+                continue;
+            }
+            stream_copy_to_stream($in, $out);
+            fclose($in);
+            fclose($out);
+            $files[] = ['path' => $dest, 'name' => $base];
+        }
+        $zip->close();
+
+        return ['dir' => $dir, 'files' => $files, 'ignored' => $ignored];
+    }
+
+    /** Remove a folder made by extractZip(). */
+    public function cleanupDir(string $dir): void
+    {
+        $root = realpath(WRITEPATH . 'uploads/imports');
+        $real = $dir !== '' ? realpath($dir) : false;
+        if ($root === false || $real === false || ! str_starts_with($real, $root . DIRECTORY_SEPARATOR)) {
+            return;
+        }
+        foreach (glob($dir . DIRECTORY_SEPARATOR . '*') ?: [] as $f) {
+            @unlink($f);
+        }
+        @rmdir($dir);
+    }
+
+    protected function validEmailOrNull(?string $email): ?string
+    {
+        $email = trim((string) $email);
+
+        return $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) !== false ? $email : null;
+    }
+
     public function readSpreadsheet(string $path, string $originalName, int $maxRows = self::MAX_ROWS): array
     {
         return $this->detectFormat($originalName) === 'xlsx'

@@ -190,6 +190,8 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->match(['get', 'post'], 'contacts/import', 'Contacts::importCsv', ['filter' => 'csrf']);
     $routes->post('contacts/import/preview', 'Contacts::importPreview', ['filter' => 'csrf']);
     $routes->post('contacts/import/commit', 'Contacts::importCommit', ['filter' => 'csrf']);
+    $routes->post('contacts/import/batch-preview', 'Contacts::importBatchPreview', ['filter' => 'csrf']);
+    $routes->post('contacts/import/batch-commit', 'Contacts::importBatchCommit', ['filter' => 'csrf']);
     $routes->get('contacts/export', 'Contacts::exportCsv');
     $routes->post('contacts/bulk-delete', 'Contacts::bulkDelete', ['filter' => 'csrf']);
     $routes->post('contacts/bulk-archive', 'Contacts::bulkArchive', ['filter' => 'csrf']);
@@ -232,6 +234,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->get('customer-groups/data', 'CustomerGroups::data');
     $routes->post('customer-groups', 'CustomerGroups::store', ['filter' => 'csrf']);
     $routes->post('customer-groups/create', 'CustomerGroups::createGroup', ['filter' => 'csrf']);
+    $routes->post('customer-groups/bulk-delete', 'CustomerGroups::bulkDelete', ['filter' => 'csrf']);
     $routes->get('customer-groups/export', 'CustomerGroups::export');
     $routes->get('customer-groups/(:num)', 'CustomerGroups::show/$1');
     $routes->get('customer-groups/(:num)/export', 'CustomerGroups::export/$1');
