@@ -537,6 +537,14 @@ class WorkflowGraph
      */
     public const NORMALIZE_VERSION = 6;
 
+    /** Action types the local builder owns: a node already using one is not an External node and must not be re-mapped. */
+    public const LOCAL_ACTIONS = [
+            'send_text', 'response_message', 'send_template', 'system_initiated',
+            'collect_images', 'ask_question', 'send_media', 'assign_bot', 'update_chat_status',
+            'add_tag', 'remove_tag', 'assign_agent', 'add_note',
+            'delay', 'webhook', 'webhook_call', 'set_attribute', 'set_attributes', 'ai_reply', 'send_email', 'end',
+        ];
+
     /**
      * Convert External React Flow graph → local builder shape (x/y, from/to, labels).
      *
@@ -563,6 +571,27 @@ class WorkflowGraph
             $y = (float) ($node['y'] ?? $pos['y'] ?? 40);
 
             $data = is_array($node['data'] ?? null) ? $node['data'] : [];
+
+            // A node saved by this builder (ask_question, send_media, ...) keeps its own type. An earlier pass could
+            // have turned it into response_message while leaving the real type in cheerio_type: restore it.
+            $localAction = strtolower((string) ($data['action_type'] ?? ''));
+            $savedType   = strtolower((string) ($data['cheerio_type'] ?? ''));
+            if ($localAction === 'response_message' && $savedType !== '' && $savedType !== 'response_message'
+                && in_array($savedType, self::LOCAL_ACTIONS, true)) {
+                $localAction            = $savedType;
+                $data['action_type']    = $savedType;
+            }
+            if (($node['type'] ?? '') === 'action' && in_array($localAction, self::LOCAL_ACTIONS, true) && $localAction !== 'end') {
+                $nodes[] = [
+                    'id'   => (string) $node['id'],
+                    'type' => 'action',
+                    'x'    => $x,
+                    'y'    => $y,
+                    'data' => array_merge($data, ['cheerio_type' => $localAction]),
+                ];
+                continue;
+            }
+
             $cheerioType = $this->resolveCheerioType($node, $data);
             $mapped      = $this->mapCheerioNode($cheerioType, $data);
             $merged      = array_merge($data, $mapped['data'], [
@@ -682,12 +711,7 @@ class WorkflowGraph
 
         // Prefer already-mapped local action types so re-open does not corrupt graphs.
         $action = strtolower((string) ($data['action_type'] ?? ''));
-        $knownActions = [
-            'send_text', 'response_message', 'send_template', 'system_initiated',
-            'collect_images', 'ask_question', 'send_media', 'assign_bot', 'update_chat_status',
-            'add_tag', 'remove_tag', 'assign_agent', 'add_note',
-            'delay', 'webhook', 'webhook_call', 'set_attribute', 'set_attributes', 'ai_reply', 'send_email', 'end',
-        ];
+        $knownActions = self::LOCAL_ACTIONS;
         if ($action !== '' && in_array($action, $knownActions, true)) {
             return $action;
         }

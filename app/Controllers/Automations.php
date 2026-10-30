@@ -364,7 +364,8 @@ class Automations extends BaseController
         $needsNormalize = is_array($graph) && (
             $wf->looksLikeCheerioGraph($graph)
             || $this->graphHasUnmappedCheerioNodes($graph)
-            || (int) ($graph['normalize_version'] ?? 0) < WorkflowGraph::NORMALIZE_VERSION
+            // Graphs this builder already saved are not re-mapped just because the version moved on.
+            || (($graph['source'] ?? '') !== 'cheerio_local' && (int) ($graph['normalize_version'] ?? 0) < WorkflowGraph::NORMALIZE_VERSION)
         );
 
         if ($needsNormalize && is_array($graph)) {
@@ -742,6 +743,12 @@ class Automations extends BaseController
             }
             $action = (string) (($node['data']['action_type'] ?? '') ?: '');
             if ($action !== '' && str_starts_with($action, 'cheerio_')) {
+                return true;
+            }
+            // Saved as response_message although the node was really another local action (older bug): repair once.
+            $real = strtolower((string) ($node['data']['cheerio_type'] ?? ''));
+            if ($action === 'response_message' && $real !== '' && $real !== 'response_message'
+                && in_array($real, WorkflowGraph::LOCAL_ACTIONS, true)) {
                 return true;
             }
         }
