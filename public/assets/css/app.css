@@ -2436,6 +2436,40 @@ body.layout-fixed .main-sidebar > .sidebar {
 }
 .msg-row.outbound { justify-content: flex-end; }
 .msg-row.inbound { justify-content: flex-start; }
+.voice-note {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    min-width: 230px;
+    padding: .15rem 0;
+}
+.voice-note audio { display: none; }
+.voice-note .vn-play {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--wa-green-dark, #be123c);
+    color: #fff;
+    font-size: .8rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+.voice-note .vn-body { flex: 1 1 auto; min-width: 0; }
+.voice-note .vn-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(0, 0, 0, .15);
+    cursor: pointer;
+    overflow: hidden;
+}
+.voice-note .vn-fill { display: block; height: 100%; width: 0; background: var(--wa-green-dark, #be123c); }
+.voice-note .vn-time { display: block; margin-top: .2rem; font-size: .7rem; opacity: .7; }
+.voice-note .vn-mic { flex: 0 0 auto; opacity: .45; }
+
 .msg-bubble {
     max-width: 70%;
     padding: .5rem .75rem;

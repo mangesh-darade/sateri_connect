@@ -118,6 +118,58 @@
         return '<i class="far fa-clock msg-status"></i>';
     }
 
+    /** Voice note / audio player: a bare <audio controls> collapses to a tiny pill inside a shrink-to-fit bubble. */
+    function voiceNoteHtml(url) {
+        return '<div class="voice-note">' +
+            '<button type="button" class="vn-play" title="Play"><i class="fas fa-play"></i></button>' +
+            '<div class="vn-body"><div class="vn-bar"><span class="vn-fill"></span></div><span class="vn-time">0:00</span></div>' +
+            '<i class="fas fa-microphone vn-mic"></i>' +
+            '<audio preload="metadata" src="' + escapeHtml(url) + '"></audio></div>';
+    }
+
+    function vnFmt(sec) {
+        sec = isFinite(sec) ? Math.max(0, Math.floor(sec)) : 0;
+        return Math.floor(sec / 60) + ':' + ('0' + (sec % 60)).slice(-2);
+    }
+
+    function vnSync(audio, ended) {
+        var box = audio.closest('.voice-note');
+        if (!box) return;
+        var dur = audio.duration;
+        var fill = box.querySelector('.vn-fill');
+        if (fill) fill.style.width = (!ended && dur > 0 ? (audio.currentTime / dur * 100) : 0) + '%';
+        var t = box.querySelector('.vn-time');
+        if (t) t.textContent = vnFmt(audio.paused && !audio.currentTime ? dur : audio.currentTime);
+        var icon = box.querySelector('.vn-play i');
+        if (icon) icon.className = 'fas ' + (audio.paused ? 'fa-play' : 'fa-pause');
+    }
+
+    (function initVoiceNotes() {
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest ? e.target.closest('.vn-play') : null;
+            var bar = e.target.closest ? e.target.closest('.vn-bar') : null;
+            var box = (btn || bar) && (btn || bar).closest('.voice-note');
+            var audio = box && box.querySelector('audio');
+            if (!audio) return;
+            if (btn) {
+                document.querySelectorAll('.voice-note audio').forEach(function (a) { if (a !== audio) a.pause(); });
+                if (audio.paused) { audio.play().catch(function () {}); } else { audio.pause(); }
+            } else if (audio.duration > 0) {
+                var r = bar.getBoundingClientRect();
+                audio.currentTime = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * audio.duration;
+            }
+        });
+        // media events do not bubble: listen in the capture phase
+        ['timeupdate', 'play', 'pause', 'loadedmetadata'].forEach(function (ev) {
+            document.addEventListener(ev, function (e) {
+                if (e.target && e.target.tagName === 'AUDIO') vnSync(e.target, false);
+            }, true);
+        });
+        document.addEventListener('ended', function (e) {
+            if (e.target && e.target.tagName === 'AUDIO') { e.target.currentTime = 0; vnSync(e.target, true); }
+        }, true);
+    })();
+
     function renderMessage(msg) {
         var dir = (msg.direction === 'outbound' || msg.direction === 'out') ? 'outbound' : 'inbound';
         var body = msg.body || msg.content || msg.message || '';
@@ -128,7 +180,7 @@
             } else if (type.indexOf('video') >= 0) {
                 body = '<video src="' + escapeHtml(msg.media_url) + '" controls class="w-100 rounded mb-1"></video><br>' + escapeHtml(body);
             } else if (type.indexOf('audio') >= 0) {
-                body = '<audio src="' + escapeHtml(msg.media_url) + '" controls class="w-100 mb-1"></audio><br>' + escapeHtml(body);
+                body = voiceNoteHtml(msg.media_url) + (String(body).trim() !== '' ? '<br>' + escapeHtml(body) : '');
             } else {
                 body = '<a href="' + escapeHtml(msg.media_url) + '" target="_blank" rel="noopener">Attachment</a><br>' + escapeHtml(body);
             }
