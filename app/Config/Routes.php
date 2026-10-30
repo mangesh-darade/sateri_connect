@@ -192,6 +192,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('contacts/import/commit', 'Contacts::importCommit', ['filter' => 'csrf']);
     $routes->get('contacts/export', 'Contacts::exportCsv');
     $routes->post('contacts/bulk-delete', 'Contacts::bulkDelete', ['filter' => 'csrf']);
+    $routes->post('contacts/bulk-archive', 'Contacts::bulkArchive', ['filter' => 'csrf']);
     $routes->post('contacts/bulk-tags', 'Contacts::bulkTags', ['filter' => 'csrf']);
     $routes->post('contacts/(:num)/erase', 'Contacts::erase/$1', ['filter' => 'csrf']);
     $routes->post('contacts/bulk-attribute', 'Contacts::bulkAttribute', ['filter' => 'csrf']);

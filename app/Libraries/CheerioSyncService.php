@@ -19,9 +19,32 @@ class CheerioSyncService
      */
     public function syncContacts(): array
     {
+        $t0 = microtime(true);
         [$remote, $source] = $this->fetchRemoteContacts();
+        $tFetch = microtime(true) - $t0;
+        if (is_array($remote[0] ?? null)) {
+            log_message('info', 'External contact fields: {keys}', ['keys' => implode(',', array_keys($remote[0]))]);
+        }
         $model    = model(ContactModel::class);
         $tagModel = model(TagModel::class);
+        $model->skipElintOmPush = true;
+        $tagCache   = [];
+
+        // One query each instead of several per contact: existing contacts (incl. deleted) and existing group links.
+        $byMobile = [];
+        foreach ($model->withDeleted()->where('channel', 'whatsapp')->findAll() as $c) {
+            $byMobile[preg_replace('/\D+/', '', (string) $c['mobile']) ?? ''] ??= $c;
+        }
+        $linked = [];
+        foreach (db_connect()->table('contact_tags')->select('tag_id, contact_id')->get()->getResultArray() as $l) {
+            $linked[$l['tag_id'] . ':' . $l['contact_id']] = true;
+        }
+        $attach = static function (int $tagId, int $contactId) use ($tagModel, &$linked): void {
+            if ($tagId > 0 && ! isset($linked[$tagId . ':' . $contactId])) {
+                $tagModel->attachContact($tagId, $contactId);
+                $linked[$tagId . ':' . $contactId] = true;
+            }
+        };
 
         $created = 0;
         $updated = 0;
@@ -63,6 +86,14 @@ class CheerioSyncService
                 $status = 'inactive';
             }
 
+            // Source shown in the Contacts "All sources" filter; an existing source is kept.
+            $prev    = $byMobile[$mobile] ?? null;
+            $prevCf  = is_array($prev['custom_fields'] ?? null) ? $prev['custom_fields'] : [];
+            $custom  = array_merge($custom ?? [], $prevCf['source'] ?? '' ? ['source' => $prevCf['source']] : []);
+            if (trim((string) ($custom['source'] ?? '')) === '') {
+                $custom['source'] = 'External Platform';
+            }
+
             $payload = [
                 'name'          => $name,
                 'mobile'        => $mobile,
@@ -75,16 +106,28 @@ class CheerioSyncService
             $contactId = 0;
 
             try {
-                $existing = $model->findByMobile($mobile);
+                $existing = $prev;
                 if ($existing !== null) {
-                    $model->skipValidation(true)->update((int) $existing['id'], $payload);
-                    $model->skipValidation(false);
                     $contactId = (int) $existing['id'];
-                    $updated++;
-                } elseif ($model->findByMobile($mobile, true) !== null) {
-                    // Deleted in the app — keep it deleted.
-                    $skipped++;
-                    continue;
+                    $changed   = false;
+                    if (! empty($existing['deleted_at'])) {
+                        // The External platform still has this contact: bring it back and refresh its values.
+                        db_connect()->table('contacts')->where('id', $contactId)->update(['deleted_at' => null]);
+                        $changed = true;
+                    }
+                    foreach (['name', 'email', 'status', 'notes'] as $k) {
+                        if ((string) ($existing[$k] ?? '') !== (string) ($payload[$k] ?? '')) {
+                            $changed = true;
+                        }
+                    }
+                    if (json_encode($existing['custom_fields'] ?? null) !== json_encode($payload['custom_fields'])) {
+                        $changed = true;
+                    }
+                    if ($changed) {
+                        $model->skipValidation(true)->update($contactId, $payload);
+                        $model->skipValidation(false);
+                        $updated++;
+                    }
                 } else {
                     $model->skipValidation(true);
                     $contactId = (int) $model->insert($payload);
@@ -96,6 +139,7 @@ class CheerioSyncService
                     $created++;
                 }
             } catch (Throwable $e) {
+                $model->skipValidation(false);
                 $existing = $model->findByMobile($mobile);
                 if ($existing === null) {
                     $skipped++;
@@ -112,25 +156,29 @@ class CheerioSyncService
                     $labelName = is_array($label)
                         ? (string) ($label['name'] ?? $label['label'] ?? '')
                         : trim((string) $label);
-                    if ($labelName === '') {
+                    // The External API sends only the label ID (no endpoint returns the name); an ID is not a usable group name.
+                    if ($labelName === '' || preg_match('/^[a-f0-9]{24}$/i', $labelName) === 1) {
                         continue;
                     }
-                    $tag = $tagModel->where('name', $labelName)->first();
-                    if ($tag === null) {
-                        $tagId = $tagModel->insert(['name' => $labelName, 'color' => '#25D366']);
-                        if ($tagId) {
-                            $tagIds[] = (int) $tagId;
-                        }
-                    } else {
-                        $tagIds[] = (int) $tag['id'];
+                    if (! isset($tagCache[$labelName])) {
+                        $tagCache[$labelName] = (int) ($tagModel->findOrCreateByName($labelName, '#25D366')['id'] ?? 0);
+                    }
+                    if ($tagCache[$labelName] > 0) {
+                        $tagIds[] = $tagCache[$labelName];
                     }
                 }
-                if ($tagIds !== []) {
-                    $model->syncTags($contactId, $tagIds);
+                // Merge: attach only, so groups added manually in the app are kept.
+                foreach (array_unique($tagIds) as $tagId) {
+                    $attach($tagId, $contactId);
                 }
             }
         }
 
+        $model->skipElintOmPush = false;
+
+        log_message('info', 'Contacts sync ({src}): fetch {fetch}s, total {total}s, {n} rows', [
+            'src' => $source, 'fetch' => round($tFetch, 1), 'total' => round(microtime(true) - $t0, 1), 'n' => count($remote),
+        ]);
         (new ActivityLogger())->log('sync', 'contacts', "Contacts sync ({$source}) created={$created} updated={$updated}");
 
         return [

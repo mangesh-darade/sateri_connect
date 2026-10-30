@@ -87,7 +87,7 @@
 /* Contacts KPI Cards - Compact */
 .contacts-kpi-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 0.6rem;
     margin-bottom: 0.75rem;
 }
@@ -146,6 +146,7 @@
 .contacts-kpi-icon.kpi-purple { background: #fff1f2; color: #e11d48; }
 .contacts-kpi-icon.kpi-green  { background: #ecfdf5; color: #10b981; }
 .contacts-kpi-icon.kpi-blue   { background: #eff6ff; color: #3b82f6; }
+.contacts-kpi-icon.kpi-slate  { background: #f1f5f9; color: #64748b; }
 .contacts-kpi-icon.kpi-amber  { background: #fffbeb; color: #f59e0b; }
 
 /* Main Panel Card */
@@ -334,6 +335,17 @@
                 <i class="fas fa-layer-group"></i>
             </div>
         </div>
+
+        <div class="contacts-kpi-card" id="kpiArchived" role="button" style="cursor:pointer" title="Show archived leads">
+            <div>
+                <div class="contacts-kpi-label">Archived Leads</div>
+                <div class="contacts-kpi-val text-secondary"><?= esc(number_format((int) ($stats['archived'] ?? 0))) ?></div>
+                <div class="contacts-kpi-sub">Not synced to LMS</div>
+            </div>
+            <div class="contacts-kpi-icon kpi-slate">
+                <i class="fas fa-box-archive"></i>
+            </div>
+        </div>
     </div>
 
     <!-- Main Table Card -->
@@ -359,7 +371,19 @@
                     <?php endforeach; ?>
                 </select>
 
-                <select id="filterConsent" class="form-select form-select-sm filter-pill-select" style="max-width:160px" title="WhatsApp consent">
+                <select id="filterArchived" class="form-select form-select-sm filter-pill-select" style="max-width:140px" title="Active or archived leads">
+                    <option value="">Active leads</option>
+                    <option value="1">Archived leads</option>
+                </select>
+
+                <select id="filterSource"class="form-select form-select-sm filter-pill-select" style="max-width:150px" title="Contact source">
+                    <option value="">All sources</option>
+                    <?php foreach (($sources ?? []) as $src): ?>
+                        <option value="<?= esc($src, 'attr') ?>"><?= esc($src) ?></option>
+                    <?php endforeach; ?>
+                </select>
+
+                <select id="filterConsent"class="form-select form-select-sm filter-pill-select" style="max-width:160px" title="WhatsApp consent">
                     <option value="">All WhatsApp consent</option>
                     <option value="opted_in">Opted in</option>
                     <option value="no_opt_in">No opt-in</option>
@@ -417,6 +441,11 @@
                         </button>
                         <button type="button" id="btnBulkAttribute" class="btn btn-sm btn-outline-info bg-white py-1 px-2" title="Set custom attribute for selected contacts">
                             <i class="fas fa-pen-to-square me-1 text-info"></i> Set attribute
+                        </button>
+                    <?php endif; ?>
+                    <?php if (can('contacts.edit')): ?>
+                        <button type="button" id="btnBulkArchive" class="btn btn-sm btn-outline-secondary bg-white py-1 px-2" title="Archive selected leads (not synced to LMS)">
+                            <i class="fas fa-box-archive me-1"></i> <span id="btnBulkArchiveLabel">Archive</span>
                         </button>
                     <?php endif; ?>
                     <?php if (can('contacts.delete')): ?>
@@ -618,7 +647,7 @@
     'use strict';
     // Clear / Reset filters button
     $('#btnResetContactsFilter').on('click', function () {
-        $('#filterStatus, #filterTag, #filterConsent, #filterAssigned, #filterAttrKey').val('');
+        $('#filterStatus, #filterTag, #filterArchived, #filterSource, #filterConsent, #filterAssigned, #filterAttrKey').val('');
         $('#filterAttrOp, #filterAttrValue').addClass('d-none').val('');
         if ($('#contactsTable').length && $.fn.DataTable) {
             $('#contactsTable').DataTable().ajax.reload();

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Libraries;
 
 use App\Models\ContactModel;
+use App\Models\TagModel;
 use RuntimeException;
 use Throwable;
 
@@ -192,7 +193,9 @@ class ElintOmCustomerSyncService
         $out     = ['created' => 0, 'updated' => 0, 'failed' => 0];
         $pushMap = (new ElintOmLeadPushService())->mapping();
 
-        foreach ($this->fetchCustomers('sateri_leads', 'leads') as $row) {
+        $this->contacts->skipElintOmPush = true; // leads come from ElintOm; pushing each one back is a wasted HTTP call
+        $leads = $this->fetchCustomers('sateri_leads', 'leads');
+        foreach ($leads as $row) {
             $mobile = normalize_phone((string) ($row['mobile'] ?? ''));
             if ($mobile === '') {
                 continue;
@@ -200,7 +203,7 @@ class ElintOmCustomerSyncService
 
             try {
                 $existing = $this->contacts->findByMobile($mobile) ?? $this->contacts->findByMobile($mobile, true);
-                if ($existing !== null && ! empty($existing['deleted_at'])) {
+                if ($existing !== null && (! empty($existing['deleted_at']) || ! empty($existing['archived_at']))) {
                     continue;
                 }
 
@@ -226,10 +229,12 @@ class ElintOmCustomerSyncService
                     if (! $id) {
                         throw new RuntimeException(implode(' ', $this->contacts->errors() ?: ['Insert failed']));
                     }
+                    $this->attachSourceGroup((int) $id);
                     $out['created']++;
                     continue;
                 }
 
+                $this->attachSourceGroup((int) $existing['id']);
                 $upd = [];
                 $cf  = is_array($existing['custom_fields'] ?? null) ? $existing['custom_fields'] : [];
                 if (! empty($cf['elintom_lead_id']) && empty($existing['wa_opt_in'])) {
@@ -269,7 +274,19 @@ class ElintOmCustomerSyncService
             }
         }
 
+        $this->contacts->skipElintOmPush = false;
+
         return $out;
+    }
+
+    /** Adds the contact to the "ElintOM" customer group (created on first use); keeps its other groups. */
+    protected function attachSourceGroup(int $contactId): void
+    {
+        $tags  = model(TagModel::class);
+        $group = $tags->findOrCreateByName('ElintOM', '#0D6EFD');
+        if (! empty($group['id'])) {
+            $tags->attachContact((int) $group['id'], $contactId);
+        }
     }
 
     /**

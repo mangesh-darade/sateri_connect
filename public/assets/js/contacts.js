@@ -56,7 +56,7 @@
             /* Global DT defaults already set scrollX/length/dom — keep contacts-specific bits */
             scrollX: false,
             pageLength: 25,
-            lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
             language: {
                 search: '_INPUT_',
                 searchPlaceholder: 'Search contacts…',
@@ -75,6 +75,8 @@
                     d.tag_id = $('#filterTag').val();
                     d.assigned_to = $('#filterAssigned').val();
                     d.consent = $('#filterConsent').val();
+                    d.source = $('#filterSource').val();
+                    d.archived = $('#filterArchived').val();
                     $.extend(d, Contacts.attributeFilter());
                 }
             },
@@ -214,7 +216,8 @@
         $('#btnFilterContacts').on('click', function () {
             Contacts.table.ajax.reload();
         });
-        $('#filterStatus, #filterTag, #filterAssigned, #filterConsent, #filterAttrOp').on('change', function () {
+        $('#filterStatus, #filterTag, #filterArchived, #filterSource, #filterAssigned, #filterConsent, #filterAttrOp').on('change', function () {
+            $('#btnBulkArchiveLabel').text($('#filterArchived').val() === '1' ? 'Restore' : 'Archive');
             Contacts.table.ajax.reload();
         });
         $('#filterAttrKey').on('change', function () {
@@ -233,6 +236,8 @@
                 tag_id: $('#filterTag').val(),
                 assigned_to: $('#filterAssigned').val(),
                 consent: $('#filterConsent').val(),
+                source: $('#filterSource').val(),
+                archived: $('#filterArchived').val(),
                 search: Contacts.table ? Contacts.table.search() : ''
             }, Contacts.attributeFilter());
             Object.keys(params).forEach(function (k) { if (!params[k]) delete params[k]; });
@@ -387,6 +392,34 @@
         }
     };
 
+    // Bulk actions send ids as JSON: a form POST with thousands of ids[] is cut off by PHP max_input_vars.
+    Contacts.postJson = function (url, data) {
+        return APP.post(url, JSON.stringify(data), { contentType: 'application/json' });
+    };
+
+    Contacts.bulkArchive = function () {
+        var ids = Contacts.selectedIds();
+        if (!ids.length) {
+            APP.toast('Select at least one contact', 'warning');
+            return;
+        }
+        var restore = $('#filterArchived').val() === '1';
+        APP.confirm({
+            title: (restore ? 'Restore' : 'Archive') + ' selected?',
+            text: restore ? ids.length + ' contact(s) will be restored and synced to LMS again.'
+                : ids.length + ' contact(s) will be archived and will not sync to LMS.',
+            confirmText: restore ? 'Restore' : 'Archive'
+        }).then(function (r) {
+            if (!r.isConfirmed) return;
+            Contacts.postJson(base() + '/contacts/bulk-archive', { ids: ids, action: restore ? 'unarchive' : 'archive' }).done(function (res) {
+                APP.toast(res.message || 'Done');
+                if (Contacts.table) Contacts.table.ajax.reload(null, false);
+            }).fail(function (xhr) {
+                APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Archive failed', 'error');
+            });
+        });
+    };
+
     Contacts.bulkDelete = function () {
         var ids = Contacts.selectedIds();
         if (!ids.length) {
@@ -396,7 +429,7 @@
         APP.confirm({ title: 'Delete selected?', text: ids.length + ' contact(s) will be deleted.', confirmText: 'Delete' })
             .then(function (r) {
                 if (!r.isConfirmed) return;
-                APP.post(base() + '/contacts/bulk-delete', { ids: ids }).done(function (res) {
+                Contacts.postJson(base() + '/contacts/bulk-delete', { ids: ids }).done(function (res) {
                     APP.toast(res.message || 'Deleted');
                     if (Contacts.table) Contacts.table.ajax.reload(null, false);
                 }).fail(function (xhr) {
@@ -416,7 +449,7 @@
             APP.toast('Select tags to apply', 'warning');
             return;
         }
-        APP.post(base() + '/contacts/bulk-tags', { ids: ids, tag_ids: tagIds, mode: $('#bulkTagAction').val() || 'add' })
+        Contacts.postJson(base() + '/contacts/bulk-tags', { ids: ids, tag_ids: tagIds, mode: $('#bulkTagAction').val() || 'add' })
             .done(function (res) {
                 APP.toast(res.message || 'Groups updated');
                 if (window.bootstrap && bootstrap.Modal) {
@@ -444,7 +477,7 @@
             APP.toast('Choose how these contacts gave WhatsApp consent', 'warning');
             return;
         }
-        APP.post(base() + '/contacts/bulk-consent', { ids: ids, action: action, source: source })
+        Contacts.postJson(base() + '/contacts/bulk-consent', { ids: ids, action: action, source: source })
             .done(function (res) {
                 APP.toast(res.message || 'Consent updated');
                 if (window.bootstrap && bootstrap.Modal) {
@@ -492,7 +525,7 @@
         }
         var value = Contacts.bulkAttributeValue();
         var run = function () {
-            APP.post(base() + '/contacts/bulk-attribute', { ids: ids, attribute: key, value: value })
+            Contacts.postJson(base() + '/contacts/bulk-attribute', { ids: ids, attribute: key, value: value })
                 .done(function (res) {
                     APP.toast(res.message || 'Attribute updated');
                     APP.hideModal('#bulkAttributeModal');
@@ -765,6 +798,8 @@
             Contacts.updateBulkBar();
         });
         $('#btnBulkDelete').on('click', function () { Contacts.bulkDelete(); });
+        $('#kpiArchived').on('click', function () { $('#filterArchived').val('1').trigger('change'); });
+        $('#btnBulkArchive').on('click', function () { Contacts.bulkArchive(); });
         $('#btnBulkTags').on('click', function () { APP.showModal('#bulkTagsModal'); });
         $('#btnApplyBulkTags').on('click', function () { Contacts.bulkTags(); });
         $('#btnBulkConsent').on('click', function () {

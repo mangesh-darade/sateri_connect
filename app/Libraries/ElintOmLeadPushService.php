@@ -94,6 +94,10 @@ class ElintOmLeadPushService
             return;
         }
 
+        if (! empty($contact['archived_at'])) {
+            return; // archived leads are not synced to LMS
+        }
+
         try {
             $custom = $contact['custom_fields'] ?? [];
             if (is_string($custom)) {
@@ -138,6 +142,7 @@ class ElintOmLeadPushService
         $rows = model(\App\Models\ContactModel::class)
             ->select('name, mobile, email, custom_fields')
             ->where('mobile !=', '')
+            ->where('archived_at', null)
             ->findAll();
 
         $list = [];

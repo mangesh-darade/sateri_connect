@@ -25,7 +25,7 @@ class ContactListFilter
      *
      * @param array<string, mixed> $in
      *
-     * @return array{search: string, status: string, tag_id: int, assigned_to: int, consent: string, attr_key: string, attr_op: string, attr_value: string}
+     * @return array{search: string, status: string, tag_id: int, assigned_to: int, consent: string, source: string, archived: string, attr_key: string, attr_op: string, attr_value: string}
      */
     public static function fromInput(array $in): array
     {
@@ -46,6 +46,8 @@ class ContactListFilter
             'tag_id'      => (int) ($in['tag_id'] ?? 0),
             'assigned_to' => (int) ($in['assigned_to'] ?? 0),
             'consent'     => $consent,
+            'source'      => trim((string) ($in['source'] ?? '')),
+            'archived'    => (string) ($in['archived'] ?? '') === '1' ? '1' : '',
             'attr_key'    => preg_match(ContactAttributeService::KEY_PATTERN, $key) ? $key : '',
             'attr_op'     => isset(self::ATTRIBUTE_OPS[$op]) ? $op : 'equals',
             'attr_value'  => trim((string) ($in['attr_value'] ?? '')),
@@ -86,6 +88,11 @@ class ContactListFilter
         }
         if ((int) ($f['assigned_to'] ?? 0) > 0) {
             $builder->where("{$alias}.assigned_to", (int) $f['assigned_to']);
+        }
+        // Archived contacts only show in the "Archived" view.
+        $builder->where("{$alias}.archived_at " . (($f['archived'] ?? '') === '1' ? 'IS NOT NULL' : 'IS NULL'), null, false);
+        if (($f['source'] ?? '') !== '') {
+            self::applyAttribute($builder, 'source', 'equals', (string) $f['source'], $alias);
         }
         if (($f['attr_key'] ?? '') !== '') {
             self::applyAttribute($builder, $f['attr_key'], (string) ($f['attr_op'] ?? 'equals'), (string) ($f['attr_value'] ?? ''), $alias);

@@ -31,20 +31,29 @@ class Contacts extends BaseController
         }
 
         $db = db_connect();
-        $totalContacts = (int) $db->table('contacts')->where('deleted_at', null)->countAllResults();
-        $optedInCount  = (int) $db->table('contacts')->where('deleted_at', null)->where('wa_opt_in', 1)->countAllResults();
-        $activeCount   = (int) $db->table('contacts')->where('deleted_at', null)->where('status', 'active')->countAllResults();
+        $archivedCount = (int) $db->table('contacts')->where('deleted_at', null)->where('archived_at IS NOT NULL', null, false)->countAllResults();
+        $totalContacts = (int) $db->table('contacts')->where('deleted_at', null)->where('archived_at', null)->countAllResults();
+        $optedInCount  = (int) $db->table('contacts')->where('deleted_at', null)->where('archived_at', null)->where('wa_opt_in', 1)->countAllResults();
+        $activeCount   = (int) $db->table('contacts')->where('deleted_at', null)->where('archived_at', null)->where('status', 'active')->countAllResults();
         $tags          = model(TagModel::class)->orderBy('name', 'ASC')->findAll();
         $agents        = model(\App\Models\UserModel::class)->where('status', 'active')->orderBy('name', 'ASC')->findAll();
 
+        $sources = array_column($db->query(
+            "SELECT DISTINCT TRIM(JSON_UNQUOTE(JSON_EXTRACT(custom_fields, '$.source'))) AS src
+             FROM contacts WHERE deleted_at IS NULL AND JSON_EXTRACT(custom_fields, '$.source') IS NOT NULL
+             HAVING src IS NOT NULL AND src <> '' AND src <> 'null' ORDER BY src"
+        )->getResultArray(), 'src');
+
         return $this->render('contacts/index', [
             'pageTitle'      => 'Contacts',
+            'sources'        => $sources,
             'tags'           => $tags,
             'agents'         => $agents,
             'stats'          => [
                 'total'    => $totalContacts,
                 'opted_in' => $optedInCount,
                 'active'   => $activeCount,
+                'archived' => $archivedCount,
                 'groups'   => count($tags),
             ],
             'attributeKeys'  => ContactAttributes::knownKeys(),
@@ -61,7 +70,8 @@ class Contacts extends BaseController
         $length  = (int) ($this->request->getGet('length') ?? 25);
         $filters = ContactListFilter::fromInput($this->request->getGet() ?? []);
 
-        $length = max(1, min(500, $length));
+        // length -1 = the "All" option; capped so one request stays bounded.
+        $length = $length < 0 ? 10000 : max(1, min(10000, $length));
 
         $db = db_connect();
 
@@ -516,6 +526,30 @@ class Contacts extends BaseController
         (new ActivityLogger())->log('bulk_delete', 'contacts', 'Contacts bulk deleted', ['ids' => $ids]);
 
         return $this->jsonResponse(true, ['deleted' => count($ids)], 'Contacts deleted.');
+    }
+
+    /** Archive / restore contacts. Archived contacts leave the main list and are not synced to ElintOm (LMS). */
+    public function bulkArchive(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('contacts.edit')) {
+            return $denied;
+        }
+
+        $input = $this->request->getJSON(true) ?: $this->request->getPost();
+        $ids   = array_values(array_filter(array_map('intval', (array) ($input['ids'] ?? []))));
+        if ($ids === []) {
+            return $this->jsonResponse(false, null, 'No contacts selected.', [], 422);
+        }
+
+        $restore = (string) ($input['action'] ?? 'archive') === 'unarchive';
+        db_connect()->table('contacts')->whereIn('id', $ids)->update([
+            'archived_at' => $restore ? null : date('Y-m-d H:i:s'),
+            'updated_at'  => date('Y-m-d H:i:s'),
+        ]);
+
+        log_activity($restore ? 'bulk_unarchive' : 'bulk_archive', 'contacts', $restore ? 'Contacts restored from archive' : 'Contacts archived', ['ids' => $ids]);
+
+        return $this->jsonResponse(true, ['count' => count($ids)], $restore ? 'Contacts restored.' : 'Contacts archived. They will not sync to LMS.');
     }
 
     public function bulkTags(): ResponseInterface

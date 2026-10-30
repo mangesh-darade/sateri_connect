@@ -31,6 +31,7 @@ class ContactModel extends Model
         'assigned_to',
         'birthday',
         'custom_fields',
+        'archived_at',
         'wa_opt_in',
         'wa_opt_in_at',
         'wa_opt_in_source',
@@ -68,6 +69,9 @@ class ContactModel extends Model
     protected $afterUpdate  = ['pushToElintOm'];
     protected $afterFind    = ['decodeCustomFields'];
 
+    /** Bulk syncs set this: one HTTP push per contact would make a few thousand rows take minutes (pushAll() sends them in batches). */
+    public bool $skipElintOmPush = false;
+
     /**
      * Create/update the matching lead in ElintOm (only when ElintOm is configured).
      *
@@ -76,12 +80,15 @@ class ContactModel extends Model
      */
     protected function pushToElintOm(array $data): array
     {
+        if ($this->skipElintOmPush) {
+            return $data;
+        }
         $ids = $data['id'] ?? [];
         foreach ((array) $ids as $id) {
             if (! $id) {
                 continue;
             }
-            $row = $this->builder()->select('name, mobile, email, custom_fields')->where('id', (int) $id)->get()->getRowArray();
+            $row = $this->builder()->select('name, mobile, email, custom_fields, archived_at')->where('id', (int) $id)->get()->getRowArray();
             if ($row) {
                 (new \App\Libraries\ElintOmLeadPushService())->push($row);
             }

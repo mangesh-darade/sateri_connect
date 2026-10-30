@@ -1434,11 +1434,12 @@ class CheerioDirectAPI
      *
      * @return list<array<string, mixed>>
      */
-    public function getContacts(?string $search = null, int $maxPages = 50): array
+    public function getContacts(?string $search = null, int $maxPages = 500): array
     {
         $all   = [];
         $page  = 1;
         $guard = 0;
+        $seenFirst = [];
 
         do {
             $query = ['page' => $page, 'limit' => 100];
@@ -1448,6 +1449,23 @@ class CheerioDirectAPI
 
             $response = $this->request('GET', 'v1/contact/getAll', $query);
             $docs     = $this->extractContactDocs($response);
+
+            $firstKey = is_array($docs[0] ?? null) ? (string) ($docs[0]['_id'] ?? $docs[0]['id'] ?? $docs[0]['mobile'] ?? $docs[0]['phone'] ?? '') : '';
+            $meta = is_array($response['data'] ?? null) ? $response['data'] : $response;
+            log_message('info', 'External contacts page {page}/{pages}: {n} rows of {total}', [
+                'page'  => $page,
+                'pages' => $meta['totalPages'] ?? '?',
+                'n'     => count($docs),
+                'total' => $meta['totalDocs'] ?? '?',
+            ]);
+            // The API ignored the page number and sent the same page again: stop instead of re-reading it up to 50 times.
+            if ($firstKey !== '' && isset($seenFirst[$firstKey])) {
+                log_message('warning', 'External contacts: page {page} repeats an earlier page, stopping.', ['page' => $page]);
+                break;
+            }
+            if ($firstKey !== '') {
+                $seenFirst[$firstKey] = true;
+            }
 
             foreach ($docs as $doc) {
                 if (is_array($doc)) {
