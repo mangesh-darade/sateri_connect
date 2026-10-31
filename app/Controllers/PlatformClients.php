@@ -945,6 +945,7 @@ class PlatformClients extends BaseController
             'test-page-messaging'   => 'testPageMessaging',
             'test-elintom'          => 'testElintOm',
             'sync-elintom'          => 'syncElintOm',
+            'test-voice-agent'      => 'testVoiceAgent',
             'test-whatsapp'         => 'testCheerio',
             'setup-webhook'         => 'setupWebhook',
             'test-ai'               => 'testAi',

@@ -65,7 +65,7 @@ class ContactModel extends Model
 
     protected $beforeInsert = ['applyAttributeDefaults', 'encodeCustomFields'];
     protected $beforeUpdate = ['encodeCustomFields'];
-    protected $afterInsert  = ['pushToElintOm'];
+    protected $afterInsert  = ['pushToElintOm', 'callWithVoiceAgent'];
     protected $afterUpdate  = ['pushToElintOm'];
     protected $afterFind    = ['decodeCustomFields'];
 
@@ -91,6 +91,35 @@ class ContactModel extends Model
             $row = $this->builder()->select('name, mobile, email, custom_fields, archived_at')->where('id', (int) $id)->get()->getRowArray();
             if ($row) {
                 (new \App\Libraries\ElintOmLeadPushService())->push($row);
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * New contacts go to the AI voice agent, which calls them (only when switched on in Settings → AI Voice Agent).
+     * Bulk syncs set skipElintOmPush, so imports/syncs do not trigger calls.
+     *
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    protected function callWithVoiceAgent(array $data): array
+    {
+        if ($this->skipElintOmPush) {
+            return $data;
+        }
+        $service = new \App\Libraries\VoiceAgentLeadService();
+        if (! $service->isActive()) {
+            return $data;
+        }
+        foreach ((array) ($data['id'] ?? []) as $id) {
+            if (! $id) {
+                continue;
+            }
+            $row = $this->builder()->select('id, name, mobile, email, channel, archived_at')->where('id', (int) $id)->get()->getRowArray();
+            if ($row && ($row['channel'] ?? 'whatsapp') === 'whatsapp') {
+                $service->push($row);
             }
         }
 

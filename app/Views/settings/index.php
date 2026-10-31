@@ -112,6 +112,15 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabVoiceAgent" type="button" role="tab" aria-controls="tabVoiceAgent" aria-selected="false">
+                        <i class="fas fa-phone-volume" aria-hidden="true"></i>
+                        <span>
+                            <span class="settings-nav-label">AI Voice Agent</span>
+                            <span class="settings-nav-hint">Auto-call new leads</span>
+                        </span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
                     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabElintOm" type="button" role="tab" aria-controls="tabElintOm" aria-selected="false">
                         <i class="fas fa-cash-register" aria-hidden="true"></i>
                         <span>
@@ -1039,6 +1048,74 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                         </div>
                     </div>
 
+                    <div class="tab-pane fade" id="tabVoiceAgent" role="tabpanel">
+                        <?php $voiceAgent = $voiceAgent ?? ['enabled' => false, 'url' => '', 'api_key' => '', 'consent_ok' => false, 'max_per_hour' => 50]; ?>
+                        <div class="settings-section-head">
+                            <div>
+                                <p class="settings-section-kicker">Voice automation</p>
+                                <h3 class="settings-section-title">AI Voice Agent</h3>
+                            </div>
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" role="switch" id="voice_agent_enabled" <?= ! empty($voiceAgent['enabled']) ? 'checked' : '' ?>>
+                                <label class="form-check-label" for="voice_agent_enabled" id="voiceAgentEnabledLabel"><?= ! empty($voiceAgent['enabled']) ? 'Active' : 'Inactive' ?></label>
+                            </div>
+                        </div>
+                        <div class="alert alert-light border settings-note">
+                            When a new contact is created (manual add, Facebook lead, smart form), it is sent to the ElintOm AI voice agent,
+                            which calls the contact within minutes during the calling hours set in the voice dashboard.
+                            CSV imports and bulk syncs never trigger calls. Contacts who ask not to be called are blocked automatically.
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-lg-8">
+                                <div class="mb-3">
+                                    <label class="form-label" for="voice_agent_url">Voice agent URL</label>
+                                    <input type="url" id="voice_agent_url" class="form-control"
+                                           value="<?= $val($voiceAgent, 'url') ?>" placeholder="https://voice.example.com">
+                                    <div class="form-text">The address of the voice dashboard server. No trailing slash.</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="voice_agent_api_key">API key</label>
+                                    <div class="input-group input-secret">
+                                        <input type="password" id="voice_agent_api_key" class="form-control"
+                                               value="<?= $val($voiceAgent, 'api_key') ?>" autocomplete="off"
+                                               placeholder="Voice dashboard → Settings → Leads API key">
+                                        <button class="btn btn-outline-secondary toggle-secret" type="button"><i class="fas fa-eye"></i></button>
+                                    </div>
+                                    <div class="form-text">Leave masked blank to keep the current key.</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="voice_agent_max_per_hour">Max calls queued per hour</label>
+                                    <input type="number" min="1" max="1000" id="voice_agent_max_per_hour" class="form-control"
+                                           value="<?= (int) ($voiceAgent['max_per_hour'] ?? 50) ?>">
+                                    <div class="form-text">Safety limit: extra new contacts in the same hour are not sent.</div>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="voice_agent_consent_ok" <?= ! empty($voiceAgent['consent_ok']) ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="voice_agent_consent_ok">
+                                        I confirm our contacts agreed to receive calls (consent, DND/TRAI rules). The agent will not call until this is ticked.
+                                    </label>
+                                </div>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <?php if ($canEditSettings): ?>
+                                        <button type="button" class="btn btn-wa" id="btnSaveVoiceAgent"><i class="fas fa-save me-1"></i> Save</button>
+                                        <button type="button" class="btn btn-outline-secondary" id="btnTestVoiceAgent"><i class="fas fa-plug me-1"></i> Test connection</button>
+                                    <?php endif; ?>
+                                </div>
+                                <div id="voiceAgentResult" class="creds-test-result mt-2"></div>
+                            </div>
+                            <div class="col-lg-4">
+                                <aside class="wp-creds-aside">
+                                    <p class="wp-aside-kicker">Setup path</p>
+                                    <ol class="wp-steps">
+                                        <li>Voice dashboard → Settings → copy the Leads API key</li>
+                                        <li>Paste the voice agent URL + key here</li>
+                                        <li>Test connection, tick the consent box, switch Active, Save</li>
+                                    </ol>
+                                </aside>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="tab-pane fade" id="tabElintOm" role="tabpanel">
                         <?php $elintom = $elintom ?? ['base_url' => '', 'private_key' => '', 'enabled' => true]; ?>
                         <div class="settings-section-head">
@@ -1796,6 +1873,44 @@ $(function () {
             elintom_enabled: $('#elintom_enabled').is(':checked') ? '1' : '0'
         };
     }
+
+    function voiceAgentPayload() {
+        return {
+            voice_agent_url: ($('#voice_agent_url').val() || '').toString().trim(),
+            voice_agent_api_key: ($('#voice_agent_api_key').val() || '').toString(),
+            voice_agent_enabled: $('#voice_agent_enabled').is(':checked') ? '1' : '0',
+            voice_agent_consent_ok: $('#voice_agent_consent_ok').is(':checked') ? '1' : '0',
+            voice_agent_max_per_hour: $('#voice_agent_max_per_hour').val() || '50'
+        };
+    }
+
+    function voiceAgentShow(ok, msg) {
+        $('#voiceAgentResult').html('<span class="' + (ok ? 'text-success' : 'text-danger') + '">' + $('<div>').text(msg).html() + '</span>');
+        APP.toast(msg, ok ? 'success' : 'error');
+    }
+
+    $('#voice_agent_enabled').on('change', function () {
+        $('#voiceAgentEnabledLabel').text(this.checked ? 'Active' : 'Inactive');
+    });
+
+    $('#btnTestVoiceAgent').on('click', function () {
+        var $btn = $(this);
+        $btn.prop('disabled', true);
+        $('#voiceAgentResult').html('<span class="text-muted">Testing…</span>');
+        APP.post(SETTINGS_API + '/test-voice-agent', voiceAgentPayload())
+            .done(function (res) { voiceAgentShow(!!(res && res.success), (res && res.message) || 'OK'); })
+            .fail(function (xhr) { voiceAgentShow(false, (xhr.responseJSON && xhr.responseJSON.message) || 'Voice agent test failed'); })
+            .always(function () { $btn.prop('disabled', false); });
+    });
+
+    $('#btnSaveVoiceAgent').on('click', function () {
+        var $btn = $(this);
+        $btn.prop('disabled', true);
+        APP.post(SETTINGS_API + '/save', $.extend({ section: 'voiceagent' }, voiceAgentPayload()))
+            .done(function (res) { voiceAgentShow(!(res && res.success === false), (res && res.message) || 'Voice agent settings saved'); })
+            .fail(function (xhr) { voiceAgentShow(false, (xhr.responseJSON && xhr.responseJSON.message) || 'Could not save voice agent settings'); })
+            .always(function () { $btn.prop('disabled', false); });
+    });
 
     $('#elintom_enabled').on('change', function () {
         $('#elintomEnabledLabel').text(this.checked ? 'Active' : 'Inactive');

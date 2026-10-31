@@ -207,6 +207,15 @@ class Settings extends BaseController
             'enabled'     => ! empty($elintomCfg['enabled']),
         ];
 
+        $voiceCfg = (new \App\Libraries\VoiceAgentLeadService())->getConfig();
+        $data['voiceAgent'] = [
+            'enabled'      => $voiceCfg['enabled'],
+            'url'          => $voiceCfg['url'],
+            'api_key'      => $this->maskSecret($voiceCfg['api_key']),
+            'consent_ok'   => $voiceCfg['consent_ok'],
+            'max_per_hour' => $voiceCfg['max_per_hour'],
+        ];
+
         $aiCfg = $settings->getAiConfig();
         $aiDisplay = $aiCfg;
         $aiDisplay['api_key'] = $this->maskSecret((string) $aiCfg['api_key']);
@@ -590,6 +599,22 @@ class Settings extends BaseController
                 $elintom->setConfig($payload);
             }
 
+            if ($section === 'voiceagent') {
+                $voice   = new \App\Libraries\VoiceAgentLeadService();
+                $payload = [
+                    'url'          => trim((string) $this->request->getPost('voice_agent_url')),
+                    'enabled'      => (string) $this->request->getPost('voice_agent_enabled') === '1',
+                    'consent_ok'   => (string) $this->request->getPost('voice_agent_consent_ok') === '1',
+                    'max_per_hour' => (int) ($this->request->getPost('voice_agent_max_per_hour') ?: 50),
+                ];
+                $voiceKey = trim((string) $this->request->getPost('voice_agent_api_key'));
+                if ($voiceKey !== '' && ! str_contains($voiceKey, '•')) {
+                    $payload['api_key'] = $voiceKey;
+                }
+                $voice->setConfig($payload);
+                log_activity('update', 'settings', 'AI voice agent settings saved', ['enabled' => $payload['enabled']]);
+            }
+
             if (in_array($section, ['all', 'ai'], true)) {
                 $aiPayload = [
                     'enabled'                 => $this->request->getPost('ai_enabled') ? '1' : '0',
@@ -816,6 +841,26 @@ class Settings extends BaseController
         $ok = ! empty($result['ok']);
 
         return $this->jsonResponse($ok, $result, (string) ($result['message'] ?? ($ok ? 'OK' : 'Failed')), [], $ok ? 200 : 422);
+    }
+
+    public function testVoiceAgent(): ResponseInterface
+    {
+        if ($denied = $this->guardSettings('settings.edit')) {
+            return $denied;
+        }
+
+        $voice   = new \App\Libraries\VoiceAgentLeadService();
+        $payload = ['url' => trim((string) $this->request->getPost('voice_agent_url'))];
+        $key     = trim((string) $this->request->getPost('voice_agent_api_key'));
+        if ($key !== '' && ! str_contains($key, '•')) {
+            $payload['api_key'] = $key;
+        }
+        $voice->setConfig($payload);
+
+        $result = $voice->testConnection();
+        $ok     = ! empty($result['ok']);
+
+        return $this->jsonResponse($ok, $result, (string) $result['message'], [], $ok ? 200 : 422);
     }
 
     public function syncElintOm(): ResponseInterface
