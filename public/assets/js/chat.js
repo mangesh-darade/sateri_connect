@@ -170,6 +170,58 @@
         }, true);
     })();
 
+    // Buttons / list rows of a sent interactive message, shown under its text in the thread.
+    function interactiveOptionsHtml(msg) {
+        var mtype = (msg.message_type || msg.type || '').toLowerCase();
+        if (mtype !== 'interactive_buttons' && mtype !== 'interactive_list') return '';
+        var p = msg.payload;
+        if (typeof p === 'string') {
+            try { p = JSON.parse(p); } catch (e) { p = null; }
+        }
+        var req = p && p.request ? p.request : null;
+        if (!req) return '';
+        var titles = [];
+        if (Array.isArray(req.buttons)) {
+            req.buttons.forEach(function (b) { if (b && b.title) titles.push(b.title); });
+        }
+        if (Array.isArray(req.sections)) {
+            req.sections.forEach(function (s) {
+                (s.rows || []).forEach(function (r) { if (r && r.title) titles.push(r.title); });
+            });
+        }
+        if (!titles.length) return '';
+        return '<div class="msg-options">' + titles.map(function (t) {
+            return '<span class="msg-option">' + escapeHtml(t) + '</span>';
+        }).join('') + '</div>';
+    }
+
+    // Ad / product the customer came from (click-to-WhatsApp referral), shown above their first message.
+    function referralCardHtml(msg) {
+        var p = msg.payload;
+        if (typeof p === 'string') {
+            try { p = JSON.parse(p); } catch (e) { p = null; }
+        }
+        var ref = p && p.message && p.message.referral ? p.message.referral : (p && p.referral ? p.referral : null);
+        if (!ref) return '';
+        var img = ref.image_url || ref.thumbnail_url || '';
+        // Only http(s) / site-relative URLs: the payload comes from a webhook, never allow javascript: or data: schemes.
+        function safeUrl(u) { u = String(u || '').trim(); return /^(https?:\/\/|\/)/i.test(u) ? u : ''; }
+        img = safeUrl(img);
+        var title = String(ref.headline || '').trim();
+        var text = String(ref.body || '').trim();
+        if (!img && !title && !text) return '';
+        var html = '<div class="msg-referral">';
+        if (img) {
+            html += '<img src="' + escapeHtml(img) + '" class="msg-referral-img" alt="ad" referrerpolicy="no-referrer" onerror="this.remove()">';
+        }
+        if (title) html += '<div class="msg-referral-title">' + escapeHtml(title).replace(/\n/g, '<br>') + '</div>';
+        if (text) html += '<div class="msg-referral-text">' + escapeHtml(text.length > 160 ? text.slice(0, 157) + '...' : text) + '</div>';
+        if (safeUrl(ref.source_url)) {
+            html += '<a class="msg-referral-link" href="' + escapeHtml(safeUrl(ref.source_url)) + '" target="_blank" rel="noopener">View ad</a>';
+        }
+        return html + '</div>';
+    }
+
     function renderMessage(msg) {
         var dir = (msg.direction === 'outbound' || msg.direction === 'out') ? 'outbound' : 'inbound';
         var body = msg.body || msg.content || msg.message || '';
@@ -193,6 +245,7 @@
         } else {
             body = escapeHtml(body).replace(/\n/g, '<br>');
         }
+        body = referralCardHtml(msg) + body + interactiveOptionsHtml(msg);
         var plain = String(msg.content || msg.body || msg.message || '');
         var type = (msg.message_type || msg.type || 'text').toLowerCase();
         var waId = String(msg.wa_message_id || msg.wamid || msg.external_message_id || '');

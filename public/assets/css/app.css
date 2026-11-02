@@ -5654,3 +5654,14 @@ table.dataTable th.dt-check, table.dataTable td.dt-check, #customerGroupsTable t
     padding-left: .5rem; padding-right: .5rem; vertical-align: middle; text-align: center;
 }
 .dt-check .form-check-input { float: none; margin: 0; vertical-align: middle; }
+
+/* Interactive message options (buttons / list rows) in the inbox thread */
+.msg-options { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.msg-option { display: block; text-align: center; padding: 6px 10px; border-radius: 8px; background: #fff; color: #0a7cff; font-size: .85rem; font-weight: 500; border: 1px solid rgba(0, 0, 0, .08); }
+
+/* Ad / product card above a click-to-WhatsApp inbound message */
+.msg-referral { margin: -2px -4px 8px; padding: 6px; border-radius: 8px; background: rgba(0, 0, 0, .05); }
+.msg-referral-img { display: block; width: 100%; max-height: 180px; object-fit: cover; border-radius: 6px; margin-bottom: 6px; }
+.msg-referral-title { font-weight: 600; font-size: .85rem; }
+.msg-referral-text { font-size: .8rem; color: #555; margin-top: 2px; }
+.msg-referral-link { font-size: .78rem; }

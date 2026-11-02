@@ -772,6 +772,15 @@ class Webhooks extends Controller
             $mediaUrl = $this->storeInboundMedia((string) $parsed['media_id'], $sourceProvider);
         }
 
+        // Ad / product image from a click-to-WhatsApp referral expires on Meta's CDN: keep our own copy.
+        if (! empty($message['referral']['image_url'])) {
+            $localRef = $this->storeReferralImage((string) $message['referral']['image_url']);
+            if ($localRef !== null) {
+                $message['referral']['source_image_url'] = $message['referral']['image_url'];
+                $message['referral']['image_url']        = $localRef;
+            }
+        }
+
         $conversation = model(ConversationModel::class)->findOrCreateForContact($contactId, 'whatsapp');
 
         try {
@@ -1150,6 +1159,50 @@ class Webhooks extends Controller
                 'reply_id' => null,
             ],
         };
+    }
+
+    /**
+     * Copy a click-to-WhatsApp ad image (Meta/Facebook CDN only) into local media; return serve URL or null.
+     */
+    protected function storeReferralImage(string $url): ?string
+    {
+        $parts = parse_url($url);
+        $host  = strtolower((string) ($parts['host'] ?? ''));
+        if (($parts['scheme'] ?? '') !== 'https' || $host === ''
+            || ! preg_match('/(^|\.)(fbcdn\.net|facebook\.com|fb\.com|cdninstagram\.com)$/', $host)) {
+            return null;
+        }
+
+        try {
+            $res = service('curlrequest')->get($url, ['timeout' => 10, 'http_errors' => false, 'allow_redirects' => false]);
+            $body = (string) $res->getBody();
+            if ($res->getStatusCode() !== 200 || $body === '' || strlen($body) > 5 * 1024 * 1024) {
+                return null;
+            }
+            $mime = strtolower((string) (new \finfo(FILEINFO_MIME_TYPE))->buffer($body));
+            $ext  = match ($mime) {
+                'image/jpeg' => 'jpg',
+                'image/png' => 'png',
+                'image/webp' => 'webp',
+                'image/gif' => 'gif',
+                'image/avif' => 'avif',
+                default => '',
+            };
+            if ($ext === '') {
+                return null;
+            }
+            $dir = WRITEPATH . 'uploads/media/';
+            if (! is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+            $filename = 'ref_' . bin2hex(random_bytes(8)) . '.' . $ext;
+
+            return file_put_contents($dir . $filename, $body) === false ? null : site_url('media/serve/' . $filename);
+        } catch (Throwable $e) {
+            log_message('warning', 'Referral image download failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return null;
+        }
     }
 
     /**

@@ -1145,7 +1145,8 @@ class AutomationEngine
         if ($question === '') {
             throw new RuntimeException('Ask question node has no question text.');
         }
-        $body     = $prefix !== '' ? $prefix . "\n\n" . $question : $question;
+        // Don't repeat the same sentence when the retry prefix equals the question text.
+        $body     = ($prefix !== '' && strcasecmp(trim($prefix), $question) !== 0) ? $prefix . "\n\n" . $question : $question;
         $options  = $this->questionOptions($config);
         $replyType = (string) ($config['reply_type'] ?? '');
         $header   = $this->interactiveImageHeader($config, $context);

@@ -130,7 +130,7 @@ class Media extends BaseController
 
         // Only render known-safe media inline; anything else (HTML, SVG, XML…) downloads so it can't run script on the app origin.
         $mime       = strtolower(trim(explode(';', $mime)[0]));
-        $inlineSafe = in_array($mime, ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf', 'text/plain', 'text/csv'], true)
+        $inlineSafe = in_array($mime, ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif', 'application/pdf', 'text/plain', 'text/csv'], true)
             || str_starts_with($mime, 'audio/')
             || str_starts_with($mime, 'video/');
 
