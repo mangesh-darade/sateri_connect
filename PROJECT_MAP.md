@@ -242,6 +242,24 @@
   - CSV export of filtered logs
 
 ---
+### 19. Social Scheduler (`social`)
+- **Controllers:** `Social`, `SocialPlanner`, `SocialAccounts`, `SocialSetup`, `SocialMedia` (public signed media) | **Views:** `app/Views/social/{calendar,library,planner,accounts,setup}.php` | **JS:** `social.js`, `social-planner.js`
+- **Routes:**
+  - `GET /social` (calendar), `GET /social/calendar-data`, `POST /social/schedule`, `POST /social/text-post`
+  - `GET /social/library`, `POST /social/folders` (+ `/{id}/scan`, `/{id}/delete`) — Google Drive media library
+  - `POST /social/targets/{id}/cancel|reschedule|retry|delete`
+  - `POST /social/ai/captions|file-captions|script|rewrite` — AI captions, reel script
+  - `GET|POST /social/planner` (+ `/quick`, `/{id}/data`, `/{id}/approve`, `items/{id}/image|update|reject`) — AI content planner
+  - `GET|POST /social/setup`, `POST /social/setup/check/{provider}` — app credentials
+  - `GET /social/accounts`, `/connect/{provider}`, `/callback/{provider}`, `POST /token`, `/youtube-token`, `/{id}/disconnect`
+- **Publishers:** Facebook, Instagram, LinkedIn, YouTube, WhatsApp broadcast (`app/Libraries/Social/*`)
+- **Permissions:** `social.view`, `social.create`, `social.accounts`
+- **Worker:** `php spark social:publish` (every minute); `social:connect-youtube` helper
+- **Tables:** `social_accounts`, `social_drive_sources`, `social_media_assets`, `social_posts`, `social_post_targets`, `social_ai_plans`, `social_ai_items`
+- **Docs:** `docs/SOCIAL_SCHEDULER.md`, `docs/GUIDE_SOCIAL_SCHEDULER.md`, `docs/SOCIAL_TEST_ACCOUNTS.md`
+
+---
+
 
 ## [Activity Logging Standard & Mandatory Rule]
 - **Mandatory Rule for All Developers & Agents**: Whenever creating or extending any screen, controller action, or state-changing operation (create, update, delete, send, dispatch, schedule, pause, resume, toggle, export, sync), ALWAYS record the event in audit logs. Never leave a state-mutating operation unlogged.

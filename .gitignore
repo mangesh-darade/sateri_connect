@@ -160,3 +160,9 @@ _modules/*
 
 /results/
 /phpunit.xml
+
+/writable/google-sa.json
+
+# Real contact exports and AI/MCP-made pictures: never commit
+/writable/import_ready/
+/writable/social_ai/
