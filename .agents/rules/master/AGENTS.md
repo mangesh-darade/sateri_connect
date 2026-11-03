@@ -12,9 +12,7 @@ Read this file first. It tells you what to load and in what order of precedence.
 If two rules conflict, follow the stricter one and tell the human.
 
 ## Always load
-- `UNIVERSAL_AI_MASTER_RULES.md`
-- `AI_AGENT_BEHAVIOR_RULES.md`
-- `PROJECT_CONTEXT.md`
+- `CORE_RULES.md` only (about 1 KB). Open `UNIVERSAL_AI_MASTER_RULES.md`, `AI_AGENT_BEHAVIOR_RULES.md` and `PROJECT_CONTEXT.md` only when a task needs them (project facts are mostly in `CLAUDE.md` already).
 
 ## Load by task
 | Task touches | Also read |
