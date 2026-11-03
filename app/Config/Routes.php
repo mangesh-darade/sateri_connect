@@ -440,6 +440,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('social/targets/(:num)/cancel', 'Social::cancel/$1', ['filter' => 'csrf']);
     $routes->post('social/targets/(:num)/reschedule', 'Social::reschedule/$1', ['filter' => 'csrf']);
     $routes->post('social/targets/(:num)/retry', 'Social::retry/$1', ['filter' => 'csrf']);
+    $routes->post('social/targets/(:num)/publish-now', 'Social::publishNow/$1', ['filter' => 'csrf']);
     $routes->post('social/targets/(:num)/delete', 'Social::delete/$1', ['filter' => 'csrf']);
     // Ads (Click-to-WhatsApp): permissions are checked inside the controller
     $routes->get('ads', 'Ads::index');
@@ -660,6 +661,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1', 'filter' => '
     $routes->post('social/ai/image', 'SocialController::aiImage');
     $routes->post('social/publish', 'SocialController::publish');
     $routes->post('mcp', 'McpController::handle');
+    $routes->get('mcp', 'McpController::stream');
     $routes->post('social/plans', 'SocialController::createPlan');
     $routes->get('social/plans/(:num)', 'SocialController::showPlan/$1');
     $routes->post('social/plans/items/(:num)/image', 'SocialController::planImage/$1');

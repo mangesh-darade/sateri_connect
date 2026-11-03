@@ -348,6 +348,16 @@ class Social extends BaseController
         return $this->respond((new SocialScheduleService())->retry($id));
     }
 
+    public function publishNow(string|int $id): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('social.create')) {
+            return $denied;
+        }
+        session_write_close();
+
+        return $this->respond((new \App\Libraries\SocialPublishService())->publishNow((int) $id));
+    }
+
     /**
      * @param array<string, mixed> $r service result
      */

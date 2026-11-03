@@ -38,7 +38,7 @@ class AutoSync extends BaseController
                 // background process and never holds up this request or the user's next page.
                 $out['social'] = $this->startSocialPublisher() ? 1 : 0;
             } catch (\Throwable $e) {
-                log_message('error', 'AutoSync::tick social ' . $e::class);
+                log_message('error', 'AutoSync::tick social ' . $e::class . ': ' . $e->getMessage() . ' @' . basename($e->getFile()) . ':' . $e->getLine());
                 $out['errors'][] = 'Social posts could not be checked.';
             }
 
@@ -80,15 +80,27 @@ class AutoSync extends BaseController
             return false;
         }
 
+        // A detached background process can fail silently on shared hosts (no CLI `php` in PATH, open_basedir, disabled exec),
+        // and we could not tell. So only local Windows (WAMP) spawns; everywhere else the publisher runs inside this request
+        // (a few posts at a time). This request is the background AJAX tick, so nobody waits on it.
+        $windows  = DIRECTORY_SEPARATOR === '\\';
+        $disabled = array_map('trim', explode(',', strtolower((string) ini_get('disable_functions'))));
+        if (! $windows || ! function_exists('popen') || in_array('popen', $disabled, true)) {
+            set_time_limit(170);
+            (new \App\Libraries\SocialPublishService())->publishDue(3);
+
+            return true;
+        }
+
         $php = PHP_BINARY;
         if (! preg_match('/php(\.exe)?$/i', $php)) {
             // Under Apache PHP_BINARY is the web server; use the CLI binary next to the loaded PHP.
-            $windows = DIRECTORY_SEPARATOR === '\\';
             $exe     = $windows ? 'php.exe' : 'php';
             $php     = 'php';
             // WAMP: extension_dir is <php folder>/ext/, so the CLI binary sits one level up.
             foreach ([dirname(rtrim((string) ini_get('extension_dir'), '\\/')), rtrim(PHP_BINDIR, '\\/')] as $dir) {
-                if (is_file($dir . DIRECTORY_SEPARATOR . $exe)) {
+                // open_basedir (Plesk) makes is_file() warn for paths outside the site, so ask quietly.
+                if (@is_file($dir . DIRECTORY_SEPARATOR . $exe)) {
                     $php = $dir . DIRECTORY_SEPARATOR . $exe;
                     break;
                 }

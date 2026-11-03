@@ -1,7 +1,16 @@
 # When DocumentRoot is the project root, send traffic into public/.
 # Prefer setting DocumentRoot to public/ (especially on nginx/Plesk).
+<IfModule mod_setenvif.c>
+    # CGI/FastCGI hosts drop the Authorization header; keep it for Bearer tokens (REST API, MCP/OAuth).
+    SetEnvIfNoCase Authorization "(.+)" HTTP_AUTHORIZATION=$1
+</IfModule>
+
 <IfModule mod_rewrite.c>
     RewriteEngine On
+
+    # Same as above for hosts where the rewrite rule is the one that works (also covers requests that never reach public/.htaccess).
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
     # Never expose secrets / app internals when DocumentRoot is project root.
     RewriteRule ^(app|writable|vendor|tests|docs|tools|builds)(/|$) - [F,L,NC]
@@ -9,7 +18,8 @@
     RewriteRule \.(sql|bak|md|log|ini|env|lock|dist|yml|yaml|sh|ps1)$ - [F,L,NC]
     RewriteRule ^(env|phpunit\.xml(\.dist)?)$ - [F,L,NC]
     # Any dotfile / dot-directory (.env.*, .cursor, .github …) except ACME challenges.
-    RewriteCond %{REQUEST_URI} !^/?\.well-known/ [NC]
+    # Also allowed after index.php/ (hosts without pretty URLs), where OAuth discovery lives.
+    RewriteCond %{REQUEST_URI} !(^|/)\.well-known/ [NC]
     RewriteRule (^|/)\. - [F,L]
 
     # Keep real files/dirs at project root (e.g. published assets/, uploads/)

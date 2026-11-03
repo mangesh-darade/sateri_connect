@@ -72,6 +72,7 @@
             <div class="modal-footer">
                 <button class="btn btn-outline-danger btn-sm d-none" id="socEvCancel">Cancel post</button>
                 <button class="btn btn-outline-secondary btn-sm d-none" id="socEvRetry">Retry now</button>
+                <button class="btn btn-wa btn-sm d-none" id="socEvPublishNow">Publish now</button>
                 <button class="btn btn-outline-danger btn-sm d-none" id="socEvDelete">Delete from calendar</button>
                 <button class="btn btn-danger btn-sm d-none" id="socEvDeleteRemote">Delete everywhere</button>
                 <button class="btn btn-wa btn-sm d-none" id="socEvSave">Save new time</button>

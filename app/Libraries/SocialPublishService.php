@@ -100,6 +100,49 @@ class SocialPublishService
     }
 
     /**
+     * Publishes one scheduled or failed post right now and reports the real outcome (no cron or waiting needed).
+     *
+     * @return array{ok: bool, status: int, message: string}
+     */
+    public function publishNow(int $targetId): array
+    {
+        try {
+            $t = $this->targets->find($targetId);
+            if (! is_array($t) || ! in_array($t['status'], ['scheduled', 'failed'], true)) {
+                return ['ok' => false, 'status' => 409, 'message' => 'Only scheduled or failed posts can be published now.'];
+            }
+            $this->targets->update($targetId, ['status' => 'scheduled', 'attempts' => 0, 'last_error' => null]);
+            if (! $this->claim($targetId)) {
+                return ['ok' => false, 'status' => 409, 'message' => 'This post is already being published.'];
+            }
+            set_time_limit(170);
+            $t = $this->targets->find($targetId);
+            try {
+                $this->publishOne($t);
+            } catch (Throwable $e) {
+                log_message('error', 'SocialPublishService::publishNow target=' . $targetId . ' ' . $e::class . ': ' . $e->getMessage());
+                if ($this->staged !== null) {
+                    $this->delivery->release($this->staged);
+                    $this->staged = null;
+                }
+                $this->finish($t, 1, ['ok' => false, 'status' => 500, 'message' => 'Publishing failed unexpectedly. Please try again.']);
+            }
+
+            $after = $this->targets->find($targetId);
+            if (is_array($after) && $after['status'] === 'published') {
+                return ['ok' => true, 'status' => 200, 'message' => 'Published successfully.'];
+            }
+            $why = trim((string) ($after['last_error'] ?? '')) ?: 'Publishing failed.';
+
+            return ['ok' => false, 'status' => 422, 'message' => 'Could not publish: ' . $why];
+        } catch (Throwable $e) {
+            log_message('error', 'SocialPublishService::publishNow ' . $e::class . ': ' . $e->getMessage());
+
+            return ['ok' => false, 'status' => 500, 'message' => 'Could not publish right now. Please try again.'];
+        }
+    }
+
+    /**
      * Deletes what this target published on the platform itself.
      *
      * @return array{ok: bool, status: int, message: string}

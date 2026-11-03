@@ -559,6 +559,7 @@
             if (!$('#socEventModal').hasClass('show')) { $('#socEvWhenInput').val(ev.scheduled_at.replace(' ', 'T').substr(0, 16)); }
             $('#socEvCancel').toggleClass('d-none', !(canEdit && (ev.status === 'scheduled' || ev.status === 'failed')));
             $('#socEvRetry').toggleClass('d-none', !(canEdit && ev.status === 'failed'));
+            $('#socEvPublishNow').toggleClass('d-none', !(canEdit && (ev.status === 'scheduled' || ev.status === 'failed')));
             // Delete: any post that is not being published right now. "Everywhere" also removes it on YouTube / Facebook.
             var remote = canEdit && ev.status === 'published' && (ev.platform === 'youtube' || ev.platform === 'facebook');
             $('#socEvDelete').toggleClass('d-none', !(canEdit && ev.status !== 'publishing'));
@@ -587,6 +588,7 @@
             confirmThen('This deletes the live post from ' + (active ? active.platform : 'the platform') + ' and removes it from the calendar. It cannot be undone.', function () { act('delete', { remote: 1 }, $b); });
         });
         $('#socEvRetry').on('click', function () { act('retry', {}, $(this)); });
+        $('#socEvPublishNow').on('click', function () { act('publish-now', {}, $(this)); });
         $('#socEvSave').on('click', function () { act('reschedule', { when: $('#socEvWhenInput').val().replace('T', ' ') }, $(this)); });
 
         // Text-only post

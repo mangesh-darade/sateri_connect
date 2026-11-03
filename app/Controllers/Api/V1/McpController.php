@@ -17,6 +17,9 @@ class McpController extends BaseV1Controller
 {
     private const PROTOCOL = '2025-03-26';
 
+    /** Versions we can speak; the client's own choice is echoed back when it is one of these. */
+    private const VERSIONS = ['2024-11-05', '2025-03-26', '2025-06-18'];
+
     /** @return array<string, array{0: string, 1: string, 2: string, 3: array<string, mixed>, 4?: list<string>}> name => [method, path, description, properties, required] */
     private function tools(): array
     {
@@ -77,6 +80,12 @@ class McpController extends BaseV1Controller
         ];
     }
 
+    /** GET /api/v1/mcp: this server has no event stream; the spec allows 405. */
+    public function stream(): ResponseInterface
+    {
+        return $this->response->setStatusCode(405)->setHeader('Allow', 'POST')->setJSON(['error' => 'Use POST.']);
+    }
+
     /** POST /api/v1/mcp */
     public function handle(): ResponseInterface
     {
@@ -95,7 +104,7 @@ class McpController extends BaseV1Controller
 
         return match ($method) {
             'initialize' => $this->rpcResult($id, [
-                'protocolVersion' => self::PROTOCOL,
+                'protocolVersion' => in_array((string) ($msg['params']['protocolVersion'] ?? ''), self::VERSIONS, true) ? (string) $msg['params']['protocolVersion'] : self::PROTOCOL,
                 'capabilities'    => ['tools' => (object) []],
                 'serverInfo'      => ['name' => 'sateri-connect', 'version' => '1.0.0'],
             ]),
@@ -111,13 +120,20 @@ class McpController extends BaseV1Controller
     {
         $out = [];
         foreach ($this->tools() as $name => $t) {
-            $out[] = [
-                '_meta'       => isset($t[3]['image_file']) ? ['openai/fileParams' => ['image_file']] : (object) [],
+            $schema = ['type' => 'object', 'properties' => $t[3] === [] ? (object) [] : $t[3]];
+            if (! empty($t[4])) {
+                $schema['required'] = $t[4];
+            }
+            $tool = [
                 'name'        => $name,
                 'description' => $t[2],
-                'inputSchema' => ['type' => 'object', 'properties' => $t[3] === [] ? (object) [] : $t[3], 'required' => $t[4] ?? []],
+                'inputSchema' => $schema,
                 'annotations' => ['readOnlyHint' => $t[0] === 'GET', 'destructiveHint' => (bool) preg_match('/_(delete|cancel)(_|$)/', $name)],
             ];
+            if (isset($t[3]['image_file'])) {
+                $tool['_meta'] = ['openai/fileParams' => ['image_file']]; // ChatGPT sends the chat picture as {download_url, file_id}
+            }
+            $out[] = $tool;
         }
 
         return $out;
