@@ -269,10 +269,24 @@ class ContactModel extends Model
         $externalId = trim($externalId);
         $wasCreated = false;
 
+        // Meta webhooks identify WhatsApp users by digits only; an API caller may send "+91...".
+        // Use digits as the identity and still match older rows saved with a leading "+".
+        $plusVariant = null;
+        if ($channel === 'whatsapp' && $externalId !== '') {
+            $digits = preg_replace('/\D+/', '', $externalId) ?? '';
+            if ($digits !== '') {
+                $externalId  = $digits;
+                $plusVariant = '+' . $digits;
+            }
+        }
+
         // Legacy/manually added rows have no external_id, so mobile is the only way to reach them.
         $byMobile = $channel === 'whatsapp' && $externalId !== '';
 
         $existing = $this->findByChannelExternalId($channel, $externalId);
+        if ($existing === null && $plusVariant !== null) {
+            $existing = $this->findByChannelExternalId($channel, $plusVariant);
+        }
         if ($existing === null && $byMobile) {
             $existing = $this->findByMobile($externalId);
         }
@@ -301,7 +315,12 @@ class ContactModel extends Model
                 $updates['channel'] = $channel;
             }
             if (empty($existing['external_id']) && $externalId !== '') {
-                $updates['external_id'] = $externalId;
+                // Another row (even a soft-deleted one) may already own this identity; the
+                // unique key (channel, external_id) would reject the update.
+                $owner = $this->findByChannelExternalId($channel, $externalId, true);
+                if ($owner === null || (int) $owner['id'] === $contactId) {
+                    $updates['external_id'] = $externalId;
+                }
             }
             if ($channel === 'whatsapp' && empty($existing['mobile'])) {
                 $updates['mobile'] = $extra['mobile'] ?? $externalId;
