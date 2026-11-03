@@ -47,6 +47,12 @@
             </li>
         </ul>
         <ul class="navbar-nav ms-auto align-items-center app-topbar-actions">
+            <li class="nav-item d-none d-md-block">
+                <div class="gsearch" id="gsearch">
+                    <input type="search" class="form-control form-control-sm" id="gsearchInput" placeholder="Search contacts, templates, messages" autocomplete="off" aria-label="Global search">
+                    <div class="gsearch-results d-none" id="gsearchResults"></div>
+                </div>
+            </li>
             <li class="nav-item">
                 <div class="nav-clock" id="navAppClock" data-timezone="<?= esc($appTimezone, 'attr') ?>" title="<?= esc($appTimezone) ?>" aria-live="polite">
                     <span class="nav-clock-time" id="navAppClockTime">--:--:--</span>
@@ -300,7 +306,11 @@
             }
 
             $navUriMatches = static function (string $uri, string $pattern): bool {
-                $uri     = trim($uri, '/');
+                $uri = trim($uri, '/');
+                // A leading "=" means the whole path must match, not just its start ('=social' is the Calendar, not social/setup).
+                if (str_starts_with($pattern, '=')) {
+                    return $uri === trim(substr($pattern, 1), '/');
+                }
                 $pattern = trim($pattern, '/');
                 if ($pattern === '') {
                     return $uri === '';
@@ -537,6 +547,36 @@
                 $navGroups[] = ['title' => 'Automation', 'items' => $automationItems];
             }
 
+            // Social scheduler: calendar, media library (Google Drive) and connected accounts.
+            $socialItems = [[
+                'label'    => 'Social Scheduler',
+                'icon'     => 'calendar-days',
+                'url'      => site_url('social'),
+                'match'    => ['=social', 'social/library', 'social/accounts', 'social/planner'],
+                'children' => [
+                    ['label' => 'Calendar', 'icon' => 'calendar', 'url' => site_url('social'), 'match' => ['=social'], 'perm' => 'social.view'],
+                    ['label' => 'AI Content Planner', 'icon' => 'wand-sparkles', 'url' => site_url('social/planner'), 'match' => ['social/planner'], 'perm' => 'social.view'],
+                    ['label' => 'Media Library', 'icon' => 'folder-open', 'url' => site_url('social/library'), 'match' => ['social/library'], 'perm' => 'social.view'],
+                    ['label' => 'Accounts', 'icon' => 'share-2', 'url' => site_url('social/accounts'), 'match' => ['social/accounts'], 'perm' => 'social.accounts'],
+                ],
+            ]];
+            $navGroups[] = ['title' => 'Social', 'items' => $socialItems];
+
+            // Ads: campaigns, the guided wizard and the budget limit.
+            if (function_exists('can') && can('ads.view')) {
+                $navGroups[] = ['title' => 'Ads', 'items' => [[
+                    'label'    => 'Ads',
+                    'icon'     => 'megaphone',
+                    'url'      => site_url('ads'),
+                    'match'    => ['=ads', 'ads/new', 'ads/settings'],
+                    'children' => [
+                        ['label' => 'Campaigns', 'icon' => 'list', 'url' => site_url('ads'), 'match' => ['=ads'], 'perm' => 'ads.view'],
+                        ['label' => 'New campaign', 'icon' => 'wand-sparkles', 'url' => site_url('ads/new'), 'match' => ['ads/new'], 'perm' => 'ads.create'],
+                        ['label' => 'Ad settings', 'icon' => 'settings-2', 'url' => site_url('ads/settings'), 'match' => ['ads/settings'], 'perm' => 'ads.accounts'],
+                    ],
+                ]]];
+            }
+
             // Analytics: the overview page with the WhatsApp and Email tabs.
             if (function_exists('can') && can('reports.view')) {
                 $navGroups[] = ['title' => 'Analytics', 'items' => [[
@@ -559,6 +599,8 @@
                         ['label' => 'Transaction Report', 'icon' => 'receipt', 'url' => site_url('reports/transactions'), 'match' => ['reports/transactions'], 'perm' => 'reports.view'],
                         ['label' => 'Campaign Report', 'icon' => 'megaphone', 'url' => site_url('reports/campaigns'), 'match' => ['reports/campaigns'], 'perm' => 'reports.view'],
                         ['label' => 'WhatsApp Template Report', 'icon' => 'message-square-text', 'url' => site_url('reports/templates'), 'match' => ['reports/templates'], 'perm' => 'reports.view'],
+                        ['label' => 'Agent Performance', 'icon' => 'users', 'url' => site_url('reports/agents'), 'match' => ['reports/agents'], 'perm' => 'reports.view'],
+                        ['label' => 'CTWA Ads Report', 'icon' => 'megaphone', 'url' => site_url('reports/ctwa'), 'match' => ['reports/ctwa'], 'perm' => 'reports.view'],
                         ['label' => 'Email Report', 'icon' => 'mail', 'url' => site_url('reports/email'), 'match' => ['reports/email'], 'perm' => 'reports.view'],
                     ],
                 ];
@@ -658,10 +700,11 @@
             ?>
             <nav class="sidebar-nav-scroll app-sidebar-nav" id="elintSidebarNav">
                 <?php foreach ($navGroups as $group): ?>
+                    <?php $grpKey = trim((string) preg_replace('/[^a-z0-9]+/', '-', strtolower((string) $group['title'])), '-') ?: 'home'; ?>
                     <?php if ($group['title'] !== ''): ?>
-                        <div class="app-sidebar-group-title"><?= esc(strtoupper($group['title'])) ?></div>
+                        <div class="app-sidebar-group-title" data-grp="<?= esc($grpKey, 'attr') ?>"><?= esc(strtoupper($group['title'])) ?></div>
                     <?php endif; ?>
-                    <ul class="nav nav-pills nav-sidebar flex-column app-sidebar-list" role="menu">
+                    <ul class="nav nav-pills nav-sidebar flex-column app-sidebar-list" role="menu" data-grp="<?= esc($grpKey, 'attr') ?>">
                         <?php foreach ($group['items'] as $item): ?>
                             <?php
                             $patterns = $item['match'] ?? [];
@@ -755,13 +798,36 @@
             ?>
             <?php if (function_exists('can') && (can('settings.view') || can('reports.view') || can('users.view'))): ?>
             <div class="sidebar-footer-links">
-                <ul class="nav nav-pills nav-sidebar flex-column mb-0">
-                    <?php if (function_exists('can') && (can('reports.view') || can('settings.view') || can('users.view'))): ?>
-                    <li class="nav-item">
-                        <a href="<?= site_url('activity-logs') ?>" class="nav-link <?= str_starts_with(uri_string(), 'activity-logs') ? 'active' : '' ?>" title="Activity Logs" aria-label="Activity Logs">
-                            <i class="nav-icon" data-lucide="history" aria-hidden="true"></i>
-                            <p>Activity Logs</p>
+                <ul class="nav nav-pills nav-sidebar flex-column mb-0" data-grp="settings">
+                    <?php
+                    // Settings group at the bottom of the sidebar: Activity Logs and the Social Setup screen.
+                    $footUri       = uri_string();
+                    $footChildren  = [];
+                    if (function_exists('can') && (can('reports.view') || can('settings.view') || can('users.view'))) {
+                        $footChildren[] = ['label' => 'Activity Logs', 'icon' => 'history', 'url' => site_url('activity-logs'), 'active' => str_starts_with($footUri, 'activity-logs')];
+                    }
+                    if (function_exists('can') && can('social.accounts')) {
+                        $footChildren[] = ['label' => 'Social Setup', 'icon' => 'settings-2', 'url' => site_url('social/setup'), 'active' => str_starts_with($footUri, 'social/setup')];
+                    }
+                    $footOpen = in_array(true, array_column($footChildren, 'active'), true);
+                    ?>
+                    <?php if ($footChildren !== []): ?>
+                    <li class="nav-item app-sidebar-item has-tree<?= $footOpen ? ' menu-open' : '' ?>" data-menu-label="settings">
+                        <a href="<?= esc($footChildren[0]['url']) ?>" class="nav-link app-sidebar-toggle<?= $footOpen ? ' active' : '' ?>" data-toggle="tree" aria-expanded="<?= $footOpen ? 'true' : 'false' ?>" title="Settings" aria-label="Settings">
+                            <i class="nav-icon" data-lucide="settings" aria-hidden="true"></i>
+                            <p><span class="elint-menu-label">Settings</span></p>
+                            <i class="right sidebar-link-arrow" data-lucide="chevron-down" aria-hidden="true"></i>
                         </a>
+                        <ul class="nav nav-treeview app-sidebar-tree">
+                            <?php foreach ($footChildren as $fc): ?>
+                            <li class="nav-item<?= $fc['active'] ? ' is-active' : '' ?>" data-menu-label="<?= esc(strtolower($fc['label']), 'attr') ?>">
+                                <a href="<?= esc($fc['url']) ?>" class="nav-link<?= $fc['active'] ? ' active' : '' ?>" title="<?= esc($fc['label']) ?>" aria-current="<?= $fc['active'] ? 'page' : 'false' ?>">
+                                    <i class="nav-icon" data-lucide="<?= esc($fc['icon'], 'attr') ?>" aria-hidden="true"></i>
+                                    <p><?= esc($fc['label']) ?></p>
+                                </a>
+                            </li>
+                            <?php endforeach; ?>
+                        </ul>
                     </li>
                     <?php endif; ?>
                 </ul>
@@ -929,6 +995,7 @@
         appName: <?= json_encode($appName) ?>,
         favicon: <?= json_encode($siteFavicon !== '' ? $siteFavicon : base_url('assets/img/avatar.png')) ?>,
         liveNotif: true,
+        schedulerTick: true,
         autoSyncJobs: <?= json_encode(function_exists('can') ? (new \App\Libraries\AutoSyncService())->jobs(static fn (string $p): bool => can($p)) : []) ?>,
         timezone: <?= json_encode($appTimezone) ?>,
         whatsappProvider: <?= json_encode(function_exists('whatsapp_provider') ? whatsapp_provider() : 'cheerio') ?>,
@@ -945,6 +1012,7 @@
 </script>
 <script src="<?= asset_url('assets/js/app.js') ?>"></script>
 <script src="<?= asset_url('assets/js/app-datatable.js') ?>"></script>
+<script src="<?= asset_url('assets/js/global-search.js') ?>"></script>
 <?php if (! empty($waSignup['ready'])): ?>
 <script src="<?= asset_url('assets/js/meta-embedded-signup.js') ?>"></script>
 <script src="<?= asset_url('assets/js/tenant-wa-connect.js') ?>"></script>

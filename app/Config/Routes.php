@@ -52,6 +52,7 @@ $routes->match(['get', 'post'], 'emails/unsubscribe', 'Emails::unsubscribe');
 // Amazon SES bounce / complaint notifications via SNS (public, signature-verified)
 $routes->post('webhooks/razorpay', 'RazorpayWebhook::receive');
 $routes->post('webhooks/mswipe', 'MswipeWebhook::receive');
+$routes->get('social/media/(:segment)', 'SocialMedia::show/$1');
 $routes->post('webhooks/ses', 'SesWebhook::receive');
 $routes->post('webhooks/ses/(:segment)', 'SesWebhook::receive/$1');
 
@@ -101,6 +102,7 @@ $routes->group('platform', ['filter' => 'platformAuth'], static function ($route
     $routes->post('clients/(:segment)/settings/test-ai', 'PlatformClients::clientSettingsAction/$1/test-ai', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/settings/api-tokens/generate', 'PlatformClients::clientSettingsAction/$1/api-tokens-generate', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/settings/api-tokens/(:num)/delete', 'PlatformClients::clientSettingsDeleteToken/$1/$2', ['filter' => 'csrf']);
+    $routes->get('clients/(:segment)/settings/mcp-server', 'PlatformClients::clientMcpServer/$1');
     $routes->get('payments', 'PlatformPayments::index');
     $routes->post('payments', 'PlatformPayments::save', ['filter' => 'csrf']);
     $routes->post('payments/test', 'PlatformPayments::test', ['filter' => 'csrf']);
@@ -180,6 +182,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('settings/test-ai', 'Settings::testAi', ['filter' => 'csrf']);
     $routes->post('settings/api-tokens/generate', 'Settings::generateApiToken', ['filter' => 'csrf']);
     $routes->post('settings/api-tokens/(:num)/delete', 'Settings::deleteApiToken/$1', ['filter' => 'csrf']);
+    $routes->get('settings/mcp-server', 'Settings::mcpServer');
     $routes->post('copilot/ask', 'AiCopilot::ask', ['filter' => 'csrf']);
     $routes->get('copilot/history', 'AiCopilot::history');
 
@@ -230,6 +233,21 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('quick-replies', 'QuickReplies::store', ['filter' => 'csrf']);
     $routes->post('quick-replies/(:num)', 'QuickReplies::update/$1', ['filter' => 'csrf']);
     $routes->post('quick-replies/(:num)/delete', 'QuickReplies::delete/$1', ['filter' => 'csrf']);
+
+    // Outgoing webhooks (events sent to the client's own systems)
+    $routes->get('webhook-endpoints', 'WebhookEndpoints::index');
+    $routes->post('webhook-endpoints', 'WebhookEndpoints::store', ['filter' => 'csrf']);
+    $routes->post('webhook-endpoints/(:num)', 'WebhookEndpoints::update/$1', ['filter' => 'csrf']);
+    $routes->post('webhook-endpoints/(:num)/rotate', 'WebhookEndpoints::rotate/$1', ['filter' => 'csrf']);
+    $routes->post('webhook-endpoints/(:num)/test', 'WebhookEndpoints::test/$1', ['filter' => 'csrf']);
+    $routes->post('webhook-endpoints/(:num)/delete', 'WebhookEndpoints::delete/$1', ['filter' => 'csrf']);
+
+    // AI knowledge base (FAQ the bot answers from)
+    $routes->get('knowledge-base', 'KnowledgeBaseEntries::index');
+    $routes->get('knowledge-base/data', 'KnowledgeBaseEntries::data');
+    $routes->post('knowledge-base', 'KnowledgeBaseEntries::store', ['filter' => 'csrf']);
+    $routes->post('knowledge-base/(:num)', 'KnowledgeBaseEntries::update/$1', ['filter' => 'csrf']);
+    $routes->post('knowledge-base/(:num)/delete', 'KnowledgeBaseEntries::delete/$1', ['filter' => 'csrf']);
 
     // Customer Groups (campaign audience lists — backed by tags)
     $routes->get('customer-groups', 'CustomerGroups::index');
@@ -322,6 +340,9 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('templates/(:num)/send-test', 'Templates::sendTest/$1', ['filter' => 'csrf']);
     $routes->post('templates/(:num)/delete', 'Templates::delete/$1', ['filter' => 'csrf']);
 
+    // Global search (topbar)
+    $routes->get('search', 'Search::index');
+
     // Chat
     $routes->get('chat', 'Chat::index');
     $routes->get('chat/conversations', 'Chat::conversations');
@@ -333,6 +354,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('chat/assign', 'Chat::assign', ['filter' => 'csrf']);
     $routes->post('chat/status', 'Chat::setStatus', ['filter' => 'csrf']);
     $routes->get('chat/search', 'Chat::search');
+    $routes->post('chat/payment-link', 'PaymentLinks::create', ['filter' => 'csrf']);
     $routes->get('chat/contact/(:num)', 'Chat::contactPanel/$1');
     $routes->post('chat/ai-suggest', 'Chat::aiSuggest', ['filter' => 'csrf']);
     $routes->post('chat/ai-summary', 'Chat::aiSummary', ['filter' => 'csrf']);
@@ -359,6 +381,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
 
     // Background sync on app open (contacts, ElintOm customers, templates)
     $routes->post('sync/auto', 'AutoSync::run', ['filter' => 'csrf']);
+    $routes->post('sync/tick', 'AutoSync::tick', ['filter' => 'csrf']);
 
     // Automations
     $routes->get('automations', 'Automations::index');
@@ -390,6 +413,56 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('sequences/(:num)/enroll', 'Sequences::enroll/$1', ['filter' => 'csrf']);
     $routes->post('sequences/(:num)/delete', 'Sequences::delete/$1', ['filter' => 'csrf']);
 
+    // Social scheduler
+    $routes->get('social', 'Social::index');
+    $routes->get('social/calendar-data', 'Social::calendarData');
+    $routes->get('social/library', 'Social::library');
+    $routes->get('social/library/file/(:num)', 'Social::mediaFile/$1');
+    $routes->get('social/library/thumb/(:num)', 'Social::mediaThumb/$1');
+    $routes->post('social/folders', 'Social::addFolder', ['filter' => 'csrf']);
+    $routes->post('social/folders/(:num)/scan', 'Social::scanFolder/$1', ['filter' => 'csrf']);
+    $routes->post('social/folders/(:num)/delete', 'Social::removeFolder/$1', ['filter' => 'csrf']);
+    $routes->post('social/schedule', 'Social::schedule', ['filter' => 'csrf']);
+    $routes->post('social/ai/captions', 'Social::captions', ['filter' => 'csrf']);
+    $routes->post('social/ai/file-captions', 'Social::fileCaptions', ['filter' => 'csrf']);
+    $routes->post('social/ai/script', 'Social::reelScript', ['filter' => 'csrf']);
+    $routes->post('social/ai/rewrite', 'Social::rewriteCaption', ['filter' => 'csrf']);
+    $routes->get('social/planner', 'SocialPlanner::index');
+    $routes->post('social/planner', 'SocialPlanner::create', ['filter' => 'csrf']);
+    $routes->post('social/planner/quick', 'SocialPlanner::quick', ['filter' => 'csrf']);
+    $routes->get('social/planner/(:num)/data', 'SocialPlanner::data/$1');
+    $routes->post('social/planner/(:num)/approve', 'SocialPlanner::approve/$1', ['filter' => 'csrf']);
+    $routes->get('social/planner/items/(:num)/image', 'SocialPlanner::image/$1');
+    $routes->post('social/planner/items/(:num)/image', 'SocialPlanner::makeImage/$1', ['filter' => 'csrf']);
+    $routes->post('social/planner/items/(:num)/update', 'SocialPlanner::updateItem/$1', ['filter' => 'csrf']);
+    $routes->post('social/planner/items/(:num)/reject', 'SocialPlanner::rejectItem/$1', ['filter' => 'csrf']);
+    $routes->post('social/text-post', 'Social::textPost', ['filter' => 'csrf']);
+    $routes->post('social/targets/(:num)/cancel', 'Social::cancel/$1', ['filter' => 'csrf']);
+    $routes->post('social/targets/(:num)/reschedule', 'Social::reschedule/$1', ['filter' => 'csrf']);
+    $routes->post('social/targets/(:num)/retry', 'Social::retry/$1', ['filter' => 'csrf']);
+    $routes->post('social/targets/(:num)/delete', 'Social::delete/$1', ['filter' => 'csrf']);
+    // Ads (Click-to-WhatsApp): permissions are checked inside the controller
+    $routes->get('ads', 'Ads::index');
+    $routes->get('ads/new', 'Ads::create');
+    $routes->post('ads/brief', 'Ads::brief', ['filter' => 'csrf']);
+    $routes->post('ads/generate', 'Ads::generate', ['filter' => 'csrf']);
+    $routes->post('ads/draft', 'Ads::saveDraft', ['filter' => 'csrf']);
+    $routes->get('ads/settings', 'Ads::settings');
+    $routes->post('ads/settings', 'Ads::saveSettings', ['filter' => 'csrf']);
+    $routes->get('ads/(:num)/summary', 'Ads::summary/$1');
+    $routes->post('ads/(:num)/launch', 'Ads::launch/$1', ['filter' => 'csrf']);
+    $routes->post('ads/(:num)/pause', 'Ads::pause/$1', ['filter' => 'csrf']);
+    $routes->post('ads/(:num)/end', 'Ads::end/$1', ['filter' => 'csrf']);
+    $routes->get('social/setup', 'SocialSetup::index');
+    $routes->post('social/setup', 'SocialSetup::save', ['filter' => 'csrf']);
+    $routes->post('social/setup/check/(:segment)', 'SocialSetup::check/$1', ['filter' => 'csrf']);
+    $routes->get('social/accounts', 'SocialAccounts::index');
+    $routes->post('social/accounts/token', 'SocialAccounts::connectToken', ['filter' => 'csrf']);
+    $routes->post('social/accounts/youtube-token', 'SocialAccounts::connectYouTubeToken', ['filter' => 'csrf']);
+    $routes->get('social/accounts/connect/(:segment)', 'SocialAccounts::connect/$1');
+    $routes->get('social/accounts/callback/(:segment)', 'SocialAccounts::callback/$1');
+    $routes->post('social/accounts/(:num)/disconnect', 'SocialAccounts::disconnect/$1', ['filter' => 'csrf']);
+
     // Keywords
     $routes->get('keywords', 'Keywords::index');
     $routes->get('keywords/data', 'Keywords::data');
@@ -408,6 +481,8 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->get('reports/deposits/export', 'Reports::depositsExport');
     $routes->get('reports/templates', 'Reports::templates');
     $routes->get('reports/templates/export', 'Reports::templatesExport');
+    $routes->get('reports/agents', 'Reports::agents');
+    $routes->get('reports/ctwa', 'Reports::ctwa');
     $routes->get('reports/email', 'Reports::email');
     $routes->get('reports/campaigns', 'Reports::campaigns');
     $routes->post('reports/campaigns/retarget', 'Reports::retarget', ['filter' => 'csrf']);
@@ -522,6 +597,14 @@ $routes->get('api/docs', 'Api\V1\DocsController::index');
 $routes->get('api/v1/spec', 'Api\V1\DocsController::spec');
 $routes->get('api/v1/postman', 'Api\V1\DocsController::postman');
 
+// OAuth 2.1 + discovery for URL-based MCP clients (ChatGPT etc.); the MCP endpoint itself is under apiAuth below.
+$routes->get('.well-known/oauth-protected-resource', 'OAuth::protectedResource');
+$routes->get('.well-known/oauth-authorization-server', 'OAuth::metadata');
+$routes->get('.well-known/openid-configuration', 'OAuth::metadata');
+$routes->post('oauth/register', 'OAuth::register', ['filter' => 'rateLimit:20,60']);
+$routes->get('oauth/authorize', 'OAuth::authorize');
+$routes->post('oauth/authorize', 'OAuth::decide', ['filter' => 'csrf']);
+$routes->post('oauth/token', 'OAuth::token', ['filter' => 'rateLimit:30,60']);
 $routes->options('api/v1/(:any)', static function () {
     return service('response')
         ->setStatusCode(200)
@@ -535,6 +618,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1', 'filter' => '
     $routes->post('contacts/upsert', 'ContactsController::upsert');
     $routes->post('contacts/(:segment)/consent', 'ContactsController::consent/$1');
     $routes->get('contacts/search', 'ContactsController::search');
+    $routes->get('contacts/tags', 'ContactsController::tags');
     $routes->get('contacts/(:segment)', 'ContactsController::show/$1');
 
     // Direct, Template & Media WhatsApp Messages
@@ -546,17 +630,47 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1', 'filter' => '
 
     // WhatsApp Templates Discovery
     $routes->get('templates', 'TemplatesController::index');
+    $routes->post('templates', 'TemplatesController::create');
+    $routes->get('campaigns', 'CampaignsController::index');
+    $routes->post('campaigns', 'CampaignsController::create');
+    $routes->get('campaigns/(:num)', 'CampaignsController::show/$1');
+    $routes->post('campaigns/(:num)/(start|schedule|pause|resume|cancel)', 'CampaignsController::act/$1/$2');
     $routes->get('templates/(:segment)', 'TemplatesController::show/$1');
 
     // Automations & Webhooks
     $routes->post('automations/trigger', 'AutomationsController::trigger');
     $routes->get('automations', 'AutomationsController::index');
+    $routes->post('automations', 'AutomationsController::create');
+    $routes->get('automations/(:num)', 'AutomationsController::show/$1');
+    $routes->post('automations/(:num)', 'AutomationsController::update/$1');
+    $routes->post('automations/(:num)/duplicate', 'AutomationsController::duplicate/$1');
+    $routes->post('automations/(:num)/toggle', 'AutomationsController::toggle/$1');
 
     // Email sending identities (Amazon SES domain / sender onboarding)
     $routes->post('email/identities', 'EmailIdentitiesController::create');
     $routes->get('email/identities', 'EmailIdentitiesController::index');
     $routes->get('email/identities/(:segment)/dns-records', 'EmailIdentitiesController::dnsRecords/$1');
     $routes->get('email/identities/(:segment)', 'EmailIdentitiesController::show/$1');
+
+    // Social scheduler (Claude MCP connector)
+    $routes->get('social/accounts', 'SocialController::accounts');
+    $routes->get('social/library', 'SocialController::library');
+    $routes->get('social/posts', 'SocialController::posts');
+    $routes->post('social/media', 'SocialController::uploadMedia');
+    $routes->post('social/ai/image', 'SocialController::aiImage');
+    $routes->post('social/publish', 'SocialController::publish');
+    $routes->post('mcp', 'McpController::handle');
+    $routes->post('social/plans', 'SocialController::createPlan');
+    $routes->get('social/plans/(:num)', 'SocialController::showPlan/$1');
+    $routes->post('social/plans/items/(:num)/image', 'SocialController::planImage/$1');
+    $routes->post('social/plans/(:num)/approve', 'SocialController::approvePlan/$1');
+    $routes->get('reports/summary', 'InsightsController::summary');
+    $routes->get('ads', 'InsightsController::ads');
+    $routes->post('ads/(:num)/pause', 'InsightsController::pauseAd/$1');
+    $routes->post('social/text-post', 'SocialController::textPost');
+    $routes->post('social/schedule', 'SocialController::schedule');
+    $routes->post('social/ai/captions', 'SocialController::captions');
+    $routes->post('social/targets/(:num)/(cancel|retry|delete|reschedule)', 'SocialController::target/$1/$2');
 
     // Account & Health Diagnostics
     $routes->get('account', 'AccountController::index');

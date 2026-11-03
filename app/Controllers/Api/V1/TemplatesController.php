@@ -15,6 +15,26 @@ use CodeIgniter\HTTP\ResponseInterface;
 class TemplatesController extends BaseV1Controller
 {
     /**
+     * Submit a new template to Meta for review (same rules and checks as the Templates screen).
+     * POST /api/v1/templates  {name, category, language, body, header, header_type, footer, body_examples, template_buttons}
+     */
+    public function create(): ResponseInterface
+    {
+        $this->request->setGlobal('post', $this->getJsonPayload());
+        $this->request->setHeader('X-Requested-With', 'XMLHttpRequest');
+
+        $screen = new \App\Controllers\Templates();
+        $screen->initController($this->request, $this->response, service('logger'));
+        $out = json_decode((string) $screen->store()->getBody(), true);
+
+        if (! is_array($out) || empty($out['success'])) {
+            return $this->respondError((string) ($out['message'] ?? 'The template could not be submitted.'), 422);
+        }
+
+        return $this->respondSuccess($out['data'] ?? null, (string) $out['message'], 201);
+    }
+
+    /**
      * List WhatsApp templates.
      * GET /api/v1/templates
      *

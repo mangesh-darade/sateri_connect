@@ -30,12 +30,20 @@ class ApiAuthFilter implements FilterInterface
     {
         self::$apiKeyCaller = null;
 
+        if (str_ends_with((string) $request->getUri()->getPath(), 'api/v1/mcp')) {
+            // URL-based MCP clients follow this hint to OAuth when they get a 401 (removed again on success in after()).
+            service('response')->setHeader('WWW-Authenticate', 'Bearer resource_metadata="' . site_url('.well-known/oauth-protected-resource') . '"');
+        }
+
         // Multi-tenant resolution:
         // 1. If session tenant exists (e.g. testing from browser API docs console)
         \App\Libraries\TenantResolver::ensureFromSession();
 
         // 2. Explicit header X-Tenant-Key / X-Tenant
         $tenantHeader = trim((string) ($request->getHeaderLine('X-Tenant-Key') ?: $request->getHeaderLine('X-Tenant')));
+        if ($tenantHeader === '' && str_ends_with((string) $request->getUri()->getPath(), 'api/v1/mcp')) {
+            $tenantHeader = trim((string) $request->getGet('tenant')); // URL-based MCP clients cannot send headers
+        }
         if ($tenantHeader !== '') {
             (new \App\Libraries\TenantConnection())->apply($tenantHeader, 'api_header');
         } elseif (\App\Libraries\MasterTenantRepository::masterConfigured() && ! \App\Libraries\TenantContext::has()) {
@@ -326,6 +334,10 @@ class ApiAuthFilter implements FilterInterface
 
     public function after(RequestInterface $request, ResponseInterface $response, $arguments = null)
     {
+        if ($response->getStatusCode() !== 401) {
+            $response->removeHeader('WWW-Authenticate');
+        }
+
         $caller = self::$apiKeyCaller;
         self::$apiKeyCaller = null;
 
@@ -401,14 +413,34 @@ class ApiAuthFilter implements FilterInterface
         if (str_contains($uri, '/messages')) {
             return $read ? 'chat.view' : 'chat.send';
         }
+        if (str_contains($uri, '/reports')) {
+            return 'reports.view';
+        }
+        if (str_contains($uri, '/ads')) {
+            return $read ? 'ads.view' : 'ads.activate';
+        }
+        if (str_contains($uri, '/campaigns')) {
+            if ($read) {
+                return 'campaigns.view';
+            }
+
+            return preg_match('#/campaigns/\d+/#', $uri) === 1 ? 'campaigns.start' : 'campaigns.create';
+        }
         if (str_contains($uri, '/templates')) {
-            return 'templates.view';
+            return $read ? 'templates.view' : 'templates.create';
         }
         if (str_contains($uri, '/automations')) {
-            return $read ? 'automations.view' : 'automations.edit';
+            if ($read) {
+                return 'automations.view';
+            }
+
+            return preg_match('#/automations(/\d+/duplicate)?$#', $uri) === 1 ? 'automations.create' : 'automations.edit';
         }
         if (str_contains($uri, '/email/identities')) {
             return $read ? 'emails.view' : 'emails.send';
+        }
+        if (str_contains($uri, '/social/')) {
+            return $read ? 'social.view' : 'social.create';
         }
 
         return null; // account / health: any authenticated caller
@@ -452,14 +484,32 @@ class ApiAuthFilter implements FilterInterface
         if (str_contains($uri, 'templates') && $method === 'GET') {
             return 'templates:read';
         }
+        if (str_contains($uri, 'templates') && $method === 'POST') {
+            return 'templates:write';
+        }
+        if (str_contains($uri, 'reports')) {
+            return 'reports:read';
+        }
+        if (str_contains($uri, '/ads')) {
+            return $method === 'GET' ? 'ads:read' : 'ads:write';
+        }
+        if (str_contains($uri, 'campaigns')) {
+            return $method === 'GET' ? 'campaigns:read' : 'campaigns:write';
+        }
         if (str_contains($uri, 'automations/trigger') && $method === 'POST') {
             return 'automations:trigger';
         }
         if (str_contains($uri, 'automations') && $method === 'GET') {
             return 'automations:read';
         }
+        if (str_contains($uri, 'automations') && $method === 'POST') {
+            return 'automations:write';
+        }
         if (str_contains($uri, 'email/identities')) {
             return $method === 'GET' ? 'email_identities:read' : 'email_identities:write';
+        }
+        if (str_contains($uri, '/social/')) {
+            return $method === 'GET' ? 'social:read' : 'social:write';
         }
         if (str_contains($uri, 'account') && $method === 'GET') {
             return 'account:read';

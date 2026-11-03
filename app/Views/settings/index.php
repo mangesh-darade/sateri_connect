@@ -112,15 +112,6 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabVoiceAgent" type="button" role="tab" aria-controls="tabVoiceAgent" aria-selected="false">
-                        <i class="fas fa-phone-volume" aria-hidden="true"></i>
-                        <span>
-                            <span class="settings-nav-label">AI Voice Agent</span>
-                            <span class="settings-nav-hint">Auto-call new leads</span>
-                        </span>
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
                     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabElintOm" type="button" role="tab" aria-controls="tabElintOm" aria-selected="false">
                         <i class="fas fa-cash-register" aria-hidden="true"></i>
                         <span>
@@ -135,6 +126,24 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                         <span>
                             <span class="settings-nav-label">AI Bot & Copilot</span>
                             <span class="settings-nav-hint">Gemini · Anti-Ban Rules</span>
+                        </span>
+                    </button>
+                </li>
+                <li class="nav-item d-none" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabHours" type="button" role="tab" aria-controls="tabHours" aria-selected="false">
+                        <i class="fas fa-clock" aria-hidden="true"></i>
+                        <span>
+                            <span class="settings-nav-label">Inbox Rules</span>
+                            <span class="settings-nav-hint">Hours · Assign · SLA</span>
+                        </span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabPayments" type="button" role="tab" aria-controls="tabPayments" aria-selected="false">
+                        <i class="fas fa-rupee-sign" aria-hidden="true"></i>
+                        <span>
+                            <span class="settings-nav-label">Payment Links</span>
+                            <span class="settings-nav-hint">Razorpay · Inbox</span>
                         </span>
                     </button>
                 </li>
@@ -1048,74 +1057,6 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                         </div>
                     </div>
 
-                    <div class="tab-pane fade" id="tabVoiceAgent" role="tabpanel">
-                        <?php $voiceAgent = $voiceAgent ?? ['enabled' => false, 'url' => '', 'api_key' => '', 'consent_ok' => false, 'max_per_hour' => 50]; ?>
-                        <div class="settings-section-head">
-                            <div>
-                                <p class="settings-section-kicker">Voice automation</p>
-                                <h3 class="settings-section-title">AI Voice Agent</h3>
-                            </div>
-                            <div class="form-check form-switch mb-0">
-                                <input class="form-check-input" type="checkbox" role="switch" id="voice_agent_enabled" <?= ! empty($voiceAgent['enabled']) ? 'checked' : '' ?>>
-                                <label class="form-check-label" for="voice_agent_enabled" id="voiceAgentEnabledLabel"><?= ! empty($voiceAgent['enabled']) ? 'Active' : 'Inactive' ?></label>
-                            </div>
-                        </div>
-                        <div class="alert alert-light border settings-note">
-                            When a new contact is created (manual add, Facebook lead, smart form), it is sent to the ElintOm AI voice agent,
-                            which calls the contact within minutes during the calling hours set in the voice dashboard.
-                            CSV imports and bulk syncs never trigger calls. Contacts who ask not to be called are blocked automatically.
-                        </div>
-                        <div class="row g-3">
-                            <div class="col-lg-8">
-                                <div class="mb-3">
-                                    <label class="form-label" for="voice_agent_url">Voice agent URL</label>
-                                    <input type="url" id="voice_agent_url" class="form-control"
-                                           value="<?= $val($voiceAgent, 'url') ?>" placeholder="https://voice.example.com">
-                                    <div class="form-text">The address of the voice dashboard server. No trailing slash.</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label" for="voice_agent_api_key">API key</label>
-                                    <div class="input-group input-secret">
-                                        <input type="password" id="voice_agent_api_key" class="form-control"
-                                               value="<?= $val($voiceAgent, 'api_key') ?>" autocomplete="off"
-                                               placeholder="Voice dashboard → Settings → Leads API key">
-                                        <button class="btn btn-outline-secondary toggle-secret" type="button"><i class="fas fa-eye"></i></button>
-                                    </div>
-                                    <div class="form-text">Leave masked blank to keep the current key.</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label" for="voice_agent_max_per_hour">Max calls queued per hour</label>
-                                    <input type="number" min="1" max="1000" id="voice_agent_max_per_hour" class="form-control"
-                                           value="<?= (int) ($voiceAgent['max_per_hour'] ?? 50) ?>">
-                                    <div class="form-text">Safety limit: extra new contacts in the same hour are not sent.</div>
-                                </div>
-                                <div class="form-check mb-3">
-                                    <input class="form-check-input" type="checkbox" id="voice_agent_consent_ok" <?= ! empty($voiceAgent['consent_ok']) ? 'checked' : '' ?>>
-                                    <label class="form-check-label" for="voice_agent_consent_ok">
-                                        I confirm our contacts agreed to receive calls (consent, DND/TRAI rules). The agent will not call until this is ticked.
-                                    </label>
-                                </div>
-                                <div class="d-flex flex-wrap gap-2">
-                                    <?php if ($canEditSettings): ?>
-                                        <button type="button" class="btn btn-wa" id="btnSaveVoiceAgent"><i class="fas fa-save me-1"></i> Save</button>
-                                        <button type="button" class="btn btn-outline-secondary" id="btnTestVoiceAgent"><i class="fas fa-plug me-1"></i> Test connection</button>
-                                    <?php endif; ?>
-                                </div>
-                                <div id="voiceAgentResult" class="creds-test-result mt-2"></div>
-                            </div>
-                            <div class="col-lg-4">
-                                <aside class="wp-creds-aside">
-                                    <p class="wp-aside-kicker">Setup path</p>
-                                    <ol class="wp-steps">
-                                        <li>Voice dashboard → Settings → copy the Leads API key</li>
-                                        <li>Paste the voice agent URL + key here</li>
-                                        <li>Test connection, tick the consent box, switch Active, Save</li>
-                                    </ol>
-                                </aside>
-                            </div>
-                        </div>
-                    </div>
-
                     <div class="tab-pane fade" id="tabElintOm" role="tabpanel">
                         <?php $elintom = $elintom ?? ['base_url' => '', 'private_key' => '', 'enabled' => true]; ?>
                         <div class="settings-section-head">
@@ -1186,14 +1127,31 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
 
                     <div class="tab-pane fade" id="tabAi" role="tabpanel">
                         <div class="settings-pane-header">
+                            <div class="d-flex flex-wrap align-items-start gap-2">
+                                <div class="me-auto">
                             <h2 class="settings-pane-title"><i class="fas fa-robot text-wa me-2"></i> AI Assistant & Gemini Auto-Bot</h2>
-                            <p class="settings-pane-sub">Power your WhatsApp customer support with Google Gemini 1.5 Flash. Built-in anti-ban guardrails, rate limiting, and 24-hour service window awareness.</p>
+                                <p class="settings-pane-sub">Power your WhatsApp customer support with Google Gemini 1.5 Flash. Built-in anti-ban guardrails, rate limiting, and 24-hour service window awareness.</p>
+                                </div>
+                                <div class="btn-group btn-group-sm" role="group" aria-label="Sections">
+                                    <button type="button" class="btn btn-outline-secondary" id="aiAccExpand"><i class="fas fa-angles-down me-1"></i> Expand all</button>
+                                    <button type="button" class="btn btn-outline-secondary" id="aiAccCollapse"><i class="fas fa-angles-up me-1"></i> Collapse all</button>
+                                </div>
+                            </div>
                         </div>
 
-                        <div class="row g-4">
-                            <div class="col-lg-8">
-                                <div class="card mb-4 border-0 shadow-sm">
-                                    <div class="card-body">
+                        <?php $voiceAgent = $voiceAgent ?? ['enabled' => false, 'url' => '', 'api_key' => '', 'consent_ok' => false, 'max_per_hour' => 50]; ?>
+                        <div class="accordion" id="aiAccordion">
+
+                        <div class="accordion-item border-0 shadow-sm rounded mb-3 overflow-hidden">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#aiAccBot" aria-expanded="false" aria-controls="aiAccBot">
+                                    <i class="fas fa-robot fa-fw me-3 text-wa" aria-hidden="true"></i>
+                                    <span class="me-auto"><span class="fw-bold d-block">AI Auto-Bot (Gemini)</span><span class="small text-muted">Provider, API key, business name and instructions</span></span>
+                                    <span class="badge <?= !empty($ai['enabled']) ? 'bg-success' : 'bg-secondary' ?> ms-2 me-3"><?= !empty($ai['enabled']) ? 'Active' : 'Off' ?></span>
+                                </button>
+                            </h2>
+                            <div id="aiAccBot" class="accordion-collapse collapse ai-acc-panel">
+                                <div class="accordion-body">
                                         <div class="d-flex align-items-center justify-content-between mb-3 pb-3 border-bottom">
                                             <div>
                                                 <h6 class="mb-1 fw-bold">Enable AI Auto-Bot</h6>
@@ -1224,10 +1182,18 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                                 <div class="input-group">
                                                     <input type="password" name="ai_api_key" id="aiApiKey" class="form-control font-monospace" value="<?= esc($ai['api_key'] ?? '') ?>" placeholder="Paste Gemini API Key (e.g. AIza... or AQ...)" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true">
                                                     <button type="button" class="btn btn-outline-secondary toggle-secret"><i class="fas fa-eye"></i></button>
-                                                    <button type="button" class="btn btn-outline-primary" id="btnTestAi"><i class="fas fa-plug me-1"></i> Test Connection</button>
+                                                    <button type="button" class="btn btn-outline-secondary" id="btnTestAi"><i class="fas fa-plug me-1"></i> Test Connection</button>
                                                 </div>
                                                 <div id="aiTestResult" class="mt-2 small"></div>
                                                 <div class="form-text">Get your free API key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio</a>.</div>
+                                            </div>
+                                            <div class="col-12">
+                                                <div class="alert alert-info py-2 px-3 small mb-0">
+                                                    <i class="fas fa-wand-magic-sparkles me-1"></i>
+                                                    <strong>Want Claude for social posts?</strong> Claude (and OpenAI) for captions, Reel / video scripts and caption rewrites is set up on
+                                                    <a href="<?= site_url('social/setup#soc-ai') ?>">Social Setup &rarr; AI captions</a>.
+                                                    The auto-bot, suggested replies and summaries on this page use Gemini.
+                                                </div>
                                             </div>
                                             <div class="col-md-6">
                                                 <label class="form-label fw-semibold">Business / Brand Name</label>
@@ -1236,17 +1202,22 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                             <div class="col-12">
                                                 <label class="form-label fw-semibold">System Instructions & Business FAQ (Knowledge Base)</label>
                                                 <textarea name="ai_system_prompt" class="form-control font-monospace small" rows="5" placeholder="Define your business details, products, working hours, pricing guidelines, etc."><?= esc($ai['system_prompt'] ?? '') ?></textarea>
-                                                <div class="form-text">AI strictly follows this prompt to answer queries in Marathi, Hindi, and English.</div>
+                                                <div class="form-text">AI strictly follows this prompt to answer queries in Marathi, Hindi, and English. For longer FAQ content use the <a href="<?= site_url('knowledge-base') ?>">Knowledge base</a>: the bot then picks the entries that match each customer message.</div>
                                             </div>
                                         </div>
-                                    </div>
                                 </div>
+                            </div>
+                        </div>
 
-                                <div class="card border-0 shadow-sm">
-                                    <div class="card-header bg-light-subtle py-3">
-                                        <h6 class="mb-0 fw-bold"><i class="fas fa-shield-alt text-danger me-2"></i> WhatsApp Anti-Ban & Loop Prevention Guardrails</h6>
-                                    </div>
-                                    <div class="card-body">
+                        <div class="accordion-item border-0 shadow-sm rounded mb-3 overflow-hidden">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#aiAccGuard" aria-expanded="false" aria-controls="aiAccGuard">
+                                    <i class="fas fa-shield-alt fa-fw me-3 text-wa" aria-hidden="true"></i>
+                                    <span class="me-auto"><span class="fw-bold d-block">Anti-Ban & Loop Guardrails</span><span class="small text-muted">Reply caps, cooldown, human takeover and hand-over</span></span>
+                                </button>
+                            </h2>
+                            <div id="aiAccGuard" class="accordion-collapse collapse  ai-acc-panel">
+                                <div class="accordion-body">
                                         <div class="row g-3">
                                             <div class="col-md-6">
                                                 <label class="form-label fw-semibold">Max Consecutive AI Replies</label>
@@ -1263,13 +1234,114 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                                 <input type="text" name="ai_human_keywords" class="form-control" value="<?= esc($ai['human_keywords'] ?? '') ?>" placeholder="human,agent,support,representative,manus,madat">
                                                 <div class="form-text">When customer types any of these, AI instantly halts and hands over the chat to a human agent.</div>
                                             </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold" for="aiHandoffUser">Hand-over agent</label>
+                                                <select name="ai_handoff_user_id" id="aiHandoffUser" class="form-select">
+                                                    <option value="0">Nobody (notify the team only)</option>
+                                                    <?php foreach (($aiAgents ?? []) as $agent): ?>
+                                                        <option value="<?= (int) $agent['id'] ?>" <?= (int) ($ai['handoff_user_id'] ?? 0) === (int) $agent['id'] ? 'selected' : '' ?>><?= esc($agent['name']) ?></option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                                <div class="form-text">Chats the AI cannot answer, or that hit the reply cap, are assigned to this person unless the contact already has an agent. The AI then stays quiet on that chat for 2 hours.</div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold" for="aiHandoffMessage">Hand-over message</label>
+                                                <textarea name="ai_handoff_message" id="aiHandoffMessage" class="form-control" rows="3" maxlength="500"><?= esc($ai['handoff_message'] ?? '') ?></textarea>
+                                                <div class="form-text">Sent to the customer when the AI cannot answer and passes the chat to a person.</div>
+                                            </div>
                                         </div>
-                                    </div>
                                 </div>
                             </div>
+                        </div>
 
+                        <div class="accordion-item border-0 shadow-sm rounded mb-3 overflow-hidden">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#aiAccVoice" aria-expanded="false" aria-controls="aiAccVoice">
+                                    <i class="fas fa-phone-volume fa-fw me-3 text-wa" aria-hidden="true"></i>
+                                    <span class="me-auto"><span class="fw-bold d-block">AI Voice Agent</span><span class="small text-muted">Auto-call new contacts through the ElintOm voice agent</span></span>
+                                    <span class="badge <?= !empty($voiceAgent['enabled']) ? 'bg-success' : 'bg-secondary' ?> ms-2 me-3"><?= !empty($voiceAgent['enabled']) ? 'Active' : 'Off' ?></span>
+                                </button>
+                            </h2>
+                            <div id="aiAccVoice" class="accordion-collapse collapse  ai-acc-panel">
+                                <div class="accordion-body">
+                        <div class="settings-section-head">
+                            <div>
+                                <p class="settings-section-kicker">Voice automation</p>
+                                <h3 class="settings-section-title">AI Voice Agent</h3>
+                            </div>
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" role="switch" id="voice_agent_enabled" <?= ! empty($voiceAgent['enabled']) ? 'checked' : '' ?>>
+                                <label class="form-check-label" for="voice_agent_enabled" id="voiceAgentEnabledLabel"><?= ! empty($voiceAgent['enabled']) ? 'Active' : 'Inactive' ?></label>
+                            </div>
+                        </div>
+                        <div class="alert alert-light border settings-note">
+                            When a new contact is created (manual add, Facebook lead, smart form), it is sent to the ElintOm AI voice agent,
+                            which calls the contact within minutes during the calling hours set in the voice dashboard.
+                            CSV imports and bulk syncs never trigger calls. Contacts who ask not to be called are blocked automatically.
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-lg-8">
+                                <div class="mb-3">
+                                    <label class="form-label" for="voice_agent_url">Voice agent URL</label>
+                                    <input type="url" id="voice_agent_url" class="form-control"
+                                           value="<?= $val($voiceAgent, 'url') ?>" placeholder="https://voice.example.com">
+                                    <div class="form-text">The address of the voice dashboard server. No trailing slash.</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="voice_agent_api_key">API key</label>
+                                    <div class="input-group input-secret">
+                                        <input type="password" id="voice_agent_api_key" class="form-control"
+                                               value="<?= $val($voiceAgent, 'api_key') ?>" autocomplete="off"
+                                               placeholder="Voice dashboard → Settings → Leads API key">
+                                        <button class="btn btn-outline-secondary toggle-secret" type="button"><i class="fas fa-eye"></i></button>
+                                    </div>
+                                    <div class="form-text">Leave masked blank to keep the current key.</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="voice_agent_max_per_hour">Max calls queued per hour</label>
+                                    <input type="number" min="1" max="1000" id="voice_agent_max_per_hour" class="form-control"
+                                           value="<?= (int) ($voiceAgent['max_per_hour'] ?? 50) ?>">
+                                    <div class="form-text">Safety limit: extra new contacts in the same hour are not sent.</div>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="voice_agent_consent_ok" <?= ! empty($voiceAgent['consent_ok']) ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="voice_agent_consent_ok">
+                                        I confirm our contacts agreed to receive calls (consent, DND/TRAI rules). The agent will not call until this is ticked.
+                                    </label>
+                                </div>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <?php if ($canEditSettings): ?>
+                                        <button type="button" class="btn btn-wa" id="btnSaveVoiceAgent"><i class="fas fa-save me-1"></i> Save</button>
+                                        <button type="button" class="btn btn-outline-secondary" id="btnTestVoiceAgent"><i class="fas fa-plug me-1"></i> Test connection</button>
+                                    <?php endif; ?>
+                                </div>
+                                <div id="voiceAgentResult" class="creds-test-result mt-2"></div>
+                            </div>
                             <div class="col-lg-4">
                                 <aside class="wp-creds-aside">
+                                    <p class="wp-aside-kicker">Setup path</p>
+                                    <ol class="wp-steps">
+                                        <li>Voice dashboard → Settings → copy the Leads API key</li>
+                                        <li>Paste the voice agent URL + key here</li>
+                                        <li>Test connection, tick the consent box, switch Active, Save</li>
+                                    </ol>
+                                </aside>
+                            </div>
+                        </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="accordion-item border-0 shadow-sm rounded mb-3 overflow-hidden">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#aiAccSafety" aria-expanded="false" aria-controls="aiAccSafety">
+                                    <i class="fas fa-circle-info fa-fw me-3 text-wa" aria-hidden="true"></i>
+                                    <span class="me-auto"><span class="fw-bold d-block">Meta Safety & Live Chat Copilot</span><span class="small text-muted">Built-in protections and what agents get in the inbox</span></span>
+                                </button>
+                            </h2>
+                            <div id="aiAccSafety" class="accordion-collapse collapse  ai-acc-panel">
+                                <div class="accordion-body">
+                                    <div class="wp-creds-aside">
                                     <p class="wp-aside-kicker">Built-in Meta Safety</p>
                                     <ul class="list-unstyled small mb-4">
                                         <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i><strong>24h Service Window:</strong> AI only replies within the active service window opened by customer.</li>
@@ -1279,7 +1351,127 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                     </ul>
                                     <p class="wp-aside-kicker">Live Chat Copilot</p>
                                     <p class="text-muted small">In Live Chat inbox, agents can click <strong>"AI Suggest"</strong> for 3 instant reply options or <strong>"Summarize Chat"</strong> for quick lead notes.</p>
-                                </aside>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+
+                    <!-- Business Hours Tab -->
+                    <div class="tab-pane fade" id="tabHours" role="tabpanel">
+                        <?php $bh = $businessHours ?? ['enabled' => false, 'away_message' => '', 'days' => []]; ?>
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <div>
+                                        <h6 class="mb-1 fw-bold">Send an away message outside business hours</h6>
+                                        <div class="text-muted small">Sent once per conversation every 12 hours, only when no keyword or workflow already replied. Replaces the AI reply for that message. WhatsApp only. Times use the workspace timezone (<?= esc(\App\Libraries\AppDateTime::appZone()->getName()) ?>).</div>
+                                    </div>
+                                    <div class="form-check form-switch fs-4 mb-0">
+                                        <input class="form-check-input" type="checkbox" role="switch" name="bh_enabled" value="1" id="bhEnabled" <?= ! empty($bh['enabled']) ? 'checked' : '' ?>>
+                                    </div>
+                                </div>
+                                <div class="table-responsive mb-3">
+                                    <table class="table table-sm align-middle mb-0">
+                                        <thead><tr><th>Day</th><th>Open</th><th>From</th><th>To</th></tr></thead>
+                                        <tbody>
+                                        <?php foreach (($bh['days'] ?? []) as $d => $row): ?>
+                                            <tr>
+                                                <td class="text-uppercase"><?= esc($d) ?></td>
+                                                <td><div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" name="bh_open[<?= esc($d, 'attr') ?>]" value="1" <?= ! empty($row['open']) ? 'checked' : '' ?>></div></td>
+                                                <td><input type="time" class="form-control form-control-sm" name="bh_from[<?= esc($d, 'attr') ?>]" value="<?= esc($row['from']) ?>"></td>
+                                                <td><input type="time" class="form-control form-control-sm" name="bh_to[<?= esc($d, 'attr') ?>]" value="<?= esc($row['to']) ?>"></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <label class="form-label fw-semibold" for="bhAway">Away message</label>
+                                <textarea name="bh_away_message" id="bhAway" class="form-control" rows="3" maxlength="1000"><?= esc($bh['away_message'] ?? '') ?></textarea>
+                            </div>
+                        </div>
+
+                        <?php $ir = $inboxRules ?? ['auto_assign' => false, 'agent_ids' => [], 'sla_minutes' => 0]; ?>
+                        <div class="card border-0 shadow-sm mt-3">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <div>
+                                        <h6 class="mb-1 fw-bold">Auto-assign new chats</h6>
+                                        <div class="text-muted small">When a customer writes and nobody owns the chat, it goes to the agent in this list with the fewest open chats. Chats you unassign are assigned again on the customer's next message.</div>
+                                    </div>
+                                    <div class="form-check form-switch fs-4 mb-0">
+                                        <input class="form-check-input" type="checkbox" role="switch" name="ir_auto_assign" value="1" id="irAutoAssign" <?= ! empty($ir['auto_assign']) ? 'checked' : '' ?>>
+                                    </div>
+                                </div>
+                                <div class="row g-2">
+                                    <?php foreach (($aiAgents ?? []) as $agent): ?>
+                                        <div class="col-6 col-md-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="ir_agents[]" value="<?= (int) $agent['id'] ?>" id="irAgent<?= (int) $agent['id'] ?>" <?= in_array((int) $agent['id'], $ir['agent_ids'], true) ? 'checked' : '' ?>>
+                                                <label class="form-check-label" for="irAgent<?= (int) $agent['id'] ?>"><?= esc($agent['name']) ?></label>
+                                            </div>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card border-0 shadow-sm mt-3">
+                            <div class="card-body">
+                                <h6 class="fw-bold mb-1">Response time target</h6>
+                                <div class="text-muted small mb-3">Minutes a customer may wait for the first reply. When it passes, the assigned agent (or the team) gets an "overdue" alert, and the chat shows under the inbox "FRT exceeded" filter. Any reply, including a bot reply, stops the timer. Set 0 to switch it off. The timer runs around the clock, not only in business hours.</div>
+                                <div class="col-md-4 px-0">
+                                    <label class="form-label fw-semibold" for="irSla">Minutes</label>
+                                    <input type="number" min="0" max="1440" class="form-control" name="ir_sla_minutes" id="irSla" value="<?= (int) ($ir['sla_minutes'] ?? 0) ?>">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card border-0 shadow-sm mt-3">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <div>
+                                        <h6 class="mb-1 fw-bold">Customer satisfaction (CSAT)</h6>
+                                        <div class="text-muted small">When an agent marks a WhatsApp chat as resolved, the customer is asked to reply 1 to 5. Needs an open 24-hour window and is asked at most once a day per chat. A rating of 1 or 2 alerts the assigned agent. Results show in Reports → Agent Performance.</div>
+                                    </div>
+                                    <div class="form-check form-switch fs-4 mb-0">
+                                        <input class="form-check-input" type="checkbox" role="switch" name="ir_csat_enabled" value="1" id="irCsat" <?= ! empty($ir['csat_enabled']) ? 'checked' : '' ?>>
+                                    </div>
+                                </div>
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-semibold" for="irCsatQ">Question</label>
+                                        <textarea class="form-control" name="ir_csat_question" id="irCsatQ" rows="3" maxlength="500"><?= esc($ir['csat_question'] ?? '') ?></textarea>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-semibold" for="irCsatT">Thank-you message</label>
+                                        <textarea class="form-control" name="ir_csat_thanks" id="irCsatT" rows="3" maxlength="500"><?= esc($ir['csat_thanks'] ?? '') ?></textarea>
+                                        <div class="form-text">Leave empty to send nothing after the rating.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Payment Links Tab -->
+                    <div class="tab-pane fade" id="tabPayments" role="tabpanel">
+                        <?php $cp = $customerPayments ?? ['key_id' => '', 'key_secret' => '']; ?>
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body">
+                                <h6 class="fw-bold mb-1">Collect payments from your customers</h6>
+                                <div class="text-muted small mb-3">Add your own Razorpay API keys. Payments go straight to your Razorpay account. Agents then get a "Payment link" button in the inbox, and you are notified when a link is paid. This is separate from the platform wallet recharge. Leave the Key ID empty to switch it off.</div>
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-semibold" for="custRzpKeyId">Razorpay Key ID</label>
+                                        <input type="text" class="form-control font-monospace" name="customer_rzp_key_id" id="custRzpKeyId" value="<?= esc($cp['key_id']) ?>" placeholder="rzp_live_xxxxxxxxxxxx" autocomplete="off">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-semibold" for="custRzpKeySecret">Razorpay Key Secret</label>
+                                        <input type="password" class="form-control font-monospace" name="customer_rzp_key_secret" id="custRzpKeySecret" value="<?= esc($cp['key_secret']) ?>" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true">
+                                        <div class="form-text">Stored encrypted. Leave unchanged to keep the saved secret.</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1291,9 +1483,14 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                 <h4 class="fw-bold mb-1"><i class="fas fa-key text-success me-2"></i>Developer REST API &amp; Secret Keys</h4>
                                 <p class="text-muted small mb-0">Manage permanent API keys for external systems, WooCommerce, Shopify, CRM, and custom scripts.</p>
                             </div>
-                            <a href="<?= site_url('api/docs') ?>" target="_blank" class="btn btn-sm btn-outline-success">
+                            <a href="<?= site_url('api/docs') ?>" target="_blank" class="btn btn-sm btn-outline-secondary">
                                 <i class="fas fa-book-open me-1"></i> Interactive API Docs
                             </a>
+                            <?php if (! $platformMode): ?>
+                            <a href="<?= site_url('webhook-endpoints') ?>" class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-share-square me-1"></i> Outgoing webhooks
+                            </a>
+                            <?php endif; ?>
                         </div>
 
                         <!-- Live API Base URL Card -->
@@ -1305,7 +1502,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                     <p class="small text-light opacity-75 mb-0" style="font-size: 0.8rem;">Use this endpoint URL in your external CRM, billing system, or Postman environment.</p>
                                 </div>
                                 <div class="d-flex gap-2">
-                                    <button class="btn btn-sm btn-outline-light" type="button" onclick="navigator.clipboard.writeText('<?= esc(site_url('api/v1')) ?>'); alert('API Base URL copied to clipboard: <?= esc(site_url('api/v1')) ?>');">
+                                    <button class="btn btn-sm btn-outline-light js-copy-api-url" type="button" data-url="<?= esc(site_url('api/v1'), 'attr') ?>">
                                         <i class="fas fa-copy me-1"></i> Copy Base URL
                                     </button>
                                     <a href="<?= site_url('api/v1/postman') ?>" class="btn btn-sm btn-warning text-dark fw-semibold">
@@ -1324,9 +1521,35 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                             <p class="small text-dark mb-2">Make sure to copy your API key now. <strong>You will not be able to see it again!</strong></p>
                             <div class="input-group">
                                 <input type="text" id="newKeySecretInput" class="form-control font-monospace fw-bold bg-white" readonly>
-                                <button class="btn btn-success" type="button" id="btnCopyNewKey">
+                                <button class="btn btn-wa" type="button" id="btnCopyNewKey">
                                     <i class="fas fa-copy me-1"></i> Copy Key
                                 </button>
+                            </div>
+                        </div>
+
+                        <!-- Connect AI (MCP) -->
+                        <div class="card mb-4 border">
+                            <button class="btn w-100 d-flex justify-content-between align-items-center text-start p-3" type="button" data-bs-toggle="collapse" data-bs-target="#mcpConnectBody" aria-expanded="false" aria-controls="mcpConnectBody">
+                                <span><i class="fas fa-plug me-2"></i><strong>Connect AI (MCP)</strong> <span class="text-muted small ms-1">Claude, ChatGPT, Antigravity, Cursor</span></span>
+                                <i class="fas fa-chevron-down small text-muted"></i>
+                            </button>
+                            <div class="collapse" id="mcpConnectBody">
+                                <div class="px-3 pb-3 small">
+                                    <p class="text-muted mb-2">For the JSON below, generate a key first; it fills in automatically. The URL needs no key: ChatGPT signs in with OAuth and the access it gets appears under Active API Keys, where you can revoke it.</p>
+                                    <div class="fw-semibold mb-1">1. ChatGPT and other URL-based clients <span class="text-muted fw-normal">(Authentication: OAuth. ChatGPT finds the sign-in itself, no key or client id to paste)</span></div>
+                                    <div class="input-group input-group-sm mb-3">
+                                        <input type="text" class="form-control font-monospace" id="mcpUrlInput" readonly value="<?= esc(site_url('api/v1/mcp'), 'attr') ?>">
+                                        <button class="btn btn-outline-secondary js-copy-api-url" type="button" data-url="<?= esc(site_url('api/v1/mcp'), 'attr') ?>"><i class="fas fa-copy me-1"></i> Copy URL</button>
+                                    </div>
+                                    <div class="fw-semibold mb-1">2. Claude, Antigravity, Cursor (JSON)</div>
+                                    <div class="d-flex gap-2 flex-wrap mb-2">
+                                        <a class="btn btn-sm btn-outline-secondary" href="<?= $platformMode ? esc($settingsBase . '/mcp-server') : site_url('settings/mcp-server') ?>"><i class="fas fa-file-arrow-down me-1"></i> Download connector</a>
+                                        <button class="btn btn-sm btn-wa ms-auto" type="button" id="btnCopyMcpConfig"><i class="fas fa-copy me-1"></i> Copy JSON</button>
+                                    </div>
+                                    <textarea id="mcpConfigJson" class="form-control font-monospace" style="font-size:0.75rem" rows="8" readonly
+                                        data-base-url="<?= esc($mcpConnect['base_url'] ?? '', 'attr') ?>" data-tenant="<?= esc($mcpConnect['tenant'] ?? '', 'attr') ?>"></textarea>
+                                    <div class="text-muted mt-1">Save the connector as <code>C:/sateri-mcp/sateri-mcp.mjs</code> (or change the path), then restart the client. Needs Node.js.</div>
+                                </div>
                             </div>
                         </div>
 
@@ -1466,6 +1689,8 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
 <?php if ($platformMode): ?>
 <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11.10.8/dist/sweetalert2.min.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.10.8/dist/sweetalert2.all.min.js"></script>
 <meta name="csrf-token" content="<?= csrf_hash() ?>">
 <meta name="csrf-header" content="<?= esc(csrf_header()) ?>">
 <script>
@@ -1652,13 +1877,15 @@ $(function () {
     });
 
     $('#btnTestEmail').on('click', function () {
-        var to = prompt('Send test email to:');
-        if (!to) return;
-        var $btn = $(this).prop('disabled', true);
-        APP.post(SETTINGS_API + '/test-email', { to: to })
-            .done(function (res) { APP.toast(res.message || 'Email OK'); })
-            .fail(function (xhr) { APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Email test failed', 'error'); })
-            .always(function () { $btn.prop('disabled', false); });
+        var $btn = $(this);
+        APP.prompt({ title: 'Send a test email', text: 'Email address to send it to', inputType: 'email', confirmText: 'Send' }).then(function (r) {
+            if (!r.isConfirmed || !r.value) return;
+            $btn.prop('disabled', true);
+            APP.post(SETTINGS_API + '/test-email', { to: r.value })
+                .done(function (res) { APP.toast(res.message || 'Email OK'); })
+                .fail(function (xhr) { APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Email test failed', 'error'); })
+                .always(function () { $btn.prop('disabled', false); });
+        });
     });
 
     function syncEmailProviderPanels() {
@@ -1889,6 +2116,14 @@ $(function () {
         APP.toast(msg, ok ? 'success' : 'error');
     }
 
+    $('#aiAccExpand, #aiAccCollapse').on('click', function () {
+        var open = this.id === 'aiAccExpand';
+        $('.ai-acc-panel').each(function () {
+            var c = bootstrap.Collapse.getOrCreateInstance(this, {toggle: false});
+            open ? c.show() : c.hide();
+        });
+    });
+
     $('#voice_agent_enabled').on('change', function () {
         $('#voiceAgentEnabledLabel').text(this.checked ? 'Active' : 'Inactive');
     });
@@ -1995,6 +2230,25 @@ $(function () {
             .always(function () { $btn.prop('disabled', false); });
     });
 
+    // MCP config JSON: placeholder until a key is generated, then filled with it.
+    function renderMcpConfig(key) {
+        var $t = $('#mcpConfigJson');
+        if (!$t.length) { return; }
+        var env = { SATERI_BASE_URL: $t.data('baseUrl'), SATERI_API_KEY: key || 'PASTE_YOUR_API_KEY' };
+        if ($t.data('tenant')) { env.SATERI_TENANT_KEY = String($t.data('tenant')); }
+        var url = $t.data('baseUrl') + '/api/v1/mcp' + ($t.data('tenant') ? '?tenant=' + encodeURIComponent($t.data('tenant')) : '');
+        $('#mcpUrlInput').val(url);
+        $('#mcpUrlInput').next('.js-copy-api-url').attr('data-url', url);
+        $t.val(JSON.stringify({ mcpServers: { sateri: { command: 'node', args: ['C:/sateri-mcp/sateri-mcp.mjs'], env: env } } }, null, 2));
+    }
+    renderMcpConfig('');
+    $('#btnCopyMcpConfig').on('click', function () {
+        var el = document.getElementById('mcpConfigJson');
+        el.select();
+        if (navigator.clipboard) { navigator.clipboard.writeText(el.value); } else { document.execCommand('copy'); }
+        APP.toast('MCP config copied.', 'success');
+    });
+
     // Developer API Keys Handlers
     $('#btnGenerateApiKey').on('click', function () {
         var $btn = $(this);
@@ -2006,6 +2260,7 @@ $(function () {
                 if (res && res.data && res.data.plain_text) {
                     var token = res.data.plain_text;
                     $('#newKeySecretInput').val(token);
+                    renderMcpConfig(token);
                     $('#newKeyAlert').removeClass('d-none');
                     APP.toast('API Key generated! Copy it now.', 'success');
 
@@ -2058,21 +2313,34 @@ $(function () {
         $('#newKeyAlert').addClass('d-none');
     });
 
+    $(document).on('click', '.js-copy-api-url', function () {
+        var url = $(this).attr('data-url');
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(url).then(function () { APP.toast('API base URL copied', 'success'); });
+        } else {
+            APP.toast(url, 'info');
+        }
+    });
+
     $(document).on('click', '.js-delete-api-token', function () {
         var id = $(this).attr('data-id');
-        if (!confirm('Are you sure you want to revoke this API Key? Any external systems using it will stop working immediately.')) {
-            return;
-        }
-        var $row = $('#tokenRow_' + id);
-        APP.post(SETTINGS_API + '/api-tokens/' + id + '/delete', {})
-            .done(function () {
-                $row.fadeOut(300, function () { $(this).remove(); });
-                APP.toast('API Key revoked', 'success');
-            })
-            .fail(function (xhr) {
-                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to revoke key';
-                APP.toast(msg, 'error');
-            });
+        APP.confirm({
+            title: 'Revoke this API key?',
+            text: 'Any external systems using it will stop working immediately.',
+            confirmText: 'Yes, revoke'
+        }).then(function (r) {
+            if (!r.isConfirmed) { return; }
+            var $row = $('#tokenRow_' + id);
+            APP.post(SETTINGS_API + '/api-tokens/' + id + '/delete', {})
+                .done(function () {
+                    $row.fadeOut(300, function () { $(this).remove(); });
+                    APP.toast('API Key revoked', 'success');
+                })
+                .fail(function (xhr) {
+                    var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to revoke key';
+                    APP.toast(msg, 'error');
+                });
+        });
     });
 
     // Live update for Tenant Powered By Preview

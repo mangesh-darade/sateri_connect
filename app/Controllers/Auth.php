@@ -193,6 +193,7 @@ class Auth extends BaseController
             );
         }
 
+        $oauthReturn = (string) $this->session->get('oauth_return');
         $this->clearAttempts($key);
         LoginThrottle::clear($email, $ip);
         $this->establishSession($user, $tenantKey ?? \App\Libraries\TenantContext::get());
@@ -201,7 +202,8 @@ class Auth extends BaseController
 
         (new ActivityLogger())->log('login', 'auth', 'User logged in', ['user_id' => $user['id']]);
 
-        $redirect = (string) ($this->session->getFlashdata('redirect_after_login') ?: site_url(landing_path() ?? 'dashboard'));
+        $redirect = (string) ($this->session->getFlashdata('redirect_after_login') ?: ($oauthReturn !== '' && str_starts_with($oauthReturn, site_url('oauth/authorize')) ? $oauthReturn : site_url(landing_path() ?? 'dashboard')));
+        $this->session->remove('oauth_return');
 
         return redirect()->to($redirect)->with('success', 'Welcome back, ' . ($user['name'] ?? 'User') . '!');
     }

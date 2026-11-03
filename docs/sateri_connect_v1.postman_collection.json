@@ -8,9 +8,21 @@
   "auth": {
     "type": "apikey",
     "apikey": [
-      { "key": "key", "value": "X-API-Key", "type": "string" },
-      { "key": "value", "value": "{{api_key}}", "type": "string" },
-      { "key": "in", "value": "header", "type": "string" }
+      {
+        "key": "key",
+        "value": "X-API-Key",
+        "type": "string"
+      },
+      {
+        "key": "value",
+        "value": "{{api_key}}",
+        "type": "string"
+      },
+      {
+        "key": "in",
+        "value": "header",
+        "type": "string"
+      }
     ]
   },
   "event": [],
@@ -36,7 +48,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -44,8 +59,13 @@
             },
             "url": {
               "raw": "{{base_url}}/contacts/upsert",
-              "host": ["{{base_url}}"],
-              "path": ["contacts", "upsert"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "contacts",
+                "upsert"
+              ]
             },
             "description": "Create or update a customer with name, email, tags, and custom attributes. Automatically triggers contact automations."
           }
@@ -57,12 +77,27 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/contacts/search?q=Mangesh&page=1&per_page=25",
-              "host": ["{{base_url}}"],
-              "path": ["contacts", "search"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "contacts",
+                "search"
+              ],
               "query": [
-                { "key": "q", "value": "Mangesh", "description": "Search by name, phone or email" },
-                { "key": "page", "value": "1" },
-                { "key": "per_page", "value": "25" }
+                {
+                  "key": "q",
+                  "value": "Mangesh",
+                  "description": "Search by name, phone or email"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "per_page",
+                  "value": "25"
+                }
               ]
             },
             "description": "Search customer contacts by query."
@@ -75,8 +110,13 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/contacts/+917744010738",
-              "host": ["{{base_url}}"],
-              "path": ["contacts", "+917744010738"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "contacts",
+                "+917744010738"
+              ]
             },
             "description": "Retrieve contact details, tags, and custom fields by contact ID or phone."
           }
@@ -91,7 +131,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -99,8 +142,13 @@
             },
             "url": {
               "raw": "{{base_url}}/messages/send-text",
-              "host": ["{{base_url}}"],
-              "path": ["messages", "send-text"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "messages",
+                "send-text"
+              ]
             },
             "description": "Send direct text message within 24-hour customer service window."
           }
@@ -110,7 +158,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -118,8 +169,13 @@
             },
             "url": {
               "raw": "{{base_url}}/messages/send-media",
-              "host": ["{{base_url}}"],
-              "path": ["messages", "send-media"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "messages",
+                "send-media"
+              ]
             },
             "description": "Send media message (image, document/PDF, video, audio) with optional caption and document filename."
           }
@@ -129,7 +185,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -137,8 +196,13 @@
             },
             "url": {
               "raw": "{{base_url}}/messages/send-template",
-              "host": ["{{base_url}}"],
-              "path": ["messages", "send-template"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "messages",
+                "send-template"
+              ]
             },
             "description": "Send approved Meta template message anytime, even outside 24h window."
           }
@@ -150,8 +214,14 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/messages/1/status",
-              "host": ["{{base_url}}"],
-              "path": ["messages", "1", "status"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "messages",
+                "1",
+                "status"
+              ]
             },
             "description": "Check if a message was sent, delivered, or read by customer using internal message ID or WhatsApp WAMID."
           }
@@ -163,11 +233,23 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/messages?phone=%2B917744010738&limit=50",
-              "host": ["{{base_url}}"],
-              "path": ["messages"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "messages"
+              ],
               "query": [
-                { "key": "phone", "value": "%2B917744010738", "description": "Customer WhatsApp number with country code" },
-                { "key": "limit", "value": "50", "description": "1 to 100 latest messages (default 50)" }
+                {
+                  "key": "phone",
+                  "value": "%2B917744010738",
+                  "description": "Customer WhatsApp number with country code"
+                },
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "1 to 100 latest messages (default 50)"
+                }
               ]
             },
             "description": "Latest messages (sent + customer replies) for one number, oldest first, with status sent / delivered / read / failed / received and within_24h flag. Requires ability messages:read."
@@ -185,12 +267,25 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/templates?status=APPROVED&page=1&per_page=25",
-              "host": ["{{base_url}}"],
-              "path": ["templates"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "templates"
+              ],
               "query": [
-                { "key": "status", "value": "APPROVED" },
-                { "key": "page", "value": "1" },
-                { "key": "per_page", "value": "25" }
+                {
+                  "key": "status",
+                  "value": "APPROVED"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "per_page",
+                  "value": "25"
+                }
               ]
             },
             "description": "Discover all approved WhatsApp templates with their categories, language, and dynamic variables schema."
@@ -203,10 +298,41 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/templates/order_confirmation",
-              "host": ["{{base_url}}"],
-              "path": ["templates", "order_confirmation"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "templates",
+                "order_confirmation"
+              ]
             },
             "description": "Get single template details, body text, buttons, and sample payload for send-template."
+          }
+        },
+        {
+          "name": "Submit New Template",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"diwali_offer\",\n  \"category\": \"MARKETING\",\n  \"language\": \"en_US\",\n  \"body\": \"Hi {{1}}, enjoy 20% off this Diwali.\",\n  \"body_examples\": \"Rahul\",\n  \"footer\": \"Reply STOP to opt out\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/templates",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "templates"
+              ]
+            },
+            "description": "Submit a new template to Meta for review (PENDING until approved)."
           }
         }
       ]
@@ -219,7 +345,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -227,8 +356,13 @@
             },
             "url": {
               "raw": "{{base_url}}/automations/trigger",
-              "host": ["{{base_url}}"],
-              "path": ["automations", "trigger"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "automations",
+                "trigger"
+              ]
             },
             "description": "Trigger an automated workflow via custom webhook event (e.g. order_placed, new_lead, payment_success)."
           }
@@ -240,10 +374,174 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/automations",
-              "host": ["{{base_url}}"],
-              "path": ["automations"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "automations"
+              ]
             },
             "description": "List all active automations available for triggering."
+          }
+        },
+        {
+          "name": "List All Workflows (incl. inactive)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/automations?all=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "automations"
+              ],
+              "query": [
+                {
+                  "key": "all",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Active and inactive workflows."
+          }
+        },
+        {
+          "name": "Get Workflow",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/automations/134",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "automations",
+                "134"
+              ]
+            },
+            "description": "Trigger, flow_graph and rules."
+          }
+        },
+        {
+          "name": "Create Workflow",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Welcome flow\",\n  \"trigger_type\": \"incoming_message\",\n  \"priority\": 10\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/automations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "automations"
+              ]
+            },
+            "description": "Stays off until activated."
+          }
+        },
+        {
+          "name": "Update Workflow",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Welcome flow v2\",\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/automations/134",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "automations",
+                "134"
+              ]
+            },
+            "description": "Name, trigger, priority, is_active, flow_graph."
+          }
+        },
+        {
+          "name": "Duplicate Workflow",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/automations/134/duplicate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "automations",
+                "134",
+                "duplicate"
+              ]
+            },
+            "description": "Copy with rules; stays off."
+          }
+        },
+        {
+          "name": "Toggle Workflow",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/automations/134/toggle",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "automations",
+                "134",
+                "toggle"
+              ]
+            },
+            "description": "Switch on/off."
           }
         }
       ]
@@ -258,8 +556,12 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/account",
-              "host": ["{{base_url}}"],
-              "path": ["account"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "account"
+              ]
             },
             "description": "Fetch API key profile, user role, and connected WhatsApp Business Account (WABA) status."
           }
@@ -271,10 +573,690 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/health",
-              "host": ["{{base_url}}"],
-              "path": ["health"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
             },
             "description": "Verify API service operational status and server time."
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Social Media",
+      "item": [
+        {
+          "name": "List Connected Accounts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/social/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "social",
+                "accounts"
+              ]
+            },
+            "description": "Connected social accounts with ids."
+          }
+        },
+        {
+          "name": "List Media Library",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/social/library",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "social",
+                "library"
+              ]
+            },
+            "description": "Photos/videos available to post."
+          }
+        },
+        {
+          "name": "Upload Picture (base64)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"image_base64\": \"<base64>\",\n  \"filename\": \"offer.png\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/social/media",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "social",
+                "media"
+              ]
+            },
+            "description": "JPEG/PNG up to 10 MB. Returns asset_id."
+          }
+        },
+        {
+          "name": "Schedule Media Posts",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assets\": [\n    6\n  ],\n  \"accounts\": [\n    3,\n    4\n  ],\n  \"start_date\": \"2026-11-03\",\n  \"times\": [\n    \"13:11\"\n  ],\n  \"caption\": \"Free demo: elintom.io\",\n  \"hashtags\": \"#RetailERP\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/social/schedule",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "social",
+                "schedule"
+              ]
+            },
+            "description": "Schedule library assets on accounts."
+          }
+        },
+        {
+          "name": "Schedule Text Post",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accounts\": [\n    3\n  ],\n  \"when\": \"2026-11-03 18:00\",\n  \"caption\": \"Hello!\",\n  \"hashtags\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/social/text-post",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "social",
+                "text-post"
+              ]
+            },
+            "description": "Text-only post (not Instagram/YouTube)."
+          }
+        },
+        {
+          "name": "List Posts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/social/posts?from=2026-11-01&to=2026-11-30",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "social",
+                "posts"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2026-11-01"
+                },
+                {
+                  "key": "to",
+                  "value": "2026-11-30"
+                }
+              ]
+            },
+            "description": "Post targets between two dates."
+          }
+        },
+        {
+          "name": "Cancel Post",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/social/targets/10/cancel",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "social",
+                "targets",
+                "10",
+                "cancel"
+              ]
+            },
+            "description": "Also: retry, delete, reschedule (body {when})."
+          }
+        },
+        {
+          "name": "AI Caption Suggestions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"topic\": \"Retail ERP demo\",\n  \"platform\": \"instagram\",\n  \"tone\": \"friendly\",\n  \"language\": \"English\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/social/ai/captions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "social",
+                "ai",
+                "captions"
+              ]
+            },
+            "description": "Caption ideas for a topic."
+          }
+        },
+        {
+          "name": "Publish Picture (one call)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"image_url\": \"https://example.com/offer.png\",\n  \"accounts\": [\n    3,\n    4\n  ],\n  \"caption\": \"Free demo: elintom.io\",\n  \"hashtags\": \"#RetailERP\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/social/publish",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "social",
+                "publish"
+              ]
+            },
+            "description": "asset_id or public image_url; when optional (default in 2 minutes)."
+          }
+        },
+        {
+          "name": "AI Picture",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prompt\": \"Clean flat illustration of a retail store dashboard\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/social/ai/image",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "social",
+                "ai",
+                "image"
+              ]
+            },
+            "description": "Image AI makes a picture and adds it to the library."
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. MCP (AI clients)",
+      "item": [
+        {
+          "name": "MCP tools/list",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/list\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp?tenant=your_client_key",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mcp"
+              ],
+              "query": [
+                {
+                  "key": "key",
+                  "value": "{{api_key}}"
+                },
+                {
+                  "key": "tenant",
+                  "value": "your_client_key"
+                }
+              ]
+            },
+            "description": "JSON-RPC MCP endpoint. Methods: initialize, tools/list, tools/call."
+          }
+        },
+        {
+          "name": "MCP tools/call",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 2,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"social_list_accounts\",\n    \"arguments\": {}\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp?tenant=your_client_key",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mcp"
+              ],
+              "query": [
+                {
+                  "key": "key",
+                  "value": "{{api_key}}"
+                },
+                {
+                  "key": "tenant",
+                  "value": "your_client_key"
+                }
+              ]
+            },
+            "description": "Call a tool, e.g. social_list_accounts."
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Campaigns, Reports & Ads",
+      "item": [
+        {
+          "name": "Contact Tags",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/contacts/tags",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "contacts",
+                "tags"
+              ]
+            },
+            "description": "Tags with contact counts (use ids as tag_ids)."
+          }
+        },
+        {
+          "name": "List Campaigns",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/campaigns",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "campaigns"
+              ]
+            },
+            "description": "Recent WhatsApp campaigns."
+          }
+        },
+        {
+          "name": "Campaign Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/campaigns/26",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "campaigns",
+                "26"
+              ]
+            },
+            "description": "Counts for one campaign."
+          }
+        },
+        {
+          "name": "Create Campaign Draft",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/campaigns",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "campaigns"
+              ]
+            },
+            "description": "Draft only, sends nothing.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Diwali offer\",\n  \"template_id\": 143,\n  \"variables\": {\n    \"1\": \"name\"\n  },\n  \"tag_ids\": [\n    4\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Start Campaign",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/campaigns/27/start",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "campaigns",
+                "27",
+                "start"
+              ]
+            },
+            "description": "Real messages: first call without confirm returns the audience.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"confirm\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Schedule Campaign",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/campaigns/27/schedule",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "campaigns",
+                "27",
+                "schedule"
+              ]
+            },
+            "description": "Real messages later.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scheduled_at\": \"2026-11-05 10:00\",\n  \"confirm\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Pause Campaign",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/campaigns/27/pause",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "campaigns",
+                "27",
+                "pause"
+              ]
+            },
+            "description": "Also: resume, cancel.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Report Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports/summary?from=2026-11-01&to=2026-11-30",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "summary"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2026-11-01"
+                },
+                {
+                  "key": "to",
+                  "value": "2026-11-30"
+                }
+              ]
+            },
+            "description": "Message totals and campaign rates."
+          }
+        },
+        {
+          "name": "List Ads",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/ads",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ads"
+              ]
+            },
+            "description": "Ad campaigns with spend and chats."
+          }
+        },
+        {
+          "name": "Pause Ad",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/ads/1/pause",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ads",
+                "1",
+                "pause"
+              ]
+            },
+            "description": "Pause an ad campaign.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Create Social Content Plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/social/plans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "social",
+                "plans"
+              ]
+            },
+            "description": "AI plan, nothing posted.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category\": \"Retail ERP\",\n  \"brief\": \"Free demo\",\n  \"days\": 7,\n  \"start_date\": \"2026-11-05\",\n  \"post_time\": \"10:00\",\n  \"accounts\": [\n    3,\n    4\n  ],\n  \"tone\": \"friendly\",\n  \"language\": \"English\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Approve Social Plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/social/plans/1/approve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "social",
+                "plans",
+                "1",
+                "approve"
+              ]
+            },
+            "description": "Schedules all posts.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"confirm\": true\n}"
+            }
           }
         }
       ]

@@ -220,8 +220,19 @@ class Settings extends BaseController
         $aiDisplay = $aiCfg;
         $aiDisplay['api_key'] = $this->maskSecret((string) $aiCfg['api_key']);
         $data['ai'] = $aiDisplay;
+        $data['aiAgents'] = model(\App\Models\UserModel::class)->getActiveUsers();
+
+        $data['businessHours'] = (new \App\Libraries\BusinessHours($settings))->config();
+        $data['inboxRules']    = (new \App\Libraries\InboxRules($settings))->config();
+
+        $payCfg = (new \App\Libraries\CustomerPaymentLinks($settings))->config();
+        $data['customerPayments'] = [
+            'key_id'     => $payCfg['key_id'],
+            'key_secret' => $this->maskSecret($payCfg['key_secret']),
+        ];
 
         $data['apiTokens'] = model(\App\Models\ApiTokenModel::class)->orderBy('id', 'DESC')->findAll(30);
+        $data['mcpConnect'] = ['base_url' => rtrim(site_url('/'), '/'), 'tenant' => (string) \App\Libraries\TenantContext::get()];
         $apiLogModel = model(\App\Models\ApiRequestLogModel::class);
         $data['apiUsage']       = $apiLogModel->usageByToken(30);
         $data['apiRecentCalls'] = $apiLogModel->recent(50);
@@ -625,6 +636,8 @@ class Settings extends BaseController
                     'max_consecutive_replies' => (int) ($this->request->getPost('ai_max_consecutive_replies') ?? 3),
                     'cooldown_seconds'        => (int) ($this->request->getPost('ai_cooldown_seconds') ?? 3),
                     'human_keywords'          => trim((string) $this->request->getPost('ai_human_keywords')),
+                    'handoff_user_id'         => max(0, (int) $this->request->getPost('ai_handoff_user_id')),
+                    'handoff_message'         => trim(mb_substr((string) $this->request->getPost('ai_handoff_message'), 0, 500)),
                 ];
 
                 $aiKey = trim((string) $this->request->getPost('ai_api_key'));
@@ -633,6 +646,45 @@ class Settings extends BaseController
                 }
 
                 $settings->setAiConfig($aiPayload);
+            }
+
+            if (in_array($section, ['all', 'payments'], true) && $this->request->getPost('customer_rzp_key_id') !== null) {
+                $paySecret = trim((string) $this->request->getPost('customer_rzp_key_secret'));
+                $payResult = (new \App\Libraries\CustomerPaymentLinks($settings))->saveConfig(
+                    (string) $this->request->getPost('customer_rzp_key_id'),
+                    str_contains($paySecret, '•') ? '' : $paySecret
+                );
+                if (! $payResult['ok']) {
+                    return $this->jsonResponse(false, null, $payResult['message'], [], $payResult['status']);
+                }
+                log_activity('update', 'settings', 'Updated customer payment (Razorpay) keys');
+            }
+
+            if (in_array($section, ['all', 'inbox_rules'], true)) {
+                $rules = (new \App\Libraries\InboxRules($settings))->save([
+                    'auto_assign' => $this->request->getPost('ir_auto_assign'),
+                    'agent_ids'   => (array) $this->request->getPost('ir_agents'),
+                    'sla_minutes' => (int) $this->request->getPost('ir_sla_minutes'),
+                    'csat_enabled'  => $this->request->getPost('ir_csat_enabled'),
+                    'csat_question' => $this->request->getPost('ir_csat_question'),
+                    'csat_thanks'   => $this->request->getPost('ir_csat_thanks'),
+                ]);
+                if (! $rules['ok']) {
+                    return $this->jsonResponse(false, null, $rules['message'], [], $rules['status']);
+                }
+            }
+
+            if (in_array($section, ['all', 'business_hours'], true)) {
+                $hours = (new \App\Libraries\BusinessHours($settings))->save([
+                    'enabled'      => $this->request->getPost('bh_enabled'),
+                    'away_message' => $this->request->getPost('bh_away_message'),
+                    'open'         => (array) $this->request->getPost('bh_open'),
+                    'from'         => (array) $this->request->getPost('bh_from'),
+                    'to'           => (array) $this->request->getPost('bh_to'),
+                ]);
+                if (! $hours['ok']) {
+                    return $this->jsonResponse(false, null, $hours['message'], [], $hours['status']);
+                }
             }
 
             // Saving Meta/Webhook settings also performs the Graph API equivalent of
@@ -779,6 +831,24 @@ class Settings extends BaseController
             'plain_text' => $result['plain_text'],
             'created_at' => date('Y-m-d H:i:s'),
         ], 'API Key generated successfully.');
+    }
+
+    /** Download a local MCP connector (Node, no dependencies) for Claude Code, Claude Desktop, Antigravity or Cursor. */
+    public function mcpServer(): ResponseInterface
+    {
+        if ($denied = $this->guardSettings('settings.view')) {
+            return $denied;
+        }
+
+        $path = ROOTPATH . 'tools/sateri-mcp/server.mjs';
+        if (! is_file($path)) {
+            return $this->jsonResponse(false, null, 'Connector file not found.');
+        }
+
+        return $this->response
+            ->setHeader('Content-Type', 'text/javascript; charset=utf-8')
+            ->setHeader('Content-Disposition', 'attachment; filename="sateri-mcp.mjs"')
+            ->setBody((string) file_get_contents($path));
     }
 
     public function deleteApiToken(int $id): ResponseInterface

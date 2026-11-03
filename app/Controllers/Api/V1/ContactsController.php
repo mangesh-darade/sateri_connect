@@ -359,6 +359,20 @@ class ContactsController extends BaseV1Controller
     }
 
     /**
+     * Tags (groups) with how many contacts each has; use the ids as tag_ids in campaigns.
+     * GET /api/v1/contacts/tags
+     */
+    public function tags(): ResponseInterface
+    {
+        $rows = model(TagModel::class)
+            ->select('tags.id, tags.name, (SELECT COUNT(*) FROM contact_tags ct WHERE ct.tag_id = tags.id) AS contacts', false)
+            ->orderBy('tags.name')
+            ->findAll(200);
+
+        return $this->respondSuccess(['tags' => $rows, 'total' => count($rows)], 'Tags loaded.');
+    }
+
+    /**
      * Search contacts with pagination.
      * GET /api/v1/contacts/search?q=query&page=1&per_page=25
      */

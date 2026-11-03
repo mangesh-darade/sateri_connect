@@ -4,6 +4,12 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Libraries\AiService;
+use App\Libraries\BusinessHours;
+use App\Libraries\CsatSurvey;
+use App\Libraries\InboxRules;
+use App\Libraries\InboxStatus;
+use App\Libraries\OutgoingWebhooks;
 use App\Libraries\WebhookValidator;
 use App\Libraries\WhatsAppConsentService;
 use App\Models\CampaignContactModel;
@@ -818,16 +824,56 @@ class Webhooks extends Controller
             return;
         }
 
-        model(ConversationModel::class)->update((int) $conversation['id'], [
+        $convUpdate = [
             'last_message_id' => $messageId,
             'last_message_at' => $now,
             'status'          => 'open',
-        ]);
+        ];
+        // Click-to-WhatsApp ad: Meta adds `referral` to the first message after the click.
+        // First touch wins. The key exists only when the column does, so older databases are skipped.
+        $adId = is_array($message['referral'] ?? null) ? trim((string) ($message['referral']['source_id'] ?? '')) : '';
+        if ($adId !== '' && array_key_exists('ctwa_referral', $conversation) && trim((string) $conversation['ctwa_referral']) === '') {
+            $convUpdate['ctwa_referral'] = mb_substr($adId, 0, 255);
+        }
+
+        // First-response target: start the clock when nobody is waiting yet; any reply clears it (MessageModel).
+        $inboxRules = new InboxRules();
+        $slaMinutes = $inboxRules->slaMinutes();
+        if ($slaMinutes > 0 && array_key_exists('frt_due_at', $conversation) && empty($conversation['frt_due_at'])) {
+            $convUpdate['frt_due_at'] = InboxStatus::defaultFrtDueAt($slaMinutes);
+        }
+
+        // Auto-assign: a chat nobody owns goes to the least busy agent in the pool.
+        if (empty($conversation['assigned_to']) && empty($contact['assigned_to'])) {
+            $agentId = $inboxRules->pickAgent();
+            if ($agentId !== null) {
+                $convUpdate['assigned_to'] = $agentId;
+                $contactModel->update($contactId, ['assigned_to' => $agentId]);
+                $contact['assigned_to'] = $agentId;
+            }
+        }
+
+        model(ConversationModel::class)->update((int) $conversation['id'], $convUpdate);
         model(ConversationModel::class)->incrementUnread((int) $conversation['id']);
 
         $contactModel->update($contactId, [
             'last_message_at' => $now,
             'last_reply_at'   => $now,
+        ]);
+
+        (new OutgoingWebhooks())->dispatch('message.received', [
+            'message_id'      => (int) $messageId,
+            'conversation_id' => (int) $conversation['id'],
+            'channel'         => 'whatsapp',
+            'type'            => (string) ($parsed['type'] ?? ''),
+            'text'            => (string) ($parsed['content'] ?? ''),
+            'media_url'       => $mediaUrl,
+            'received_at'     => $now,
+            'contact'         => [
+                'id'     => $contactId,
+                'name'   => (string) ($contact['name'] ?? ''),
+                'mobile' => $from,
+            ],
         ]);
 
         // Header bell — notify assigned agent or chat staff
@@ -873,6 +919,12 @@ class Webhooks extends Controller
             if (is_array($fresh)) {
                 $contact = $fresh;
             }
+        }
+
+        // CSAT: a bare 1-5 right after the satisfaction question is the answer, not a new request for the bots.
+        if ($autoReplyAllowed && ($parsed['type'] ?? '') === 'text'
+            && (new CsatSurvey())->tryRecord($contactId, (string) ($parsed['content'] ?? '')) !== null) {
+            return;
         }
 
         // Reply to an open workflow "Ask question": continue that flow instead of starting new ones.
@@ -990,7 +1042,18 @@ class Webhooks extends Controller
             // AI Smart Assistant / Fallback:
             // When neither Keyword Bot nor Automation workflows triggered, invoke AI
             $hasExecutedAction = ($autoRes1['executed'] ?? 0) > 0 || ($autoRes2['executed'] ?? 0) > 0;
-            if (! $botMatched && ! $hasExecutedAction && $runKeywordMatch) {
+
+            // Outside business hours: one away message per conversation, sent instead of the AI fallback.
+            $awaySent = false;
+            if (! $botMatched && ! $hasExecutedAction) {
+                $hours = new BusinessHours();
+                if ($hours->shouldSendAway((int) $conversation['id'])) {
+                    $this->sendAutoReplyText($contactId, (int) $conversation['id'], $from, 'whatsapp', $activeProvider, $hours->awayMessage());
+                    $awaySent = true;
+                }
+            }
+
+            if (! $awaySent && ! $botMatched && ! $hasExecutedAction && $runKeywordMatch) {
                 $this->handleAiAutoReply($contactId, (int) $conversation['id'], $keywordText, $from, 'whatsapp', $activeProvider);
             }
         } catch (Throwable $e) {
@@ -1047,6 +1110,15 @@ class Webhooks extends Controller
                 $update['error_message'] = (string) ($errors[0]['title'] ?? $errors[0]['message'] ?? 'Failed');
             }
             $messages->update((int) $message['id'], $update);
+
+            (new OutgoingWebhooks())->dispatch('message.status', [
+                'message_id'    => (int) $message['id'],
+                'wa_message_id' => $waId,
+                'contact_id'    => (int) $message['contact_id'],
+                'campaign_id'   => ! empty($message['campaign_id']) ? (int) $message['campaign_id'] : null,
+                'status'        => $newStatus,
+                'error'         => $newStatus === 'failed' ? ($update['error_message'] ?? null) : null,
+            ]);
 
             if (! empty($message['campaign_id'])) {
                 model(CampaignModel::class)->updateStats((int) $message['campaign_id']);
@@ -1344,9 +1416,12 @@ class Webhooks extends Controller
                     'reason' => $gate['reason'],
                 ]);
 
-                // If user specifically requested human assistance, escalate cleanly
                 if ($gate['reason'] === 'human_requested') {
+                    // Customer asked for a person: escalateToHuman() notifies and replies; handoff() assigns and pauses the bot.
                     service('whatsAppConsent')->escalateToHuman($contact, $activeProvider);
+                    $aiService->handoff($contact, $conversation, 'The customer asked for a person.', false);
+                } elseif ($gate['reason'] === 'consecutive_limit_reached') {
+                    $aiService->handoff($contact, $conversation, 'The bot reached its reply limit. Please take over.');
                 }
 
                 return;
@@ -1364,33 +1439,53 @@ class Webhooks extends Controller
                 return;
             }
 
-            $wa = service('whatsApp');
-            $wa->forceProvider($activeProvider);
+            // The model could not answer: tell the customer a person will reply and pass the chat on.
+            if (str_contains($reply, AiService::HANDOFF_TOKEN)) {
+                $handoffText = $aiService->handoffMessage();
+                if ($handoffText !== '') {
+                    $this->sendAutoReplyText($contactId, $conversationId, $from, $channel, $activeProvider, $handoffText);
+                }
+                $aiService->handoff($contact, $conversation, 'The bot could not answer this question.');
 
-            $sendRes = $wa->sendText($from, $reply);
-            $wamid = (string) ($sendRes['messages'][0]['id'] ?? $sendRes['id'] ?? '');
+                return;
+            }
 
-            $replyMsgId = $messagesModel->insert([
-                'contact_id'          => $contactId,
-                'conversation_id'     => $conversationId,
-                'channel'             => $channel,
-                'direction'           => 'outbound',
-                'message_type'        => 'text',
-                'external_message_id' => $wamid !== '' ? $wamid : null,
-                'wa_message_id'       => $wamid !== '' ? $wamid : null,
-                'wamid'               => $wamid !== '' ? $wamid : null,
-                'content'             => $reply,
-                'status'              => 'sent',
-                'is_read'             => 1,
-            ]);
-
-            $convModel->update($conversationId, [
-                'last_message_id' => $replyMsgId,
-                'last_message_at' => date('Y-m-d H:i:s'),
-                'status'          => 'open',
-            ]);
+            $this->sendAutoReplyText($contactId, $conversationId, $from, $channel, $activeProvider, $reply);
         } catch (Throwable $e) {
             log_message('error', 'AI auto-reply handler failed: {msg}', ['msg' => $e->getMessage()]);
         }
+    }
+
+    /**
+     * Send a free-text automated reply on the active provider and record it in the inbox.
+     * Callers guard against errors; this only runs right after an inbound message (24h window open).
+     */
+    protected function sendAutoReplyText(int $contactId, int $conversationId, string $from, string $channel, string $activeProvider, string $text): void
+    {
+        $wa = service('whatsApp');
+        $wa->forceProvider($activeProvider);
+
+        $sendRes = $wa->sendText($from, $text);
+        $wamid   = (string) ($sendRes['messages'][0]['id'] ?? $sendRes['id'] ?? '');
+
+        $replyMsgId = model(MessageModel::class)->insert([
+            'contact_id'          => $contactId,
+            'conversation_id'     => $conversationId,
+            'channel'             => $channel,
+            'direction'           => 'outbound',
+            'message_type'        => 'text',
+            'external_message_id' => $wamid !== '' ? $wamid : null,
+            'wa_message_id'       => $wamid !== '' ? $wamid : null,
+            'wamid'               => $wamid !== '' ? $wamid : null,
+            'content'             => $text,
+            'status'              => 'sent',
+            'is_read'             => 1,
+        ]);
+
+        model(ConversationModel::class)->update($conversationId, [
+            'last_message_id' => $replyMsgId,
+            'last_message_at' => date('Y-m-d H:i:s'),
+            'status'          => 'open',
+        ]);
     }
 }

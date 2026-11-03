@@ -974,6 +974,11 @@ class PlatformClients extends BaseController
             : $this->response->setStatusCode(500)->setJSON(['success' => false, 'message' => 'Could not revoke API key.']);
     }
 
+    public function clientMcpServer(string $key): string|ResponseInterface
+    {
+        return $this->runClientSettings($key, 'mcpServer');
+    }
+
     /**
      * @param list<mixed> $args
      */

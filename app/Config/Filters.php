@@ -102,6 +102,8 @@ class Filters extends BaseFilters
                     'data-deletion',
                     'api',
                     'api/*',
+                    'oauth/register',
+                    'oauth/token',
                     'install',
                     'install/*',
                 ],

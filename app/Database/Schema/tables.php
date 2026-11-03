@@ -4,6 +4,88 @@
 // Used by SchemaRepairService to auto-create missing tables / columns / indexes. Do not edit by hand.
 
 return array (
+  'ad_campaigns' => 
+  array (
+    'columns' => 
+    array (
+      'id' => 'bigint unsigned NOT NULL AUTO_INCREMENT',
+      'name' => 'varchar(150) COLLATE utf8mb4_general_ci NOT NULL',
+      'objective' => 'varchar(20) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'messages\'',
+      'website_url' => 'varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'brief' => 'mediumtext COLLATE utf8mb4_general_ci',
+      'audience' => 'text COLLATE utf8mb4_general_ci',
+      'special_category' => 'varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'daily_budget_minor' => 'bigint unsigned NOT NULL DEFAULT \'0\'',
+      'currency' => 'varchar(3) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'INR\'',
+      'starts_at' => 'datetime DEFAULT NULL',
+      'ends_at' => 'datetime DEFAULT NULL',
+      'status' => 'varchar(12) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'draft\'',
+      'is_mock' => 'tinyint(1) NOT NULL DEFAULT \'0\'',
+      'ad_account_id' => 'varchar(40) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'meta_campaign_id' => 'varchar(40) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'meta_adset_id' => 'varchar(40) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'meta_ad_id' => 'varchar(40) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'source_target_id' => 'int unsigned DEFAULT NULL',
+      'created_by' => 'int unsigned DEFAULT NULL',
+      'approved_by' => 'int unsigned DEFAULT NULL',
+      'last_error' => 'varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'created_at' => 'datetime DEFAULT NULL',
+      'updated_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' => 
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+      'idx_ad_campaigns_status' => 'KEY `idx_ad_campaigns_status` (`status`)',
+      'idx_ad_campaigns_meta_ad' => 'KEY `idx_ad_campaigns_meta_ad` (`meta_ad_id`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
+  'ad_creatives' => 
+  array (
+    'columns' => 
+    array (
+      'id' => 'bigint unsigned NOT NULL AUTO_INCREMENT',
+      'campaign_id' => 'bigint unsigned NOT NULL',
+      'headline' => 'varchar(100) COLLATE utf8mb4_general_ci NOT NULL',
+      'primary_text' => 'varchar(500) COLLATE utf8mb4_general_ci NOT NULL',
+      'cta' => 'varchar(30) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'WHATSAPP_MESSAGE\'',
+      'media_asset_id' => 'int unsigned DEFAULT NULL',
+      'post_external_id' => 'varchar(80) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'is_selected' => 'tinyint(1) NOT NULL DEFAULT \'0\'',
+      'ai_generated' => 'tinyint(1) NOT NULL DEFAULT \'0\'',
+      'created_at' => 'datetime DEFAULT NULL',
+      'updated_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' => 
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+      'idx_ad_creatives_campaign' => 'KEY `idx_ad_creatives_campaign` (`campaign_id`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
+  'ad_metrics_daily' => 
+  array (
+    'columns' => 
+    array (
+      'id' => 'bigint unsigned NOT NULL AUTO_INCREMENT',
+      'campaign_id' => 'bigint unsigned NOT NULL',
+      'metric_date' => 'date NOT NULL',
+      'spend_minor' => 'bigint unsigned NOT NULL DEFAULT \'0\'',
+      'impressions' => 'int unsigned NOT NULL DEFAULT \'0\'',
+      'reach' => 'int unsigned NOT NULL DEFAULT \'0\'',
+      'clicks' => 'int unsigned NOT NULL DEFAULT \'0\'',
+      'conversations' => 'int unsigned NOT NULL DEFAULT \'0\'',
+      'cost_per_conversation_minor' => 'bigint unsigned NOT NULL DEFAULT \'0\'',
+      'created_at' => 'datetime DEFAULT NULL',
+      'updated_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' => 
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+      'uniq_ad_metrics_campaign_date' => 'UNIQUE KEY `uniq_ad_metrics_campaign_date` (`campaign_id`,`metric_date`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
   'activity_logs' => 
   array (
     'columns' => 
@@ -374,6 +456,27 @@ return array (
     ),
     'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
   ),
+  'csat_ratings' => 
+  array (
+    'columns' => 
+    array (
+      'id' => 'bigint unsigned NOT NULL AUTO_INCREMENT',
+      'conversation_id' => 'int unsigned NOT NULL',
+      'contact_id' => 'int unsigned NOT NULL',
+      'agent_id' => 'int unsigned DEFAULT NULL',
+      'rating' => 'tinyint unsigned DEFAULT NULL',
+      'asked_at' => 'datetime DEFAULT NULL',
+      'answered_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' => 
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+      'idx_csat_conversation' => 'KEY `idx_csat_conversation` (`conversation_id`,`asked_at`)',
+      'idx_csat_contact' => 'KEY `idx_csat_contact` (`contact_id`,`asked_at`)',
+      'idx_csat_agent' => 'KEY `idx_csat_agent` (`agent_id`,`answered_at`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
   'email_builders' => 
   array (
     'columns' => 
@@ -634,6 +737,25 @@ return array (
     ),
     'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
   ),
+  'kb_entries' => 
+  array (
+    'columns' => 
+    array (
+      'id' => 'int unsigned NOT NULL AUTO_INCREMENT',
+      'title' => 'varchar(191) COLLATE utf8mb4_general_ci NOT NULL',
+      'content' => 'text COLLATE utf8mb4_general_ci NOT NULL',
+      'is_active' => 'tinyint(1) NOT NULL DEFAULT \'1\'',
+      'created_by' => 'int unsigned DEFAULT NULL',
+      'created_at' => 'datetime DEFAULT NULL',
+      'updated_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' => 
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+      'idx_kb_entries_active' => 'KEY `idx_kb_entries_active` (`is_active`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
   'keywords' => 
   array (
     'columns' => 
@@ -815,6 +937,33 @@ return array (
     array (
       'email' => 'KEY `email` (`email`)',
       'token' => 'KEY `token` (`token`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
+  'payment_links' => 
+  array (
+    'columns' => 
+    array (
+      'id' => 'bigint unsigned NOT NULL AUTO_INCREMENT',
+      'contact_id' => 'int unsigned NOT NULL',
+      'link_id' => 'varchar(64) COLLATE utf8mb4_general_ci NOT NULL',
+      'short_url' => 'varchar(255) COLLATE utf8mb4_general_ci NOT NULL',
+      'amount' => 'decimal(14,2) NOT NULL DEFAULT \'0.00\'',
+      'currency' => 'varchar(3) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'INR\'',
+      'description' => 'varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'status' => 'varchar(12) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'created\'',
+      'payment_id' => 'varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'created_by' => 'int unsigned DEFAULT NULL',
+      'paid_at' => 'datetime DEFAULT NULL',
+      'created_at' => 'datetime DEFAULT NULL',
+      'updated_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' => 
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+      'uniq_payment_links_link' => 'UNIQUE KEY `uniq_payment_links_link` (`link_id`)',
+      'idx_payment_links_contact' => 'KEY `idx_payment_links_contact` (`contact_id`,`created_at`)',
+      'idx_payment_links_status' => 'KEY `idx_payment_links_status` (`status`,`created_at`)',
     ),
     'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
   ),
@@ -1178,6 +1327,51 @@ return array (
     ),
     'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
   ),
+  'webhook_deliveries' => 
+  array (
+    'columns' => 
+    array (
+      'id' => 'bigint unsigned NOT NULL AUTO_INCREMENT',
+      'endpoint_id' => 'int unsigned NOT NULL',
+      'event' => 'varchar(50) COLLATE utf8mb4_general_ci NOT NULL',
+      'payload' => 'mediumtext COLLATE utf8mb4_general_ci NOT NULL',
+      'status' => 'varchar(10) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'pending\'',
+      'attempts' => 'tinyint unsigned NOT NULL DEFAULT \'0\'',
+      'next_attempt_at' => 'datetime DEFAULT NULL',
+      'last_http_status' => 'smallint unsigned DEFAULT NULL',
+      'last_error' => 'varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'created_at' => 'datetime DEFAULT NULL',
+      'sent_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' => 
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+      'idx_webhook_deliveries_due' => 'KEY `idx_webhook_deliveries_due` (`status`,`next_attempt_at`)',
+      'idx_webhook_deliveries_endpoint' => 'KEY `idx_webhook_deliveries_endpoint` (`endpoint_id`,`id`)',
+      'idx_webhook_deliveries_created' => 'KEY `idx_webhook_deliveries_created` (`created_at`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
+  'webhook_endpoints' => 
+  array (
+    'columns' => 
+    array (
+      'id' => 'int unsigned NOT NULL AUTO_INCREMENT',
+      'name' => 'varchar(100) COLLATE utf8mb4_general_ci NOT NULL',
+      'url' => 'varchar(500) COLLATE utf8mb4_general_ci NOT NULL',
+      'secret' => 'text COLLATE utf8mb4_general_ci NOT NULL',
+      'events' => 'varchar(255) COLLATE utf8mb4_general_ci NOT NULL',
+      'is_active' => 'tinyint(1) NOT NULL DEFAULT \'1\'',
+      'created_by' => 'int unsigned DEFAULT NULL',
+      'created_at' => 'datetime DEFAULT NULL',
+      'updated_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' => 
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
   'webhook_logs' => 
   array (
     'columns' => 
@@ -1197,6 +1391,182 @@ return array (
       'event_type' => 'KEY `event_type` (`event_type`)',
       'processed' => 'KEY `processed` (`processed`)',
       'created_at' => 'KEY `created_at` (`created_at`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
+  'social_accounts' => 
+  array (
+    'columns' => 
+    array (
+      'id' => 'int unsigned NOT NULL AUTO_INCREMENT',
+      'platform' => 'varchar(20) COLLATE utf8mb4_general_ci NOT NULL',
+      'external_id' => 'varchar(64) COLLATE utf8mb4_general_ci NOT NULL',
+      'name' => 'varchar(191) COLLATE utf8mb4_general_ci NOT NULL',
+      'access_token' => 'text COLLATE utf8mb4_general_ci',
+      'refresh_token' => 'text COLLATE utf8mb4_general_ci',
+      'token_expires_at' => 'datetime DEFAULT NULL',
+      'scopes' => 'varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'status' => 'varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'active\'',
+      'created_by' => 'int unsigned DEFAULT NULL',
+      'created_at' => 'datetime DEFAULT NULL',
+      'updated_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' => 
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+      'uniq_social_accounts_platform_ext' => 'UNIQUE KEY `uniq_social_accounts_platform_ext` (`platform`,`external_id`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
+  'social_drive_sources' => 
+  array (
+    'columns' => 
+    array (
+      'id' => 'int unsigned NOT NULL AUTO_INCREMENT',
+      'folder_id' => 'varchar(128) COLLATE utf8mb4_general_ci NOT NULL',
+      'folder_name' => 'varchar(191) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'mode' => 'varchar(20) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'service_account\'',
+      'last_scanned_at' => 'datetime DEFAULT NULL',
+      'status' => 'varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'active\'',
+      'created_at' => 'datetime DEFAULT NULL',
+      'updated_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' => 
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+      'uniq_social_drive_sources_folder' => 'UNIQUE KEY `uniq_social_drive_sources_folder` (`folder_id`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
+  'social_media_assets' => 
+  array (
+    'columns' => 
+    array (
+      'id' => 'int unsigned NOT NULL AUTO_INCREMENT',
+      'source_id' => 'int unsigned DEFAULT NULL',
+      'drive_file_id' => 'varchar(128) COLLATE utf8mb4_general_ci NOT NULL',
+      'filename' => 'varchar(255) COLLATE utf8mb4_general_ci NOT NULL',
+      'mime' => 'varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'size_bytes' => 'bigint unsigned NOT NULL DEFAULT \'0\'',
+      'duration_sec' => 'decimal(8,2) DEFAULT NULL',
+      'width' => 'int unsigned DEFAULT NULL',
+      'height' => 'int unsigned DEFAULT NULL',
+      'checksum' => 'char(64) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'validation' => 'text COLLATE utf8mb4_general_ci',
+      'status' => 'varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'new\'',
+      'created_at' => 'datetime DEFAULT NULL',
+      'updated_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' => 
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+      'uniq_social_media_assets_file' => 'UNIQUE KEY `uniq_social_media_assets_file` (`drive_file_id`)',
+      'idx_social_media_assets_checksum' => 'KEY `idx_social_media_assets_checksum` (`checksum`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
+  'social_posts' => 
+  array (
+    'columns' => 
+    array (
+      'id' => 'int unsigned NOT NULL AUTO_INCREMENT',
+      'asset_id' => 'int unsigned DEFAULT NULL',
+      'type' => 'varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'post\'',
+      'title' => 'varchar(191) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'caption' => 'text COLLATE utf8mb4_general_ci',
+      'hashtags' => 'varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'status' => 'varchar(20) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'draft\'',
+      'created_by' => 'int unsigned DEFAULT NULL',
+      'approved_by' => 'int unsigned DEFAULT NULL',
+      'created_at' => 'datetime DEFAULT NULL',
+      'updated_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' => 
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+      'idx_social_posts_status' => 'KEY `idx_social_posts_status` (`status`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
+  'social_post_targets' => 
+  array (
+    'columns' => 
+    array (
+      'id' => 'int unsigned NOT NULL AUTO_INCREMENT',
+      'post_id' => 'int unsigned NOT NULL',
+      'account_id' => 'int unsigned NOT NULL',
+      'caption_override' => 'text COLLATE utf8mb4_general_ci',
+      'options' => 'text COLLATE utf8mb4_general_ci',
+      'scheduled_at' => 'datetime DEFAULT NULL',
+      'status' => 'varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'scheduled\'',
+      'external_id' => 'varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'external_url' => 'varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'attempts' => 'tinyint unsigned NOT NULL DEFAULT \'0\'',
+      'last_error' => 'varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'progress' => 'tinyint unsigned NOT NULL DEFAULT \'0\'',
+      'progress_stage' => 'varchar(60) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'published_at' => 'datetime DEFAULT NULL',
+      'created_at' => 'datetime DEFAULT NULL',
+      'updated_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' => 
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+      'idx_social_targets_due' => 'KEY `idx_social_targets_due` (`status`,`scheduled_at`)',
+      'idx_social_targets_post' => 'KEY `idx_social_targets_post` (`post_id`)',
+      'uniq_social_targets_post_account' => 'UNIQUE KEY `uniq_social_targets_post_account` (`post_id`,`account_id`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
+  'social_ai_plans' => 
+  array (
+    'columns' => 
+    array (
+      'id' => 'int unsigned NOT NULL AUTO_INCREMENT',
+      'title' => 'varchar(191) COLLATE utf8mb4_general_ci NOT NULL',
+      'category' => 'varchar(191) COLLATE utf8mb4_general_ci NOT NULL',
+      'brief' => 'text COLLATE utf8mb4_general_ci',
+      'days' => 'tinyint unsigned NOT NULL DEFAULT \'7\'',
+      'start_date' => 'date DEFAULT NULL',
+      'post_time' => 'varchar(5) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'10:00\'',
+      'account_ids' => 'varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'tone' => 'varchar(20) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'friendly\'',
+      'language' => 'varchar(20) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'English\'',
+      'status' => 'varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'draft\'',
+      'created_by' => 'int unsigned DEFAULT NULL',
+      'created_at' => 'datetime DEFAULT NULL',
+      'updated_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' => 
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
+  'social_ai_items' => 
+  array (
+    'columns' => 
+    array (
+      'id' => 'int unsigned NOT NULL AUTO_INCREMENT',
+      'plan_id' => 'int unsigned NOT NULL',
+      'day_no' => 'tinyint unsigned NOT NULL DEFAULT \'1\'',
+      'post_date' => 'date DEFAULT NULL',
+      'topic' => 'varchar(191) COLLATE utf8mb4_general_ci NOT NULL',
+      'image_prompt' => 'text COLLATE utf8mb4_general_ci',
+      'caption' => 'text COLLATE utf8mb4_general_ci',
+      'hashtags' => 'varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'image_file' => 'varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'asset_id' => 'int unsigned DEFAULT NULL',
+      'post_id' => 'int unsigned DEFAULT NULL',
+      'status' => 'varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT \'planned\'',
+      'error' => 'varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL',
+      'created_at' => 'datetime DEFAULT NULL',
+      'updated_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' => 
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+      'idx_social_ai_items_plan' => 'KEY `idx_social_ai_items_plan` (`plan_id`)',
     ),
     'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
   ),

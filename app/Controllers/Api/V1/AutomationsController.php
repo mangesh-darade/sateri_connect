@@ -103,7 +103,7 @@ class AutomationsController extends BaseV1Controller
     public function index(): ResponseInterface
     {
         $autoModel = model(AutomationModel::class);
-        $items     = $autoModel->where('is_active', 1)
+        $items     = ($this->request->getGet('all') ? $autoModel : $autoModel->where('is_active', 1))
             ->orderBy('priority', 'ASC')
             ->findAll();
 
@@ -113,6 +113,7 @@ class AutomationsController extends BaseV1Controller
                 'name'         => $a['name'] ?? '',
                 'trigger_type' => $a['trigger_type'] ?? '',
                 'priority'     => (int) ($a['priority'] ?? 0),
+                'is_active'    => (int) ($a['is_active'] ?? 0),
                 'created_at'   => $a['created_at'] ?? '',
             ];
         }, $items);
@@ -121,5 +122,120 @@ class AutomationsController extends BaseV1Controller
             'automations' => $list,
             'total'       => count($list),
         ], 'Automations loaded.');
+    }
+
+    /** GET /api/v1/automations/{id}: workflow with its trigger, canvas graph and rules. */
+    public function show(string $id): ResponseInterface
+    {
+        $row = model(AutomationModel::class)->getWithRules((int) $id);
+
+        return $row === null ? $this->respondError('Workflow not found.', 404) : $this->respondSuccess($row, 'Workflow loaded.');
+    }
+
+    /**
+     * Create a workflow. POST /api/v1/automations
+     * {name, trigger_type, trigger_config?, priority?, is_active? (default 0), flow_graph?}
+     * flow_graph is the canvas JSON {nodes, edges}; it is validated like the builder does. A new workflow stays off unless is_active is 1.
+     */
+    public function create(): ResponseInterface
+    {
+        $in   = $this->getJsonPayload();
+        $name = trim((string) ($in['name'] ?? ''));
+        $type = trim((string) ($in['trigger_type'] ?? ''));
+        if ($name === '' || ($type === '' && empty($in['flow_graph']))) {
+            return $this->respondError('name and trigger_type (or a flow_graph with a trigger node) are required.', 422);
+        }
+
+        $cfg = $in['trigger_config'] ?? null;
+        $id  = model(AutomationModel::class)->insert([
+            'name'           => mb_substr($name, 0, 191),
+            'trigger_type'   => $type !== '' ? $type : 'incoming_message',
+            'trigger_config' => is_array($cfg) ? $cfg : null,
+            'is_active'      => empty($in['is_active']) ? 0 : 1,
+            'priority'       => (int) ($in['priority'] ?? 10),
+            'created_by'     => $this->currentUserId(),
+        ]);
+        if (! $id) {
+            return $this->respondError('The workflow could not be created.', 422);
+        }
+        log_activity('create', 'automations', 'Workflow created via API: ' . $name, ['automation_id' => $id]);
+
+        if (! empty($in['flow_graph'])) {
+            $failed = $this->saveGraph((int) $id);
+            if ($failed !== null) {
+                model(AutomationModel::class)->delete((int) $id);
+
+                return $failed;
+            }
+        }
+
+        return $this->respondSuccess(['id' => (int) $id], 'Workflow created (off until activated).', 201);
+    }
+
+    /** POST /api/v1/automations/{id}: change name, trigger_type, trigger_config, priority, is_active and/or flow_graph. */
+    public function update(string $id): ResponseInterface
+    {
+        $id    = (int) $id;
+        $model = model(AutomationModel::class);
+        if ($model->find($id) === null) {
+            return $this->respondError('Workflow not found.', 404);
+        }
+
+        $in     = $this->getJsonPayload();
+        $fields = array_intersect_key($in, array_flip(['name', 'trigger_type', 'trigger_config', 'priority', 'is_active']));
+        if (isset($fields['is_active'])) {
+            $fields['is_active'] = empty($fields['is_active']) ? 0 : 1;
+        }
+        if (isset($fields['trigger_config']) && ! is_array($fields['trigger_config'])) {
+            unset($fields['trigger_config']);
+        }
+        if ($fields !== []) {
+            $model->update($id, $fields);
+        }
+        if (! empty($in['flow_graph']) && ($failed = $this->saveGraph($id)) !== null) {
+            return $failed;
+        }
+        log_activity('update', 'automations', 'Workflow updated via API', ['automation_id' => $id]);
+
+        return $this->respondSuccess(['id' => $id], 'Workflow updated.');
+    }
+
+    /** POST /api/v1/automations/{id}/duplicate: copy with its rules; the copy stays off. */
+    public function duplicate(string $id): ResponseInterface
+    {
+        $newId = model(AutomationModel::class)->duplicateRow((int) $id, $this->currentUserId());
+        if ($newId === null) {
+            return $this->respondError('Workflow not found.', 404);
+        }
+        log_activity('create', 'automations', 'Workflow duplicated via API', ['automation_id' => $newId, 'source_id' => (int) $id]);
+
+        return $this->respondSuccess(['id' => $newId], 'Workflow duplicated (off until activated).', 201);
+    }
+
+    /** POST /api/v1/automations/{id}/toggle: switch on/off. */
+    public function toggle(string $id): ResponseInterface
+    {
+        $model = model(AutomationModel::class);
+        $row   = $model->find((int) $id);
+        if ($row === null) {
+            return $this->respondError('Workflow not found.', 404);
+        }
+        $on = (int) ($row['is_active'] ?? 0) === 1 ? 0 : 1;
+        $model->update((int) $id, ['is_active' => $on]);
+        log_activity('toggle', 'automations', ($on ? 'Enabled' : 'Disabled') . ' workflow via API', ['automation_id' => (int) $id]);
+
+        return $this->respondSuccess(['id' => (int) $id, 'is_active' => $on], $on ? 'Workflow is on.' : 'Workflow is off.');
+    }
+
+    /** Saves the posted flow_graph through the same code as the canvas; null on success, an error response otherwise. */
+    private function saveGraph(int $id): ?ResponseInterface
+    {
+        $screen = new \App\Controllers\Automations();
+        $screen->initController($this->request, $this->response, service('logger'));
+        $out = json_decode((string) $screen->builder($id)->getBody(), true);
+
+        return is_array($out) && ! empty($out['success'])
+            ? null
+            : $this->respondError((string) ($out['message'] ?? 'The workflow graph could not be saved.'), 422);
     }
 }
