@@ -208,7 +208,8 @@ class AutomationEngine
             $type   = (string) ($current['rule_type'] ?? 'action');
 
             if ($type === 'condition') {
-                $config['_preset'] = (string) ($current['action_type'] ?? $config['preset'] ?? '');
+                $config['_preset']  = (string) ($current['action_type'] ?? $config['preset'] ?? '');
+                $config['_rule_id'] = (int) ($current['id'] ?? 0);
                 $passed = $this->evaluateCondition($config, $context);
                 $nextRef = $passed
                     ? ($current['next_on_true'] ?? null)
@@ -313,7 +314,8 @@ class AutomationEngine
             $type   = (string) ($current['rule_type'] ?? 'action');
 
             if ($type === 'condition') {
-                $config['_preset'] = (string) ($current['action_type'] ?? $config['preset'] ?? '');
+                $config['_preset']  = (string) ($current['action_type'] ?? $config['preset'] ?? '');
+                $config['_rule_id'] = (int) ($current['id'] ?? 0);
                 $passed = $this->evaluateCondition($config, $context);
                 $nextRef = $passed
                     ? ($current['next_on_true'] ?? null)
@@ -437,6 +439,18 @@ class AutomationEngine
                 ->countAllResults();
 
             return $count > 0;
+        }
+
+        // A/B split: "true" is branch A. Sticky per contact + node, so a contact re-entering the flow gets the same branch.
+        if ($preset === 'ab_split') {
+            $percent   = max(1, min(99, (int) (($config['value'] ?? '') !== '' ? $config['value'] : 50)));
+            $contactId = (int) ($context['contact_id'] ?? 0);
+            if ($contactId <= 0) {
+                return random_int(1, 100) <= $percent;
+            }
+            $seed = $contactId . ':' . (int) ($context['automation_id'] ?? 0) . ':' . (int) ($config['_rule_id'] ?? 0);
+
+            return crc32($seed) % 100 < $percent;
         }
 
         if ($preset === 'within_window') {

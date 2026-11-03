@@ -503,6 +503,40 @@ class Reports extends BaseController
         ]);
     }
 
+    public function agents(): string|ResponseInterface
+    {
+        if ($denied = $this->requirePermission('reports.view')) {
+            return $denied;
+        }
+
+        $service = new ReportService();
+        $range   = $service->dateRange((string) $this->request->getGet('from'), (string) $this->request->getGet('to'));
+
+        return view('reports/agents', [
+            'pageTitle' => 'Agent performance',
+            'from'      => $range['from'],
+            'to'        => $range['to'],
+            'rows'      => $service->agentPerformance($range),
+        ]);
+    }
+
+    public function ctwa(): string|ResponseInterface
+    {
+        if ($denied = $this->requirePermission('reports.view')) {
+            return $denied;
+        }
+
+        $service = new ReportService();
+        $range   = $service->dateRange((string) $this->request->getGet('from'), (string) $this->request->getGet('to'));
+
+        return view('reports/ctwa', [
+            'pageTitle' => 'Click-to-WhatsApp ads',
+            'from'      => $range['from'],
+            'to'        => $range['to'],
+            'rows'      => $service->ctwaAds($range),
+        ]);
+    }
+
     public function templatesExport(): ResponseInterface
     {
         if ($denied = $this->requirePermission('reports.export')) {

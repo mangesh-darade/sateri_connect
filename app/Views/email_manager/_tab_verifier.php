@@ -22,7 +22,7 @@ $verifications = $verifications ?? [];
                         <div class="form-text small text-muted">Separate multiple emails with new lines, commas, or spaces.</div>
                     </div>
                     
-                    <button type="submit" class="btn btn-primary btn-sm px-3 mt-2">
+                    <button type="submit" class="btn btn-wa btn-sm px-3 mt-2">
                         <i class="fas fa-check-circle me-1"></i> Run Instant Verification
                     </button>
                     <div class="em-msg mt-2 small" id="verifyMsg"></div>

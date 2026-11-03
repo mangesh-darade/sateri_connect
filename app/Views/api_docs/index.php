@@ -148,7 +148,7 @@
                 <i class="fas fa-file-arrow-down me-1"></i> Download Postman Collection
             </a>
             <a href="<?= site_url('settings') ?>" class="btn btn-sm btn-outline-secondary"><i class="fas fa-key me-1"></i> Manage API Keys</a>
-            <a href="<?= site_url('dashboard') ?>" class="btn btn-sm btn-success"><i class="fas fa-gauge me-1"></i> Dashboard</a>
+            <a href="<?= site_url('dashboard') ?>" class="btn btn-sm btn-wa"><i class="fas fa-gauge me-1"></i> Dashboard</a>
         </div>
     </nav>
 
@@ -253,7 +253,7 @@
                     </div>
 
                     <div class="d-flex justify-content-between align-items-center">
-                        <button type="button" class="btn btn-sm btn-success px-4 fw-bold" id="btnRunTest">
+                        <button type="button" class="btn btn-sm btn-wa px-4 fw-bold" id="btnRunTest">
                             <i class="fas fa-paper-plane me-1"></i> Send Live Request
                         </button>
                         <span class="text-muted small" id="testerStatusText"></span>

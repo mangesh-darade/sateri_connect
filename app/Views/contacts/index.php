@@ -434,10 +434,10 @@
                 </div>
                 <div class="d-flex align-items-center gap-1 flex-wrap">
                     <?php if (can('contacts.edit')): ?>
-                        <button type="button" id="btnBulkTags" class="btn btn-sm btn-outline-primary bg-white py-1 px-2" title="Assign or remove groups for selected contacts">
+                        <button type="button" id="btnBulkTags" class="btn btn-sm btn-outline-secondary bg-white py-1 px-2" title="Assign or remove groups for selected contacts">
                             <i class="fas fa-tags me-1 text-primary"></i> Bulk groups
                         </button>
-                        <button type="button" id="btnBulkConsent" class="btn btn-sm btn-outline-success bg-white py-1 px-2" title="Update WhatsApp consent status">
+                        <button type="button" id="btnBulkConsent" class="btn btn-sm btn-outline-secondary bg-white py-1 px-2" title="Update WhatsApp consent status">
                             <i class="fab fa-whatsapp me-1 text-success"></i> WhatsApp consent
                         </button>
                         <button type="button" id="btnBulkAttribute" class="btn btn-sm btn-outline-info bg-white py-1 px-2" title="Set custom attribute for selected contacts">

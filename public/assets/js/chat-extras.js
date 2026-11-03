@@ -324,7 +324,7 @@
                     return;
                 }
                 var html = suggestions.map(function (s) {
-                    return '<button type="button" class="btn btn-sm btn-outline-success rounded-pill px-3 py-1 text-start ai-suggestion-pill" data-text="' + esc(s) + '">'
+                    return '<button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 text-start ai-suggestion-pill" data-text="' + esc(s) + '">'
                         + '<i class="fas fa-magic me-1 small"></i> ' + esc(s) + '</button>';
                 }).join('');
                 $aiList.html(html);
@@ -380,6 +380,47 @@
         navigator.clipboard.writeText(text).then(function () {
             APP.toast('Summary copied to clipboard', 'success');
         });
+    });
+
+    /* ---------------- Payment link (Razorpay) ---------------- */
+
+    $('#btnPayLinkCreate').on('click', function () {
+        var cid = Chat.contactId || 0;
+        var amount = parseFloat($('#payLinkAmount').val());
+        if (!cid) {
+            APP.toast('Please select a conversation first', 'warning');
+            return;
+        }
+        if (!(amount >= 1)) {
+            APP.toast('Enter an amount of at least 1', 'warning');
+            return;
+        }
+
+        var $btn = $(this);
+        $btn.prop('disabled', true);
+        APP.post(base() + '/chat/payment-link', {
+            contact_id: cid,
+            amount: amount,
+            description: $('#payLinkDesc').val()
+        })
+            .done(function (res) {
+                var text = res && res.data && res.data.text;
+                if (!text) {
+                    APP.toast('Could not create the payment link', 'error');
+                    return;
+                }
+                var $input = $('#chatInput');
+                $input.val(($input.val() ? $input.val() + '\n' : '') + text).focus();
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('payLinkModal')).hide();
+                $('#payLinkAmount, #payLinkDesc').val('');
+                APP.toast('Payment link added to the message box', 'success');
+            })
+            .fail(function (xhr) {
+                APP.toast(apiError(xhr, 'Could not create the payment link'), 'error');
+            })
+            .always(function () {
+                $btn.prop('disabled', false);
+            });
     });
 })(window, jQuery);
 

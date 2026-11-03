@@ -19,6 +19,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="page-list">
 <div class="container-fluid px-0">
     <!-- Filter Card -->
     <div class="card border-0 shadow-sm mb-4">
@@ -208,6 +209,7 @@
         </div>
     </div>
 </div>
+</div>
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
@@ -291,7 +293,7 @@ document.addEventListener('DOMContentLoaded', function() {
             { data: null, className: 'small text-muted font-monospace', render: function (r) { return AppDT.esc(r.ip_address || '\u2014'); } },
             { data: null, orderable: false, className: 'text-end', render: function (r) {
                 var has = r.change_count > 0;
-                return '<button type="button" class="btn btn-xs ' + (has ? 'btn-primary' : 'btn-outline-secondary') + ' py-1 px-2 btn-open-log" title="View change details">' +
+                return '<button type="button" class="btn btn-xs ' + (has ? 'btn-wa' : 'btn-outline-secondary') + ' py-1 px-2 btn-open-log" title="View change details">' +
                     (has ? '<i class="fas fa-sliders-h me-1"></i> Changes' : '<i class="fas fa-eye me-1"></i> View') + '</button>';
             } }
         ],

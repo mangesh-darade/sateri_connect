@@ -5,7 +5,7 @@
     <a href="<?= site_url('campaigns?channel=email') ?>" class="btn btn-outline-secondary btn-sm shadow-sm">
         <i class="fas fa-arrow-left me-1"></i> Back to Campaigns
     </a>
-    <a href="<?= site_url('email-manager?tab=campaigns') ?>" class="btn btn-outline-primary btn-sm shadow-sm">
+    <a href="<?= site_url('email-manager?tab=campaigns') ?>" class="btn btn-outline-secondary btn-sm shadow-sm">
         <i class="fas fa-sliders-h me-1"></i> Email Manager
     </a>
 </div>
@@ -61,7 +61,7 @@ $isActive = in_array($status, ['queued', 'sending', 'running'], true);
                         <i class="fas fa-sync-alt me-1" id="emailRefreshIcon"></i> Refresh
                     </button>
                     <?php if ($canSend && in_array($status, ['draft', 'failed'], true)): ?>
-                        <button type="button" class="btn btn-primary btn-sm shadow-sm js-send-camp-btn" data-id="<?= $id ?>">
+                        <button type="button" class="btn btn-wa btn-sm shadow-sm js-send-camp-btn" data-id="<?= $id ?>">
                             <i class="fas fa-paper-plane me-1"></i> Broadcast Now
                         </button>
                     <?php endif; ?>
@@ -348,11 +348,19 @@ $(function () {
         var campId = $(this).data('id');
         if (!campId) return;
 
-        if (!confirm('Broadcast this email campaign to all recipients now?')) {
-            return;
-        }
+        var $btn = $(this);
+        APP.confirm({
+            title: 'Send this campaign now?',
+            text: 'It will be sent to all recipients through your active email provider.',
+            icon: 'question',
+            confirmText: 'Yes, send'
+        }).then(function (r) {
+            if (r.isConfirmed) { sendCampaign($btn, campId); }
+        });
+    });
 
-        var $btn = $(this).prop('disabled', true);
+    function sendCampaign($btn, campId) {
+        $btn.prop('disabled', true);
         var origHtml = $btn.html();
         $btn.html('<span class="spinner-border spinner-border-sm me-1"></span> Sending…');
 
@@ -365,22 +373,18 @@ $(function () {
             }
         }).done(function (res) {
             if (res && res.success) {
-                if (window.APP && APP.toast) {
-                    APP.toast(res.message || 'Campaign broadcast sent!', 'success');
-                } else {
-                    alert(res.message || 'Campaign broadcast sent!');
-                }
+                APP.toast(res.message || 'Campaign broadcast sent!', 'success');
                 setTimeout(function () { fetchEmailProgress(true); }, 1200);
             } else {
-                alert((res && res.message) || 'Campaign send failed.');
+                APP.toast((res && res.message) || 'Campaign send failed.', 'error');
                 $btn.prop('disabled', false).html(origHtml);
             }
         }).fail(function (xhr) {
             var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Error sending campaign.';
-            alert(msg);
+            APP.toast(msg, 'error');
             $btn.prop('disabled', false).html(origHtml);
         });
-    });
+    }
 });
 </script>
 <?= $this->endSection() ?>

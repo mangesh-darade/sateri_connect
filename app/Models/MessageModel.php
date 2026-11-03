@@ -58,8 +58,33 @@ class MessageModel extends Model
     protected $cleanValidationRules = true;
 
     protected $beforeInsert = ['encodePayload'];
+    protected $afterInsert  = ['clearResponseDue'];
     protected $beforeUpdate = ['encodePayload'];
     protected $afterFind    = ['decodePayload'];
+
+    /**
+     * A reply (agent, bot or workflow, not a broadcast) ends the customer's first-response wait.
+     *
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    protected function clearResponseDue(array $data): array
+    {
+        $row = $data['data'] ?? [];
+        if (($row['direction'] ?? '') === 'outbound' && empty($row['campaign_id']) && ! empty($row['conversation_id'])) {
+            try {
+                $this->db->table('conversations')
+                    ->where('id', (int) $row['conversation_id'])
+                    ->where('frt_due_at IS NOT NULL')
+                    ->update(['frt_due_at' => null]);
+            } catch (\Throwable $e) {
+                // Older databases without the column: sending must never fail because of this.
+                log_message('debug', 'clearResponseDue skipped: {msg}', ['msg' => $e->getMessage()]);
+            }
+        }
+
+        return $data;
+    }
 
     /**
      * @param array<string, mixed> $data

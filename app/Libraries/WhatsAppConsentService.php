@@ -1630,6 +1630,7 @@ class WhatsAppConsentService
             $info   = service('whatsApp')->getPhoneNumberInfo();
             $rating = strtoupper(trim((string) ($info['quality_rating'] ?? '')));
             $tier   = trim((string) ($info['messaging_limit'] ?? ''));
+            $prevTier = (string) $settings->get('wa_messaging_limit', '');
             if ($tier !== '') {
                 $settings->set('wa_messaging_limit', $tier, 'whatsapp');
             }
@@ -1644,6 +1645,7 @@ class WhatsAppConsentService
         }
 
         $settings->set('wa_quality_rating', $rating, 'whatsapp');
+        $this->notifyQualityChange($cached, $rating, $prevTier, $tier);
         if ($rating === 'RED' && $this->getHealth()['status'] === self::HEALTH_OK) {
             $this->recordHealthEvent(
                 self::HEALTH_FLAGGED,
@@ -1653,6 +1655,40 @@ class WhatsAppConsentService
         }
 
         return $rating;
+    }
+
+    /**
+     * Header-bell alerts for a quality drop to YELLOW, a recovery to GREEN and messaging-limit changes.
+     * RED is left to recordHealthEvent(), which also pauses campaigns. Silent when there is no earlier value.
+     */
+    private function notifyQualityChange(string $prevRating, string $rating, string $prevTier, string $tier): void
+    {
+        $alerts = [];
+
+        if ($prevRating !== '' && $prevRating !== $rating) {
+            if ($rating === 'YELLOW') {
+                $alerts[] = ['warning', 'WhatsApp quality dropped to medium', "Quality rating changed from {$prevRating} to YELLOW. Slow down broadcasts and check recent complaints before it turns RED."];
+            } elseif ($rating === 'GREEN') {
+                $alerts[] = ['info', 'WhatsApp quality recovered', "Quality rating is GREEN again (was {$prevRating})."];
+            }
+        }
+
+        if ($prevTier !== '' && $tier !== '' && $prevTier !== $tier) {
+            $lower    = (self::parseMessagingLimit($tier) ?? PHP_INT_MAX) < (self::parseMessagingLimit($prevTier) ?? PHP_INT_MAX);
+            $alerts[] = [
+                $lower ? 'warning' : 'info',
+                $lower ? 'WhatsApp messaging limit reduced' : 'WhatsApp messaging limit increased',
+                "Daily messaging limit changed from {$prevTier} to {$tier}.",
+            ];
+        }
+
+        foreach ($alerts as [$type, $title, $message]) {
+            try {
+                model(NotificationModel::class)->notifyChatUsers($title, $message, site_url('campaigns'), null, $type);
+            } catch (Throwable $e) {
+                log_message('warning', 'Quality notify failed: {msg}', ['msg' => $e->getMessage()]);
+            }
+        }
     }
 
     /**

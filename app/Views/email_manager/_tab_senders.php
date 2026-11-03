@@ -43,7 +43,7 @@ $isSes = ! empty($isSes);
                             <option value="reject">reject â€” failing mail is blocked</option>
                         </select>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-sm px-3"><i class="fas fa-play me-1"></i> Start Setup &amp; Get DNS Records</button>
+                    <button type="submit" class="btn btn-wa btn-sm px-3"><i class="fas fa-play me-1"></i> Start Setup &amp; Get DNS Records</button>
                     <div class="small mt-2 js-ses-msg" data-base-class="small mt-2 js-ses-msg"></div>
                 </form>
             </div>
@@ -123,7 +123,7 @@ $isSes = ! empty($isSes);
                     </div>
 
                     <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary btn-sm px-3"><i class="fas fa-save me-1"></i> Save Identity</button>
+                        <button type="submit" class="btn btn-wa btn-sm px-3"><i class="fas fa-save me-1"></i> Save Identity</button>
                         <button type="button" class="btn btn-light border btn-sm px-3" id="senderReset"><i class="fas fa-undo me-1"></i> Reset</button>
                     </div>
                     <div class="em-msg mt-2 small" id="senderMsg"></div>
@@ -201,12 +201,12 @@ $isSes = ! empty($isSes);
                                     <?php if ($isSesRow && ($s['type'] ?? '') === 'domain'): ?>
                                         <button type="button" class="btn btn-xs btn-outline-dark em-ses-dns"><i class="fas fa-list me-1"></i>DNS</button>
                                         <?php if ($canSend): ?>
-                                            <button type="button" class="btn btn-xs btn-outline-success em-ses-check" data-domain="<?= esc($s['domain'] ?? '', 'attr') ?>"><i class="fas fa-sync-alt me-1"></i>Check</button>
+                                            <button type="button" class="btn btn-xs btn-outline-secondary em-ses-check" data-domain="<?= esc($s['domain'] ?? '', 'attr') ?>"><i class="fas fa-sync-alt me-1"></i>Check</button>
                                         <?php endif; ?>
                                     <?php endif; ?>
                                     <?php if ($canSend): ?>
                                         <?php if (! ($isSesRow && ($s['type'] ?? '') === 'domain')): ?>
-                                        <button type="button" class="btn btn-xs btn-outline-primary em-edit-sender"><i class="fas fa-edit me-1"></i>Edit</button>
+                                        <button type="button" class="btn btn-xs btn-outline-secondary em-edit-sender"><i class="fas fa-edit me-1"></i>Edit</button>
                                         <?php endif; ?>
                                         <button type="button" class="btn btn-xs btn-outline-danger em-del-sender" data-id="<?= (int) $s['id'] ?>"><i class="fas fa-trash me-1"></i>Del</button>
                                     <?php endif; ?>

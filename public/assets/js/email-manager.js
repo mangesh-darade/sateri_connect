@@ -139,10 +139,12 @@
 
     document.querySelectorAll('.em-del-builder').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        if (!confirm('Delete this builder?')) return;
-        post('email-manager/builders/' + btn.getAttribute('data-id') + '/delete', {}).then(function (res) {
-          if (res.success) location.reload();
-          else alert(res.message || 'Delete failed');
+        APP.confirm({ title: 'Delete this builder?', text: 'This cannot be undone.', confirmText: 'Yes, delete' }).then(function (r) {
+          if (!r.isConfirmed) return;
+          post('email-manager/builders/' + btn.getAttribute('data-id') + '/delete', {}).then(function (res) {
+            if (res.success) location.reload();
+            else APP.toast(res.message || 'Delete failed', 'error');
+          });
         });
       });
     });
@@ -251,24 +253,27 @@
 
     document.querySelectorAll('.em-del-drip').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        if (!confirm('Delete this drip?')) return;
-        post('email-manager/drips/' + btn.getAttribute('data-id') + '/delete', {}).then(function (res) {
-          if (res.success) location.reload();
-          else alert(res.message || 'Failed');
+        APP.confirm({ title: 'Delete this drip?', text: 'This cannot be undone.', confirmText: 'Yes, delete' }).then(function (r) {
+          if (!r.isConfirmed) return;
+          post('email-manager/drips/' + btn.getAttribute('data-id') + '/delete', {}).then(function (res) {
+            if (res.success) location.reload();
+            else APP.toast(res.message || 'Failed', 'error');
+          });
         });
       });
     });
 
     document.querySelectorAll('.em-send-step').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        var to = prompt('Send this drip step to email:');
-        if (!to) return;
-        post('email-manager/drips/send-step', {
-          drip_id: btn.getAttribute('data-drip-id'),
-          step_id: btn.getAttribute('data-step-id'),
-          to: to
-        }).then(function (res) {
-          alert(res.message || (res.success ? 'Sent' : 'Failed'));
+        APP.prompt({ title: 'Send this drip step', text: 'Email address to send it to', inputType: 'email', confirmText: 'Send' }).then(function (r) {
+          if (!r.isConfirmed || !r.value) return;
+          post('email-manager/drips/send-step', {
+            drip_id: btn.getAttribute('data-drip-id'),
+            step_id: btn.getAttribute('data-step-id'),
+            to: r.value
+          }).then(function (res) {
+            APP.toast(res.message || (res.success ? 'Sent' : 'Failed'), res.success ? 'success' : 'error');
+          });
         });
       });
     });
@@ -441,20 +446,24 @@
 
     document.querySelectorAll('.em-send-camp').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        if (!confirm('Send this HTML campaign now via active email provider?')) return;
-        post('email-manager/campaigns/' + btn.getAttribute('data-id') + '/send', {}).then(function (res) {
-          alert(res.message || (res.success ? 'Sent' : 'Failed'));
-          if (res.success) location.reload();
+        APP.confirm({ title: 'Send this campaign now?', text: 'It will be sent through your active email provider.', icon: 'question', confirmText: 'Yes, send' }).then(function (r) {
+          if (!r.isConfirmed) return;
+          post('email-manager/campaigns/' + btn.getAttribute('data-id') + '/send', {}).then(function (res) {
+            APP.toast(res.message || (res.success ? 'Sent' : 'Failed'), res.success ? 'success' : 'error');
+            if (res.success) window.setTimeout(function () { location.reload(); }, 800);
+          });
         });
       });
     });
 
     document.querySelectorAll('.em-del-camp').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        if (!confirm('Delete campaign?')) return;
-        post('email-manager/campaigns/' + btn.getAttribute('data-id') + '/delete', {}).then(function (res) {
-          if (res.success) location.reload();
-          else alert(res.message || 'Failed');
+        APP.confirm({ title: 'Delete this campaign?', text: 'This cannot be undone.', confirmText: 'Yes, delete' }).then(function (r) {
+          if (!r.isConfirmed) return;
+          post('email-manager/campaigns/' + btn.getAttribute('data-id') + '/delete', {}).then(function (res) {
+            if (res.success) location.reload();
+            else APP.toast(res.message || 'Failed', 'error');
+          });
         });
       });
     });
@@ -523,10 +532,12 @@
 
     document.querySelectorAll('.em-del-sender').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        if (!confirm('Delete this record?')) return;
-        post('email-manager/senders/' + btn.getAttribute('data-id') + '/delete', {}).then(function (res) {
-          if (res.success) location.reload();
-          else alert(res.message || 'Failed');
+        APP.confirm({ title: 'Delete this record?', text: 'This cannot be undone.', confirmText: 'Yes, delete' }).then(function (r) {
+          if (!r.isConfirmed) return;
+          post('email-manager/senders/' + btn.getAttribute('data-id') + '/delete', {}).then(function (res) {
+            if (res.success) location.reload();
+            else APP.toast(res.message || 'Failed', 'error');
+          });
         });
       });
     });

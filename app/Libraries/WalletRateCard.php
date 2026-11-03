@@ -353,6 +353,223 @@ class WalletRateCard
     }
 
     /**
+     * Import a rate card file. Meta publishes it as a spreadsheet (xlsx) even though the link says "CSV", so
+     * both are accepted.
+     *
+     * @return array{ok: bool, imported: int, skipped: list<string>, message: string}
+     */
+    public function importFile(string $path, string $currency): array
+    {
+        $head = (string) @file_get_contents($path, false, null, 0, 2);
+        if ($head !== 'PK') {
+            return $this->importCsv($path, $currency);
+        }
+        if (! class_exists(\ZipArchive::class) || ! function_exists('simplexml_load_string')) {
+            return ['ok' => false, 'imported' => 0, 'skipped' => [], 'message' => 'This server cannot read spreadsheets (PHP zip/xml missing). Save the rate card as CSV and upload that.'];
+        }
+        $csv = $this->xlsxToCsv((string) file_get_contents($path));
+        if ($csv === null || $csv === '') {
+            return ['ok' => false, 'imported' => 0, 'skipped' => [], 'message' => 'The spreadsheet could not be read. Save it as CSV and upload that.'];
+        }
+        $tmp = tempnam(sys_get_temp_dir(), 'wacard');
+        if ($tmp === false) {
+            return ['ok' => false, 'imported' => 0, 'skipped' => [], 'message' => 'Could not create a temporary file.'];
+        }
+        try {
+            file_put_contents($tmp, $csv);
+            $res = $this->importCsv($tmp, $currency);
+        } finally {
+            @unlink($tmp);
+        }
+        if ($res['ok'] && preg_match('/effective ([A-Za-z]+ \d{1,2}, \d{4})/', $csv, $m) === 1) {
+            $res['message'] .= ' Meta rates effective ' . $m[1] . '.';
+        }
+
+        return $res;
+    }
+
+    /**
+     * Import from the link behind "<CUR> list rates" on Meta's pricing page (copy the link address there and
+     * paste it). The link is a signed Meta CDN URL, so only https Meta/Facebook hosts are fetched.
+     *
+     * @return array{ok: bool, imported: int, skipped: list<string>, message: string}
+     */
+    public function importFromUrl(string $url, string $currency): array
+    {
+        $url  = trim($url);
+        $fail = static fn (string $m): array => ['ok' => false, 'imported' => 0, 'skipped' => [], 'message' => $m];
+        // The pricing page wraps file links in l.facebook.com/l.php?u=<real link>.
+        if (str_contains($url, 'l.facebook.com/l.php')) {
+            parse_str((string) parse_url($url, PHP_URL_QUERY), $q);
+            $url = (string) ($q['u'] ?? '');
+        }
+        if (! $this->isMetaHost($url)) {
+            return $fail('Paste the link address of "' . $currency . ' list rates" from the Meta pricing page (it must be a Meta download link).');
+        }
+        $file = $this->httpGet($url, 3_000_000);
+        if ($file === null || $file === '') {
+            return $fail('Could not download the file. The link may have expired: copy it again from the Meta pricing page.');
+        }
+        $tmp = tempnam(sys_get_temp_dir(), 'wacard');
+        if ($tmp === false) {
+            return $fail('Could not create a temporary file.');
+        }
+        try {
+            file_put_contents($tmp, $file);
+
+            return $this->importFile($tmp, $currency);
+        } finally {
+            @unlink($tmp);
+        }
+    }
+
+    /**
+     * GET with a size cap. Redirects are followed by hand (max 4) and every hop must stay on https and on a
+     * Meta/Facebook host, so a redirect cannot be used to reach anything else. Null on any failure.
+     */
+    protected function httpGet(string $url, int $maxBytes): ?string
+    {
+        try {
+            for ($hop = 0; $hop <= 4; $hop++) {
+                if (! $this->isMetaHost($url)) {
+                    return null;
+                }
+                $headers = [];
+                $ch      = curl_init($url);
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_FOLLOWLOCATION => false,
+                    CURLOPT_CONNECTTIMEOUT => 8,
+                    CURLOPT_TIMEOUT        => 30,
+                    CURLOPT_MAXFILESIZE    => $maxBytes,
+                    CURLOPT_PROTOCOLS      => CURLPROTO_HTTPS,
+                    CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; RateCardFetcher)',
+                    CURLOPT_ENCODING       => '',
+                    CURLOPT_HEADERFUNCTION => static function ($c, string $h) use (&$headers): int {
+                        if (stripos($h, 'location:') === 0) {
+                            $headers['location'] = trim(substr($h, 9));
+                        }
+
+                        return strlen($h);
+                    },
+                ]);
+                $body   = curl_exec($ch);
+                $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                if ($body === false) {
+                    log_message('error', 'WalletRateCard::httpGet transport error: {e}', ['e' => curl_error($ch)]);
+                }
+                curl_close($ch);
+
+                if (in_array($status, [301, 302, 303, 307, 308], true) && ! empty($headers['location'])) {
+                    $url = $this->absoluteUrl($url, (string) $headers['location']);
+                    continue;
+                }
+
+                return is_string($body) && $status === 200 && strlen($body) <= $maxBytes ? $body : null;
+            }
+        } catch (Throwable $e) {
+            log_message('error', 'WalletRateCard::httpGet failed: {msg}', ['msg' => $e->getMessage()]);
+        }
+
+        return null;
+    }
+
+    protected function isMetaHost(string $url): bool
+    {
+        $p = parse_url($url);
+
+        return ($p['scheme'] ?? '') === 'https'
+            && preg_match('/(^|\.)(fbcdn\.net|facebook\.com|fbsbx\.com)$/', strtolower((string) ($p['host'] ?? ''))) === 1;
+    }
+
+    protected function absoluteUrl(string $base, string $location): string
+    {
+        if (preg_match('#^https?://#i', $location) === 1) {
+            return $location;
+        }
+        $p = parse_url($base);
+
+        return ($p['scheme'] ?? 'https') . '://' . ($p['host'] ?? '') . (str_starts_with($location, '/') ? '' : '/') . $location;
+    }
+
+    /** First worksheet of an xlsx as CSV text (every row, including the notes above the header). */
+    protected function xlsxToCsv(string $xlsx): ?string
+    {
+        if ($xlsx === '') {
+            return null;
+        }
+        $tmp = tempnam(sys_get_temp_dir(), 'waxlsx');
+        if ($tmp === false) {
+            return null;
+        }
+        $zip = new \ZipArchive();
+        try {
+            file_put_contents($tmp, $xlsx);
+            if ($zip->open($tmp) !== true) {
+                return null;
+            }
+            $read = static function (string $name) use ($zip): string {
+                $s = $zip->getFromName($name, 20_000_000);
+
+                return is_string($s) ? $s : '';
+            };
+            $sheet = $read('xl/worksheets/sheet1.xml');
+            if ($sheet === '') {
+                return null;
+            }
+            $strings = [];
+            $ssXml   = $read('xl/sharedStrings.xml');
+            if ($ssXml !== '' && ($ss = @simplexml_load_string($ssXml)) !== false) {
+                foreach ($ss->si as $si) {
+                    $strings[] = (string) dom_import_simplexml($si)->textContent;
+                }
+            }
+            $xml = @simplexml_load_string($sheet);
+            if ($xml === false) {
+                return null;
+            }
+
+            $out = fopen('php://temp', 'r+b');
+            foreach ($xml->sheetData->row ?? [] as $row) {
+                $line = [];
+                foreach ($row->c as $c) {
+                    $col = preg_replace('/\d+/', '', (string) $c['r']) ?? '';
+                    $n   = 0;
+                    foreach (str_split($col) as $ch) {
+                        $n = $n * 26 + (ord($ch) - 64);
+                    }
+                    $val = (string) $c->v;
+                    if ((string) $c['t'] === 's' && $val !== '') {
+                        $val = $strings[(int) $val] ?? '';
+                    }
+                    $line[max(0, $n - 1)] = str_replace(["\r", "\n"], ' ', $val);
+                }
+                if ($line === []) {
+                    continue;
+                }
+                $max = max(array_keys($line));
+                $fill = [];
+                for ($i = 0; $i <= $max; $i++) {
+                    $fill[] = $line[$i] ?? '';
+                }
+                fputcsv($out, $fill, ',', '"', '\\');
+            }
+            rewind($out);
+            $csv = (string) stream_get_contents($out);
+            fclose($out);
+
+            return $csv;
+        } catch (Throwable $e) {
+            log_message('error', 'WalletRateCard::xlsxToCsv failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return null;
+        } finally {
+            $zip->close();
+            @unlink($tmp);
+        }
+    }
+
+    /**
      * Import Meta's rate card CSV (Market, Marketing, Utility, Authentication, Service columns).
      * Rows are matched to a calling code by country name; regional rows ("Rest of Africa") cannot be
      * matched and are skipped. A row named "Other" fills the "other" fallback.
@@ -373,6 +590,11 @@ class WalletRateCard
         while (($line = fgetcsv($fh, 0, ',', '"', '\\')) !== false) {
             if ($cols === []) {
                 $cols = $this->csvColumns($line);
+                // Notes above the header ("Marketing rates apply across...") mention "market" too: a real header
+                // row names the market column and at least one rate column.
+                if (! isset($cols['market']) || count($cols) < 2) {
+                    $cols = [];
+                }
                 continue;
             }
             if ($cols === null || ! isset($cols['market'])) {

@@ -14,15 +14,15 @@
     </button>
 <?php endif; ?>
 <?php if (function_exists('can') && can('templates.delete')): ?>
-    <form action="<?= site_url('templates/' . (int) ($t['id'] ?? 0) . '/delete') ?>" method="post"
-          onsubmit="return confirm('Delete this template from <?= esc(function_exists('whatsapp_provider_short') ? whatsapp_provider_short() : 'provider') ?> and locally?');">
+    <form action="<?= site_url('templates/' . (int) ($t['id'] ?? 0) . '/delete') ?>" method="post">
         <?= csrf_field() ?>
-        <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fas fa-trash me-1"></i> Delete</button>
+        <button type="submit" class="btn btn-outline-danger btn-sm" data-confirm-title="Delete this template?" data-confirm="It will be deleted from <?= esc(function_exists('whatsapp_provider_short') ? whatsapp_provider_short() : 'the provider', 'attr') ?> and from this app." data-confirm-text="Yes, delete"><i class="fas fa-trash me-1"></i> Delete</button>
     </form>
 <?php endif; ?>
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="page-list">
 <?php $t = $template ?? []; ?>
 <div class="row g-3">
     <div class="col-lg-6">
@@ -135,6 +135,7 @@
             </div>
         </div>
     </div>
+</div>
 </div>
 <?= $this->endSection() ?>
 

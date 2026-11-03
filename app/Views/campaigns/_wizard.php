@@ -143,7 +143,7 @@
                             <button type="button" class="btn btn-sm btn-outline-secondary cw-filter-chip py-1 px-2" data-tab="email" title="Click to view contacts with email">
                                 <i class="far fa-envelope text-secondary me-1"></i> Email: <strong id="cwEmailCount">0</strong>
                             </button>
-                            <button type="button" class="btn btn-sm btn-outline-success cw-filter-chip py-1 px-2" data-tab="eligible" id="cwEligibleChip" title="Click to view WhatsApp eligible contacts">
+                            <button type="button" class="btn btn-sm btn-outline-secondary cw-filter-chip py-1 px-2" data-tab="eligible" id="cwEligibleChip" title="Click to view WhatsApp eligible contacts">
                                 <i class="fab fa-whatsapp text-success me-1"></i> Eligible: <strong id="cwEligibleCount">0</strong>
                             </button>
                             <button type="button" class="btn btn-sm btn-outline-warning cw-filter-chip py-1 px-2 d-none" data-tab="skipped" id="cwSkippedChip" title="Click to view skipped contacts & reasons">
@@ -290,7 +290,7 @@
                         <button type="button" class="btn btn-outline-secondary active" data-tab="all">
                             All (<span class="tab-count-all">0</span>)
                         </button>
-                        <button type="button" class="btn btn-outline-success" data-tab="eligible">
+                        <button type="button" class="btn btn-outline-secondary" data-tab="eligible">
                             <i class="fab fa-whatsapp me-1"></i> Eligible (<span class="tab-count-eligible">0</span>)
                         </button>
                         <button type="button" class="btn btn-outline-warning" data-tab="skipped">

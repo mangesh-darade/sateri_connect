@@ -7,6 +7,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="page-list">
 <?php
 $providerShort = function_exists('whatsapp_provider_short') ? whatsapp_provider_short() : 'External';
 $providerLabel = function_exists('whatsapp_provider_label') ? whatsapp_provider_label() : 'provider';
@@ -312,6 +313,7 @@ $categories = [
             </div>
         </div>
     </div>
+</div>
 </div>
 <?= $this->endSection() ?>
 

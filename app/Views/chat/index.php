@@ -157,7 +157,7 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
                     </button>
                     <?php endif; ?>
                     <?php if ($canSend): ?>
-                    <button type="button" class="btn btn-sm btn-outline-primary" id="btnChatAiSummary" title="AI Summary of Conversation">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btnChatAiSummary" title="AI Summary of Conversation">
                         <i class="fas fa-magic me-1"></i><span class="d-none d-sm-inline">AI Summary</span>
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-secondary" id="btnTemplateReply" title="Template reply">
@@ -210,6 +210,9 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
                         <button type="button" class="btn btn-light rounded-circle" id="btnEmoji" title="Emoji"><i class="far fa-smile"></i></button>
                         <button type="button" class="btn btn-light rounded-circle" id="btnAttach" title="Attach"><i class="fas fa-paperclip"></i></button>
                         <button type="button" class="btn btn-light rounded-circle" id="btnQuickReply" title="Quick replies (type /)"><i class="fas fa-bolt"></i></button>
+                        <?php if (function_exists('customer_payments_enabled') && customer_payments_enabled()): ?>
+                        <button type="button" class="btn btn-light rounded-circle" id="btnPayLink" title="Send a payment link" data-bs-toggle="modal" data-bs-target="#payLinkModal"><i class="fas fa-rupee-sign"></i></button>
+                        <?php endif; ?>
                         <?php if (function_exists('is_ai_enabled') && is_ai_enabled()): ?>
                         <button type="button" class="btn btn-light rounded-circle text-primary" id="btnAiSuggest" title="AI Suggest Reply (Gemini Copilot)"><i class="fas fa-magic"></i></button>
                         <?php endif; ?>
@@ -395,6 +398,30 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
         </div>
     </div>
 </div>
+
+<?php if (function_exists('customer_payments_enabled') && customer_payments_enabled()): ?>
+<div class="modal fade" id="payLinkModal" tabindex="-1" aria-labelledby="payLinkModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="payLinkModalLabel"><i class="fas fa-rupee-sign me-2"></i> Payment link</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label small mb-1" for="payLinkAmount">Amount (INR)</label>
+                <input type="number" class="form-control mb-3" id="payLinkAmount" min="1" max="500000" step="0.01" inputmode="decimal">
+                <label class="form-label small mb-1" for="payLinkDesc">For</label>
+                <input type="text" class="form-control" id="payLinkDesc" maxlength="200" placeholder="e.g. Order #1042">
+                <div class="form-text">The link is added to the message box. Review it, then press Send. It expires in 7 days.</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-wa btn-sm" id="btnPayLinkCreate">Create link</button>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>

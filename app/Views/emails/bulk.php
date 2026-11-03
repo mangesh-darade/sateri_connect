@@ -8,6 +8,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="page-list">
 <?php
 $provider = $provider ?? 'smtp';
 $providerLabel = $providerLabel ?? 'SMTP';
@@ -215,7 +216,7 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
                                             <!-- Dropdown Footer -->
                                             <div class="d-flex justify-content-between align-items-center mt-2 pt-1 border-top" style="font-size: 0.7rem;">
                                                 <span class="text-muted" id="bulkSearchStatus"><?= count($contactsWithEmail) ?> total contacts</span>
-                                                <button type="button" class="btn btn-primary btn-xs px-2.5 py-0.5 fw-semibold" id="btnDoneDropdown" style="font-size: 0.72rem;">Done</button>
+                                                <button type="button" class="btn btn-wa btn-xs px-2.5 py-0.5 fw-semibold" id="btnDoneDropdown" style="font-size: 0.72rem;">Done</button>
                                             </div>
                                         </div>
                                     </div>
@@ -267,7 +268,7 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
                             </select>
                         </div>
                         <div class="col-md-5">
-                            <button type="button" class="btn btn-outline-primary btn-sm w-100 d-inline-flex align-items-center justify-content-center gap-1 fw-semibold"
+                            <button type="button" class="btn btn-outline-secondary btn-sm w-100 d-inline-flex align-items-center justify-content-center gap-1 fw-semibold"
                                     id="btnLoadGroupIntoRecipients" style="height: 36px; font-size: 0.82rem;">
                                 <i class="fas fa-cloud-arrow-down"></i>
                                 <span>Load Contacts into Custom List</span>
@@ -414,7 +415,7 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
                     <a href="<?= site_url('emails') ?>" class="btn btn-sm btn-outline-secondary px-3" style="font-size: 0.82rem;">Cancel</a>
                     <button type="reset" class="btn btn-sm btn-link text-muted px-2 text-decoration-none" style="font-size: 0.82rem;">Reset Form</button>
                 </div>
-                <button type="submit" class="btn btn-primary btn-sm px-4 py-2 fw-semibold shadow-sm d-inline-flex align-items-center gap-2" id="btnSendBulk" style="font-size: 0.85rem; border-radius: 6px;">
+                <button type="submit" class="btn btn-wa btn-sm px-4 py-2 fw-semibold shadow-sm d-inline-flex align-items-center gap-2" id="btnSendBulk" style="font-size: 0.85rem; border-radius: 6px;">
                     <i class="fas fa-paper-plane"></i>
                     <span>Send Bulk Email via <?= esc($providerLabel) ?></span>
                 </button>
@@ -423,6 +424,7 @@ $defaultTo = $defaultTo ?? 'sateri.mangesh@gmail.com';
 
         <div id="emailBulkResult" class="px-4 pb-3"></div>
     </div>
+</div>
 </div>
 <?= $this->endSection() ?>
 

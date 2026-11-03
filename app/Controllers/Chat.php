@@ -1107,6 +1107,13 @@ class Chat extends BaseController
             'channel'    => $channel,
         ]);
 
+        if ($status === \App\Libraries\InboxStatus::RESOLVED && $channel === 'whatsapp') {
+            $resolvedContact = model(ContactModel::class)->find($contactId);
+            if (is_array($resolvedContact)) {
+                (new \App\Libraries\CsatSurvey())->ask($resolvedContact, $conversation);
+            }
+        }
+
         return $this->jsonResponse(true, [
             'contact_id' => $contactId,
             'status'     => $status,

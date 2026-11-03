@@ -5,6 +5,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="page-list">
 <?php
 $campaign = $campaign ?? [];
 $id = (int) ($campaign['id'] ?? 0);
@@ -156,6 +157,7 @@ $isActive = in_array($campaign['status'] ?? '', ['running', 'scheduled', 'queued
             </table>
         </div>
     </div>
+</div>
 </div>
 <?= $this->endSection() ?>
 

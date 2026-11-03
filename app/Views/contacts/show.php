@@ -17,6 +17,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="page-list">
 <?php
 $contact       = $contact ?? [];
 $contactId     = (int) ($contact['id'] ?? 0);
@@ -154,7 +155,7 @@ $details = [
                                     <?php endforeach; ?>
                                 </select>
                                 <button type="button" class="btn btn-sm btn-wa" data-wa-consent="opt_in"><i class="fas fa-check me-1"></i> Record opt-in</button>
-                                <button type="button" class="btn btn-sm btn-outline-success" data-wa-consent="request_opt_in"
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-wa-consent="request_opt_in"
                                         title="Send the Agree / Stop opt-in message on WhatsApp"><i class="fab fa-whatsapp me-1"></i> Request opt-in</button>
                             <?php endif; ?>
                             <button type="button" class="btn btn-sm btn-outline-danger" data-wa-consent="opt_out"><i class="fas fa-ban me-1"></i> Opt out</button>
@@ -275,6 +276,7 @@ $details = [
             </div>
         </div>
     </div>
+</div>
 </div>
 <?= $this->endSection() ?>
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Commands;
 
+use App\Libraries\CustomerPaymentLinks;
 use App\Libraries\MasterTenantRepository;
 use App\Libraries\MswipeService;
 use App\Libraries\TenantConnection;
@@ -40,12 +41,8 @@ class PaymentsReconcile extends BaseCommand
             }
         }
 
-        $svc = new MswipeService();
-        if (! $svc->isConfigured()) {
-            CLI::write('Mswipe is not configured; nothing to do.');
-
-            return;
-        }
+        // Mswipe is platform-wide; customer payment links are per client and need no platform setup.
+        $mswipe = (new MswipeService())->isConfigured();
 
         $total = 0;
         foreach (array_filter($keys) as $key) {
@@ -55,10 +52,16 @@ class PaymentsReconcile extends BaseCommand
                     continue;
                 }
                 TenantContext::set($key, 'cli');
-                $n = (new MswipeService())->reconcilePending();
-                $total += $n;
-                if ($n > 0) {
-                    CLI::write($key . ': ' . $n . ' credited', 'green');
+                if ($mswipe) {
+                    $n = (new MswipeService())->reconcilePending();
+                    $total += $n;
+                    if ($n > 0) {
+                        CLI::write($key . ': ' . $n . ' credited', 'green');
+                    }
+                }
+                $links = (new CustomerPaymentLinks())->reconcilePending();
+                if ($links > 0) {
+                    CLI::write($key . ': ' . $links . ' customer payment link(s) paid', 'green');
                 }
             } catch (Throwable $e) {
                 CLI::error($key . ': ' . $e->getMessage());

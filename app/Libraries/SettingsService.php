@@ -1051,6 +1051,8 @@ class SettingsService
             'max_consecutive_replies' => (int) ($this->get('ai_max_consecutive_replies', 3)),
             'cooldown_seconds'        => (int) ($this->get('ai_cooldown_seconds', 3)),
             'human_keywords'          => (string) ($this->get('ai_human_keywords', 'human,agent,support,representative,manus,madat,manushya,call')),
+            'handoff_user_id'         => (int) ($this->get('ai_handoff_user_id', 0)),
+            'handoff_message'         => (string) ($this->get('ai_handoff_message', "Thanks for your question. I've passed it to our team and a representative will reply to you shortly.")),
         ];
     }
 
@@ -1071,6 +1073,8 @@ class SettingsService
             'max_consecutive_replies' => ['ai_max_consecutive_replies', 'ai', false],
             'cooldown_seconds'        => ['ai_cooldown_seconds', 'ai', false],
             'human_keywords'          => ['ai_human_keywords', 'ai', false],
+            'handoff_user_id'         => ['ai_handoff_user_id', 'ai', false],
+            'handoff_message'         => ['ai_handoff_message', 'ai', false],
         ];
 
         foreach ($map as $inputKey => [$settingKey, $group, $encrypt]) {

@@ -5,6 +5,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="page-list">
 <?php
 $campaign = $campaign ?? [];
 $isEdit = ! empty($campaign['id']);
@@ -119,6 +120,7 @@ if (is_string($variablesJson)) {
             <div class="modal-body" id="campaignPreviewContent"></div>
         </div>
     </div>
+</div>
 </div>
 <?= $this->endSection() ?>
 

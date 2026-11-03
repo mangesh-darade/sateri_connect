@@ -353,6 +353,22 @@
         });
     };
 
+    /** Ask for one line of text (replaces native prompt()). Resolves like Swal: result.isConfirmed, result.value. */
+    APP.prompt = function (options) {
+        options = options || {};
+        return Swal.fire({
+            title: options.title || 'Enter a value',
+            text: options.text || '',
+            input: options.inputType || 'text',
+            inputValue: options.value || '',
+            showCancelButton: true,
+            confirmButtonColor: '#e11d48',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: options.confirmText || 'OK',
+            cancelButtonText: options.cancelText || 'Cancel'
+        });
+    };
+
     APP.deleteConfirm = function (url, options) {
         options = options || {};
         return APP.confirm({
@@ -1204,6 +1220,38 @@
     APP.autoSync = function (force) { return AutoSync.run(!!force); };
 
     /**
+     * Scheduler tick: while the app is open, ask the server about once a minute to run what cron would run
+     * (scheduled social posts, scheduled campaigns, the message queue). Hidden tabs skip; the server throttles.
+     */
+    var SchedulerTick = {
+        intervalMs: 60 * 1000,
+        busy: false,
+
+        run: function () {
+            var self = this;
+            if (self.busy || document.hidden) return;
+            self.busy = true;
+            APP.post((APP.baseUrl || '') + '/sync/tick', {}, { global: false, timeout: 190000 })
+                .done(function (res) {
+                    var d = (res && res.data) || {};
+                    if (d.ran) { $(document).trigger('app:tick', [d]); }
+                    if (d.ran && res && !res.success && d.errors && d.errors.length) {
+                        APP.toast('Scheduler: ' + d.errors.join(' '), 'warning');
+                    }
+                })
+                .always(function () { self.busy = false; });
+        },
+
+        init: function () {
+            if (!APP.schedulerTick) return;
+            var self = this;
+            window.setTimeout(function () { self.run(); }, 4000);
+            window.setInterval(function () { self.run(); }, self.intervalMs);
+            $(document).on('visibilitychange', function () { if (!document.hidden) self.run(); });
+        }
+    };
+
+    /**
      * Searchable timezone picker. The native select stays in the form so the
      * posted value is unchanged when JavaScript is off.
      */
@@ -1405,6 +1453,7 @@
         LiveNotif.start();
         refreshWaIdentityIfNeeded();
         AutoSync.init();
+        SchedulerTick.init();
 
         function refreshLucideIcons() {
             if (window.lucide && typeof window.lucide.createIcons === 'function') {

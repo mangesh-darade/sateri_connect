@@ -209,14 +209,22 @@ class PlatformWallet extends BaseController
             return $denied;
         }
 
-        $file = $this->request->getFile('rate_card');
-        if ($file === null || ! $file->isValid() || $file->getSize() > 1_048_576
-            || ! in_array(strtolower($file->getClientExtension()), ['csv', 'txt'], true)) {
-            return redirect()->back()->with('error', 'Choose the Meta rate card CSV (up to 1 MB).');
-        }
-
         $currency = strtoupper(substr(trim((string) $this->request->getPost('currency')), 0, 3)) ?: \App\Libraries\Currency::base();
-        $result   = (new WalletRateCard())->importCsv($file->getTempName(), $currency);
+        if (! \App\Libraries\Currency::isKnown($currency)) {
+            return redirect()->back()->with('error', 'Choose one of the currencies Meta publishes rates in.');
+        }
+        $cards = new WalletRateCard();
+        $url   = trim((string) $this->request->getPost('rate_url'));
+        $file  = $this->request->getFile('rate_card');
+
+        if ($url !== '') {
+            $result = $cards->importFromUrl($url, $currency);
+        } elseif ($file !== null && $file->isValid() && $file->getSize() <= 3_145_728
+            && in_array(strtolower($file->getClientExtension()), ['csv', 'txt', 'xlsx'], true)) {
+            $result = $cards->importFile($file->getTempName(), $currency);
+        } else {
+            return redirect()->back()->with('error', 'Upload the rate card file from Meta (xlsx or csv, up to 3 MB) or paste its link.');
+        }
         if (! $result['ok']) {
             return redirect()->back()->with('error', $result['message']);
         }

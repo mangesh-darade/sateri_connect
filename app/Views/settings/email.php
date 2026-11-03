@@ -56,13 +56,14 @@ $steps = [
     <i class="fas fa-key me-1"></i> Provider &amp; Credentials
 </a>
 <?php if ($canSetup): ?>
-<button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#sesAddDomainModal">
+<button type="button" class="btn btn-sm btn-wa" data-bs-toggle="modal" data-bs-target="#sesAddDomainModal">
     <i class="fas fa-plus me-1"></i> Add Domain
 </button>
 <?php endif; ?>
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="page-list">
 <div class="email-settings">
 
     <?php if (! $isSes): ?>
@@ -190,7 +191,7 @@ $steps = [
             <div class="d-flex gap-2">
                 <button type="button" class="btn btn-sm btn-light border" id="sesBounceCheck"><i class="fas fa-sync-alt me-1"></i><span>Check status</span></button>
                 <?php if ($canSetup): ?>
-                <button type="button" class="btn btn-sm btn-primary" id="sesBounceConnect"><i class="fas fa-plug me-1"></i><span><?= ($bt['state'] ?? '') === 'not_connected' ? 'Connect' : 'Reconnect' ?></span></button>
+                <button type="button" class="btn btn-sm btn-wa" id="sesBounceConnect"><i class="fas fa-plug me-1"></i><span><?= ($bt['state'] ?? '') === 'not_connected' ? 'Connect' : 'Reconnect' ?></span></button>
                 <?php endif; ?>
             </div>
         </div>
@@ -214,7 +215,7 @@ $steps = [
                 <div class="form-text">Required by anti-spam laws (CAN-SPAM). Use your registered office or a valid postal / PO box address.</div>
                 <?php if ($canEditSettings): ?>
                 <div class="d-flex align-items-center gap-2 mt-3">
-                    <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-save me-1"></i> Save Address</button>
+                    <button type="submit" class="btn btn-sm btn-wa"><i class="fas fa-save me-1"></i> Save Address</button>
                     <span class="small js-compliance-msg" data-base-class="small js-compliance-msg"></span>
                 </div>
                 <?php endif; ?>
@@ -230,7 +231,7 @@ $steps = [
                 <div class="small text-muted">Each domain needs its DNS records published once. DKIM CNAMEs also verify ownership.</div>
             </div>
             <?php if ($canSetup): ?>
-            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#sesAddDomainModal"><i class="fas fa-plus me-1"></i> Add Domain</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#sesAddDomainModal"><i class="fas fa-plus me-1"></i> Add Domain</button>
             <?php endif; ?>
         </div>
         <div class="card-body p-0">
@@ -240,7 +241,7 @@ $steps = [
                     <div class="fw-semibold">No sending domain yet</div>
                     <div class="small text-muted mb-3">Add your domain (e.g. <code>yourbrand.com</code>) to get the DNS records for verification.</div>
                     <?php if ($canSetup): ?>
-                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#sesAddDomainModal"><i class="fas fa-plus me-1"></i> Add Domain</button>
+                    <button type="button" class="btn btn-sm btn-wa" data-bs-toggle="modal" data-bs-target="#sesAddDomainModal"><i class="fas fa-plus me-1"></i> Add Domain</button>
                     <?php endif; ?>
                 </div>
             <?php else: ?>
@@ -273,7 +274,7 @@ $steps = [
                             <td class="text-end pe-3 text-nowrap">
                                 <button type="button" class="btn btn-sm btn-outline-dark em-ses-dns" title="View DNS records"><i class="fas fa-list me-1"></i><span>DNS</span></button>
                                 <?php if ($canManage && $isSes): ?>
-                                <button type="button" class="btn btn-sm btn-outline-success em-ses-check" data-domain="<?= esc($d['domain'], 'attr') ?>"><i class="fas fa-sync-alt me-1"></i><span>Check</span></button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary em-ses-check" data-domain="<?= esc($d['domain'], 'attr') ?>"><i class="fas fa-sync-alt me-1"></i><span>Check</span></button>
                                 <?php endif; ?>
                                 <?php if ($canManage): ?>
                                 <button type="button" class="btn btn-sm btn-outline-danger em-ses-delete" data-id="<?= (int) $d['id'] ?>" data-label="<?= esc($d['domain'], 'attr') ?>"
@@ -297,7 +298,7 @@ $steps = [
                 <div class="small text-muted">Primary sends system, automation alerts &amp; tests. Promotional sends campaigns, bulk &amp; drips — keep it on a separate subdomain to protect your main reputation.</div>
             </div>
             <?php if ($canSetup && $domains !== []): ?>
-            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#sesAddSenderModal"><i class="fas fa-plus me-1"></i> Add Sender</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#sesAddSenderModal"><i class="fas fa-plus me-1"></i> Add Sender</button>
             <?php endif; ?>
         </div>
         <div class="card-body p-0">
@@ -307,7 +308,7 @@ $steps = [
                     <div class="fw-semibold">No sender email yet</div>
                     <div class="small text-muted mb-3"><?= $domains === [] ? 'Add a domain first, then add From addresses like hello@yourdomain.com.' : 'Add a From address such as hello@' . esc($domains[0]['domain']) . '.' ?></div>
                     <?php if ($canSetup && $domains !== []): ?>
-                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#sesAddSenderModal"><i class="fas fa-plus me-1"></i> Add Sender</button>
+                    <button type="button" class="btn btn-sm btn-wa" data-bs-toggle="modal" data-bs-target="#sesAddSenderModal"><i class="fas fa-plus me-1"></i> Add Sender</button>
                     <?php endif; ?>
                 </div>
             <?php else: ?>
@@ -400,7 +401,7 @@ $steps = [
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" class="btn btn-primary"><i class="fas fa-arrow-right me-1"></i> Continue &amp; Get DNS Records</button>
+                <button type="submit" class="btn btn-wa"><i class="fas fa-arrow-right me-1"></i> Continue &amp; Get DNS Records</button>
             </div>
         </form>
     </div>
@@ -454,7 +455,7 @@ $steps = [
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> Save Sender</button>
+                <button type="submit" class="btn btn-wa"><i class="fas fa-save me-1"></i> Save Sender</button>
             </div>
         </form>
     </div>
@@ -462,6 +463,7 @@ $steps = [
 <?php endif; ?>
 
 <?= view('partials/ses_dns_modal', ['canManage' => $canManage && $isSes]) ?>
+</div>
 <?= $this->endSection() ?>
 
 <?= $this->section('styles') ?>

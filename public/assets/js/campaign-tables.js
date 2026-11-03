@@ -189,11 +189,11 @@
                     if (r.can_send && id > 0) {
                         var retry = r.status === 'sent' && r.failed_count > 0;
                         if (['draft', 'failed', 'paused'].indexOf(r.status) !== -1) {
-                            h += '<button type="button" class="btn btn-xs btn-primary em-send-camp" data-id="' + id + '" title="'
+                            h += '<button type="button" class="btn btn-xs btn-wa em-send-camp" data-id="' + id + '" title="'
                                 + (r.status === 'draft' ? 'Broadcast campaign now' : 'Send to recipients who have not received it yet') + '"><i class="fas fa-paper-plane me-1"></i> '
                                 + (r.status === 'draft' ? 'Send' : (r.status === 'paused' ? 'Resume' : 'Retry')) + '</button>';
                         } else if (retry) {
-                            h += '<button type="button" class="btn btn-xs btn-outline-primary em-send-camp" data-id="' + id + '" title="Send only to recipients that failed"><i class="fas fa-redo me-1"></i> Retry failed</button>';
+                            h += '<button type="button" class="btn btn-xs btn-outline-secondary em-send-camp" data-id="' + id + '" title="Send only to recipients that failed"><i class="fas fa-redo me-1"></i> Retry failed</button>';
                         }
                         h += '<button type="button" class="btn btn-xs btn-outline-danger em-del-camp ms-1" data-id="' + id + '" title="Delete"><i class="fas fa-trash-alt"></i></button>';
                     }

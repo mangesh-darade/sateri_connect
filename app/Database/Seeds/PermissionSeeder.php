@@ -81,6 +81,15 @@ class PermissionSeeder extends Seeder
             // Queue
             ['name' => 'View Queue', 'slug' => 'queue.view', 'module' => 'queue', 'description' => 'View message queue'],
             ['name' => 'Manage Queue', 'slug' => 'queue.manage', 'module' => 'queue', 'description' => 'Retry, cancel, or clear queue items'],
+            // Social scheduler
+            ['name' => 'View Social', 'slug' => 'social.view', 'module' => 'social', 'description' => 'View the social calendar and media library'],
+            ['name' => 'Create Social Posts', 'slug' => 'social.create', 'module' => 'social', 'description' => 'Add Drive folders, schedule, reschedule and cancel social posts'],
+            ['name' => 'Manage Social Accounts', 'slug' => 'social.accounts', 'module' => 'social', 'description' => 'Connect and disconnect Facebook and Instagram accounts'],
+            // Ads
+            ['name' => 'View Ads', 'slug' => 'ads.view', 'module' => 'ads', 'description' => 'View ad campaigns and their results'],
+            ['name' => 'Create Ads', 'slug' => 'ads.create', 'module' => 'ads', 'description' => 'Create and edit ad campaign drafts with AI'],
+            ['name' => 'Launch Ads', 'slug' => 'ads.activate', 'module' => 'ads', 'description' => 'Launch, pause and end ad campaigns (spends real money)'],
+            ['name' => 'Manage Ad Settings', 'slug' => 'ads.accounts', 'module' => 'ads', 'description' => 'Connect ad accounts and set the maximum daily ad budget'],
         ];
 
         $rows = [];
@@ -120,6 +129,8 @@ class PermissionSeeder extends Seeder
             'guide.view',
             'settings.view',
             'queue.view', 'queue.manage',
+            'social.view', 'social.create',
+            'ads.view', 'ads.create',
         ];
 
         $agentSlugs = [
@@ -134,6 +145,7 @@ class PermissionSeeder extends Seeder
             'keywords.view',
             'reports.view',
             'guide.view',
+            'social.view',
         ];
 
         // Only re-sync built-in roles. Custom roles keep their existing grants.

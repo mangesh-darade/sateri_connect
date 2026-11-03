@@ -166,6 +166,9 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
             <div class="palette-item" draggable="true" data-palette="condition" data-condition="message_contains">
                 <i class="fas fa-code-branch"></i> If / Else
             </div>
+            <div class="palette-item" draggable="true" data-palette="condition" data-condition="ab_split">
+                <i class="fas fa-random"></i> A/B split
+            </div>
             <div class="palette-item" draggable="true" data-palette="condition" data-condition="message_equals">
                 <i class="fas fa-equals"></i> Message equals
             </div>

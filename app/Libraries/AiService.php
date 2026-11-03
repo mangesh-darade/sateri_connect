@@ -7,6 +7,7 @@ namespace App\Libraries;
 use App\Models\ContactModel;
 use App\Models\ConversationModel;
 use App\Models\NotificationModel;
+use App\Models\UserModel;
 use Throwable;
 
 /**
@@ -32,6 +33,12 @@ class AiService
 
     /** Seconds a workflow generation may take (big flows are slow). */
     public const COPILOT_TIMEOUT = 150;
+
+    /** The model answers with this when it cannot help; the webhook then hands the chat to a person. */
+    public const HANDOFF_TOKEN = '[[HANDOFF]]';
+
+    /** After a hand-over the AI stays quiet on that contact for this long. */
+    private const HANDOFF_PAUSE_SECONDS = 7200;
 
     protected SettingsService $settings;
 
@@ -102,6 +109,11 @@ class AiService
             }
         }
 
+        // A person already took over (see handoff()): stay quiet.
+        if (service('cache')->get($this->handoffKey($contactId)) !== null) {
+            return ['allowed' => false, 'reason' => 'handoff_pending'];
+        }
+
         // 4. Human Takeover Keywords
         $humanKeywords = array_filter(array_map('trim', explode(',', strtolower((string) ($config['human_keywords'] ?? '')))));
         foreach ($humanKeywords as $kw) {
@@ -122,9 +134,7 @@ class AiService
         $consecutiveCount = (int) ($cache->get($consecutiveKey) ?? 0);
         $maxConsecutive = max(1, (int) ($config['max_consecutive_replies'] ?? 3));
         if ($consecutiveCount >= $maxConsecutive) {
-            // Trigger an agent alert that bot has reached conversation cap
-            $this->notifyStaffOfCapReached($contact, $consecutiveCount);
-
+            // The webhook hands the chat to a person (handoff()) on this reason.
             return ['allowed' => false, 'reason' => 'consecutive_limit_reached'];
         }
 
@@ -155,12 +165,17 @@ STRICT WHATSAPP OPERATING RULES:
 4. Security & Safety:
    - NEVER invent or commit to unauthorized discounts, contracts, or promises not explicitly provided.
    - NEVER generate offensive, adult, political, medical, or illegal content (violates WhatsApp Terms of Service).
-   - If unsure about specific product pricing or details, politely state: "I have shared this information with our team, and our representative will connect with you shortly."
+   - If you cannot answer confidently from the instructions or knowledge base (for example pricing or details you were not given), reply with exactly [[HANDOFF]] and nothing else. A person will take over.
 5. Output plain WhatsApp formatted text only (*bold* and _italic_ are allowed, no markdown headers or HTML tags).
 PROMPT;
         $extraInstruction = trim(mb_substr($extraInstruction, 0, 500));
         if ($extraInstruction !== '') {
             $instructions .= "\n6. Extra instruction for this step (the rules above still win): " . $extraInstruction;
+        }
+
+        $kb = (new KnowledgeBase())->promptSection($userMessage);
+        if ($kb !== '') {
+            $instructions .= "\n\n" . $kb;
         }
 
         $contents = [];
@@ -245,6 +260,11 @@ PROMPT;
             "Generate 3 distinct, professional, and short quick-reply options (each under 15 words) to reply to the user. " .
             "Match the language of the user (English, Marathi, or Hindi). " .
             "Output strictly a valid JSON array of 3 strings. Example: [\"Option 1\", \"Option 2\", \"Option 3\"]. Do not wrap in markdown tags.";
+
+        $kb = (new KnowledgeBase())->promptSection($userMessage);
+        if ($kb !== '') {
+            $instructions .= "\n\n" . $kb;
+        }
 
         $contents = [
             [
@@ -523,6 +543,7 @@ Include this reasoning in the "thinking" field in the user's language (Marathi/H
 - message_equals: Exact text match (data: { condition_type: "message_equals", value: "YES", label: "Equals 'YES'?" }) -> ports: "true" and "false"
 - has_tag: If contact has tag (data: { condition_type: "has_tag", tag_name: "Customer", label: "Has Tag 'Customer'?" }) -> ports: "true" and "false"
 - within_window: Within 24-hour WhatsApp window (data: { condition_type: "within_window", label: "Within 24h Window?" }) -> ports: "true" and "false"
+- ab_split: Randomly split contacts into two paths (data: { condition_type: "ab_split", value: "50", label: "A/B split" }) where value is the percent sent to path A -> ports: "true" (A) and "false" (B)
 - attribute_condition: Attribute value test (data: { condition_type: "attribute_condition", attribute: "budget", operator: "greater_than", value: "1000", label: "Budget > 1000?" }) -> ports: "true" and "false"
 
 3. ACTIONS:
@@ -924,22 +945,68 @@ EOT;
         return $res['success'] && ! empty($res['text']) ? $res['text'] : null;
     }
 
-    /**
-     * Alert staff when a conversation has hit the max consecutive AI reply limit.
-     */
-    protected function notifyStaffOfCapReached(array $contact, int $count): void
+    /** Cache is shared by every client, so the key carries the client's database. */
+    private function handoffKey(int $contactId): string
     {
+        return 'ai_handoff_' . md5((string) db_connect()->getDatabase()) . '_' . $contactId;
+    }
+
+    /**
+     * Text sent to the customer when the AI cannot answer and a person takes over.
+     */
+    public function handoffMessage(): string
+    {
+        return trim((string) $this->settings->getAiConfig()['handoff_message']);
+    }
+
+    /**
+     * Pass a chat to a person: the AI stays quiet on this contact for 2 hours, the chat goes to the contact's
+     * agent (or the configured hand-over agent), and the team gets a notification.
+     *
+     * @param array<string, mixed> $contact
+     * @param array<string, mixed> $conversation
+     * @param bool                 $notify False when the caller already notified (e.g. a human was requested).
+     */
+    public function handoff(array $contact, array $conversation, string $reason, bool $notify = true): void
+    {
+        $contactId = (int) ($contact['id'] ?? 0);
+        if ($contactId <= 0) {
+            return;
+        }
+
         try {
-            $name = (string) ($contact['name'] ?? $contact['phone'] ?? 'Contact');
-            $contactId = (int) ($contact['id'] ?? 0);
-            model(NotificationModel::class)->notifyChatUsers(
-                'AI Bot Handover Needed',
-                "AI auto-reply stopped for {$name} after {$count} replies to prevent looping. Please take over.",
-                site_url('chat?contact_id=' . $contactId),
-                ! empty($contact['assigned_to']) ? (int) $contact['assigned_to'] : null
-            );
+            service('cache')->save($this->handoffKey($contactId), 1, self::HANDOFF_PAUSE_SECONDS);
+
+            $agentId = ! empty($contact['assigned_to']) ? (int) $contact['assigned_to'] : 0;
+            if ($agentId <= 0) {
+                $candidate = (int) $this->settings->getAiConfig()['handoff_user_id'];
+                $user      = $candidate > 0 ? model(UserModel::class)->find($candidate) : null;
+                if (is_array($user) && ($user['status'] ?? '') === 'active') {
+                    $agentId = $candidate;
+                    model(ContactModel::class)->update($contactId, ['assigned_to' => $agentId]);
+                    if (! empty($conversation['id'])) {
+                        model(ConversationModel::class)->update((int) $conversation['id'], ['assigned_to' => $agentId]);
+                    }
+                }
+            }
+
+            if ($notify) {
+                $name = trim((string) ($contact['name'] ?? '')) ?: (string) ($contact['mobile'] ?? 'Customer');
+                model(NotificationModel::class)->notifyChatUsers(
+                    'AI handed over a chat',
+                    $name . ': ' . $reason,
+                    site_url('chat?contact_id=' . $contactId),
+                    $agentId > 0 ? $agentId : null
+                );
+            }
+
+            log_activity('handoff', 'chat', 'AI handed a conversation to a person', [
+                'contact_id'  => $contactId,
+                'assigned_to' => $agentId > 0 ? $agentId : null,
+                'reason'      => $reason,
+            ]);
         } catch (Throwable $e) {
-            log_message('warning', 'Failed to notify staff of AI cap: {msg}', ['msg' => $e->getMessage()]);
+            log_message('warning', 'AI hand-over failed for contact {id}: {msg}', ['id' => $contactId, 'msg' => $e->getMessage()]);
         }
     }
 }

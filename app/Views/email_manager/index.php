@@ -23,10 +23,10 @@ $activeTab = $activeTab ?? 'campaigns';
         </ul>
     </div>
 <?php endif; ?>
-<a href="<?= site_url('email-manager?tab=senders') ?>" class="btn btn-sm <?= $activeTab === 'senders' ? 'btn-primary' : 'btn-outline-secondary' ?>">
+<a href="<?= site_url('email-manager?tab=senders') ?>" class="btn btn-sm <?= $activeTab === 'senders' ? 'btn-wa' : 'btn-outline-secondary' ?>">
     <i class="fas fa-id-badge me-1"></i> Sender &amp; Domain Identity
 </a>
-<a href="<?= site_url('analytics?tab=email') ?>" class="btn btn-sm btn-outline-primary">
+<a href="<?= site_url('analytics?tab=email') ?>" class="btn btn-sm btn-outline-secondary">
     <i class="fas fa-chart-pie me-1"></i> Analytics &amp; Reports
 </a>
 <a href="<?= site_url('settings/email') ?>" class="btn btn-sm btn-outline-secondary">

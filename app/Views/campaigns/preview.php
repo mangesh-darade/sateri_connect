@@ -6,6 +6,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="page-list">
 <?php $campaign = $campaign ?? []; $preview = $preview ?? []; ?>
 <div class="card card-wa">
     <div class="card-body">
@@ -37,5 +38,6 @@
             </div>
         </div>
     </div>
+</div>
 </div>
 <?= $this->endSection() ?>

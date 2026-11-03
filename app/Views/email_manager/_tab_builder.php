@@ -70,7 +70,7 @@ $canSend = ! empty($canSend);
                     </div>
 
                     <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary btn-sm px-3"><i class="fas fa-save me-1"></i> Save Template</button>
+                        <button type="submit" class="btn btn-wa btn-sm px-3"><i class="fas fa-save me-1"></i> Save Template</button>
                         <button type="button" class="btn btn-light border btn-sm px-3" id="builderReset"><i class="fas fa-undo me-1"></i> Reset</button>
                     </div>
                     <div class="em-msg mt-2 small" id="builderMsg"></div>
@@ -147,7 +147,7 @@ $canSend = ! empty($canSend);
                                 </td>
                                 <td class="text-end text-nowrap">
                                     <?php if ($canSend): ?>
-                                        <button type="button" class="btn btn-xs btn-outline-primary em-edit-builder" title="Load into editor">
+                                        <button type="button" class="btn btn-xs btn-outline-secondary em-edit-builder" title="Load into editor">
                                             <i class="fas fa-edit me-1"></i> Edit
                                         </button>
                                         <button type="button" class="btn btn-xs btn-outline-danger em-del-builder ms-1" data-id="<?= (int) $b['id'] ?>" title="Delete template">

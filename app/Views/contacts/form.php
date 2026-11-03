@@ -7,6 +7,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="page-list">
 <?php
 $contact = $contact ?? [];
 $isEdit = ! empty($contact['id']);
@@ -418,6 +419,7 @@ if ($selectedDialCode !== '' && str_starts_with($localMobileVal, $selectedDialCo
         </div>
 
     </form>
+</div>
 </div>
 <?= $this->endSection() ?>
 

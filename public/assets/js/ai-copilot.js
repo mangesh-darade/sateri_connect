@@ -221,11 +221,7 @@
                     }
                     if (window.WorkflowFlow && typeof window.WorkflowFlow.setGraph === 'function') {
                         window.WorkflowFlow.setGraph(workflowData.nodes, workflowData.edges, workflowData.workflow_name);
-                        if (typeof toastr !== 'undefined') {
-                            toastr.success('Workflow canvas updated with AI flow!', 'Success');
-                        } else {
-                            alert('Workflow successfully applied to canvas!');
-                        }
+                        APP.toast('Workflow canvas updated with AI flow.', 'success');
                         $btn.prop('disabled', true).html('<i class="fas fa-check me-1"></i> Applied to Canvas');
                     } else if ($('#automationBuilder form').length) {
                         // Store pending graph for visual canvas
@@ -251,7 +247,7 @@
                     }
                 } catch (e) {
                     console.error('Failed to apply workflow', e);
-                    alert('Error applying workflow data.');
+                    APP.toast('Error applying workflow data.', 'error');
                 }
             });
 
@@ -414,11 +410,11 @@
 
                 var buttonHtml = '';
                 if (isOnBuilder) {
-                    buttonHtml = '<button type="button" class="btn btn-sm btn-success w-100 js-apply-workflow-btn" data-workflow="' + jsonStr + '"><i class="fas fa-magic me-1"></i> Apply to Flow Canvas</button>';
+                    buttonHtml = '<button type="button" class="btn btn-sm btn-wa w-100 js-apply-workflow-btn" data-workflow="' + jsonStr + '"><i class="fas fa-magic me-1"></i> Apply to Flow Canvas</button>';
                 } else if (isCreateForm) {
-                    buttonHtml = '<button type="button" class="btn btn-sm btn-success w-100 js-apply-workflow-btn" data-workflow="' + jsonStr + '"><i class="fas fa-save me-1"></i> Save & Open Visual Canvas</button>';
+                    buttonHtml = '<button type="button" class="btn btn-sm btn-wa w-100 js-apply-workflow-btn" data-workflow="' + jsonStr + '"><i class="fas fa-save me-1"></i> Save & Open Visual Canvas</button>';
                 } else {
-                    buttonHtml = '<a href="' + APP.baseUrl + '/automations/create" class="btn btn-sm btn-outline-success w-100"><i class="fas fa-external-link-alt me-1"></i> Open Flow Builder</a>';
+                    buttonHtml = '<a href="' + APP.baseUrl + '/automations/create" class="btn btn-sm btn-outline-secondary w-100"><i class="fas fa-external-link-alt me-1"></i> Open Flow Builder</a>';
                 }
 
                 actionCardHtml =
@@ -436,7 +432,7 @@
                     '<div class="copilot-action-card">' +
                         '<h6><i class="fas fa-file-lines me-1 text-primary"></i> ' + APP.escapeHtml(actionData.title || 'Draft Copy') + '</h6>' +
                         '<div class="p-2 bg-white rounded border mb-2 small font-monospace" style="white-space: pre-wrap;">' + APP.escapeHtml(copyText) + '</div>' +
-                        '<button type="button" class="btn btn-sm btn-outline-primary w-100 js-copilot-copy-btn" data-copy="' + APP.escapeHtml(copyText) + '"><i class="fas fa-copy me-1"></i> Copy Message Text</button>' +
+                        '<button type="button" class="btn btn-sm btn-outline-secondary w-100 js-copilot-copy-btn" data-copy="' + APP.escapeHtml(copyText) + '"><i class="fas fa-copy me-1"></i> Copy Message Text</button>' +
                     '</div>';
             }
             // Handle Keywords Action
@@ -493,7 +489,7 @@
                                         APP.escapeHtml(created) +
                                     '</div>' +
                                 '</div>' +
-                                '<button type="button" class="btn btn-xs btn-outline-success js-load-history-prompt px-2 py-1" style="font-size: 0.7rem; white-space: nowrap;" data-prompt="' + APP.escapeHtml(promptStr) + '" title="Use this prompt">' +
+                                '<button type="button" class="btn btn-xs btn-outline-secondary js-load-history-prompt px-2 py-1" style="font-size: 0.7rem; white-space: nowrap;" data-prompt="' + APP.escapeHtml(promptStr) + '" title="Use this prompt">' +
                                     '<i class="fas fa-arrow-turn-up me-1"></i> Use' +
                                 '</button>' +
                             '</div>';

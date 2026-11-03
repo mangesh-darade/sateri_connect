@@ -52,7 +52,7 @@
                 <code><?= esc($key) ?></code>
                 <a href="<?= site_url('contacts?attr_key=' . rawurlencode($key) . '&attr_op=not_empty') ?>" class="text-muted text-decoration-none" title="Show these contacts"><?= (int) $count ?> contact<?= $count === 1 ? '' : 's' ?></a>
                 <?php if ($canEdit): ?>
-                    <button type="button" class="btn btn-sm btn-outline-success py-0 px-2" data-crud-new
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" data-crud-new
                             data-prefill="<?= esc(json_encode(['attr_key' => $key, 'label' => ucwords(str_replace('_', ' ', $key)), 'type' => 'text']), 'attr') ?>">
                         <i class="fas fa-plus me-1"></i>Add
                     </button>

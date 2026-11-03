@@ -79,7 +79,8 @@
         has_tag: 'Has tag',
         within_window: 'Within 24h window',
         contact_status: 'Contact status',
-        attribute_condition: 'Attribute condition'
+        attribute_condition: 'Attribute condition',
+        ab_split: 'A/B split'
     };
 
     /** Block colours (palette tiles + node headers). Key = trigger_type / condition_type / action_type / 'end'. */
@@ -359,6 +360,10 @@
             var list = d.action_type === 'ask_question' ? questionOptions(d) : choiceOptions(d);
             var opt = list[parseInt(String(p).slice(4), 10) - 1];
             if (opt) return opt.length > 18 ? opt.slice(0, 17) + '…' : opt;
+        }
+        if (d.condition_type === 'ab_split') {
+            var pct = parseInt(d.value, 10) || 50;
+            return p === 'true' ? 'A (' + pct + '%)' : 'B (' + (100 - pct) + '%)';
         }
         return p === 'true' ? 'Yes' : (p === 'false' ? 'No' : (String(p).indexOf('opt_') === 0 ? ('#' + String(p).slice(4)) : 'Out'));
     }
@@ -728,7 +733,7 @@
         });
 
         return '<div class="insp-var-picker mt-1" data-target="' + esc(target) + '">' +
-            '<button type="button" class="btn btn-sm btn-outline-primary insp-var-toggle"><i class="fas fa-plus me-1"></i>Variable</button>' +
+            '<button type="button" class="btn btn-sm btn-outline-secondary insp-var-toggle"><i class="fas fa-plus me-1"></i>Variable</button>' +
             '<div class="insp-var-menu d-none border rounded p-2 mt-1 bg-white">' +
                 group('Contact', contactChips) +
                 group('Attributes', attrChips) +
@@ -941,11 +946,11 @@
             html += '<p class="small text-muted mb-2" style="font-size:11px;line-height:1.4;">' +
                 'Trigger a live test lead for this specific form directly, or open Meta tools.' +
                 '</p>';
-            html += '<button type="button" class="btn btn-sm btn-success w-100 mb-2 js-fb-send-test-lead" style="font-size:12px;font-weight:600;"' + (d.form_id ? '' : ' disabled') + '>' +
+            html += '<button type="button" class="btn btn-sm btn-wa w-100 mb-2 js-fb-send-test-lead" style="font-size:12px;font-weight:600;"' + (d.form_id ? '' : ' disabled') + '>' +
                 '<i class="fas fa-bolt me-1"></i> Send Test Lead Now (1-Click)' +
                 '</button>';
             html += '<div class="text-center text-muted small mb-2" style="font-size:10px;">— OR USE META TOOLS —</div>';
-            html += '<a href="https://developers.facebook.com/tools/lead-ads-testing" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-primary w-100 mb-1 text-center js-fb-test-tool-btn" style="font-size:12px;font-weight:600;">' +
+            html += '<a href="https://developers.facebook.com/tools/lead-ads-testing" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-wa w-100 mb-1 text-center js-fb-test-tool-btn" style="font-size:12px;font-weight:600;">' +
                 '<i class="fas fa-external-link-alt me-1"></i> Open Meta Lead Testing Tool' +
                 '</a>';
             if (d.page_id) {
@@ -1036,7 +1041,7 @@
                 '</div>';
         });
         if (list.length < 10) {
-            html += '<button type="button" class="btn btn-sm btn-outline-success mb-2" id="inspAddOption">Add option</button>';
+            html += '<button type="button" class="btn btn-sm btn-outline-secondary mb-2" id="inspAddOption">Add option</button>';
         }
         html += attrDropdownHtml({ k: 'save_as', label: 'Save reply in a variable', cur: d.save_as || '', empty: '— Don\'t save —', noMobile: true });
         html += inspHint(filled.length > 3
@@ -1233,10 +1238,15 @@
                         html += '<label>Value</label><input class="form-control insp" data-k="value" type="' + (condDef && condDef.type === 'date' ? 'date' : 'text') + '" value="' + esc(d.value || '') + '">';
                     }
                 }
+            } else if (d.condition_type === 'ab_split') {
+                html += '<label>Percent sent to path A</label><input class="form-control insp" data-k="value" type="number" min="1" max="99" value="' + esc(d.value || 50) + '">';
+                html += inspHint('The rest follow path B. Each contact always gets the same path at this node, so a re-entering contact is not switched.');
             } else {
                 html += '<label>Value</label><input class="form-control insp" data-k="value" value="' + esc(d.value || '') + '">';
             }
-            html += tagSelectHtml(d);
+            if (d.condition_type !== 'ab_split') {
+                html += tagSelectHtml(d);
+            }
         } else if (node.type === 'end') {
             html += inspHint('End node — workflow stops here.');
         } else {
@@ -1385,7 +1395,7 @@
         } else if (palette === 'condition') {
             node.data.condition_type = extra || 'message_contains';
             node.data.label = CONDITION_LABELS[node.data.condition_type] || 'If / Else';
-            node.data.value = '';
+            node.data.value = node.data.condition_type === 'ab_split' ? '50' : '';
         } else if (palette === 'end') {
             node.type = 'end';
             node.data.action_type = 'end';
@@ -1525,12 +1535,10 @@
         });
 
         req.done(function (res) {
-            if (window.APP && APP.toast) APP.toast((res && res.message) || 'Workflow saved', 'success');
-            else alert('Workflow saved');
+            APP.toast((res && res.message) || 'Workflow saved', 'success');
         }).fail(function (xhr) {
             var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Save failed';
-            if (window.APP && APP.toast) APP.toast(msg, 'error');
-            else alert(msg);
+            APP.toast(msg, 'error');
         });
     }
 

@@ -38,7 +38,7 @@ $canManage = ! empty($canManage);
             <div class="modal-footer">
                 <span class="small text-muted me-auto" id="sesDnsChecked"></span>
                 <?php if ($canManage): ?>
-                <button type="button" class="btn btn-outline-success btn-sm" id="sesDnsRecheck"><i class="fas fa-sync-alt me-1"></i> Check Verification</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="sesDnsRecheck"><i class="fas fa-sync-alt me-1"></i> Check Verification</button>
                 <?php endif; ?>
                 <button type="button" class="btn btn-light border btn-sm" data-bs-dismiss="modal">Close</button>
             </div>

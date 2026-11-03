@@ -234,14 +234,48 @@ $cats = ['marketing' => 'Marketing', 'utility' => 'Utility', 'authentication' =>
 
     <div class="platform-card">
         <details class="rg-details">
-            <summary>Import Meta rate card (CSV)</summary>
-            <p class="platform-help" style="margin-top:.75rem">Download the list-rates CSV for your billing currency from Meta's <a href="https://developers.facebook.com/docs/whatsapp/pricing" target="_blank" rel="noopener">pricing page</a> (Rate cards and volume tiers) and upload it. Countries are matched by name and existing rates are updated. Regional rows such as "Rest of Africa" are skipped; add those countries separately.</p>
-            <form method="post" action="<?= site_url('platform/wa-rates/import') ?>" enctype="multipart/form-data" class="platform-form-grid">
+            <summary>Import Meta rate card</summary>
+            <p class="platform-help" style="margin-top:.75rem">Meta has no pricing API, so the rate card comes from its pricing page. Open
+                <a href="https://developers.facebook.com/docs/whatsapp/pricing" target="_blank" rel="noopener">Meta's pricing page</a>,
+                find <strong>Rate cards and volume tiers</strong> and pick your billing currency. Then either <strong>paste the link</strong> of
+                "<em>&lt;currency&gt; list rates</em>" (right-click, Copy link address) or <strong>upload the file</strong> (Meta's file is an
+                .xlsx spreadsheet; .csv works too). Countries are matched by name and existing rates are updated. Regional rows such as
+                "Rest of Africa" are skipped; add those countries separately.</p>
+            <form method="post" action="<?= site_url('platform/wa-rates/import') ?>" enctype="multipart/form-data" class="platform-form-grid" id="rateImportForm">
                 <?= csrf_field() ?>
-                <div class="full"><label class="platform-label" for="rateCard">CSV file</label><input class="platform-input" id="rateCard" type="file" name="rate_card" accept=".csv,text/csv" required></div>
-                <div><label class="platform-label">Currency</label><input class="platform-input" name="currency" value="<?= esc($baseCur, 'attr') ?>" maxlength="3"></div>
-                <div class="full"><button class="btn-pf btn-pf-primary" type="submit">Import</button></div>
+                <div class="full"><label class="platform-label" for="rateUrl">Link to "list rates" (recommended)</label>
+                    <input class="platform-input" id="rateUrl" type="url" name="rate_url" placeholder="https://scontent...fbcdn.net/..." autocomplete="off">
+                    <div class="platform-help">Meta's links expire after a few days, so use it right after copying.</div></div>
+                <div class="full"><label class="platform-label" for="rateCard">Or upload the file</label>
+                    <input class="platform-input" id="rateCard" type="file" name="rate_card" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></div>
+                <div><label class="platform-label" for="rateCurrency">Currency of the file</label>
+                    <select class="platform-input" id="rateCurrency" name="currency">
+                        <?php foreach (\App\Libraries\Currency::codes() as $cur): ?>
+                            <option value="<?= esc($cur, 'attr') ?>"<?= $cur === $baseCur ? ' selected' : '' ?>><?= esc($cur) ?></option>
+                        <?php endforeach; ?>
+                    </select></div>
+                <div class="full"><button class="btn-pf btn-pf-primary" type="submit" id="rateImportBtn"><i class="fas fa-cloud-arrow-down" aria-hidden="true"></i> Import rates</button></div>
             </form>
+            <script>
+            (function () {
+                var f = document.getElementById('rateImportForm');
+                if (!f) return;
+                f.addEventListener('submit', function (e) {
+                    if (!document.getElementById('rateUrl').value.trim() && !document.getElementById('rateCard').files.length) {
+                        e.preventDefault();
+                        alert('Paste the link or choose the rate card file first.');
+                        return;
+                    }
+                    if (!window.confirm('Import will overwrite the saved rates of every country found in the Meta rate card. Continue?')) {
+                        e.preventDefault();
+                        return;
+                    }
+                    var b = document.getElementById('rateImportBtn');
+                    b.disabled = true;
+                    b.textContent = 'Importing…';
+                });
+            })();
+            </script>
         </details>
     </div>
 </section>

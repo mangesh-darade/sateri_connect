@@ -40,6 +40,11 @@ class Guide extends BaseController
             'title'    => 'Facebook Lead Ads Guide',
             'subtitle' => 'Step-by-step Meta Developer, Webhook, and Business Suite setup for Lead Ads.',
         ],
+        'social' => [
+            'file'     => 'GUIDE_SOCIAL_SCHEDULER.md',
+            'title'    => 'Social Scheduler Guide',
+            'subtitle' => 'Connect Facebook, Instagram, YouTube, LinkedIn and WhatsApp, then schedule weeks of posts.',
+        ],
         'automations' => [
             'file'     => '',
             'title'    => 'Automation Flows',
@@ -235,6 +240,7 @@ class Guide extends BaseController
             ['type' => 'meta-official', 'label' => 'Meta Publish'],
             ['type' => 'meta-screenshots', 'label' => 'Meta Screenshots'],
             ['type' => 'meta-lead-ads', 'label' => 'Facebook Leads'],
+            ['type' => 'social', 'label' => 'Social Scheduler'],
             ['type' => 'automations', 'label' => 'Automations'],
         ];
     }

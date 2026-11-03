@@ -348,7 +348,7 @@
             var groupId = $opt.data('id');
             var groupName = $opt.val();
             if (!groupId || !groupName) {
-                alert('Please select a customer group first.');
+                APP.toast('Please select a customer group first.', 'warning');
                 return;
             }
 
@@ -360,12 +360,12 @@
             .then(function (res) {
                 $btn.prop('disabled', false);
                 if (!res.success) {
-                    alert(res.message || 'Error loading group contacts.');
+                    APP.toast(res.message || 'Error loading group contacts.', 'error');
                     return;
                 }
                 var emails = (res.data && res.data.emails) || [];
                 if (!emails.length) {
-                    alert('No active contacts with valid email in this group.');
+                    APP.toast('No active contacts with valid email in this group.', 'warning');
                     return;
                 }
 
@@ -388,7 +388,7 @@
             })
             .catch(function (err) {
                 $btn.prop('disabled', false);
-                alert(err.message || 'Network error.');
+                APP.toast(err.message || 'Network error.', 'error');
             });
         });
 

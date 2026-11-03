@@ -59,7 +59,7 @@ $canSend = ! empty($canSend);
                     <div class="mb-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <label class="form-label small fw-semibold mb-0">Sequence Steps (Email Timeline)</label>
-                            <button type="button" class="btn btn-xs btn-outline-primary" id="dripAddStep">
+                            <button type="button" class="btn btn-xs btn-outline-secondary" id="dripAddStep">
                                 <i class="fas fa-plus me-1"></i> Add Step
                             </button>
                         </div>
@@ -67,7 +67,7 @@ $canSend = ! empty($canSend);
                     </div>
 
                     <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary btn-sm px-3"><i class="fas fa-save me-1"></i> Save Drip</button>
+                        <button type="submit" class="btn btn-wa btn-sm px-3"><i class="fas fa-save me-1"></i> Save Drip</button>
                         <button type="button" class="btn btn-light border btn-sm px-3" id="dripReset"><i class="fas fa-undo me-1"></i> Reset</button>
                     </div>
                     <div class="em-msg mt-2 small" id="dripMsg"></div>
@@ -130,7 +130,7 @@ $canSend = ! empty($canSend);
                                     </div>
                                     <?php if ($canSend): ?>
                                     <div class="d-flex gap-1 text-nowrap">
-                                        <button type="button" class="btn btn-xs btn-outline-primary em-edit-drip"><i class="fas fa-edit me-1"></i>Edit</button>
+                                        <button type="button" class="btn btn-xs btn-outline-secondary em-edit-drip"><i class="fas fa-edit me-1"></i>Edit</button>
                                         <button type="button" class="btn btn-xs btn-outline-danger em-del-drip" data-id="<?= (int) $d['id'] ?>"><i class="fas fa-trash me-1"></i>Delete</button>
                                     </div>
                                     <?php endif; ?>
@@ -150,7 +150,7 @@ $canSend = ! empty($canSend);
                                                     <span class="fw-medium text-dark"><?= esc($s['subject']) ?></span>
                                                 </div>
                                                 <?php if ($canSend): ?>
-                                                    <button type="button" class="btn btn-xs btn-outline-success em-send-step"
+                                                    <button type="button" class="btn btn-xs btn-outline-secondary em-send-step"
                                                         data-drip-id="<?= (int) $d['id'] ?>"
                                                         data-step-id="<?= (int) $s['id'] ?>">
                                                         <i class="fas fa-paper-plane me-1"></i> Test Send

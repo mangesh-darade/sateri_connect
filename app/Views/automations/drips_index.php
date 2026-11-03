@@ -141,7 +141,7 @@ $totalSteps  = (int) ($totalSteps ?? 0);
                     <section class="drip-section drip-steps-section">
                         <div class="d-flex align-items-center justify-content-between mb-2">
                             <h6 class="drip-section-title mb-0"><i class="fas fa-list-ol me-1"></i> Sequence Steps</h6>
-                            <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2" id="btnAddDripStep">
+                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="btnAddDripStep">
                                 <i class="fas fa-plus me-1"></i> Add Step
                             </button>
                         </div>

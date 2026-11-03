@@ -87,7 +87,7 @@ $isCheerio = ! empty($isCheerio);
                                     </option>
                                 <?php endforeach; ?>
                             </select>
-                            <button type="button" class="btn btn-primary btn-sm px-3" id="btnLoadGroupEmails">
+                            <button type="button" class="btn btn-wa btn-sm px-3" id="btnLoadGroupEmails">
                                 <i class="fas fa-user-plus me-1"></i> Add
                             </button>
                         </div>
@@ -124,7 +124,7 @@ $isCheerio = ! empty($isCheerio);
                     </div>
 
                     <div class="d-flex gap-2 mt-3">
-                        <button type="submit" class="btn btn-primary btn-sm px-3"><i class="fas fa-save me-1"></i> Save Draft</button>
+                        <button type="submit" class="btn btn-wa btn-sm px-3"><i class="fas fa-save me-1"></i> Save Draft</button>
                         <button type="button" class="btn btn-light border btn-sm px-3" id="campReset"><i class="fas fa-undo me-1"></i> Reset</button>
                     </div>
                     <div class="em-msg mt-2 small" id="campMsg"></div>

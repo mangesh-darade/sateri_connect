@@ -714,11 +714,7 @@ $(function () {
         var $b = $(this);
         var status = ($b.data('status') || '').toString().toUpperCase();
         if (status && status !== 'APPROVED') {
-            if (window.APP && APP.toast) {
-                APP.toast('Only APPROVED templates can be sent. Current status: ' + status, 'error');
-            } else {
-                alert('Only APPROVED templates can be sent.');
-            }
+            APP.toast('Only APPROVED templates can be sent. Current status: ' + status, 'error');
             return;
         }
         var id = $b.data('id');

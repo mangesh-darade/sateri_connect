@@ -198,6 +198,18 @@ if (! function_exists('is_cheerio_email_provider')) {
     }
 }
 
+if (! function_exists('customer_payments_enabled')) {
+    /** Whether the client saved its own Razorpay keys, so the inbox can send payment links */
+    function customer_payments_enabled(): bool
+    {
+        try {
+            return (new \App\Libraries\CustomerPaymentLinks())->isConfigured();
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+}
+
 if (! function_exists('is_ai_enabled')) {
     /** Whether AI Assistant & Gemini Auto-Bot is enabled in Settings */
     function is_ai_enabled(): bool

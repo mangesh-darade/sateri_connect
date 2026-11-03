@@ -60,6 +60,235 @@ class ReportService
     }
 
     /**
+     * New inbox conversations that started from a Click-to-WhatsApp ad, grouped by ad (first touch).
+     * Headline and link come from the referral Meta attached to the customer's first message.
+     *
+     * @param array{from_utc:string,to_utc:string} $range
+     * @return list<array{ad_id:string,headline:string,source_type:string,source_url:string,conversations:int,answered:int,first_at:?string,last_at:?string,campaign:string,spend_minor:?int,cost_per_conversation_minor:?int}>
+     */
+    public function ctwaAds(array $range): array
+    {
+        $db = db_connect();
+
+        $ads = $db->query(
+            "SELECT cv.ctwa_referral AS ad_id, COUNT(*) AS conversations,
+                    SUM(EXISTS(SELECT 1 FROM messages o WHERE o.conversation_id = cv.id AND o.direction = 'outbound')) AS answered,
+                    MIN(cv.created_at) AS first_at, MAX(cv.created_at) AS last_at
+               FROM conversations cv
+              WHERE cv.ctwa_referral IS NOT NULL AND cv.ctwa_referral <> ''
+                AND cv.created_at >= ? AND cv.created_at <= ?
+              GROUP BY cv.ctwa_referral
+              ORDER BY conversations DESC
+              LIMIT 100",
+            [$range['from_utc'], $range['to_utc']]
+        )->getResultArray();
+
+        if ($ads === []) {
+            return [];
+        }
+
+        $info = [];
+        $rows = $db->table('conversations cv')
+            ->select('cv.ctwa_referral AS ad_id, m.payload')
+            ->join('messages m', "m.conversation_id = cv.id AND m.direction = 'inbound'")
+            ->whereIn('cv.ctwa_referral', array_column($ads, 'ad_id'))
+            ->where('cv.created_at >=', $range['from_utc'])
+            ->where('cv.created_at <=', $range['to_utc'])
+            ->like('m.payload', '"referral"')
+            ->orderBy('m.id', 'DESC')
+            ->limit(300)
+            ->get()
+            ->getResultArray();
+
+        foreach ($rows as $r) {
+            $adId = (string) $r['ad_id'];
+            if (isset($info[$adId])) {
+                continue;
+            }
+            $payload = json_decode((string) $r['payload'], true);
+            $ref     = is_array($payload) ? ($payload['message']['referral'] ?? null) : null;
+            if (is_array($ref)) {
+                $info[$adId] = $ref;
+            }
+        }
+
+        $out = [];
+        foreach ($ads as $a) {
+            $ref   = $info[(string) $a['ad_id']] ?? [];
+            $url   = (string) ($ref['source_url'] ?? '');
+            $out[] = [
+                'ad_id'         => (string) $a['ad_id'],
+                'headline'      => trim((string) ($ref['headline'] ?? '')),
+                'source_type'   => (string) ($ref['source_type'] ?? ''),
+                'source_url'    => str_starts_with($url, 'https://') ? $url : '',
+                'conversations' => (int) $a['conversations'],
+                'answered'      => (int) $a['answered'],
+                'first_at'      => $a['first_at'],
+                'last_at'       => $a['last_at'],
+                'campaign'      => '',
+                'spend_minor'   => null,
+                'cost_per_conversation_minor' => null,
+            ];
+        }
+
+        return $this->withAdSpend($out);
+    }
+
+    /**
+     * Adds campaign name, spend and cost per chat to ads that were created in Ads (ad_campaigns.meta_ad_id
+     * matches the ad id Meta sends). Ads made elsewhere keep null. Test-mode campaigns never match: they
+     * have no Meta ad id.
+     *
+     * @param list<array<string, mixed>> $rows
+     * @return list<array<string, mixed>>
+     */
+    private function withAdSpend(array $rows): array
+    {
+        $db = db_connect();
+        if ($rows === [] || ! $db->tableExists('ad_campaigns') || ! $db->tableExists('ad_metrics_daily')) {
+            return $rows;
+        }
+
+        $found = $db->query(
+            'SELECT c.meta_ad_id, MAX(c.name) AS name, COALESCE(SUM(m.spend_minor), 0) AS spend_minor
+               FROM ad_campaigns c
+               LEFT JOIN ad_metrics_daily m ON m.campaign_id = c.id
+              WHERE c.is_mock = 0 AND c.meta_ad_id IN (' . implode(',', array_fill(0, count($rows), '?')) . ')
+              GROUP BY c.meta_ad_id',
+            array_column($rows, 'ad_id')
+        )->getResultArray();
+
+        $byAd = [];
+        foreach ($found as $f) {
+            $byAd[(string) $f['meta_ad_id']] = $f;
+        }
+        foreach ($rows as &$r) {
+            $f = $byAd[$r['ad_id']] ?? null;
+            if ($f === null) {
+                continue;
+            }
+            $r['campaign']    = (string) $f['name'];
+            $r['spend_minor'] = (int) $f['spend_minor'];
+            // Cost per chat uses the chats we actually received, not Meta's own count.
+            $r['cost_per_conversation_minor'] = $r['conversations'] > 0 && $r['spend_minor'] > 0 ? (int) round($r['spend_minor'] / $r['conversations']) : null;
+        }
+        unset($r);
+
+        return $rows;
+    }
+
+    /**
+     * Inbox workload per assigned agent. An agent owns a conversation through
+     * conversations.assigned_to, because messages do not record who sent them.
+     * First response counts any non-campaign outbound reply, bots included.
+     *
+     * @param array{from_utc:string,to_utc:string} $range
+     * @return list<array{user_id:?int,name:string,conversations:int,answered:int,avg_first_response_sec:?int,replies:int,open_now:int,csat_avg:?float,csat_count:int}>
+     */
+    public function agentPerformance(array $range): array
+    {
+        $db = db_connect();
+        $p  = [$range['from_utc'], $range['to_utc']];
+
+        $first = $db->query(
+            "SELECT t.assigned_to AS user_id,
+                    COUNT(*) AS conversations,
+                    SUM(t.first_reply_at IS NOT NULL) AS answered,
+                    AVG(TIMESTAMPDIFF(SECOND, t.first_in_at, t.first_reply_at)) AS avg_sec
+             FROM (
+                 SELECT c.assigned_to, fi.first_in_at,
+                        (SELECT MIN(o.created_at) FROM messages o
+                          WHERE o.conversation_id = c.id AND o.direction = 'outbound'
+                            AND o.campaign_id IS NULL AND o.created_at > fi.first_in_at
+                            AND o.created_at <= ?) AS first_reply_at
+                 FROM (SELECT conversation_id, MIN(created_at) AS first_in_at
+                         FROM messages
+                        WHERE direction = 'inbound' AND conversation_id IS NOT NULL
+                          AND created_at >= ? AND created_at <= ?
+                        GROUP BY conversation_id) fi
+                 JOIN conversations c ON c.id = fi.conversation_id
+             ) t
+             GROUP BY t.assigned_to",
+            [$range['to_utc'], $range['from_utc'], $range['to_utc']]
+        )->getResultArray();
+
+        $replies = $db->query(
+            "SELECT c.assigned_to AS user_id, COUNT(*) AS replies
+               FROM messages m JOIN conversations c ON c.id = m.conversation_id
+              WHERE m.direction = 'outbound' AND m.campaign_id IS NULL
+                AND m.created_at >= ? AND m.created_at <= ?
+              GROUP BY c.assigned_to",
+            $p
+        )->getResultArray();
+
+        $open = $db->query(
+            'SELECT assigned_to AS user_id, COUNT(*) AS open_now FROM conversations WHERE status IN (?, ?) GROUP BY assigned_to',
+            [InboxStatus::OPEN, InboxStatus::PENDING]
+        )->getResultArray();
+
+        // CSAT answers by the agent the chat belonged to when the question was sent.
+        $csat = [];
+        try {
+            model(\App\Models\CsatRatingModel::class); // creates the table on first use
+            $csat = $db->query(
+                'SELECT agent_id AS user_id, COUNT(*) AS csat_count, AVG(rating) AS csat_avg
+                   FROM csat_ratings
+                  WHERE rating IS NOT NULL AND answered_at >= ? AND answered_at <= ?
+                  GROUP BY agent_id',
+                $p
+            )->getResultArray();
+        } catch (\Throwable $e) {
+            log_message('warning', 'CSAT report skipped: {msg}', ['msg' => $e->getMessage()]);
+        }
+
+        $rows = [];
+        $slot = static function (array &$rows, mixed $uid): string {
+            $key = $uid === null ? 'none' : (string) (int) $uid;
+            $rows[$key] ??= [
+                'user_id' => $uid === null ? null : (int) $uid, 'name' => '',
+                'conversations' => 0, 'answered' => 0, 'avg_first_response_sec' => null,
+                'replies' => 0, 'open_now' => 0, 'csat_avg' => null, 'csat_count' => 0,
+            ];
+
+            return $key;
+        };
+
+        foreach ($csat as $r) {
+            $k = $slot($rows, $r['user_id']);
+            $rows[$k]['csat_avg']   = round((float) $r['csat_avg'], 1);
+            $rows[$k]['csat_count'] = (int) $r['csat_count'];
+        }
+
+        foreach ($first as $r) {
+            $k = $slot($rows, $r['user_id']);
+            $rows[$k]['conversations']          = (int) $r['conversations'];
+            $rows[$k]['answered']               = (int) $r['answered'];
+            $rows[$k]['avg_first_response_sec'] = $r['avg_sec'] === null ? null : (int) round((float) $r['avg_sec']);
+        }
+        foreach ($replies as $r) {
+            $rows[$slot($rows, $r['user_id'])]['replies'] = (int) $r['replies'];
+        }
+        foreach ($open as $r) {
+            $rows[$slot($rows, $r['user_id'])]['open_now'] = (int) $r['open_now'];
+        }
+
+        $ids   = array_filter(array_column($rows, 'user_id'));
+        $names = $ids === [] ? [] : array_column(
+            $db->table('users')->select('id, name')->whereIn('id', array_values($ids))->get()->getResultArray(),
+            'name',
+            'id'
+        );
+        foreach ($rows as &$row) {
+            $row['name'] = $row['user_id'] === null ? 'Unassigned' : (string) ($names[$row['user_id']] ?? ('User #' . $row['user_id']));
+        }
+        unset($row);
+
+        usort($rows, static fn (array $a, array $b): int => $b['conversations'] <=> $a['conversations']);
+
+        return $rows;
+    }
+
+    /**
      * @param array{from:string,to:string,from_utc:string,to_utc:string} $range
      * @return array{
      *   summary:array<string,int|float>,
