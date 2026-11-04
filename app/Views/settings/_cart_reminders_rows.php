@@ -16,7 +16,7 @@ $crPlats = \App\Libraries\CartRecoveryService::PLATFORMS;
                                 <td><span class="badge bg-<?= $badge ?>"><?= esc(ucfirst((string) $c['status'])) ?></span><?php if ($c['last_error'] !== ''): ?><div class="small text-muted"><?= esc($c['last_error']) ?></div><?php endif; ?>
                                     <?php if (! empty($c['delivery_status'])): ?>
                                         <?php $dl = ['sent' => ['success', 'Delivered to WhatsApp'], 'failed' => ['danger', 'Delivery failed'], 'cancelled' => ['secondary', 'Cancelled']][$c['delivery_status']] ?? ['info', 'Sending']; ?>
-                                        <div class="small text-<?= $dl[0] ?>"><?= esc($dl[1]) ?><?= ($c['delivery_status'] === 'failed' && (string) $c['delivery_error'] !== '') ? ': ' . esc(mb_substr((string) $c['delivery_error'], 0, 160)) : '' ?></div>
+                                        <div class="small text-<?= $dl[0] ?>"><?= esc($dl[1]) ?><?= ($c['delivery_status'] === 'failed' && (string) $c['delivery_error'] !== '') ? ': ' . esc(\App\Libraries\CartRecoveryService::deliveryHint((string) $c['delivery_error'])) : '' ?></div>
                                     <?php endif; ?></td>
                                 <td class="text-end"><?= (int) $c['reminders_sent'] ?></td>
                                 <td class="small"><?= esc(format_app_datetime($c['last_activity_at'], 'd M Y, g:i A')) ?></td>

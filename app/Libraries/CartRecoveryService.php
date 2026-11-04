@@ -27,6 +27,15 @@ class CartRecoveryService
 
     private const GROUP = 'cart_recovery';
 
+    /** Between products in the saved item text and in the message. */
+    private const ITEM_SEP = ' · ';
+
+    /** Note on a cart whose shopper emptied the cart; if items are added again the cart is live again. */
+    private const NOTE_EMPTY = 'Cart is empty.';
+
+    /** Products named in one reminder; the rest are counted ("+2 more"). */
+    private const MESSAGE_ITEMS = 3;
+
     private const WOO_UNPAID = ['pending', 'failed', 'checkout-draft'];
     private const WOO_DROP   = ['cancelled', 'trash', 'refunded'];
 
@@ -276,13 +285,13 @@ class CartRecoveryService
         }
         $items = [];
         foreach ((array) ($o['line_items'] ?? []) as $li) {
-            $items[] = trim((string) ($li['name'] ?? '')) . ' x' . (int) ($li['quantity'] ?? 1);
+            $items[] = $this->shortName((string) ($li['name'] ?? '')) . ' x' . (int) ($li['quantity'] ?? 1);
         }
         $cur = (string) ($o['currency'] ?? '');
         $this->upsert('woocommerce', $id, [
             'phone'         => $phone,
             'customer_name' => trim((string) ($o['billing']['first_name'] ?? '')),
-            'items_text'    => implode(', ', $items),
+            'items_text'    => implode(self::ITEM_SEP, $items),
             'total'         => trim($cur . ' ' . (string) ($o['total'] ?? '')),
             'amount'        => (float) ($o['total'] ?? 0),
             'checkout_url'  => $url,
@@ -320,19 +329,19 @@ class CartRecoveryService
         foreach ((array) ($o['line_items'] ?? []) as $li) {
             $qty = (int) ($li['quantity'] ?? 1);
             if ($qty > 0) {
-                $items[] = trim((string) ($li['title'] ?? $li['name'] ?? '')) . ' x' . $qty;
+                $items[] = $this->shortName((string) ($li['title'] ?? $li['name'] ?? '')) . ' x' . $qty;
             }
         }
         if ($items === []) {
             // The shopper emptied the cart: nothing to remind about.
-            $this->markDone('shopify', $id, '', 'skipped');
+            $this->markDone('shopify', $id, '', 'skipped', self::NOTE_EMPTY);
 
             return;
         }
         $this->upsert('shopify', $id, [
             'phone'         => $phone,
             'customer_name' => trim((string) ($o['customer']['first_name'] ?? $o['billing_address']['first_name'] ?? '')),
-            'items_text'    => implode(', ', $items),
+            'items_text'    => implode(self::ITEM_SEP, $items),
             'total'         => trim((string) ($o['currency'] ?? '') . ' ' . (string) ($o['total_price'] ?? '')),
             'amount'        => (float) ($o['total_price'] ?? 0),
             'checkout_url'  => (string) ($o['abandoned_checkout_url'] ?? ''),
@@ -357,13 +366,16 @@ class CartRecoveryService
 
             return;
         }
-        if (in_array($row['status'], ['recovered', 'skipped'], true)) {
+        if ($row['status'] === 'skipped' && $row['last_error'] === self::NOTE_EMPTY) {
+            $f['status']     = 'open';
+            $f['last_error'] = '';
+        } elseif (in_array($row['status'], ['recovered', 'skipped'], true)) {
             return;
         }
         $model->update((int) $row['id'], $f);
     }
 
-    private function markDone(string $platform, string $externalId, string $phone, string $status): void
+    private function markDone(string $platform, string $externalId, string $phone, string $status, string $note = ''): void
     {
         if ($externalId === '' && $phone === '') {
             return;
@@ -386,7 +398,54 @@ class CartRecoveryService
             // Paid before any reminder went out: not a recovery, so it must not count as one.
             $scope()->where('reminders_sent', 0)->update(['status' => 'skipped', 'last_error' => 'Paid before a reminder was sent.']);
         }
-        $scope()->update(['status' => $status, 'recovered_at' => $status === 'recovered' ? date('Y-m-d H:i:s') : null]);
+        $update = ['status' => $status, 'recovered_at' => $status === 'recovered' ? date('Y-m-d H:i:s') : null];
+        if ($note !== '') {
+            $update['last_error'] = $note;
+        }
+        $scope()->update($update);
+    }
+
+    /**
+     * The item list as one WhatsApp variable (no line breaks allowed there): the first products, then "+N more".
+     */
+    private function itemsForMessage(string $text): string
+    {
+        $text = trim($text);
+        if ($text === '') {
+            return 'your items';
+        }
+        $parts = array_values(array_filter(array_map('trim', explode(self::ITEM_SEP, $text))));
+        $shown = array_slice($parts, 0, self::MESSAGE_ITEMS);
+        $more  = count($parts) - count($shown);
+
+        return implode(self::ITEM_SEP, $shown) . ($more > 0 ? self::ITEM_SEP . '+' . $more . ' more' : '');
+    }
+
+    /**
+     * A plain explanation for the delivery errors people meet most. Anything else is shown as Meta wrote it.
+     */
+    public static function deliveryHint(string $error): string
+    {
+        $e = mb_strtolower($error);
+        if (str_contains($e, 'healthy ecosystem') || str_contains($e, '131049')) {
+            return 'Meta did not deliver this marketing message to this number (it limits promotional messages to people who have not replied recently). Try another number or wait a day.';
+        }
+        if (str_contains($e, 're-engagement') || str_contains($e, '131047')) {
+            return 'The customer has not messaged you in the last 24 hours, so only an approved template can be sent.';
+        }
+        if (str_contains($e, 'not a valid whatsapp') || str_contains($e, '131026')) {
+            return 'This phone number is not on WhatsApp.';
+        }
+
+        return mb_substr($error, 0, 160);
+    }
+
+    /** Product name for the message: stores often use "Name | long description"; keep the name and cap the length. */
+    private function shortName(string $title): string
+    {
+        $name = trim(explode(' | ', $title)[0]);
+
+        return mb_strlen($name) > 40 ? rtrim(mb_substr($name, 0, 39)) . '…' : $name;
     }
 
     private function normalizePhone(string $raw): string
@@ -540,7 +599,7 @@ class CartRecoveryService
             }
 
             $name       = $cart['customer_name'] !== '' ? $cart['customer_name'] : 'there';
-            $components = $guard->buildBodyComponents($tpl, [$name, $cart['items_text'] ?: 'your items', $cart['total'] ?: '-', $cart['checkout_url']]);
+            $components = $guard->buildBodyComponents($tpl, [1 => $name, 2 => $this->itemsForMessage((string) $cart['items_text']), 3 => $cart['total'] ?: '-', 4 => $cart['checkout_url']]);
             $queueId    = $queue->enqueue($cid, 'template', [
                 'template_name' => $cfg['template_name'],
                 'language'      => $cfg['template_language'],

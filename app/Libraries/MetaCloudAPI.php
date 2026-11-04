@@ -163,6 +163,15 @@ class MetaCloudAPI
                 }
 
                 $human = MetaApiErrorMapper::humanize($apiMessage, $status, $parsed['code'] ?? null);
+                // Creating a template: Meta's own review message says exactly what to fix (a generic send-time
+                // mapping like "variables are missing" would mislead here).
+                if (strtoupper($method) === 'POST' && str_ends_with(rtrim($endpoint, '/'), '/message_templates')) {
+                    $userMsg = trim((string) ($decoded['error']['error_user_msg'] ?? ''));
+                    if ($userMsg !== '') {
+                        $title = trim((string) ($decoded['error']['error_user_title'] ?? ''));
+                        $human = mb_substr(($title !== '' ? $title . ': ' : '') . $userMsg, 0, 400);
+                    }
+                }
                 if (! empty($parsed['code'])) {
                     // Queue retry/suppression decisions key off this marker.
                     $human .= ' [Meta #' . $parsed['code'] . ']';

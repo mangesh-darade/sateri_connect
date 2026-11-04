@@ -83,7 +83,7 @@ $labels = ['open' => 'Waiting', 'reminded' => 'Reminded', 'recovered' => 'Recove
                             <span class="badge bg-<?= $badge ?>"><?= esc(ucfirst((string) $r['status'])) ?></span>
                             <?php if ($r['last_error'] !== ''): ?><div class="small text-muted"><?= esc($r['last_error']) ?></div><?php endif; ?>
                             <?php if ($dl !== null): ?>
-                                <div class="small text-<?= $dl[0] ?>"><?= esc($dl[1]) ?><?= ($r['delivery_status'] === 'failed' && (string) $r['delivery_error'] !== '') ? ': ' . esc(mb_substr((string) $r['delivery_error'], 0, 160)) : '' ?></div>
+                                <div class="small text-<?= $dl[0] ?>"><?= esc($dl[1]) ?><?= ($r['delivery_status'] === 'failed' && (string) $r['delivery_error'] !== '') ? ': ' . esc(\App\Libraries\CartRecoveryService::deliveryHint((string) $r['delivery_error'])) : '' ?></div>
                             <?php endif; ?>
                         </td>
                         <td class="text-end"><?= (int) $r['reminders_sent'] ?></td>
