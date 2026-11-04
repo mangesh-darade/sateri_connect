@@ -174,11 +174,34 @@ class CartRecoveryService
     }
 
     /**
+     * Saves the customer on a checkout or order as a contact (phone required). Never fails the webhook.
+     *
+     * @param array<string, mixed> $o
+     */
+    private function contactFromOrder(string $platform, array $o): void
+    {
+        try {
+            $res = (new StoreCustomerSync($this))->fromOrder($platform, $o);
+            if ($res['message'] !== 'Customer sync is off.' && ! str_starts_with($res['message'], 'Skipped')) {
+                $this->settings->set(self::GROUP . '.last_customer', json_encode(['platform' => $platform, 'ok' => $res['ok'], 'message' => $res['message'] . ' (from checkout)', 'at' => time()]), self::GROUP, false);
+            }
+        } catch (Throwable $e) {
+            log_message('warning', 'CartRecoveryService::contactFromOrder ' . $e::class);
+        }
+    }
+
+    /**
      * @param array<string, mixed> $c
      */
     private function saveCustomer(string $platform, array $c): void
     {
         $res = (new StoreCustomerSync($this))->sync($platform, $c);
+        // Shown in the settings tab so "I signed up but no contact appeared" can be answered (usually: no phone).
+        try {
+            $this->settings->set(self::GROUP . '.last_customer', json_encode(['platform' => $platform, 'ok' => $res['ok'], 'message' => $res['message'], 'at' => time()]), self::GROUP, false);
+        } catch (Throwable) {
+            // Bookkeeping only.
+        }
         if (! $res['ok']) {
             throw new RuntimeException($res['message']);
         }
@@ -248,6 +271,12 @@ class CartRecoveryService
                 }
             }
         }
+        $cust = json_decode((string) $this->settings->get(self::GROUP . '.last_customer', ''), true);
+        if (is_array($cust)) {
+            $label = self::PLATFORMS[$cust['platform'] ?? ''] ?? 'Store';
+            $when  = $this->localTime((int) ($cust['at'] ?? 0));
+            $out[] = ['level' => ! empty($cust['ok']) && str_starts_with((string) ($cust['message'] ?? ''), 'Contact') ? 'success' : (! empty($cust['ok']) ? 'secondary' : 'danger'), 'message' => 'Last customer signup from ' . $label . ' (' . $when . '): ' . ($cust['message'] ?? '')];
+        }
         if (! $this->hasShopifySecret()) {
             $out[] = ['level' => 'secondary', 'message' => 'Shopify signing key is not set, so Shopify events are rejected.'];
         }
@@ -285,6 +314,9 @@ class CartRecoveryService
         }
         $status = strtolower((string) ($o['status'] ?? ''));
         $phone  = $this->normalizePhone((string) ($o['billing']['phone'] ?? ''));
+        if ($phone !== '' && ! in_array($status, self::WOO_DROP, true)) {
+            $this->contactFromOrder('woocommerce', $o);
+        }
 
         if (in_array($status, self::WOO_DROP, true)) {
             $this->markDone('woocommerce', $id, '', 'skipped');
@@ -330,6 +362,9 @@ class CartRecoveryService
         if (str_starts_with($topic, 'orders/')) {
             $token = (string) ($o['checkout_token'] ?? '');
             $phone = $this->normalizePhone((string) ($o['phone'] ?? $o['billing_address']['phone'] ?? $o['customer']['phone'] ?? $o['customer']['default_address']['phone'] ?? ''));
+            if ($phone !== '') {
+                $this->contactFromOrder('shopify', $o);
+            }
             if ($token !== '') {
                 $this->markDone('shopify', $token, $phone, 'recovered');
             } elseif ($phone !== '') {
@@ -344,6 +379,9 @@ class CartRecoveryService
             return;
         }
         $phone = $this->normalizePhone((string) ($o['phone'] ?? $o['billing_address']['phone'] ?? $o['shipping_address']['phone'] ?? $o['customer']['phone'] ?? $o['customer']['default_address']['phone'] ?? ''));
+        if ($phone !== '') {
+            $this->contactFromOrder('shopify', $o);
+        }
         if (! empty($o['completed_at'])) {
             $this->markDone('shopify', $id, $phone, 'recovered');
 
@@ -362,12 +400,20 @@ class CartRecoveryService
 
             return;
         }
+        // A new checkout can report total_price 0.00 before shipping/tax are worked out; fall back to the line total.
+        $amount = 0.0;
+        foreach (['total_price', 'subtotal_price', 'total_line_items_price'] as $k) {
+            if ((float) ($o[$k] ?? 0) > 0) {
+                $amount = (float) $o[$k];
+                break;
+            }
+        }
         $this->upsert('shopify', $id, [
             'phone'         => $phone,
             'customer_name' => trim((string) ($o['customer']['first_name'] ?? $o['billing_address']['first_name'] ?? '')),
             'items_text'    => implode(self::ITEM_SEP, $items),
-            'total'         => trim((string) ($o['currency'] ?? '') . ' ' . (string) ($o['total_price'] ?? '')),
-            'amount'        => (float) ($o['total_price'] ?? 0),
+            'total'         => trim((string) ($o['currency'] ?? '') . ' ' . number_format($amount, 2, '.', '')),
+            'amount'        => $amount,
             'checkout_url'  => (string) ($o['abandoned_checkout_url'] ?? ''),
         ]);
     }
