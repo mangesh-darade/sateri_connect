@@ -205,6 +205,16 @@ class ErrorPresenter
                 . '", which has no database mapped yet. Add a case for it in Config\\Database::applyBySubdomain().';
         }
 
+        // Only a real connection failure should say "could not connect". A query the database rejected (missing
+        // column, constraint, duplicate) is a different problem and must not send people checking credentials.
+        $lower = strtolower($raw);
+        $connectionFailure = str_contains($lower, 'unable to connect')
+            || str_contains($lower, 'connection')
+            || str_contains($lower, 'gone away');
+        if (! $connectionFailure) {
+            return 'The database could not save or read this. Please try again; if it keeps happening, share the reference details with your administrator.';
+        }
+
         return 'The application could not open a database connection. Check that the database exists and credentials are correct.';
     }
 
