@@ -413,9 +413,9 @@
 
                 <input type="text" id="filterAttrValue" class="form-control form-control-sm filter-pill-select d-none" style="max-width:130px" placeholder="Value">
 
-                <button type="button" id="btnFilterContacts" class="btn btn-sm btn-wa px-3 shadow-none">
-                    <i class="fas fa-search me-1"></i> Filter
-                </button>
+                <input type="date" id="filterDateFrom" class="form-control form-control-sm filter-pill-select" style="max-width:150px" title="Added from this date" aria-label="From date">
+                <input type="date" id="filterDateTo" class="form-control form-control-sm filter-pill-select" style="max-width:150px" title="Added up to this date" aria-label="To date">
+
                 <button type="button" id="btnResetContactsFilter" class="btn btn-sm btn-light border px-2 text-secondary" title="Reset all filters">
                     <i class="fas fa-undo"></i>
                 </button>
@@ -648,7 +648,7 @@
     'use strict';
     // Clear / Reset filters button
     $('#btnResetContactsFilter').on('click', function () {
-        $('#filterStatus, #filterTag, #filterArchived, #filterSource, #filterConsent, #filterAssigned, #filterAttrKey').val('');
+        $('#filterStatus, #filterTag, #filterArchived, #filterSource, #filterConsent, #filterAssigned, #filterAttrKey, #filterDateFrom, #filterDateTo').val('');
         $('#filterAttrOp, #filterAttrValue').addClass('d-none').val('');
         if ($('#contactsTable').length && $.fn.DataTable) {
             $('#contactsTable').DataTable().ajax.reload();

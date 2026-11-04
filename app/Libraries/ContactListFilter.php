@@ -25,7 +25,7 @@ class ContactListFilter
      *
      * @param array<string, mixed> $in
      *
-     * @return array{search: string, status: string, tag_id: int, assigned_to: int, consent: string, source: string, archived: string, attr_key: string, attr_op: string, attr_value: string}
+     * @return array{search: string, status: string, tag_id: int, assigned_to: int, consent: string, source: string, date_from: string, date_to: string, archived: string, attr_key: string, attr_op: string, attr_value: string}
      */
     public static function fromInput(array $in): array
     {
@@ -47,11 +47,22 @@ class ContactListFilter
             'assigned_to' => (int) ($in['assigned_to'] ?? 0),
             'consent'     => $consent,
             'source'      => trim((string) ($in['source'] ?? '')),
+            'date_from'   => self::dateOrEmpty($in['date_from'] ?? ''),
+            'date_to'     => self::dateOrEmpty($in['date_to'] ?? ''),
             'archived'    => (string) ($in['archived'] ?? '') === '1' ? '1' : '',
             'attr_key'    => preg_match(ContactAttributeService::KEY_PATTERN, $key) ? $key : '',
             'attr_op'     => isset(self::ATTRIBUTE_OPS[$op]) ? $op : 'equals',
             'attr_value'  => trim((string) ($in['attr_value'] ?? '')),
         ];
+    }
+
+    /** A valid Y-m-d date or ''. */
+    private static function dateOrEmpty(mixed $v): string
+    {
+        $v = trim((string) $v);
+        $d = \DateTime::createFromFormat('!Y-m-d', $v);
+
+        return $d !== false && $d->format('Y-m-d') === $v ? $v : '';
     }
 
     /**
@@ -93,6 +104,13 @@ class ContactListFilter
         $builder->where("{$alias}.archived_at " . (($f['archived'] ?? '') === '1' ? 'IS NOT NULL' : 'IS NULL'), null, false);
         if (($f['source'] ?? '') !== '') {
             self::applyAttribute($builder, 'source', 'equals', (string) $f['source'], $alias);
+        }
+        // Date added, both days included.
+        if (($f['date_from'] ?? '') !== '') {
+            $builder->where("{$alias}.created_at >=", $f['date_from'] . ' 00:00:00');
+        }
+        if (($f['date_to'] ?? '') !== '') {
+            $builder->where("{$alias}.created_at <=", $f['date_to'] . ' 23:59:59');
         }
         if (($f['attr_key'] ?? '') !== '') {
             self::applyAttribute($builder, $f['attr_key'], (string) ($f['attr_op'] ?? 'equals'), (string) ($f['attr_value'] ?? ''), $alias);

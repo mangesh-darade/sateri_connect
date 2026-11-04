@@ -76,6 +76,8 @@
                     d.assigned_to = $('#filterAssigned').val();
                     d.consent = $('#filterConsent').val();
                     d.source = $('#filterSource').val();
+                    d.date_from = $('#filterDateFrom').val();
+                    d.date_to = $('#filterDateTo').val();
                     d.archived = $('#filterArchived').val();
                     $.extend(d, Contacts.attributeFilter());
                 }
@@ -223,10 +225,7 @@
             Contacts.showDetail(data);
         });
 
-        $('#btnFilterContacts').on('click', function () {
-            Contacts.table.ajax.reload();
-        });
-        $('#filterStatus, #filterTag, #filterArchived, #filterSource, #filterAssigned, #filterConsent, #filterAttrOp').on('change', function () {
+        $('#filterStatus, #filterTag, #filterArchived, #filterSource, #filterDateFrom, #filterDateTo, #filterAssigned, #filterConsent, #filterAttrOp').on('change', function () {
             $('#btnBulkArchiveLabel').text($('#filterArchived').val() === '1' ? 'Restore' : 'Archive');
             Contacts.table.ajax.reload();
         });
@@ -237,8 +236,11 @@
             Contacts.table.ajax.reload();
         });
         $('#filterAttrOp').on('change', Contacts.syncAttrValueInput);
+        // No Filter button: every filter applies as soon as it changes (the value box on Enter or when it loses focus).
         $('#filterAttrValue').on('keydown', function (e) {
             if (e.key === 'Enter') Contacts.table.ajax.reload();
+        }).on('change', function () {
+            Contacts.table.ajax.reload();
         });
         $('#btnExportContacts').on('click', function () {
             var params = Contacts.filterParams();
@@ -413,6 +415,8 @@
             assigned_to: $('#filterAssigned').val(),
             consent: $('#filterConsent').val(),
             source: $('#filterSource').val(),
+            date_from: $('#filterDateFrom').val(),
+            date_to: $('#filterDateTo').val(),
             archived: $('#filterArchived').val(),
             search: Contacts.table ? Contacts.table.search() : ''
         }, Contacts.attributeFilter());
