@@ -175,15 +175,23 @@
         }
     });
 
-    $(document).ajaxError(function (_event, xhr) {
+    $(document).ajaxError(function (_event, xhr, settings) {
         if (!xhr) return;
 
         refreshCsrfFromResponse(xhr);
 
         if (xhr.status === 403) {
-            var message = 'Your form/session security token expired or is invalid. Refresh the page and try again.';
-            if (xhr.responseJSON && xhr.responseJSON.message) {
-                message = xhr.responseJSON.message;
+            var json = xhr.responseJSON || {};
+            var message;
+            if (json.message) {
+                message = json.message;
+            } else {
+                // Not the app's own JSON answer: a blocked request (permission, web server or firewall), not a stale token.
+                var path = String((settings && settings.url) || '').split('?')[0].replace(/^https?:\/\/[^/]+/, '');
+                message = 'This request was blocked (403)' + (path ? ': ' + path : '') + '. If it keeps happening, check your permission or ask support.';
+            }
+            if (window.console && console.warn) {
+                console.warn('403 from', settings && settings.type, settings && settings.url, xhr.responseText ? String(xhr.responseText).slice(0, 200) : '');
             }
             APP.toast(message, 'error');
         }
