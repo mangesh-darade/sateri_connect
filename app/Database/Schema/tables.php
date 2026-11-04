@@ -477,6 +477,37 @@ return array (
     ),
     'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
   ),
+  'store_carts' => 
+  array (
+    'columns' => 
+    array (
+      'id' => 'bigint unsigned NOT NULL AUTO_INCREMENT',
+      'platform' => 'varchar(20) NOT NULL',
+      'external_id' => 'varchar(80) NOT NULL',
+      'phone' => "varchar(32) NOT NULL DEFAULT ''",
+      'customer_name' => "varchar(120) NOT NULL DEFAULT ''",
+      'items_text' => "varchar(500) NOT NULL DEFAULT ''",
+      'total' => "varchar(40) NOT NULL DEFAULT ''",
+      'amount' => "decimal(12,2) NOT NULL DEFAULT '0.00'",
+      'checkout_url' => "varchar(1000) NOT NULL DEFAULT ''",
+      'status' => "varchar(20) NOT NULL DEFAULT 'open'",
+      'reminders_sent' => "tinyint unsigned NOT NULL DEFAULT '0'",
+      'queue_id' => 'int unsigned DEFAULT NULL',
+      'last_error' => "varchar(255) NOT NULL DEFAULT ''",
+      'last_activity_at' => 'datetime DEFAULT NULL',
+      'last_reminded_at' => 'datetime DEFAULT NULL',
+      'recovered_at' => 'datetime DEFAULT NULL',
+      'created_at' => 'datetime DEFAULT NULL',
+    ),
+    'indexes' => 
+    array (
+      'PRIMARY' => 'PRIMARY KEY (`id`)',
+      'uq_store_cart_ext' => 'UNIQUE KEY `uq_store_cart_ext` (`platform`,`external_id`)',
+      'idx_store_cart_due' => 'KEY `idx_store_cart_due` (`status`,`last_activity_at`)',
+      'idx_store_cart_phone' => 'KEY `idx_store_cart_phone` (`phone`,`status`)',
+    ),
+    'options' => 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci',
+  ),
   'email_builders' => 
   array (
     'columns' => 
