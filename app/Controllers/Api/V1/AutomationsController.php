@@ -124,12 +124,128 @@ class AutomationsController extends BaseV1Controller
         ], 'Automations loaded.');
     }
 
+    /**
+     * GET /api/v1/automations/agents: the team members a workflow can assign a chat to (id, name, role).
+     * No email or phone is returned.
+     */
+    public function agents(): ResponseInterface
+    {
+        $rows = db_connect()->table('users u')
+            ->select('u.id, u.name, r.name AS role')
+            ->join('roles r', 'r.id = u.role_id', 'left')
+            ->where('u.status', 'active')
+            ->where('u.deleted_at', null)
+            ->orderBy('u.name', 'ASC')
+            ->limit(200)
+            ->get()->getResultArray();
+
+        $list = array_map(static fn (array $r): array => ['id' => (int) $r['id'], 'name' => (string) $r['name'], 'role' => (string) ($r['role'] ?? '')], $rows);
+
+        return $this->respondSuccess(['agents' => $list, 'total' => count($list)], 'Agents loaded. Use an id as user_id in an assign_agent node.');
+    }
+
+    /**
+     * GET /api/v1/automations/schema: how to write a flow_graph (node and edge format, every action with its data keys,
+     * condition presets, WhatsApp limits and a complete example). Lets an AI client build workflows without guessing.
+     */
+    public function schema(): ResponseInterface
+    {
+        $example = [
+            'nodes' => [
+                ['id' => 'trigger', 'type' => 'trigger', 'x' => 40, 'y' => 40, 'data' => ['trigger_type' => 'incoming_message', 'keyword' => 'mango, hapus', 'match_type' => 'contains']],
+                ['id' => 'tag', 'type' => 'action', 'x' => 360, 'y' => 40, 'data' => ['action_type' => 'add_tag', 'tag_name' => 'Mango']],
+                ['id' => 'ask', 'type' => 'action', 'x' => 680, 'y' => 40, 'data' => ['action_type' => 'ask_question', 'text' => 'What would you like to do?', 'options' => ['Order a sample', 'Talk to sales'], 'reply_type' => 'buttons']],
+                ['id' => 'sample', 'type' => 'action', 'x' => 1000, 'y' => 40, 'data' => ['action_type' => 'send_text', 'text' => 'Please send your city and quantity.']],
+                ['id' => 'agent', 'type' => 'action', 'x' => 1000, 'y' => 170, 'data' => ['action_type' => 'assign_agent', 'user_id' => 0]],
+            ],
+            'edges' => [
+                ['from' => 'trigger', 'to' => 'tag', 'port' => 'out'],
+                ['from' => 'tag', 'to' => 'ask', 'port' => 'out'],
+                ['from' => 'ask', 'to' => 'sample', 'port' => 'opt_1'],
+                ['from' => 'ask', 'to' => 'agent', 'port' => 'opt_2'],
+            ],
+        ];
+
+        return $this->respondSuccess([
+            'flow_graph' => [
+                'shape'        => '{ "nodes": [ ... ], "edges": [ ... ] }',
+                'node'         => '{ "id": "unique string", "type": "trigger|action|condition", "x": number, "y": number, "data": { ... } }. Exactly one trigger node. Lay nodes out left to right (x grows by about 320 per column, y by about 130 per row).',
+                'edge'         => '{ "from": node id, "to": node id, "port": "out|true|false|opt_N" }. "out" for a normal next step, "true" / "false" from a condition, "opt_1", "opt_2" ... from an ask_question node, one per option in the order listed. A port with no edge ends that branch.',
+                'merge'        => 'Several nodes may point to the same next node. There are no loops.',
+                'trigger_data' => [
+                    'trigger_type' => 'incoming_message | keyword_matched | contact_created | tag_added | campaign_replied | shopify_event | form_response | schedule | birthday',
+                    'keyword'      => 'comma separated keywords',
+                    'match_type'   => 'exact | contains | starts_with (keywords match whole words, case and punctuation ignored)',
+                ],
+            ],
+            'actions' => [
+                'send_text'          => ['data' => ['text' => 'message text; {{name}} style placeholders are filled from the contact'], 'note' => 'Free text only works inside the customer 24 hour window.'],
+                'send_template'      => ['data' => ['template_name' => 'approved template name', 'language' => 'e.g. en_US', 'variables' => '{ "1": "{{name}}", "2": "text" } mapping template variables to values'], 'note' => 'Use for messages outside the 24 hour window. The template must be approved.'],
+                'send_media'         => ['data' => ['media_type' => 'image | video | document', 'media_url' => 'public https link', 'filename' => 'for documents', 'caption' => 'optional']],
+                'ask_question'       => [
+                    'data' => [
+                        'text'            => 'the question',
+                        'options'         => ['option label', 'option label'],
+                        'reply_type'      => 'buttons (max 3 options, label up to 20 characters) | list (up to 10 options, label up to 24 characters) | text (free answer, no branching)',
+                        'list_button'     => 'list button label, up to 20 characters',
+                        'save_as'         => 'optional contact attribute that stores the answer',
+                        'max_retries'     => 'default 1',
+                        'timeout_minutes' => 'default 1440',
+                    ],
+                    'note' => 'Pauses the flow until the customer answers. Connect one "opt_N" edge per option; for reply_type text use the "out" edge.',
+                ],
+                'set_attribute'      => ['data' => ['attribute' => 'attribute key, letters digits underscore', 'value' => 'text']],
+                'add_tag'            => ['data' => ['tag_name' => 'created if missing']],
+                'remove_tag'         => ['data' => ['tag_name' => 'tag to remove']],
+                'assign_agent'       => ['data' => ['user_id' => 'agent user id (0 leaves the chat unassigned)']],
+                'assign_bot'         => ['data' => [], 'note' => 'Hands the chat to the chatbot.'],
+                'update_chat_status' => ['data' => ['status' => 'open | pending | resolved | intervened']],
+                'add_note'           => ['data' => ['text' => 'internal note on the contact']],
+                'delay'              => ['data' => ['minutes' => 'or seconds'], 'note' => 'Pauses the flow, then continues with the next node.'],
+                'ai_reply'           => ['data' => ['text' => 'optional extra instruction for the AI, e.g. "answer only about delivery"'], 'note' => 'Needs the AI bot enabled in Settings. The AI hands over to a person when unsure.'],
+                'webhook_call'       => ['data' => ['url' => 'https endpoint', 'method' => 'POST | GET', 'body' => 'optional']],
+                'send_email'         => ['data' => ['subject' => 'subject', 'text' => 'body']],
+            ],
+            'conditions' => [
+                'node'    => '{ "id": "...", "type": "condition", "data": { "condition_type": "<preset>", "value": "..." } } with edges from it on ports "true" and "false".',
+                'presets' => ['message_contains' => 'value', 'message_equals' => 'value', 'message_type' => 'value: text|image|document|audio', 'has_tag' => 'tag_id', 'within_window' => 'no value', 'contact_status' => 'value: active|inactive|blocked'],
+            ],
+            'limits' => [
+                'Interactive buttons and lists, and free text, only work while the customer has written in the last 24 hours.',
+                'Use approved templates to start a conversation or after the window closes.',
+                'Prices and fixed facts belong in send_text nodes; use ai_reply only for open questions.',
+                'A new workflow is created OFF. Review it on the Automations screen, then switch it on.',
+            ],
+            'example' => $example,
+        ], 'Workflow schema.');
+    }
+
     /** GET /api/v1/automations/{id}: workflow with its trigger, canvas graph and rules. */
     public function show(string $id): ResponseInterface
     {
         $row = model(AutomationModel::class)->getWithRules((int) $id);
+        if ($row === null) {
+            return $this->respondError('Workflow not found.', 404);
+        }
 
-        return $row === null ? $this->respondError('Workflow not found.', 404) : $this->respondSuccess($row, 'Workflow loaded.');
+        // Workflows made the old way have rules but no canvas graph. Rebuild one from the rules so a client always has
+        // a working example of the node format (it is not saved).
+        $graph = $row['flow_graph'] ?? null;
+        $empty = $graph === null || $graph === '' || $graph === '[]' || $graph === '{}'
+            || (is_array($graph) && empty($graph['nodes'])) || (is_string($graph) && empty((json_decode($graph, true) ?: [])['nodes']));
+        if ($empty && ! empty($row['rules'])) {
+            $rules = array_map(static function (array $r): array {
+                if (is_string($r['config'] ?? null)) {
+                    $r['config'] = json_decode($r['config'], true) ?: [];
+                }
+
+                return $r;
+            }, $row['rules']);
+            $row['flow_graph']         = (new \App\Libraries\WorkflowGraph())->fromRules($rules, (string) ($row['trigger_type'] ?? 'incoming_message'));
+            $row['flow_graph_derived'] = true;
+        }
+
+        return $this->respondSuccess($row, 'Workflow loaded.');
     }
 
     /**

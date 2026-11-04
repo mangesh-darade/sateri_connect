@@ -654,6 +654,8 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1', 'filter' => '
 
     // Automations & Webhooks
     $routes->post('automations/trigger', 'AutomationsController::trigger');
+    $routes->get('automations/schema', 'AutomationsController::schema');
+    $routes->get('automations/agents', 'AutomationsController::agents');
     $routes->get('automations', 'AutomationsController::index');
     $routes->post('automations', 'AutomationsController::create');
     $routes->get('automations/(:num)', 'AutomationsController::show/$1');
