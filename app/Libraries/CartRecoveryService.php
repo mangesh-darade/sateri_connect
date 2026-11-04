@@ -208,6 +208,23 @@ class CartRecoveryService
         } catch (Throwable) {
             // Table not migrated yet; the webhook alerts above already say so.
         }
+        if ($cfg['enabled']) {
+            $run = json_decode((string) $this->settings->get(self::GROUP . '.last_run', ''), true);
+            if (! is_array($run)) {
+                $out[] = ['level' => 'warning', 'message' => 'The reminder check has not run yet. Keep any Sateri Connect page open (it runs about once a minute) or add the carts:remind cron job.'];
+            } else {
+                $when = $this->localTime((int) ($run['at'] ?? 0));
+                if (time() - (int) ($run['at'] ?? 0) > 900) {
+                    $out[] = ['level' => 'warning', 'message' => 'The reminder check last ran at ' . $when . '. Keep a Sateri Connect page open or add the carts:remind cron job.'];
+                } elseif (($run['why'] ?? '') !== '') {
+                    $out[] = ['level' => 'danger', 'message' => 'Reminder check at ' . $when . ': ' . (int) ($run['due'] ?? 0) . ' due, ' . (int) ($run['sent'] ?? 0) . ' queued. ' . $run['why']];
+                } elseif ((int) ($run['due'] ?? 0) > 0) {
+                    $out[] = ['level' => 'success', 'message' => 'Reminder check at ' . $when . ': ' . (int) ($run['due'] ?? 0) . ' due, ' . (int) ($run['sent'] ?? 0) . ' queued.'];
+                } else {
+                    $out[] = ['level' => 'secondary', 'message' => 'Reminder check ran at ' . $when . '. Nothing was due yet.'];
+                }
+            }
+        }
         if (! $this->hasShopifySecret()) {
             $out[] = ['level' => 'secondary', 'message' => 'Shopify signing key is not set, so Shopify events are rejected.'];
         }
@@ -216,7 +233,7 @@ class CartRecoveryService
             if (! is_array($last)) {
                 continue;
             }
-            $when = date('d M H:i', (int) ($last['at'] ?? 0));
+            $when = $this->localTime((int) ($last['at'] ?? 0));
             if (($last['outcome'] ?? '') === 'rejected') {
                 $out[] = ['level' => 'danger', 'message' => $label . ' sent an event that was rejected (' . $when . '). ' . ($last['why'] ?? '')];
             } elseif (($last['outcome'] ?? '') === 'failed') {
@@ -301,7 +318,16 @@ class CartRecoveryService
         }
         $items = [];
         foreach ((array) ($o['line_items'] ?? []) as $li) {
-            $items[] = trim((string) ($li['title'] ?? $li['name'] ?? '')) . ' x' . (int) ($li['quantity'] ?? 1);
+            $qty = (int) ($li['quantity'] ?? 1);
+            if ($qty > 0) {
+                $items[] = trim((string) ($li['title'] ?? $li['name'] ?? '')) . ' x' . $qty;
+            }
+        }
+        if ($items === []) {
+            // The shopper emptied the cart: nothing to remind about.
+            $this->markDone('shopify', $id, '', 'skipped');
+
+            return;
         }
         $this->upsert('shopify', $id, [
             'phone'         => $phone,
@@ -399,6 +425,7 @@ class CartRecoveryService
             $tpl = $guard->resolveApprovedTemplate(null, $cfg['template_name'], $cfg['template_language']);
         } catch (RuntimeException $e) {
             log_message('warning', 'CartRecoveryService template: ' . $e->getMessage());
+            $this->noteRun(0, 0, 'The template cannot be sent: ' . $e->getMessage());
 
             return 0;
         }
@@ -413,55 +440,152 @@ class CartRecoveryService
             ->groupEnd()
             ->orderBy('id', 'ASC')->findAll(max(1, $limit));
 
-        $contacts = model(ContactModel::class);
-        $consent  = service('whatsAppConsent');
-        $queue    = new QueueService();
-        $sent     = 0;
+        $queue = new QueueService();
+        $sent  = 0;
+        $why   = '';
 
         foreach ($rows as $cart) {
-            try {
-                if ($cart['checkout_url'] === '') {
-                    $this->fail((int) $cart['id'], 'skipped', 'No checkout link in the store event.');
-                    continue;
-                }
-                $contact = $contacts->findOrCreateForChannel('whatsapp', (string) $cart['phone'], ['mobile' => (string) $cart['phone'], 'name' => (string) $cart['customer_name']]);
-                $cid     = (int) $contact['id'];
-                if ($cfg['assume_optin'] && ! $consent->isOptedOut($contact)) {
-                    $consent->optIn($cid, 'checkout');
-                    $contact = $contacts->find($cid) ?? $contact;
-                }
-                $check = $consent->templateSendCheck($contact, $tpl, null, null, true);
-                if (! $check['ok']) {
-                    if (in_array($check['reason'], ['messaging_limit'], true)) {
-                        break; // try again on the next run
-                    }
-                    $this->fail((int) $cart['id'], 'skipped', mb_substr($check['message'], 0, 250));
-                    continue;
-                }
-
-                $name = $cart['customer_name'] !== '' ? $cart['customer_name'] : 'there';
-                $components = $guard->buildBodyComponents($tpl, [$name, $cart['items_text'] ?: 'your items', $cart['total'] ?: '-', $cart['checkout_url']]);
-                $queueId = $queue->enqueue($cid, 'template', [
-                    'template_name' => $cfg['template_name'],
-                    'language'      => $cfg['template_language'],
-                    'components'    => $components,
-                ], null, 4);
-
-                $model->update((int) $cart['id'], [
-                    'status'           => 'reminded',
-                    'reminders_sent'   => (int) $cart['reminders_sent'] + 1,
-                    'last_reminded_at' => date('Y-m-d H:i:s'),
-                    'queue_id'         => $queueId,
-                    'last_error'       => '',
-                ]);
+            $res = $this->deliver($cart, $cfg, $tpl, $guard, $queue);
+            if ($res['ok']) {
                 $sent++;
-            } catch (Throwable $e) {
-                log_message('error', 'CartRecoveryService::remindDue ' . $e::class . ': ' . $e->getMessage());
-                $this->fail((int) $cart['id'], 'skipped', 'Could not send the reminder.');
+                continue;
+            }
+            if ($res['retry']) {
+                $why = $res['message'];
+                break; // try again on the next run
+            }
+            $this->fail((int) $cart['id'], 'skipped', mb_substr($res['message'], 0, 250));
+            if ($res['status'] >= 500) {
+                $why = $res['message'];
             }
         }
+        $this->noteRun(count($rows), $sent, $why);
 
         return $sent;
+    }
+
+    /**
+     * Sends one reminder now, ignoring the delay (the "Send now" button on a cart).
+     *
+     * @return array{ok: bool, status: int, message: string}
+     */
+    public function sendNow(int $cartId): array
+    {
+        $cart = model(StoreCartModel::class)->find($cartId);
+        if ($cart === null) {
+            return ['ok' => false, 'status' => 404, 'message' => 'Cart not found.'];
+        }
+        if ($cart['status'] === 'recovered') {
+            return ['ok' => false, 'status' => 409, 'message' => 'This cart was already paid, so no reminder is needed.'];
+        }
+        $cfg = $this->config();
+        if ($cfg['template_name'] === '') {
+            return ['ok' => false, 'status' => 422, 'message' => 'Choose the approved template in Reminder settings first.'];
+        }
+
+        $guard = new WhatsAppTemplateSendGuard();
+        try {
+            $tpl = $guard->resolveApprovedTemplate(null, $cfg['template_name'], $cfg['template_language']);
+        } catch (RuntimeException $e) {
+            return ['ok' => false, 'status' => 422, 'message' => 'The template cannot be sent: ' . $e->getMessage()];
+        }
+
+        $queue = new QueueService();
+        $res   = $this->deliver($cart, $cfg, $tpl, $guard, $queue);
+        if (! $res['ok']) {
+            model(StoreCartModel::class)->update($cartId, ['last_error' => mb_substr($res['message'], 0, 255)]);
+
+            return ['ok' => false, 'status' => $res['status'], 'message' => $res['message']];
+        }
+
+        try {
+            $queue->processBatch(5); // send it now instead of waiting for the next tick
+        } catch (Throwable $e) {
+            log_message('warning', 'CartRecoveryService::sendNow queue ' . $e::class);
+        }
+
+        return ['ok' => true, 'status' => 200, 'message' => 'Reminder sent to WhatsApp. Check the delivery result in the cart list.'];
+    }
+
+    /**
+     * Policy checks, template variables and queueing for one cart.
+     *
+     * @param array<string, mixed> $cart
+     * @param array<string, mixed> $cfg
+     * @param array<string, mixed> $tpl
+     *
+     * @return array{ok: bool, status: int, message: string, retry: bool}
+     */
+    private function deliver(array $cart, array $cfg, array $tpl, WhatsAppTemplateSendGuard $guard, QueueService $queue): array
+    {
+        try {
+            if ((string) $cart['phone'] === '') {
+                return ['ok' => false, 'status' => 422, 'message' => 'This cart has no phone number.', 'retry' => false];
+            }
+            if ((string) $cart['checkout_url'] === '') {
+                return ['ok' => false, 'status' => 422, 'message' => 'No checkout link in the store event.', 'retry' => false];
+            }
+
+            $contacts = model(ContactModel::class);
+            $consent  = service('whatsAppConsent');
+            $contact  = $contacts->findOrCreateForChannel('whatsapp', (string) $cart['phone'], ['mobile' => (string) $cart['phone'], 'name' => (string) $cart['customer_name']]);
+            $cid      = (int) $contact['id'];
+            if ($cfg['assume_optin'] && ! $consent->isOptedOut($contact)) {
+                $consent->optIn($cid, 'checkout');
+                $contact = $contacts->find($cid) ?? $contact;
+            }
+            $check = $consent->templateSendCheck($contact, $tpl, null, null, true);
+            if (! $check['ok']) {
+                return ['ok' => false, 'status' => 422, 'message' => (string) $check['message'], 'retry' => $check['reason'] === 'messaging_limit'];
+            }
+
+            $name       = $cart['customer_name'] !== '' ? $cart['customer_name'] : 'there';
+            $components = $guard->buildBodyComponents($tpl, [$name, $cart['items_text'] ?: 'your items', $cart['total'] ?: '-', $cart['checkout_url']]);
+            $queueId    = $queue->enqueue($cid, 'template', [
+                'template_name' => $cfg['template_name'],
+                'language'      => $cfg['template_language'],
+                'components'    => $components,
+            ], null, 4);
+
+            model(StoreCartModel::class)->update((int) $cart['id'], [
+                'status'           => 'reminded',
+                'reminders_sent'   => (int) $cart['reminders_sent'] + 1,
+                'last_reminded_at' => date('Y-m-d H:i:s'),
+                'queue_id'         => $queueId,
+                'last_error'       => '',
+            ]);
+
+            return ['ok' => true, 'status' => 200, 'message' => 'Queued.', 'retry' => false];
+        } catch (RuntimeException $e) {
+            // Template variables the cart cannot fill, and similar rule failures: safe to show.
+            return ['ok' => false, 'status' => 422, 'message' => $e->getMessage(), 'retry' => false];
+        } catch (Throwable $e) {
+            log_message('error', 'CartRecoveryService::deliver ' . $e::class . ': ' . $e->getMessage());
+
+            return ['ok' => false, 'status' => 500, 'message' => 'Could not send the reminder. Check the server log.', 'retry' => false];
+        }
+    }
+
+    /** A stored UTC time shown in the app timezone (Settings). */
+    private function localTime(int $ts): string
+    {
+        return format_app_datetime(date('Y-m-d H:i:s', $ts), 'd M, g:i A');
+    }
+
+    /** Remembers the latest reminder check so the settings tab can show whether it runs and why nothing was sent. */
+    private function noteRun(int $due, int $sent, string $why): void
+    {
+        try {
+            $key = self::GROUP . '.last_run';
+            $old = json_decode((string) $this->settings->get($key, ''), true);
+            // Quiet ticks (nothing due) are rewritten at most every 5 minutes.
+            if ($due === 0 && $why === '' && is_array($old) && time() - (int) ($old['at'] ?? 0) < 300) {
+                return;
+            }
+            $this->settings->set($key, json_encode(['at' => time(), 'due' => $due, 'sent' => $sent, 'why' => $why]), self::GROUP, false);
+        } catch (Throwable) {
+            // Bookkeeping only.
+        }
     }
 
     private function fail(int $id, string $status, string $message): void
