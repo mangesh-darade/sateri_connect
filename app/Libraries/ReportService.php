@@ -60,6 +60,49 @@ class ReportService
     }
 
     /**
+     * Abandoned cart reminders (WooCommerce, Shopify) with the delivery result of each queued WhatsApp message.
+     * Carts are picked by their last activity inside the period.
+     *
+     * @param array{from_utc:string,to_utc:string} $range
+     * @return array{rows: list<array<string, mixed>>, totals: array<string, int|float>}
+     */
+    public function cartReminders(array $range, string $status = ''): array
+    {
+        model(\App\Models\StoreCartModel::class); // creates the table on first use
+
+        $b = db_connect()->table('store_carts c')
+            ->select('c.*, q.status AS delivery_status, q.error_message AS delivery_error')
+            ->join('message_queue q', 'q.id = c.queue_id', 'left')
+            ->where('c.last_activity_at >=', $range['from_utc'])
+            ->where('c.last_activity_at <=', $range['to_utc']);
+        if (in_array($status, ['open', 'reminded', 'recovered', 'skipped'], true)) {
+            $b->where('c.status', $status);
+        }
+        $rows = $b->orderBy('c.id', 'DESC')->limit(2000)->get()->getResultArray();
+
+        $t = ['carts' => 0, 'reminded' => 0, 'delivered' => 0, 'failed' => 0, 'recovered' => 0, 'recovered_amount' => 0.0, 'cart_value' => 0.0, 'recovery_rate' => 0.0];
+        foreach ($rows as $r) {
+            $t['carts']++;
+            $t['cart_value'] += (float) $r['amount'];
+            if ((int) $r['reminders_sent'] > 0) {
+                $t['reminded']++;
+            }
+            if ($r['delivery_status'] === 'sent') {
+                $t['delivered']++;
+            } elseif ($r['delivery_status'] === 'failed') {
+                $t['failed']++;
+            }
+            if ($r['status'] === 'recovered') {
+                $t['recovered']++;
+                $t['recovered_amount'] += (float) $r['amount'];
+            }
+        }
+        $t['recovery_rate'] = $t['reminded'] > 0 ? round($t['recovered'] / $t['reminded'] * 100, 1) : 0.0;
+
+        return ['rows' => $rows, 'totals' => $t];
+    }
+
+    /**
      * New inbox conversations that started from a Click-to-WhatsApp ad, grouped by ad (first touch).
      * Headline and link come from the referral Meta attached to the customer's first message.
      *

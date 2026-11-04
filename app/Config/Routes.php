@@ -496,6 +496,8 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->get('reports/templates/export', 'Reports::templatesExport');
     $routes->get('reports/agents', 'Reports::agents');
     $routes->get('reports/ctwa', 'Reports::ctwa');
+    $routes->get('reports/cart-reminders', 'Reports::cartReminders');
+    $routes->get('reports/cart-reminders/export', 'Reports::cartRemindersExport');
     $routes->get('reports/email', 'Reports::email');
     $routes->get('reports/campaigns', 'Reports::campaigns');
     $routes->post('reports/campaigns/retarget', 'Reports::retarget', ['filter' => 'csrf']);

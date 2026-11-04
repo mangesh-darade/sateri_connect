@@ -537,6 +537,62 @@ class Reports extends BaseController
         ]);
     }
 
+    public function cartReminders(): string|ResponseInterface
+    {
+        if ($denied = $this->requirePermission('reports.view')) {
+            return $denied;
+        }
+
+        $service = new ReportService();
+        $range   = $service->dateRange((string) $this->request->getGet('from'), (string) $this->request->getGet('to'));
+        $status  = (string) $this->request->getGet('status');
+        $data    = $service->cartReminders($range, $status);
+
+        return view('reports/cart_reminders', [
+            'pageTitle' => 'Cart reminders',
+            'from'      => $range['from'],
+            'to'        => $range['to'],
+            'status'    => $status,
+            'rows'      => $data['rows'],
+            'totals'    => $data['totals'],
+        ]);
+    }
+
+    public function cartRemindersExport(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('reports.export')) {
+            return $denied;
+        }
+
+        $service = new ReportService();
+        $range   = $service->dateRange((string) $this->request->getGet('from'), (string) $this->request->getGet('to'));
+        $status  = (string) $this->request->getGet('status');
+
+        $rows = [];
+        foreach ($service->cartReminders($range, $status)['rows'] as $r) {
+            $delivery = ['sent' => 'Delivered to WhatsApp', 'failed' => 'Delivery failed', 'cancelled' => 'Cancelled', 'pending' => 'Sending', 'processing' => 'Sending'][(string) $r['delivery_status']] ?? '';
+            $rows[] = [
+                \App\Libraries\CartRecoveryService::PLATFORMS[$r['platform']] ?? $r['platform'],
+                $r['customer_name'], $r['phone'], $r['items_text'], $r['total'], ucfirst((string) $r['status']),
+                (int) $r['reminders_sent'], $delivery . ((string) $r['delivery_error'] !== '' ? ': ' . $r['delivery_error'] : ($r['last_error'] !== '' ? $r['last_error'] : '')),
+                format_app_datetime($r['last_reminded_at'], 'd M Y, g:i A', ''), format_app_datetime($r['last_activity_at'], 'd M Y, g:i A', ''),
+            ];
+        }
+
+        log_activity('export', 'reports', 'Exported cart reminders report', ['from' => $range['from'], 'to' => $range['to']]);
+
+        return ReportExporter::respond(
+            $this->response,
+            (string) $this->request->getGet('format'),
+            'Cart reminders report',
+            'cart-reminders-' . $range['from'] . '-to-' . $range['to'],
+            ['Store', 'Customer', 'Phone', 'Items', 'Total', 'Status', 'Reminders', 'Delivery / note', 'Last reminded', 'Last activity'],
+            $rows,
+            [],
+            ['Period' => $range['from'] . ' to ' . $range['to']],
+        );
+    }
+
     public function templatesExport(): ResponseInterface
     {
         if ($denied = $this->requirePermission('reports.export')) {

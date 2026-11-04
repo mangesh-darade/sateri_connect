@@ -600,6 +600,7 @@
                         ['label' => 'Campaign Report', 'icon' => 'megaphone', 'url' => site_url('reports/campaigns'), 'match' => ['reports/campaigns'], 'perm' => 'reports.view'],
                         ['label' => 'WhatsApp Template Report', 'icon' => 'message-square-text', 'url' => site_url('reports/templates'), 'match' => ['reports/templates'], 'perm' => 'reports.view'],
                         ['label' => 'Agent Performance', 'icon' => 'users', 'url' => site_url('reports/agents'), 'match' => ['reports/agents'], 'perm' => 'reports.view'],
+                        ['label' => 'Cart Reminders Report', 'icon' => 'shopping-cart', 'url' => site_url('reports/cart-reminders'), 'match' => ['reports/cart-reminders'], 'perm' => 'reports.view'],
                         ['label' => 'CTWA Ads Report', 'icon' => 'megaphone', 'url' => site_url('reports/ctwa'), 'match' => ['reports/ctwa'], 'perm' => 'reports.view'],
                         ['label' => 'Email Report', 'icon' => 'mail', 'url' => site_url('reports/email'), 'match' => ['reports/email'], 'perm' => 'reports.view'],
                     ],
