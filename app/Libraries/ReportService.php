@@ -987,14 +987,18 @@ class ReportService
     }
 
     /**
+     * Customers who replied, per campaign: each customer counts once however many messages they send.
+     * A reply is an inbound message that arrives after the campaign was sent to that customer; it belongs to
+     * the latest campaign sent to them before it.
+     *
      * @return array<int,int>
      */
     public function whatsappRepliesByCampaign(string $fromUtc, string $toUtc, ?int $campaignId, ?array $ids = null): array
     {
         $sql = "
-            SELECT attributed.campaign_id, COUNT(*) AS reply_count
+            SELECT attributed.campaign_id, COUNT(DISTINCT attributed.contact_id) AS reply_count
             FROM (
-                SELECT m.id,
+                SELECT m.id, m.contact_id,
                     (
                         SELECT cc.campaign_id
                         FROM campaign_contacts cc

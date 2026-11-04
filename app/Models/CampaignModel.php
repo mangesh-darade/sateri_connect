@@ -123,10 +123,9 @@ class CampaignModel extends Model
             return false;
         }
 
-        $replyCount = $this->db->table('messages')
-            ->where('campaign_id', $campaignId)
-            ->where('direction', 'inbound')
-            ->countAllResults();
+        // Customers who replied (once each), the same definition as the campaign report.
+        $replyCount = (int) ((new \App\Libraries\ReportService())
+            ->whatsappRepliesByCampaign('1970-01-01 00:00:00', '2999-12-31 23:59:59', $campaignId)[$campaignId] ?? 0);
 
         return $this->update($campaignId, [
             'total_contacts'  => (int) ($stats['total_contacts'] ?? 0),
