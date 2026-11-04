@@ -46,7 +46,7 @@ class CartRecoveryService
 
         return [
             'enabled'           => (string) $get('enabled', '0') === '1',
-            'delay_minutes'     => max(15, min(10080, (int) $get('delay_minutes', 60))),
+            'delay_minutes'     => max(2, min(10080, (int) $get('delay_minutes', 60))),
             'max_reminders'     => max(1, min(3, (int) $get('max_reminders', 2))),
             'gap_hours'         => max(1, min(168, (int) $get('gap_hours', 24))),
             'template_name'     => trim((string) $get('template_name', '')),
@@ -79,7 +79,7 @@ class CartRecoveryService
 
         $values = [
             'enabled'           => $enabled ? '1' : '0',
-            'delay_minutes'     => (string) max(15, min(10080, (int) ($in['delay_minutes'] ?? 60))),
+            'delay_minutes'     => (string) max(2, min(10080, (int) ($in['delay_minutes'] ?? 60))),
             'max_reminders'     => (string) max(1, min(3, (int) ($in['max_reminders'] ?? 2))),
             'gap_hours'         => (string) max(1, min(168, (int) ($in['gap_hours'] ?? 24))),
             'template_name'     => $name,
@@ -279,7 +279,7 @@ class CartRecoveryService
     {
         if (str_starts_with($topic, 'orders/')) {
             $token = (string) ($o['checkout_token'] ?? '');
-            $phone = $this->normalizePhone((string) ($o['phone'] ?? $o['billing_address']['phone'] ?? $o['customer']['phone'] ?? ''));
+            $phone = $this->normalizePhone((string) ($o['phone'] ?? $o['billing_address']['phone'] ?? $o['customer']['phone'] ?? $o['customer']['default_address']['phone'] ?? ''));
             if ($token !== '') {
                 $this->markDone('shopify', $token, $phone, 'recovered');
             } elseif ($phone !== '') {
@@ -293,7 +293,7 @@ class CartRecoveryService
         if ($id === '') {
             return;
         }
-        $phone = $this->normalizePhone((string) ($o['phone'] ?? $o['billing_address']['phone'] ?? $o['shipping_address']['phone'] ?? $o['customer']['phone'] ?? ''));
+        $phone = $this->normalizePhone((string) ($o['phone'] ?? $o['billing_address']['phone'] ?? $o['shipping_address']['phone'] ?? $o['customer']['phone'] ?? $o['customer']['default_address']['phone'] ?? ''));
         if (! empty($o['completed_at'])) {
             $this->markDone('shopify', $id, $phone, 'recovered');
 
