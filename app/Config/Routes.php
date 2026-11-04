@@ -53,6 +53,8 @@ $routes->match(['get', 'post'], 'emails/unsubscribe', 'Emails::unsubscribe');
 $routes->post('webhooks/razorpay', 'RazorpayWebhook::receive');
 $routes->post('webhooks/mswipe', 'MswipeWebhook::receive');
 $routes->get('social/media/(:segment)', 'SocialMedia::show/$1');
+$routes->post('webhooks/store/(:segment)', 'StoreWebhook::receive/$1');
+$routes->post('webhooks/store/(:segment)/(:segment)', 'StoreWebhook::receive/$1/$2');
 $routes->post('webhooks/ses', 'SesWebhook::receive');
 $routes->post('webhooks/ses/(:segment)', 'SesWebhook::receive/$1');
 

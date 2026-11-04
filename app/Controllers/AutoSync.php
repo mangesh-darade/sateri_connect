@@ -43,6 +43,12 @@ class AutoSync extends BaseController
             }
 
             try {
+                (new \App\Libraries\CartRecoveryService())->remindDue(20);
+            } catch (\Throwable $e) {
+                log_message('error', 'AutoSync::tick carts ' . $e::class);
+            }
+
+            try {
                 $out['campaigns'] = (new \App\Libraries\CampaignService())->processScheduled();
             } catch (\Throwable $e) {
                 log_message('error', 'AutoSync::tick campaigns ' . $e::class);
