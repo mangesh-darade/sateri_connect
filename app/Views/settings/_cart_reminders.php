@@ -8,17 +8,10 @@ $crDisable = $canEdit ? '' : 'disabled';
 ?>
 <div id="crPage" data-base="<?= esc($settingsBase . '/cart-reminders', 'attr') ?>">
 
-<?php foreach (($cartHealth ?? []) as $h): ?>
-    <div class="alert alert-<?= esc($h['level'], 'attr') ?> py-2 small mb-2" role="alert"><?= esc($h['message']) ?></div>
-<?php endforeach; ?>
+<div id="crAlerts"><?= view('settings/_cart_reminders_alerts', ['cartHealth' => $cartHealth ?? []]) ?></div>
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-    <div class="d-flex flex-wrap gap-3 small">
-        <?php foreach (['open' => 'Waiting', 'reminded' => 'Reminded', 'recovered' => 'Recovered', 'skipped' => 'Skipped'] as $k => $label): ?>
-            <span><span class="text-muted"><?= $label ?></span> <strong><?= (int) $cartOverview['counts'][$k] ?></strong></span>
-        <?php endforeach; ?>
-        <span><span class="text-muted">Recovered value</span> <strong><?= esc(number_format((float) $cartOverview['recovered_amount'], 2)) ?></strong></span>
-    </div>
+    <div id="crSummary"><?= view('settings/_cart_reminders_summary', ['cartOverview' => $cartOverview]) ?></div>
     <div class="btn-group btn-group-sm">
         <button type="button" class="btn btn-outline-secondary" id="crExpand"><i class="fas fa-angles-down me-1"></i> Expand all</button>
         <button type="button" class="btn btn-outline-secondary" id="crCollapse"><i class="fas fa-angles-up me-1"></i> Collapse all</button>
@@ -173,7 +166,7 @@ $crDisable = $canEdit ? '' : 'disabled';
             <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#crAccCarts" aria-expanded="false" aria-controls="crAccCarts">
                 <i class="fas fa-shopping-cart fa-fw me-3 text-wa" aria-hidden="true"></i>
                 <span class="me-auto"><span class="fw-bold d-block">Carts</span><span class="small text-muted">Latest carts received from your stores</span></span>
-                <span class="badge bg-secondary ms-2 me-3"><?= $crTotal ?></span>
+                <span class="badge bg-secondary ms-2 me-3" id="crCartCount"><?= $crTotal ?></span>
             </button>
         </h2>
         <div id="crAccCarts" class="accordion-collapse collapse cr-acc-panel">
@@ -181,33 +174,8 @@ $crDisable = $canEdit ? '' : 'disabled';
                 <div class="table-responsive">
                     <table class="table table-sm align-middle mb-0">
                         <thead><tr><th>Store</th><th>Customer</th><th>Items</th><th class="text-end">Total</th><th>Status</th><th class="text-end">Reminders</th><th>Last activity</th><?php if ($canEdit): ?><th class="text-end">Action</th><?php endif; ?></tr></thead>
-                        <tbody>
-                        <?php if (empty($cartOverview['rows'])): ?>
-                            <tr><td colspan="8" class="text-center text-muted py-4">No carts yet. They appear when your store sends an event.</td></tr>
-                        <?php endif; ?>
-                        <?php foreach ($cartOverview['rows'] as $c): ?>
-                            <?php $badge = ['open' => 'warning', 'reminded' => 'info', 'recovered' => 'success', 'skipped' => 'secondary'][$c['status']] ?? 'secondary'; ?>
-                            <tr>
-                                <td><?= esc($crPlats[$c['platform']] ?? $c['platform']) ?></td>
-                                <td><?= esc($c['customer_name'] !== '' ? $c['customer_name'] : '-') ?><div class="small text-muted"><?= esc($c['phone'] !== '' ? $c['phone'] : 'No phone') ?></div></td>
-                                <td class="small"><?= esc($c['items_text']) ?></td>
-                                <td class="text-end"><?= esc($c['total']) ?></td>
-                                <td><span class="badge bg-<?= $badge ?>"><?= esc(ucfirst((string) $c['status'])) ?></span><?php if ($c['last_error'] !== ''): ?><div class="small text-muted"><?= esc($c['last_error']) ?></div><?php endif; ?>
-                                    <?php if (! empty($c['delivery_status'])): ?>
-                                        <?php $dl = ['sent' => ['success', 'Delivered to WhatsApp'], 'failed' => ['danger', 'Delivery failed'], 'cancelled' => ['secondary', 'Cancelled']][$c['delivery_status']] ?? ['info', 'Sending']; ?>
-                                        <div class="small text-<?= $dl[0] ?>"><?= esc($dl[1]) ?><?= ($c['delivery_status'] === 'failed' && (string) $c['delivery_error'] !== '') ? ': ' . esc(mb_substr((string) $c['delivery_error'], 0, 160)) : '' ?></div>
-                                    <?php endif; ?></td>
-                                <td class="text-end"><?= (int) $c['reminders_sent'] ?></td>
-                                <td class="small"><?= esc(format_app_datetime($c['last_activity_at'], 'd M Y, g:i A')) ?></td>
-                                <?php if ($canEdit): ?>
-                                    <td class="text-end text-nowrap">
-                                        <?php if ($c['status'] !== 'recovered' && $c['phone'] !== ''): ?>
-                                            <button type="button" class="btn btn-sm btn-outline-secondary js-cr-send" data-id="<?= (int) $c['id'] ?>" title="Send the reminder now"><i class="fab fa-whatsapp me-1"></i> Send now</button>
-                                        <?php endif; ?>
-                                    </td>
-                                <?php endif; ?>
-                            </tr>
-                        <?php endforeach; ?>
+                        <tbody id="crRows">
+                        <?= view('settings/_cart_reminders_rows', ['cartOverview' => $cartOverview, 'canEdit' => $canEdit]) ?>
                         </tbody>
                     </table>
                 </div>

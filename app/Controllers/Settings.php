@@ -862,6 +862,28 @@ class Settings extends BaseController
         return $this->jsonResponse(true, null, $res['message']);
     }
 
+    /** Live data for the Cart Reminders tab: the alert box, counts and carts table as HTML. */
+    public function cartRemindersData(): ResponseInterface
+    {
+        if ($denied = $this->guardSettings('settings.view')) {
+            return $denied;
+        }
+
+        $svc      = new \App\Libraries\CartRecoveryService();
+        $overview = $svc->overview(50);
+        $canEdit  = true;
+        if (! $this->platformMode) {
+            $canEdit = function_exists('can') && can('settings.edit');
+        }
+
+        return $this->jsonResponse(true, [
+            'alerts'  => view('settings/_cart_reminders_alerts', ['cartHealth' => $svc->health()]),
+            'summary' => view('settings/_cart_reminders_summary', ['cartOverview' => $overview]),
+            'rows'    => view('settings/_cart_reminders_rows', ['cartOverview' => $overview, 'canEdit' => $canEdit]),
+            'total'   => (int) array_sum($overview['counts']),
+        ], 'OK');
+    }
+
     /** Sends the cart reminder for one cart right now (ignores the delay). */
     public function sendCartReminder(int $id): ResponseInterface
     {

@@ -952,6 +952,7 @@ class PlatformClients extends BaseController
             'api-tokens-generate'   => 'generateApiToken',
             'cart-reminders'        => 'saveCartReminders',
             'cart-reminders-rotate' => 'rotateCartSecret',
+            'cart-reminders-data'   => 'cartRemindersData',
         ];
 
         $method = $map[$action] ?? '';

@@ -43,12 +43,33 @@
             .always(function () { $btns.prop('disabled', false); });
     });
 
+    // Live refresh: the alert box, counts and carts table update without reloading the page.
+    var refreshing = false;
+    function refresh() {
+        if (refreshing || document.hidden || !$('#tabCartReminders').hasClass('active')) { return; }
+        refreshing = true;
+        APP.get(base + '/data', {}, { global: false })
+            .done(function (res) {
+                var d = (res && res.data) || {};
+                if (typeof d.rows !== 'string') { return; }
+                $('#crAlerts').html(d.alerts);
+                $('#crSummary').html(d.summary);
+                $('#crRows').html(d.rows);
+                $('#crCartCount').text(d.total);
+            })
+            .always(function () { refreshing = false; });
+    }
+    window.setInterval(refresh, 10000);
+    $(document).on('visibilitychange', refresh);
+    $('button[data-bs-target="#tabCartReminders"]').on('shown.bs.tab', refresh);
+
     $page.on('click', '.js-cr-send', function () {
         var $btn = $(this).prop('disabled', true);
         APP.post(base + '/' + $btn.data('id') + '/send', {})
             .done(function (res) {
                 APP.toast(res.message || 'Reminder sent.', 'success');
-                window.setTimeout(function () { window.location.reload(); }, 1200);
+                refresh();
+                window.setTimeout(refresh, 4000); // delivery result arrives a moment later
             })
             .fail(function (xhr) {
                 APP.toast(errorMessage(xhr, 'Could not send the reminder.'), 'error');

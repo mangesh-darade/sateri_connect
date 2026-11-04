@@ -104,6 +104,7 @@ $routes->group('platform', ['filter' => 'platformAuth'], static function ($route
     $routes->post('clients/(:segment)/settings/test-whatsapp', 'PlatformClients::clientSettingsAction/$1/test-whatsapp', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/settings/setup-webhook', 'PlatformClients::clientSettingsAction/$1/setup-webhook', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/settings/test-ai', 'PlatformClients::clientSettingsAction/$1/test-ai', ['filter' => 'csrf']);
+    $routes->get('clients/(:segment)/settings/cart-reminders/data', 'PlatformClients::clientSettingsAction/$1/cart-reminders-data');
     $routes->post('clients/(:segment)/settings/cart-reminders', 'PlatformClients::clientSettingsAction/$1/cart-reminders', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/settings/cart-reminders/(:num)/send', 'PlatformClients::clientSettingsCartSend/$1/$2', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/settings/cart-reminders/rotate', 'PlatformClients::clientSettingsAction/$1/cart-reminders-rotate', ['filter' => 'csrf']);
@@ -187,6 +188,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('settings/test-whatsapp', 'Settings::testCheerio', ['filter' => 'csrf']); // active provider via UI uses specific buttons
     $routes->post('settings/setup-webhook', 'Settings::setupWebhook', ['filter' => 'csrf']);
     $routes->post('settings/test-ai', 'Settings::testAi', ['filter' => 'csrf']);
+    $routes->get('settings/cart-reminders/data', 'Settings::cartRemindersData');
     $routes->post('settings/cart-reminders', 'Settings::saveCartReminders', ['filter' => 'csrf']);
     $routes->post('settings/cart-reminders/(:num)/send', 'Settings::sendCartReminder/$1', ['filter' => 'csrf']);
     $routes->post('settings/cart-reminders/rotate', 'Settings::rotateCartSecret', ['filter' => 'csrf']);
