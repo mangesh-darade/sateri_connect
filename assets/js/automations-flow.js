@@ -1,0 +1,2146 @@
+/**
+* External-style visual workflow canvas for Automations.
+*/
+(function (window, $) {
+    'use strict';
+
+    var Flow = {
+        nodes: [],
+        edges: [],
+        selectedId: null,
+        selectedEdge: null,
+        dragNode: null,
+        linkFrom: null,
+        pan: null,
+        spaceDown: false,
+        scale: 1,
+        panX: 0,
+        panY: 0,
+        uid: 1,
+        meta: { tags: [], templates: [], agents: [], attributes: [], webhook_base: '' }
+    };
+
+    var GRID = 20;
+    var MIN_SCALE = 0.4;
+    var MAX_SCALE = 1.8;
+
+    var TRIGGER_LABELS = {
+        incoming_message: 'Incoming WhatsApp',
+        campaign_sent: 'Campaign Sent',
+        shopify_event: 'Shopify Events',
+        facebook_lead: 'Facebook Lead',
+        kylas_event_create: 'Kylas Event Create',
+        kylas_event_update: 'Kylas Event Update',
+        pabbly_event: 'Pabbly Event',
+        incoming_webhook: 'Incoming Webhook',
+        messenger: 'Messenger',
+        instagram: 'Instagram',
+        commerce_event: 'Commerce Event',
+        contact_created: 'New contact',
+        form_response: 'New form response',
+        keyword_matched: 'Keyword matched',
+        tag_added: 'Tag added',
+        attribute_updated: 'Attribute updated',
+        birthday: 'Birthday',
+        campaign_replied: 'Campaign reply',
+        schedule: 'Schedule',
+        cheerio_workflow: 'Imported External workflow'
+    };
+
+    var ACTION_LABELS = {
+        system_initiated: 'System initiated',
+        response_message: 'Response message',
+        collect_images: 'Collect Images',
+        ask_question: 'Ask question',
+        send_media: 'Send media',
+        send_template: 'Send WA template',
+        send_text: 'Send text',
+        send_email: 'Send email',
+        add_tag: 'Add tag',
+        remove_tag: 'Remove tag',
+        assign_agent: 'Assign agent',
+        assign_bot: 'Assign to bot',
+        update_chat_status: 'Update chat status',
+        add_note: 'Add note',
+        delay: 'Delay',
+        webhook: 'Webhook',
+        webhook_call: 'Webhook',
+        set_attribute: 'Update attribute',
+        set_attributes: 'Update attributes',
+        ai_reply: 'AI reply',
+        end: 'End'
+    };
+
+    var CONDITION_LABELS = {
+        message_contains: 'Message contains',
+        message_equals: 'Message equals',
+        caption_contains: 'Caption contains',
+        message_type: 'Message type (text/image/video…)',
+        has_tag: 'Has tag',
+        within_window: 'Within 24h window',
+        contact_status: 'Contact status',
+        attribute_condition: 'Attribute condition',
+        ab_split: 'A/B split'
+    };
+
+    /** Block colours (palette tiles + node headers). Key = trigger_type / condition_type / action_type / 'end'. */
+    var KIND_COLORS = {
+        incoming_message: '#25D366', campaign_sent: '#e11d48', shopify_event: '#5e8e3e', facebook_lead: '#1877F2',
+        kylas_event_create: '#4f46e5', kylas_event_update: '#6366f1', pabbly_event: '#16a34a', incoming_webhook: '#f43f5e',
+        messenger: '#0084FF', instagram: '#E1306C', commerce_event: '#9333ea', contact_created: '#0ea5e9',
+        form_response: '#f97316', keyword_matched: '#f59e0b', tag_added: '#14b8a6', attribute_updated: '#f43f5e',
+        birthday: '#ec4899', campaign_replied: '#06b6d4', schedule: '#0ea5e9',
+        system_initiated: '#0ea5e9', response_message: '#22c55e', ask_question: '#10b981', send_media: '#06b6d4',
+        collect_images: '#0891b2', send_template: '#16a34a', send_text: '#22c55e', send_email: '#f97316',
+        set_attribute: '#e11d48', set_attributes: '#be123c', ai_reply: '#8b5cf6', add_tag: '#14b8a6', remove_tag: '#64748b', assign_agent: '#2563eb', assign_bot: '#0ea5e9',
+        update_chat_status: '#6366f1', add_note: '#eab308', delay: '#f59e0b', webhook: '#f43f5e', webhook_call: '#f43f5e',
+        end: '#ef4444'
+    };
+    var TYPE_COLORS = { trigger: '#25D366', condition: '#f59e0b', action: '#e11d48', updateAttribute: '#e11d48', end: '#ef4444' };
+    var TYPE_ICONS = { trigger: 'fas fa-bolt', condition: 'fas fa-code-branch', action: 'fas fa-play', updateAttribute: 'fas fa-pen', end: 'fas fa-flag-checkered' };
+    /** kind → icon class, read from the palette markup (single source for tiles and nodes). */
+    var KIND_ICONS = {};
+
+    function nodeKind(node) {
+        var d = node.data || {};
+        if (node.type === 'trigger') return d.trigger_type || '';
+        if (node.type === 'condition') return d.condition_type || '';
+        if (node.type === 'end') return 'end';
+        if (node.type === 'updateAttribute') return 'set_attribute';
+        return d.action_type || '';
+    }
+
+    /** Header colour, icon and name for a canvas node. */
+    function nodeStyle(node) {
+        var kind = nodeKind(node);
+        var label;
+        if (node.type === 'trigger') label = 'Event';
+        else if (node.type === 'condition') label = 'Condition';
+        else if (node.type === 'end') label = 'End Flow';
+        else label = ACTION_LABELS[kind] || 'Action';
+        return {
+            color: KIND_COLORS[kind] || (node.type === 'condition' ? TYPE_COLORS.condition : TYPE_COLORS[node.type] || TYPE_COLORS.action),
+            icon: KIND_ICONS[kind] || TYPE_ICONS[node.type] || TYPE_ICONS.action,
+            label: label
+        };
+    }
+
+    /** Palette: colour tiles, 2-column grids and collapsible sections. */
+    function decoratePalette() {
+        $('.flow-palette .palette-item').each(function () {
+            var $it = $(this);
+            var kind = $it.data('trigger') || $it.data('condition') || $it.data('action') || '';
+            var $icon = $it.find('i').first();
+            if (kind && $icon.length) KIND_ICONS[kind] = $icon.attr('class');
+            var color = KIND_COLORS[kind] || TYPE_COLORS[$it.data('palette')] || TYPE_COLORS.action;
+            $it[0].style.setProperty('--pc', color);
+            $it.attr('title', $.trim($it.text()));
+            $icon.wrap('<span class="palette-icon"></span>');
+            $it.contents().filter(function () { return this.nodeType === 3 && $.trim(this.nodeValue); })
+                .wrap('<span class="palette-label"></span>');
+        });
+        $('.flow-palette h6').each(function () {
+            var $h = $(this);
+            $h.nextUntil('h6, .palette-hint').wrapAll('<div class="palette-grid"></div>');
+            $h.addClass('palette-section').append('<i class="fas fa-chevron-up palette-chevron"></i>');
+        });
+        $('.flow-palette').on('click', '.palette-section', function () {
+            $(this).toggleClass('collapsed').next('.palette-grid').slideToggle(150);
+        });
+    }
+
+    var TRIGGER_CONFIG_KEYS = [
+        'keyword', 'content', 'event_topic', 'event_type', 'shopify_topic',
+        'form_id', 'ad_id', 'page_id', 'business_id', 'ad_account_id', 'token', 'secret', 'campaign_id',
+        'source', 'object', 'filter', 'tag_id', 'attribute', 'attribute_value', 'match_type'
+    ];
+
+    var KEYWORD_MATCH_TYPES = [
+        ['contains', 'Contains (word anywhere, e.g. “hi mangesh”)'],
+        ['exact', 'Exact (whole message only, e.g. “hi”)'],
+        ['starts_with', 'Starts with (e.g. “hi mangesh”, not “hindi”)']
+    ];
+
+    function esc(s) {
+        return APP.escapeHtml(s);
+    }
+
+    function nextId(prefix) {
+        return prefix + '_' + (Flow.uid++) + '_' + Date.now().toString(36);
+    }
+
+    function findNode(id) {
+        return Flow.nodes.find(function (n) { return n.id === id; });
+    }
+
+    function loadGraph() {
+        try {
+            var raw = $('#flowGraphData').text() || $('#flowGraphJson').val() || '{}';
+            var g = JSON.parse(raw);
+            Flow.nodes = Array.isArray(g.nodes) ? g.nodes : [];
+            Flow.edges = Array.isArray(g.edges) ? g.edges : [];
+            Flow.nodes.forEach(function (n) {
+                if ((n.x === undefined || n.y === undefined) && n.position) {
+                    n.x = n.position.x || 40;
+                    n.y = n.position.y || 40;
+                }
+                n.id = String(n.id);
+                n.x = Number(n.x);
+                n.y = Number(n.y);
+                if (!isFinite(n.x)) n.x = 40;
+                if (!isFinite(n.y)) n.y = 40;
+                var m = String(n.id || '').match(/(\d+)/);
+                if (m) Flow.uid = Math.max(Flow.uid, parseInt(m[1], 10) + 1);
+            });
+            // Only shift when External-style negative coords remain
+            if (Flow.nodes.length) {
+                var minX = Math.min.apply(null, Flow.nodes.map(function (n) { return n.x; }));
+                var minY = Math.min.apply(null, Flow.nodes.map(function (n) { return n.y; }));
+                if (minX < 0 || minY < 0) {
+                    var sx = 60 - minX;
+                    var sy = 60 - minY;
+                    Flow.nodes.forEach(function (n) {
+                        n.x = Math.round((n.x + sx) * 100) / 100;
+                        n.y = Math.round((n.y + sy) * 100) / 100;
+                    });
+                }
+            }
+            Flow.edges = Flow.edges.map(function (e) {
+                var handle = e.port || e.sourceHandle || 'out';
+                var port = 'out';
+                var hs = String(handle);
+                if (handle === 'false' || hs.indexOf('child_node_1') >= 0 || /_no$/i.test(hs)) {
+                    port = 'false';
+                } else if (handle === 'true' || hs.indexOf('child_node_0') >= 0 || /_yes$/i.test(hs)) {
+                    port = 'true';
+                } else {
+                    var cm = hs.match(/child_node_(\d+)/i);
+                    if (cm) {
+                        var idx = parseInt(cm[1], 10);
+                        port = idx === 0 ? 'true' : (idx === 1 ? 'false' : ('opt_' + idx));
+                    } else if (handle && handle !== 'out' && handle !== 'source') {
+                        port = hs;
+                    }
+                }
+                var from = e.from || e.source;
+                var to = e.to || e.target;
+                return { from: from ? String(from) : '', to: to ? String(to) : '', port: port };
+            }).filter(function (e) { return e.from && e.to; });
+        } catch (e) {
+            Flow.nodes = [];
+            Flow.edges = [];
+        }
+        try {
+            Flow.meta = JSON.parse($('#flowMetaJson').text() || '{}') || Flow.meta;
+        } catch (e2) {
+            // ignore
+        }
+        if (!Flow.nodes.length) {
+            Flow.nodes.push({
+                id: 'trigger',
+                type: 'trigger',
+                x: 24,
+                y: 24,
+                data: { trigger_type: 'incoming_message', label: TRIGGER_LABELS.incoming_message }
+            });
+        }
+    }
+
+    function nodeTitle(node) {
+        var d = node.data || {};
+        var label = d.label ? String(d.label).replace(/\\\//g, '/') : '';
+        var generic = !label || /\snode$/i.test(label);
+
+        if (!generic && (node.type === 'trigger' || node.type === 'action' || node.type === 'condition' || node.type === 'end')) {
+            return label;
+        }
+        if (node.type === 'trigger') {
+            return TRIGGER_LABELS[d.trigger_type] || label || d.trigger_type || 'Trigger';
+        }
+        if (node.type === 'condition') return CONDITION_LABELS[d.condition_type] || label || 'If / Else';
+        if (node.type === 'end') return 'End';
+        if (d.adName || d.labelName) return String(d.adName || d.labelName).replace(/\\\//g, '/');
+        if (d.attribute) {
+            var v = String(d.attributeNewValue || d.value || d.text || '').replace(/\\\//g, '/');
+            return 'Update ' + d.attribute + (v ? ' = ' + v : '');
+        }
+        if (d.url && (d.action_type === 'webhook' || String(d.cheerio_type || '').toLowerCase().indexOf('webhook') >= 0)) {
+            return 'Webhook: ' + String(d.url).slice(0, 42);
+        }
+        return ACTION_LABELS[d.action_type] || d.action_type || label || d.cheerio_type || 'Action';
+    }
+
+    function nodeSubtitle(node) {
+        var d = node.data || {};
+        if (node.type === 'trigger') {
+            if (d.trigger_type === 'keyword_matched' || d.keyword) {
+                if (!d.keyword) return 'Any keyword…';
+                var mt = { exact: 'exact', starts_with: 'starts with' }[d.match_type] || 'contains';
+                return mt + ' “' + d.keyword + '”';
+            }
+            if (d.trigger_type === 'shopify_event') return d.shopify_topic || d.event_topic || 'Any topic…';
+            if (d.trigger_type === 'commerce_event') return d.event_type || 'Any event…';
+            if (d.trigger_type === 'kylas_event_create' || d.trigger_type === 'kylas_event_update') return d.object || d.event_type || 'Any object…';
+            if (d.trigger_type === 'pabbly_event') return d.event_type || 'Any event…';
+            if (d.trigger_type === 'incoming_webhook') return d.token ? ('Token …' + String(d.token).slice(-6)) : 'Set token…';
+            if (d.trigger_type === 'facebook_lead') return d.form_name || d.page_name || d.form_id || 'Connect Facebook…';
+            if (d.trigger_type === 'form_response') return d.form_id || 'Any form…';
+            if (d.trigger_type === 'campaign_sent' || d.trigger_type === 'campaign_replied') return d.campaign_id ? ('Campaign #' + d.campaign_id) : 'Any campaign…';
+            if (d.trigger_type === 'messenger' || d.trigger_type === 'instagram') return d.page_id || 'Any page…';
+            return '';
+        }
+        if (node.type === 'condition') return d.value ? ('“' + d.value + '”') : 'Configure…';
+        if (d.action_type === 'response_message' || d.action_type === 'send_text') {
+            var bit = d.text ? String(d.text).slice(0, 28) : 'Write message…';
+            var n = choiceOptions(d).length;
+            return n ? bit + ' · ' + n + ' option' + (n === 1 ? '' : 's') : bit;
+        }
+        if (d.action_type === 'system_initiated' || d.action_type === 'send_template') {
+            return d.template_name || 'Pick template…';
+        }
+        if (d.action_type === 'collect_images') {
+            return (d.count || d.max_images || 1) + ' image(s)';
+        }
+        if (d.action_type === 'ask_question') {
+            var q = d.text ? String(d.text).slice(0, 30) : 'Write question…';
+            return q + (d.save_as ? (' → ' + d.save_as) : '');
+        }
+        if (d.action_type === 'send_media') {
+            return (d.media_type || 'image') + (d.media_url ? (' · ' + String(d.media_url).replace(/^https?:\/\//, '').slice(0, 24)) : ' · URL…');
+        }
+        if (d.action_type === 'add_tag' || d.action_type === 'remove_tag') {
+            return d.tag_name || d.labelName || (d.tag_id ? ('Tag #' + d.tag_id) : 'Pick tag…');
+        }
+        if (d.action_type === 'delay') return (d.minutes || Math.round((d.seconds || 60) / 60)) + ' min';
+        if (d.action_type === 'webhook' || d.action_type === 'webhook_call') {
+            var n = Array.isArray(d.values) ? d.values.length : 0;
+            return (d.url ? String(d.url).replace(/^https?:\/\//, '').slice(0, 28) : 'URL…') + (n ? (' · ' + n + ' params') : '');
+        }
+        if (d.action_type === 'set_attribute') return (d.attribute || '') + (d.text ? (' = ' + d.text) : '');
+        if (d.action_type === 'set_attributes') {
+            var bulk = (Array.isArray(d.attributes) ? d.attributes : []).filter(function (r) { return r && r.attribute; });
+            return bulk.length ? (bulk.length + ' attribute' + (bulk.length > 1 ? 's' : '') + ': ' + bulk.slice(0, 2).map(function (r) { return r.attribute; }).join(', ') + (bulk.length > 2 ? '…' : '')) : '';
+        }
+        if (node.type === 'end' || d.action_type === 'end') return '';
+        if (d.cheerio_type) return String(d.cheerio_type);
+        return (!d.label || /\snode$/i.test(String(d.label))) ? '' : String(d.label);
+    }
+
+    /** Response message / Send text option labels, in order, skipping blanks. Max 10. */
+    function choiceOptions(d) {
+        if (!d || (d.action_type !== 'response_message' && d.action_type !== 'send_text')) return [];
+        var raw = Array.isArray(d.options) ? d.options : String(d.options || '').split(/\r?\n/);
+        return raw.map(function (s) { return String(s).trim(); }).filter(Boolean).slice(0, 10);
+    }
+
+    function choicePorts(d) {
+        var opts = choiceOptions(d);
+        if (!opts.length) return null;
+        return opts.map(function (_, i) { return 'opt_' + (i + 1); }).concat(['false']);
+    }
+
+    /** Ask question options (one per line), max 10; empty for free-text answers. */
+    function questionOptions(d) {
+        if (!d || (d.reply_type || 'text') === 'text') return [];
+        var raw = Array.isArray(d.options) ? d.options : String(d.options || '').split(/\r?\n/);
+        return raw.map(function (s) { return String(s).trim(); }).filter(Boolean).slice(0, 10);
+    }
+
+    function askQuestionPorts(d) {
+        var opts = questionOptions(d);
+        if (!opts.length) return ['true', 'false'];
+        return opts.map(function (_, i) { return 'opt_' + (i + 1); }).concat(['false']);
+    }
+
+    function portLabel(node, p) {
+        var d = node.data || {};
+        if (d.action_type === 'ask_question' || d.action_type === 'response_message' || d.action_type === 'send_text') {
+            if (p === 'true') return 'Answered';
+            if (p === 'false') return 'No reply';
+            var list = d.action_type === 'ask_question' ? questionOptions(d) : choiceOptions(d);
+            var opt = list[parseInt(String(p).slice(4), 10) - 1];
+            if (opt) return opt.length > 18 ? opt.slice(0, 17) + '…' : opt;
+        }
+        if (d.condition_type === 'ab_split') {
+            var pct = parseInt(d.value, 10) || 50;
+            return p === 'true' ? 'A (' + pct + '%)' : 'B (' + (100 - pct) + '%)';
+        }
+        return p === 'true' ? 'Yes' : (p === 'false' ? 'No' : (String(p).indexOf('opt_') === 0 ? ('#' + String(p).slice(4)) : 'Out'));
+    }
+
+    /** Drop edges from ports an Ask question node no longer has (option removed / type changed). */
+    function pruneAskQuestionEdges(node) {
+        var valid = askQuestionPorts(node.data || {});
+        Flow.edges = Flow.edges.filter(function (e) {
+            return e.from !== node.id || valid.indexOf(e.port || 'out') >= 0;
+        });
+    }
+
+    function pruneChoiceEdges(node) {
+        var d = node.data || {};
+        if (d.action_type !== 'response_message' && d.action_type !== 'send_text') return;
+        var valid = choicePorts(d) || ['out'];
+        Flow.edges = Flow.edges.filter(function (e) {
+            return e.from !== node.id || valid.indexOf(e.port || 'out') >= 0;
+        });
+    }
+
+    function portsForNode(node) {
+        if ((node.data || {}).action_type === 'ask_question') return askQuestionPorts(node.data);
+        var choice = choicePorts(node.data || {});
+        if (choice) return choice;
+        var ports = {};
+        Flow.edges.forEach(function (e) {
+            if (e.from === node.id) ports[e.port || 'out'] = true;
+        });
+        var d = node.data || {};
+        if (Array.isArray(d.ports)) {
+            d.ports.forEach(function (p) { ports[p] = true; });
+        }
+        if (node.type === 'condition' || d.branches) {
+            if (!ports.true && !ports.false && !Object.keys(ports).some(function (p) { return String(p).indexOf('opt_') === 0; })) {
+                ports.true = true;
+                ports.false = true;
+            }
+        }
+        var list = Object.keys(ports);
+        if (!list.length && node.type !== 'end') list = ['out'];
+        var order = { true: 1, false: 2, out: 3 };
+        list.sort(function (a, b) {
+            var ao = order[a] || (String(a).indexOf('opt_') === 0 ? 10 + parseInt(String(a).slice(4), 10) : 50);
+            var bo = order[b] || (String(b).indexOf('opt_') === 0 ? 10 + parseInt(String(b).slice(4), 10) : 50);
+            return ao - bo;
+        });
+        return list;
+    }
+
+    function nodeHasBranches(node) {
+        if (!node) return false;
+        if (node.type === 'condition') return true;
+        var d = node.data || {};
+        if (d.branches) return true;
+        return portsForNode(node).some(function (p) {
+            return p === 'true' || p === 'false' || String(p).indexOf('opt_') === 0;
+        });
+    }
+
+    function snap(v) {
+        return Math.round(v / GRID) * GRID;
+    }
+
+    function applyViewport() {
+        var vp = document.getElementById('flowViewport');
+        if (!vp) return;
+        vp.style.transform = 'translate(' + Flow.panX + 'px,' + Flow.panY + 'px) scale(' + Flow.scale + ')';
+        var label = document.getElementById('flowZoomLabel');
+        if (label) label.textContent = Math.round(Flow.scale * 100) + '%';
+    }
+
+    function setScale(next, cx, cy) {
+        var wrap = document.getElementById('flowCanvasWrap') || document.querySelector('.flow-canvas-wrap');
+        var old = Flow.scale;
+        next = Math.max(MIN_SCALE, Math.min(MAX_SCALE, next));
+        if (wrap && cx != null && cy != null) {
+            var rect = wrap.getBoundingClientRect();
+            var mx = cx - rect.left;
+            var my = cy - rect.top;
+            Flow.panX = mx - (mx - Flow.panX) * (next / old);
+            Flow.panY = my - (my - Flow.panY) * (next / old);
+        }
+        Flow.scale = next;
+        applyViewport();
+        drawEdges();
+    }
+
+    function fitView() {
+        var wrap = document.getElementById('flowCanvasWrap') || document.querySelector('.flow-canvas-wrap');
+        if (!wrap || !Flow.nodes.length) return;
+        var minX = Math.min.apply(null, Flow.nodes.map(function (n) { return n.x; }));
+        var minY = Math.min.apply(null, Flow.nodes.map(function (n) { return n.y; }));
+        var maxX = Math.max.apply(null, Flow.nodes.map(function (n) { return n.x + 220; }));
+        var maxY = Math.max.apply(null, Flow.nodes.map(function (n) { return n.y + 100; }));
+        var bw = maxX - minX + 80;
+        var bh = maxY - minY + 80;
+        var rw = Math.max(200, wrap.clientWidth - 24);
+        var rh = Math.max(200, wrap.clientHeight - 40);
+        var s = Math.min(1.1, rw / bw, rh / bh);
+        s = Math.max(MIN_SCALE, Math.min(MAX_SCALE, s));
+        Flow.scale = s;
+        // Pin the flow to the top-left of the canvas so the empty grid is to the right, not around the nodes.
+        Flow.panX = 24 - minX * s;
+        Flow.panY = 24 - minY * s;
+        applyViewport();
+        drawEdges();
+    }
+
+    function resizeCanvas() {
+        var maxX = 1200;
+        var maxY = 800;
+        Flow.nodes.forEach(function (n) {
+            maxX = Math.max(maxX, (Number(n.x) || 0) + 320);
+            maxY = Math.max(maxY, (Number(n.y) || 0) + 220);
+        });
+        var w = Math.ceil(maxX);
+        var h = Math.ceil(maxY);
+        var canvas = document.getElementById('flowCanvas');
+        var edges = document.getElementById('flowEdges');
+        var vp = document.getElementById('flowViewport');
+        if (canvas) {
+            canvas.style.width = w + 'px';
+            canvas.style.height = h + 'px';
+        }
+        if (edges) {
+            edges.setAttribute('width', String(w));
+            edges.setAttribute('height', String(h));
+            edges.style.width = w + 'px';
+            edges.style.height = h + 'px';
+        }
+        if (vp) {
+            vp.style.width = w + 'px';
+            vp.style.height = h + 'px';
+        }
+    }
+
+    function renderNodes() {
+        resizeCanvas();
+        var $c = $('#flowCanvas').empty();
+        Flow.nodes.forEach(function (node) {
+            var ports = '';
+            var rows = '';
+            if (node.type !== 'trigger') {
+                ports += '<div class="flow-port in" data-port="in" data-node="' + esc(node.id) + '"></div>';
+            }
+            var outPorts = portsForNode(node);
+            var branched = outPorts.length > 1 || outPorts.indexOf('true') >= 0 || outPorts.indexOf('false') >= 0
+                || outPorts.some(function (p) { return String(p).indexOf('opt_') === 0; });
+            if (branched) {
+                outPorts.forEach(function (p) {
+                    var cls = p === 'true' ? 'true' : (p === 'false' ? 'false' : 'out');
+                    rows += '<div class="flow-node-row">' + esc(portLabel(node, p)) +
+                        '<div class="flow-port ' + cls + '" data-port="' + esc(p) + '" data-node="' + esc(node.id) + '"></div></div>';
+                });
+            } else if (node.type !== 'end') {
+                ports += '<div class="flow-port out" data-port="out" data-node="' + esc(node.id) + '"></div>';
+            }
+            var st = nodeStyle(node);
+            var title = nodeTitle(node);
+            var sub = nodeSubtitle(node);
+            var body = (title !== st.label ? '<div class="flow-node-title">' + esc(title) + '</div>' : '') +
+                (sub ? '<div class="flow-node-box">' + esc(sub) + '</div>' : '') +
+                (rows ? '<div class="flow-node-rows">' + rows + '</div>' : '');
+            var html =
+                '<div class="flow-node ' + esc(node.type) + (Flow.selectedId === node.id ? ' selected' : '') + '" data-id="' + esc(node.id) + '" style="left:' + node.x + 'px;top:' + node.y + 'px;--nc:' + esc(st.color) + '">' +
+                '<div class="flow-node-head"><i class="' + esc(st.icon) + '"></i><span>' + esc(st.label) + '</span><i class="fas fa-pen-to-square flow-node-edit"></i></div>' +
+                (body ? '<div class="flow-node-body">' + body + '</div>' : '') +
+                ports +
+                '</div>';
+            $c.append(html);
+        });
+        drawEdges();
+    }
+
+    function portCenter(nodeId, port) {
+        var portAttr = String(port);
+        try {
+            if (window.CSS && typeof CSS.escape === 'function') {
+                portAttr = CSS.escape(portAttr);
+            }
+        } catch (err) { /* ignore */ }
+        var el = document.querySelector('.flow-port[data-node="' + nodeId + '"][data-port="' + portAttr + '"]');
+        if (!el) {
+            el = document.querySelector('.flow-port[data-node="' + nodeId + '"][data-port="' + String(port) + '"]');
+        }
+        var canvas = document.getElementById('flowCanvas');
+        if (!el || !canvas) {
+            var nodeEl = document.querySelector('.flow-node[data-id="' + nodeId + '"]');
+            if (!nodeEl || !canvas) return null;
+            var nr = nodeEl.getBoundingClientRect();
+            var cr0 = canvas.getBoundingClientRect();
+            var s0 = Flow.scale || 1;
+            return {
+                x: (nr.right - cr0.left) / s0,
+                y: (nr.top - cr0.top) / s0 + (nr.height / s0) / 2
+            };
+        }
+        var er = el.getBoundingClientRect();
+        var cr = canvas.getBoundingClientRect();
+        var s = Flow.scale || 1;
+        return {
+            x: (er.left - cr.left) / s + (er.width / s) / 2,
+            y: (er.top - cr.top) / s + (er.height / s) / 2
+        };
+    }
+
+    function curve(x1, y1, x2, y2) {
+        var dx = Math.max(70, Math.abs(x2 - x1) * 0.5);
+        return 'M ' + x1 + ' ' + y1 + ' C ' + (x1 + dx) + ' ' + y1 + ', ' + (x2 - dx) + ' ' + y2 + ', ' + x2 + ' ' + y2;
+    }
+
+    function clearEdgeSvg(svg) {
+        var keep = [];
+        Array.prototype.slice.call(svg.childNodes).forEach(function (child) {
+            if (child.nodeName && child.nodeName.toLowerCase() === 'defs') {
+                keep.push(child);
+            } else {
+                svg.removeChild(child);
+            }
+        });
+        if (!svg.querySelector('defs')) {
+            var defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            defs.innerHTML =
+                '<marker id="flowArrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4"><circle cx="5" cy="5" r="5" fill="#fda4af"></circle></marker>' +
+                '<marker id="flowArrowTrue" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4"><circle cx="5" cy="5" r="5" fill="#e11d48"></circle></marker>' +
+                '<marker id="flowArrowFalse" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4"><circle cx="5" cy="5" r="5" fill="#e25555"></circle></marker>';
+            svg.appendChild(defs);
+        }
+    }
+
+    function edgeKey(e) {
+        return String(e.from) + '|' + String(e.port || 'out') + '|' + String(e.to);
+    }
+
+    function drawEdges(temp) {
+        var svg = document.getElementById('flowEdges');
+        if (!svg) return;
+        clearEdgeSvg(svg);
+
+        Flow.edges.forEach(function (e, idx) {
+            var fromPort = e.port || 'out';
+            if (fromPort === 'in') fromPort = 'out';
+            var a = portCenter(e.from, fromPort);
+            if (!a) a = portCenter(e.from, 'out');
+            if (!a) a = portCenter(e.from, 'true');
+            var toNode = findNode(e.to);
+            var b = portCenter(e.to, toNode && toNode.type === 'trigger' ? 'out' : 'in');
+            if (!b) b = portCenter(e.to, 'out');
+            if (!a || !b) return;
+
+            var key = edgeKey(e);
+            var hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            hit.setAttribute('d', curve(a.x, a.y, b.x, b.y));
+            hit.setAttribute('class', 'flow-edge-hit');
+            hit.setAttribute('data-edge-idx', String(idx));
+            hit.setAttribute('data-edge-key', key);
+            svg.appendChild(hit);
+
+            var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', curve(a.x, a.y, b.x, b.y));
+            var edgeCls = 'flow-edge';
+            var marker = 'url(#flowArrow)';
+            if (e.port === 'true') { edgeCls += ' true'; marker = 'url(#flowArrowTrue)'; }
+            else if (e.port === 'false') { edgeCls += ' false'; marker = 'url(#flowArrowFalse)'; }
+            if (Flow.selectedEdge && Flow.selectedEdge === key) edgeCls += ' selected';
+            path.setAttribute('class', edgeCls);
+            path.setAttribute('marker-start', marker);
+            path.setAttribute('marker-end', marker);
+            path.setAttribute('data-edge-idx', String(idx));
+            path.setAttribute('data-edge-key', key);
+            svg.appendChild(path);
+        });
+
+        if (temp && temp.a && temp.b) {
+            var p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            p.setAttribute('d', curve(temp.a.x, temp.a.y, temp.b.x, temp.b.y));
+            p.setAttribute('class', 'flow-edge temp');
+            svg.appendChild(p);
+        }
+    }
+
+    function selectNode(id) {
+        Flow.selectedId = id;
+        renderNodes();
+        renderInspector();
+    }
+
+    function inspHint(text) {
+        return '<p class="insp-hint">' + esc(text) + '</p>';
+    }
+
+    function templateSelectHtml(d) {
+        var html = '<label>WA template</label><select class="form-select insp" data-k="template_name"><option value="">—</option>';
+        (Flow.meta.templates || []).forEach(function (t) {
+            html += '<option value="' + esc(t.name) + '"' + (d.template_name === t.name ? ' selected' : '') + '>' + esc(t.name) + ' (' + esc(t.language) + ')</option>';
+        });
+        html += '</select>';
+        html += '<label>Language</label><input class="form-control insp" data-k="language" value="' + esc(d.language || 'en_US') + '">';
+        html += templateVariablesHtml(d);
+        return html;
+    }
+
+    /** One value box per template placeholder; values may use {{contact.city}}, {{answer}} etc. */
+    function templateVariablesHtml(d) {
+        var tpl = (Flow.meta.templates || []).find(function (t) { return t.name === d.template_name; });
+        var vars = (tpl && tpl.variables) || [];
+        if (!vars.length) return '';
+        var saved = (d.variables && typeof d.variables === 'object') ? d.variables : {};
+        var html = '<label class="mt-2">Template variables</label>';
+        vars.forEach(function (v) {
+            html += '<div class="input-group input-group-sm mb-1"><span class="input-group-text"><code>{{' + esc(v.key) + '}}</code></span>' +
+                '<input class="form-control insp-var" data-var="' + esc(v.key) + '" list="inspTplVarList" value="' + esc(saved[v.key] || '') + '" placeholder="' + esc(v.example ? 'e.g. ' + v.example : '{{contact.name}}') + '"></div>';
+        });
+        html += '<datalist id="inspTplVarList">';
+        ['name', 'mobile', 'email'].concat(knownAttributes([])).forEach(function (k, i, all) {
+            if (all.indexOf(k) !== i) return;
+            html += '<option value="{{contact.' + esc(k) + '}}">';
+        });
+        html += '</datalist>';
+        html += inspHint('Pick a contact field / attribute ({{contact.city}}) or type fixed text. Contacts with an empty value are skipped (Meta rejects blank variables).');
+        return html;
+    }
+
+    function tagSelectHtml(d) {
+        var html = '<label>Tag</label><select class="form-select insp" data-k="tag_id"><option value="">—</option>';
+        (Flow.meta.tags || []).forEach(function (t) {
+            html += '<option value="' + t.id + '"' + (String(d.tag_id) === String(t.id) ? ' selected' : '') + '>' + esc(t.name) + '</option>';
+        });
+        html += '</select>';
+        return html;
+    }
+
+    function agentSelectHtml(d) {
+        var html = '<label>Assign agent</label><select class="form-select insp" data-k="user_id"><option value="">—</option>';
+        (Flow.meta.agents || []).forEach(function (a) {
+            html += '<option value="' + a.id + '"' + (String(d.user_id || d.agent_id) === String(a.id) ? ' selected' : '') + '>' + esc(a.name) + '</option>';
+        });
+        html += '</select>';
+        return html;
+    }
+
+    /**
+     * "+ Variable" picker under a text field: click a chip to insert {{…}} at the cursor.
+     * target = data-k of the .insp field it fills.
+     */
+    function varPickerHtml(target) {
+        var chip = function (token, text) {
+            return '<button type="button" class="btn btn-sm btn-light border insp-var-insert" data-token="' + esc(token) + '">' + esc(text) + '</button>';
+        };
+        var group = function (title, chips) {
+            return chips ? '<div class="small text-muted mt-2 mb-1">' + esc(title) + '</div><div class="d-flex flex-wrap gap-1">' + chips + '</div>' : '';
+        };
+
+        var contactChips = chip('{{contact.name}}', 'Name') + chip('{{contact.mobile}}', 'Mobile') + chip('{{contact.email}}', 'Email');
+
+        var defs = Flow.meta.attribute_defs || {};
+        var attrChips = '';
+        var seen = {};
+        Object.keys(defs).forEach(function (k) {
+            seen[k] = true;
+            attrChips += chip('{{attributes.' + k + '}}', defs[k].label || k);
+        });
+        knownAttributes([]).forEach(function (k) {
+            if (seen[k] || CORE_ATTR_LABELS[k]) return;
+            attrChips += chip('{{attributes.' + k + '}}', k);
+        });
+
+        return '<div class="insp-var-picker mt-1" data-target="' + esc(target) + '">' +
+            '<button type="button" class="btn btn-sm btn-outline-secondary insp-var-toggle"><i class="fas fa-plus me-1"></i>Variable</button>' +
+            '<div class="insp-var-menu d-none border rounded p-2 mt-1 bg-white">' +
+                group('Contact', contactChips) +
+                group('Attributes', attrChips) +
+                group('Flow', chip('{{answer}}', 'Last answer')) +
+            '</div></div>';
+    }
+
+    function insertVarToken($picker, token) {
+        var $field = $('#inspectorBody .insp[data-k="' + $picker.data('target') + '"]').first();
+        if (!$field.length) return;
+        var el = $field[0];
+        var val = String($field.val() || '');
+        var start = typeof el.selectionStart === 'number' ? el.selectionStart : val.length;
+        var end = typeof el.selectionEnd === 'number' ? el.selectionEnd : val.length;
+        $field.val(val.slice(0, start) + token + val.slice(end));
+        el.focus();
+        var pos = start + token.length;
+        if (el.setSelectionRange) el.setSelectionRange(pos, pos);
+        $field.trigger('input');
+    }
+
+    function knownAttributes(extra) {
+        var set = {};
+        (Flow.meta.attributes || []).forEach(function (k) { if (k) set[String(k)] = true; });
+        (extra || []).forEach(function (k) { if (k) set[String(k)] = true; });
+        return Object.keys(set).sort(function (a, b) {
+            return a.toLowerCase().localeCompare(b.toLowerCase());
+        });
+    }
+
+    var CORE_ATTR_LABELS = { name: 'Name', mobile: 'Mobile', email: 'Email', country: 'Country', notes: 'Notes', status: 'Status', birthday: 'Birthday', source: 'Source' };
+
+    /** Allowed values for dropdown / Yes-No attributes (and contact status); [] = free value. */
+    function attrOptions(key) {
+        if (key === 'status') return ['active', 'inactive', 'blocked'];
+        var def = (Flow.meta.attribute_defs || {})[String(key || '')] || null;
+        if (!def) return [];
+        if (def.type === 'boolean') return ['Yes', 'No'];
+        return def.type === 'dropdown' ? (def.options || []) : [];
+    }
+
+    /**
+     * Attribute picker: attributes defined on Contacts → Attributes, then core contact fields.
+     * opts: { k, label, cur, empty, noMobile }
+     */
+    function attrDropdownHtml(opts) {
+        var cur = String(opts.cur || '');
+        var defs = Flow.meta.attribute_defs || {};
+        var seen = {};
+        var opt = function (value, text) {
+            seen[value] = true;
+            return '<option value="' + esc(value) + '"' + (cur === value ? ' selected' : '') + '>' + esc(text) + '</option>';
+        };
+        var html = '<div class="d-flex justify-content-between align-items-end"><label>' + esc(opts.label || 'Attribute') + '</label>' +
+            '<a class="small" href="' + esc((window.APP && APP.baseUrl ? APP.baseUrl : '') + '/attributes') + '" target="_blank">Manage</a></div>';
+        html += '<select class="form-select insp" data-k="' + esc(opts.k) + '"><option value="">' + esc(opts.empty || '— Select attribute —') + '</option>';
+
+        var defKeys = Object.keys(defs);
+        if (defKeys.length) {
+            html += '<optgroup label="Attributes">';
+            defKeys.forEach(function (k) { if (k === 'source') return; html += opt(k, defs[k].label + (defs[k].label.toLowerCase() !== k.toLowerCase() ? ' (' + k + ')' : '')); });
+            html += '</optgroup>';
+        }
+        html += '<optgroup label="Contact fields">';
+        Object.keys(CORE_ATTR_LABELS).forEach(function (k) {
+            if (opts.noMobile && k === 'mobile') return;
+            if (!seen[k]) html += opt(k, CORE_ATTR_LABELS[k]);
+        });
+        html += '</optgroup>';
+        if (cur && !seen[cur]) html += opt(cur, cur);
+        html += '</select>';
+        return html;
+    }
+
+    /** Rows editor of the bulk "Update attributes" action: data.attributes = [{attribute, value}]. */
+    function bulkAttributeRows(d) {
+        return Array.isArray(d.attributes) ? d.attributes : [];
+    }
+
+    function bulkAttributesHtml(d) {
+        var rows = bulkAttributeRows(d);
+        var html = '<label>Attributes to set</label>';
+        if (!rows.length) html += '<p class="text-muted small mb-1">No rows yet. Add the first attribute below.</p>';
+        rows.forEach(function (r, i) {
+            html += '<div class="border rounded p-2 mb-2">';
+            html += attrDropdownHtml({ k: 'bulk_attribute', cur: r.attribute || '', label: 'Attribute ' + (i + 1), noMobile: true })
+                .replace('class="form-select insp" data-k="bulk_attribute"', 'class="form-select insp-bulk" data-bk="attribute" data-row="' + i + '"');
+            html += '<label>New value</label><input class="form-control insp-bulk" data-bk="value" data-row="' + i + '" value="' + esc(r.value || '') + '" placeholder="Value or {{contact.name}}">';
+            html += '<button type="button" class="btn btn-sm btn-outline-danger mt-2 insp-bulk-remove" data-row="' + i + '"><i class="fas fa-trash"></i> Remove</button></div>';
+        });
+        html += '<button type="button" class="btn btn-sm btn-outline-primary" id="inspBulkAdd"><i class="fas fa-plus"></i> Add attribute</button>';
+        html += inspHint('Sets or adds every listed attribute in one step. Variables like {{contact.name}} work in values.');
+        return html;
+    }
+
+    function attributeSelectHtml(d, extra) {
+        return attrDropdownHtml($.extend({ k: 'attribute', cur: d.attribute || '' }, extra || {}));
+    }
+
+    function webhookHeaderHtml(d) {
+        var h = d.header;
+        if (!h || typeof h !== 'object' || Array.isArray(h)) {
+            h = { key: 'Content-Type', value: 'application/json' };
+        }
+        var html = '<label class="mt-2">Header name</label><input class="form-control insp-header" data-hk="key" value="' + esc(h.key || '') + '" placeholder="Content-Type">';
+        html += '<label>Header value</label><input class="form-control insp-header" data-hk="value" value="' + esc(h.value || '') + '" placeholder="application/json">';
+        return html;
+    }
+
+    function webhookValuesHtml(d) {
+        var selected = Array.isArray(d.values) ? d.values.map(String) : [];
+        var keys = knownAttributes(selected);
+        var html = '<div class="mt-2"><label>Parameter mapping</label>';
+        html += '<div class="insp-attr-map" style="max-height:180px;overflow:auto;border:1px solid #e5e7eb;border-radius:6px;padding:8px">';
+        if (!keys.length) {
+            html += '<p class="text-muted small mb-0">No attributes yet — add custom below.</p>';
+        }
+        keys.forEach(function (k, idx) {
+            var id = 'wv_' + idx + '_' + k.replace(/[^a-z0-9_]/gi, '_');
+            var checked = selected.indexOf(k) >= 0 ? ' checked' : '';
+            html += '<div class="form-check"><input type="checkbox" class="form-check-input insp-value-check" data-attr="' + esc(k) + '" id="' + id + '"' + checked + '>';
+            html += '<label class="form-check-label" for="' + id + '">' + esc(k) + '</label></div>';
+        });
+        html += '</div>';
+        html += '<div class="input-group input-group-sm mt-2">';
+        html += '<input type="text" class="form-control" id="inspNewParam" list="inspAttrList" placeholder="Add param key">';
+        html += '<button type="button" class="btn btn-outline-secondary" id="inspAddParam">Add</button>';
+        html += '</div>';
+        html += '<datalist id="inspAttrList">';
+        keys.forEach(function (k) { html += '<option value="' + esc(k) + '">'; });
+        html += '</datalist>';
+        if (selected.length) {
+            html += '<p class="insp-hint mb-0 mt-1">Sending: ' + esc(selected.join(', ')) + '</p>';
+        }
+        html += '</div>';
+        return html;
+    }
+
+    function syncWebhookValuesFromChecks() {
+        var node = findNode(Flow.selectedId);
+        if (!node) return;
+        node.data = node.data || {};
+        var values = [];
+        $('#inspectorBody .insp-value-check:checked').each(function () {
+            var a = String($(this).data('attr') || '');
+            if (a && values.indexOf(a) < 0) values.push(a);
+        });
+        node.data.values = values;
+        renderNodes();
+        $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+    }
+
+    function renderTriggerFields(d) {
+        var t = d.trigger_type || 'incoming_message';
+        var html = '';
+
+        if (t === 'incoming_message' || t === 'keyword_matched' || t === 'messenger' || t === 'instagram') {
+            html += '<label>Optional keyword / filter</label><input class="form-control insp" data-k="keyword" value="' + esc(d.keyword || '') + '" placeholder="e.g. hi, hello, namaste">';
+            html += '<label>Match type</label><select class="form-select insp" data-k="match_type">';
+            KEYWORD_MATCH_TYPES.forEach(function (p) {
+                html += '<option value="' + p[0] + '"' + ((d.match_type || 'contains') === p[0] ? ' selected' : '') + '>' + p[1] + '</option>';
+            });
+            html += '</select>';
+            html += inspHint('Leave keyword blank to match any inbound message on this channel. Separate several keywords with commas. Case and punctuation are ignored.');
+        }
+        if (t === 'campaign_sent' || t === 'campaign_replied') {
+            html += '<label>Campaign ID (optional)</label><input class="form-control insp" data-k="campaign_id" value="' + esc(d.campaign_id || '') + '" placeholder="Leave blank = any">';
+        }
+        if (t === 'shopify_event') {
+            html += '<label>Shopify topic</label><select class="form-select insp" data-k="shopify_topic">';
+            ['', 'orders/create', 'orders/updated', 'orders/paid', 'orders/cancelled', 'customers/create', 'customers/update', 'checkouts/create', 'fulfillments/create'].forEach(function (v) {
+                html += '<option value="' + v + '"' + ((d.shopify_topic || '') === v ? ' selected' : '') + '>' + (v || 'Any topic') + '</option>';
+            });
+            html += '</select>';
+            html += '<label>Or custom topic</label><input class="form-control insp" data-k="event_topic" value="' + esc(d.event_topic || '') + '" placeholder="custom/topic">';
+        }
+        if (t === 'facebook_lead') {
+            html += '<div class="fb-lead-wizard">';
+            html += '<button type="button" class="btn btn-sm js-fb-login" style="background:#1877F2;color:#fff;border:0"><i class="fab fa-facebook me-1"></i> Login with Facebook</button>';
+            html += '<div class="js-fb-status small text-muted mt-1">' + (d.page_name ? ('Connected page: ' + esc(d.page_name)) : 'Login, then choose portfolio, ad account, and lead page.') + '</div>';
+            if (!Flow.meta.fb_app_id) {
+                html += inspHint('Add the Meta App ID and App Secret in Settings before Facebook login can open.');
+            } else if (!Flow.meta.fb_config_id) {
+                html += inspHint('Save the Lead Login Config ID on Platform → Your Meta app, then refresh this page before logging in.');
+            }
+            html += '<label>1. Portfolio</label><select class="form-select insp js-fb-portfolio" data-k="business_id"' + (d.business_id ? '' : ' disabled') + '>';
+            html += '<option value="">' + (d.business_id ? 'Change portfolio' : 'Login, then choose a portfolio') + '</option>';
+            if (d.business_id) html += '<option value="' + esc(d.business_id) + '" selected>' + esc(d.business_name || d.business_id) + '</option>';
+            html += '</select>';
+            html += '<label>2. Ad account</label><select class="form-select insp js-fb-account" data-k="ad_account_id"' + (d.ad_account_id ? '' : ' disabled') + '>';
+            html += '<option value="">' + (d.ad_account_id ? 'Change ad account' : 'Choose a portfolio first') + '</option>';
+            if (d.ad_account_id) html += '<option value="' + esc(d.ad_account_id) + '" selected>' + esc(d.ad_account_name || d.ad_account_id) + '</option>';
+            html += '</select>';
+            html += '<label>3. Lead page</label><select class="form-select insp js-fb-page" data-k="page_id"' + (d.page_id ? '' : ' disabled') + '>';
+            html += '<option value="">' + (d.page_id ? 'Change lead page' : 'Choose an ad account first') + '</option>';
+            if (d.page_id) html += '<option value="' + esc(d.page_id) + '" selected>' + esc(d.page_name || d.page_id) + '</option>';
+            html += '</select>';
+            html += '<label>Lead form</label><select class="form-select insp js-fb-form" data-k="form_id">';
+            html += '<option value="">Any form on this page</option>';
+            if (d.form_id) html += '<option value="' + esc(d.form_id) + '" selected>' + esc(d.form_name || d.form_id) + '</option>';
+            html += '</select>';
+            html += inspHint('Login with the Facebook profile that owns the Lead Ads. Pick the business portfolio, then the ad account, then the Page that collects the leads. Leave the form blank to run for every form on that Page.');
+
+            // Form Testing & Preview helper card right below Lead Form
+            html += '<div class="card border-primary-subtle bg-light-subtle p-2 mt-2 js-fb-test-card" style="border:1px solid #bfdbfe;background:#f8faff;border-radius:6px;">';
+            html += '<div class="d-flex align-items-center justify-content-between mb-1">';
+            html += '<span class="fw-semibold small text-primary"><i class="fas fa-vial me-1"></i> Test & Preview Lead Form</span>';
+            html += '<span class="badge bg-primary text-white" style="font-size:10px;">Meta Tool</span>';
+            html += '</div>';
+            html += '<p class="small text-muted mb-2" style="font-size:11px;line-height:1.4;">' +
+                'Trigger a live test lead for this specific form directly, or open Meta tools.' +
+                '</p>';
+            html += '<button type="button" class="btn btn-sm btn-wa w-100 mb-2 js-fb-send-test-lead" style="font-size:12px;font-weight:600;"' + (d.form_id ? '' : ' disabled') + '>' +
+                '<i class="fas fa-bolt me-1"></i> Send Test Lead Now (1-Click)' +
+                '</button>';
+            html += '<div class="text-center text-muted small mb-2" style="font-size:10px;">— OR USE META TOOLS —</div>';
+            html += '<a href="https://developers.facebook.com/tools/lead-ads-testing" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-wa w-100 mb-1 text-center js-fb-test-tool-btn" style="font-size:12px;font-weight:600;">' +
+                '<i class="fas fa-external-link-alt me-1"></i> Open Meta Lead Testing Tool' +
+                '</a>';
+            if (d.page_id) {
+                var suiteFormsUrl = 'https://business.facebook.com/latest/instant_forms/forms?asset_id=' + encodeURIComponent(d.page_id);
+                html += '<a href="' + esc(suiteFormsUrl) + '" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary w-100 text-center js-fb-suite-forms-btn mt-1" style="font-size:11px;">' +
+                    '<i class="fab fa-facebook me-1"></i> View Instant Forms in Meta Suite' +
+                    '</a>';
+            }
+            html += '<div class="mt-2 pt-2 border-top small js-fb-test-summary" style="font-size:10.5px;color:#475569;">';
+            html += '<div><b>Page:</b> <span class="js-fb-summary-page">' + esc(d.page_name || d.page_id || 'Not selected') + '</span>' + (d.page_id ? (' <code class="text-muted">(' + esc(d.page_id) + ')</code>') : '') + '</div>';
+            html += '<div><b>Form:</b> <span class="js-fb-summary-form">' + esc(d.form_name || (d.form_id ? d.form_id : 'Any form on this page')) + '</span>' + (d.form_id ? (' <code class="text-muted">(' + esc(d.form_id) + ')</code>') : '') + '</div>';
+            html += '</div>';
+            html += '</div>';
+            html += '</div>';
+        }
+        if (t === 'kylas_event_create' || t === 'kylas_event_update') {
+            html += '<label>Object type</label><select class="form-select insp" data-k="object">';
+            ['', 'lead', 'deal', 'contact', 'company', 'activity'].forEach(function (v) {
+                html += '<option value="' + v + '"' + ((d.object || '') === v ? ' selected' : '') + '>' + (v || 'Any object') + '</option>';
+            });
+            html += '</select>';
+            html += '<label>Event type filter</label><input class="form-control insp" data-k="event_type" value="' + esc(d.event_type || '') + '" placeholder="optional">';
+        }
+        if (t === 'pabbly_event') {
+            html += '<label>Event type</label><input class="form-control insp" data-k="event_type" value="' + esc(d.event_type || '') + '" placeholder="e.g. new_lead">';
+            html += '<label>Source filter</label><input class="form-control insp" data-k="source" value="' + esc(d.source || '') + '">';
+        }
+        if (t === 'incoming_webhook') {
+            html += '<label>Webhook token</label><input class="form-control insp" data-k="token" value="' + esc(d.token || '') + '" placeholder="secret token">';
+            html += '<label>Optional secret</label><input class="form-control insp" data-k="secret" value="' + esc(d.secret || '') + '">';
+            if (Flow.meta.webhook_base) {
+                html += inspHint('POST to ' + Flow.meta.webhook_base + '/{token}');
+            } else {
+                html += inspHint('Each automation can listen on a unique webhook token.');
+            }
+        }
+        if (t === 'messenger' || t === 'instagram') {
+            html += '<label>Page / IG account ID</label><input class="form-control insp" data-k="page_id" value="' + esc(d.page_id || '') + '">';
+        }
+        if (t === 'commerce_event') {
+            html += '<label>Event type</label><select class="form-select insp" data-k="event_type">';
+            ['', 'order_created', 'order_updated', 'payment_received', 'cart_abandoned', 'product_inquiry'].forEach(function (v) {
+                html += '<option value="' + v + '"' + ((d.event_type || '') === v ? ' selected' : '') + '>' + (v || 'Any event') + '</option>';
+            });
+            html += '</select>';
+        }
+        if (t === 'form_response') {
+            html += '<label>Form ID</label><input class="form-control insp" data-k="form_id" value="' + esc(d.form_id || '') + '" placeholder="Leave blank = any form">';
+        }
+        if (t === 'contact_created') {
+            html += inspHint('Fires when a new contact is created (WhatsApp inbound or manual).');
+        }
+        if (t === 'tag_added') {
+            html += tagSelectHtml(d);
+            html += inspHint('Optional: only when this specific tag is added.');
+        }
+        if (t === 'attribute_updated') {
+            html += attributeSelectHtml(d, { empty: 'Any attribute' });
+            html += '<label>New value (optional)</label><input class="form-control insp" data-k="attribute_value" list="inspAttrValueList" value="' + esc(d.attribute_value || '') + '" placeholder="Blank = any change">';
+            html += '<datalist id="inspAttrValueList"></datalist><div class="small text-muted mt-1" id="inspAttrTypeHint"></div>';
+            html += inspHint('Fires when a contact attribute changes (contact edit, inbox, bulk update, keyword or another workflow). Blank attribute = any attribute. Use {{attribute}}, {{attribute_value}}, {{old_value}} in messages.');
+        }
+        if (t === 'birthday' || t === 'schedule') {
+            html += inspHint('Processed by the daily automations cron.');
+        }
+
+        if (!html) {
+            html += inspHint('No extra filters for this trigger.');
+        }
+        return html;
+    }
+
+    function choiceMessageFields(d) {
+        var list = Array.isArray(d.options) ? d.options : [];
+        var filled = choiceOptions(d);
+        var html = '<label>Image</label><input class="form-control insp" data-k="media_url" value="' + esc(d.media_url || '') + '" placeholder="https://…/image.jpg">';
+        if (/^https?:\/\//i.test(String(d.media_url || ''))) {
+            html += '<img src="' + esc(d.media_url) + '" alt="" class="mt-1 rounded border" style="max-width:100%;max-height:88px;object-fit:cover">';
+        }
+        html += '<label>Add body text</label><textarea class="form-control insp" data-k="text" rows="3" placeholder="Welcome to Gulf Pharmacy">' + esc(d.text || d.note || '') + '</textarea>';
+        html += varPickerHtml('text');
+        html += '<label>Configure input options</label>';
+        list.forEach(function (label, i) {
+            html += '<div class="input-group input-group-sm mb-1">' +
+                '<span class="input-group-text">' + (i + 1) + '.</span>' +
+                '<input class="form-control insp-option" data-i="' + i + '" maxlength="24" value="' + esc(label) + '" placeholder="Option">' +
+                '<button type="button" class="btn btn-outline-secondary insp-option-remove" data-i="' + i + '" title="Remove">×</button>' +
+                '</div>';
+        });
+        if (list.length < 10) {
+            html += '<button type="button" class="btn btn-sm btn-outline-secondary mb-2" id="inspAddOption">Add option</button>';
+        }
+        html += attrDropdownHtml({ k: 'save_as', label: 'Save reply in a variable', cur: d.save_as || '', empty: '— Don\'t save —', noMobile: true });
+        html += inspHint(filled.length > 3
+            ? '4 or more options are sent as a WhatsApp list. Each option gets its own path. No reply follows the "No reply" path.'
+            : 'Up to 3 options are WhatsApp buttons (20 characters). Each option gets its own path.');
+        html += inspHint('Free text and buttons are delivered only if the customer messaged you in the last 24h. Contacts who sent STOP get no automated replies.');
+        return html;
+    }
+
+    function renderActionFields(d) {
+        var a = d.action_type || 'response_message';
+        var html = '';
+
+        if (a === 'system_initiated') {
+            html += inspHint('Business-initiated outreach (outside 24h window) via approved WA template. Sent only to contacts with recorded WhatsApp opt-in.');
+            html += templateSelectHtml(d);
+            html += '<label>Fallback note (optional)</label><textarea class="form-control insp" data-k="text" rows="2">' + esc(d.text || '') + '</textarea>';
+            html += varPickerHtml('text');
+        } else if (a === 'response_message' || a === 'send_text') {
+            html += choiceMessageFields(d);
+        } else if (a === 'collect_images') {
+            html += '<label>How many images?</label><input type="number" min="1" max="20" class="form-control insp" data-k="count" value="' + esc(d.count || d.max_images || 1) + '">';
+            html += '<label>Prompt message</label><textarea class="form-control insp" data-k="prompt" rows="3" placeholder="Please send your photo…">' + esc(d.prompt || d.text || '') + '</textarea>';
+            html += varPickerHtml('prompt');
+            html += inspHint('Asks the contact for images, then stores them on the contact until the count is met.');
+        } else if (a === 'ask_question') {
+            var rt = d.reply_type || 'text';
+            html += '<label>Question</label><textarea class="form-control insp" data-k="text" rows="3" placeholder="Which city are you from?">' + esc(d.text || '') + '</textarea>';
+            html += varPickerHtml('text');
+            html += '<label>Answer type</label><select class="form-select insp" data-k="reply_type">';
+            [['text', 'Free text'], ['buttons', 'Buttons (max 3)'], ['list', 'List (max 10)']].forEach(function (p) {
+                html += '<option value="' + p[0] + '"' + (rt === p[0] ? ' selected' : '') + '>' + p[1] + '</option>';
+            });
+            html += '</select>';
+            if (rt === 'text') {
+                html += '<label>Validate answer</label><select class="form-select insp" data-k="validation">';
+                [['any', 'Any text'], ['number', 'Number'], ['email', 'Email'], ['phone', 'Phone number']].forEach(function (p) {
+                    html += '<option value="' + p[0] + '"' + ((d.validation || 'any') === p[0] ? ' selected' : '') + '>' + p[1] + '</option>';
+                });
+                html += '</select>';
+            } else {
+                var optText = Array.isArray(d.options) ? d.options.join('\n') : (d.options || '');
+                html += '<label>Options (one per line)</label><textarea class="form-control insp" data-k="options" rows="4" placeholder="Pune&#10;Mumbai&#10;Other">' + esc(optText) + '</textarea>';
+                html += inspHint(rt === 'buttons' ? 'Up to 3 buttons, 20 characters each. Each option gets its own path.' : 'Up to 10 rows, 24 characters each. Each option gets its own path.');
+                if (rt === 'list') {
+                    html += '<label>List button text</label><input class="form-control insp" data-k="list_button" maxlength="20" value="' + esc(d.list_button || 'Choose') + '">';
+                }
+            }
+            html += attrDropdownHtml({ k: 'save_as', label: 'Save answer to attribute', cur: d.save_as || '', empty: "— Don't save —", noMobile: true });
+            html += '<label>Wrong answer message</label><input class="form-control insp" data-k="retry_text" value="' + esc(d.retry_text || '') + '" placeholder="Please choose one of the options.">';
+            html += '<label>Wait for reply (minutes)</label><input type="number" min="1" max="10080" class="form-control insp" data-k="timeout_minutes" value="' + esc(d.timeout_minutes || 1440) + '">';
+            html += inspHint('The flow waits for the reply. A wrong answer is asked once more; no reply in time follows the "No reply" path. In later nodes use "+ Variable" → Last answer, or the attribute you saved it to.');
+        } else if (a === 'send_media') {
+            html += '<label>Media type</label><select class="form-select insp" data-k="media_type">';
+            ['image', 'video', 'document'].forEach(function (t) {
+                html += '<option value="' + t + '"' + ((d.media_type || 'image') === t ? ' selected' : '') + '>' + t + '</option>';
+            });
+            html += '</select>';
+            html += '<label>Media URL</label><input class="form-control insp" data-k="media_url" value="' + esc(d.media_url || '') + '" placeholder="https://…/brochure.pdf">';
+            html += '<label>Caption (optional)</label><textarea class="form-control insp" data-k="caption" rows="2">' + esc(d.caption || '') + '</textarea>';
+            html += varPickerHtml('caption');
+            if ((d.media_type || 'image') === 'document') {
+                html += '<label>File name (optional)</label><input class="form-control insp" data-k="filename" value="' + esc(d.filename || '') + '" placeholder="brochure.pdf">';
+            }
+            html += inspHint('URL must be public (https). Like text, media is delivered only inside the 24h window.');
+        } else if (a === 'send_template') {
+            html += templateSelectHtml(d);
+            html += inspHint('WhatsApp policy: outside the 24h window this sends only to contacts with recorded WhatsApp opt-in; others are skipped automatically.');
+        } else if (a === 'add_tag' || a === 'remove_tag') {
+            html += tagSelectHtml(d);
+            html += '<label>Or tag name</label><input class="form-control insp" data-k="tag_name" value="' + esc(d.tag_name || d.labelName || '') + '" placeholder="Tag / label name">';
+        } else if (a === 'set_attribute') {
+            html += attributeSelectHtml(d, { noMobile: true });
+            html += '<label>New value</label><input class="form-control insp" data-k="text" list="inspAttrValueList" value="' + esc(d.text || d.attributeNewValue || '') + '" placeholder="Value or {{contact.name}}">';
+            html += '<datalist id="inspAttrValueList"></datalist><div class="small text-muted mt-1" id="inspAttrTypeHint"></div>';
+            html += varPickerHtml('text');
+            html += inspHint('Core fields (name, email…) update the contact row; others go into custom attributes. Use "+ Variable" for dynamic values.');
+        } else if (a === 'ai_reply') {
+            html += '<label>Extra instruction (optional)</label><textarea class="form-control insp" data-k="text" rows="3" maxlength="500" placeholder="e.g. Answer only about delivery and pricing">' + esc(d.text || '') + '</textarea>';
+            html += inspHint('Gemini writes the reply from the last customer message, in their language. It follows the AI Bot settings and is skipped for opted-out contacts, outside the 24h window, during human takeover and past the consecutive-reply cap. The flow then continues.');
+        } else if (a === 'set_attributes') {
+            html += bulkAttributesHtml(d);
+        } else if (a === 'assign_agent') {
+            html += agentSelectHtml(d);
+        } else if (a === 'assign_bot') {
+            html += inspHint('Marks the conversation as Chatbot and clears the human assignee.');
+        } else if (a === 'update_chat_status') {
+            html += '<label>Chat status</label><select class="form-select insp" data-k="status">';
+            ['open', 'pending', 'resolved', 'chatbot', 'intervened'].forEach(function (s) {
+                html += '<option value="' + s + '"' + ((d.status || 'open') === s ? ' selected' : '') + '>' + s + '</option>';
+            });
+            html += '</select>';
+        } else if (a === 'send_email') {
+            html += '<label>To (optional)</label><input class="form-control insp" data-k="to" value="' + esc(d.to || '') + '" placeholder="Leave blank = contact email">';
+            html += '<label>Subject</label><input class="form-control insp" data-k="subject" value="' + esc(d.subject || '') + '">';
+            html += varPickerHtml('subject');
+            html += '<label>Body</label><textarea class="form-control insp" data-k="text" rows="4">' + esc(d.text || d.body || '') + '</textarea>';
+            html += varPickerHtml('text');
+            html += inspHint('Uses the active Email provider.');
+        } else if (a === 'add_note') {
+            html += '<label>Note</label><textarea class="form-control insp" data-k="text" rows="3">' + esc(d.text || d.note || '') + '</textarea>';
+            html += varPickerHtml('text');
+        } else if (a === 'delay') {
+            html += '<label>Delay (minutes)</label><input type="number" min="1" class="form-control insp" data-k="minutes" value="' + esc(d.minutes || Math.round((d.seconds || 60) / 60) || 1) + '">';
+        } else if (a === 'webhook' || a === 'webhook_call') {
+            html += '<label>Webhook URL</label><input class="form-control insp" data-k="url" value="' + esc(d.url || '') + '" placeholder="https://…">';
+            html += '<label>Method</label><select class="form-select insp" data-k="method">';
+            ['POST', 'GET', 'PUT', 'PATCH'].forEach(function (m) {
+                html += '<option value="' + m + '"' + ((d.method || 'POST') === m ? ' selected' : '') + '>' + m + '</option>';
+            });
+            html += '</select>';
+            html += webhookHeaderHtml(d);
+            html += webhookValuesHtml(d);
+            html += '<div class="form-check mt-2"><input type="checkbox" class="form-check-input insp-check" data-k="branches" id="inspBranches"' + (d.branches ? ' checked' : '') + '><label class="form-check-label" for="inspBranches">Branch on success / fail</label></div>';
+            html += inspHint('Mapped params are sent as JSON body from contact attributes. Use {{contact.name}} in URL/header.');
+        } else if (a === 'end') {
+            html += inspHint('Stops the workflow here.');
+        } else {
+            html += '<label>Text / note</label><textarea class="form-control insp" data-k="text" rows="3">' + esc(d.text || d.note || '') + '</textarea>';
+            html += templateSelectHtml(d);
+            html += tagSelectHtml(d);
+            html += agentSelectHtml(d);
+            html += '<label>Delay (minutes)</label><input type="number" min="1" class="form-control insp" data-k="minutes" value="' + esc(d.minutes || 1) + '">';
+            html += '<label>Webhook URL</label><input class="form-control insp" data-k="url" value="' + esc(d.url || '') + '">';
+        }
+        return html;
+    }
+
+    function renderInspector() {
+        var node = findNode(Flow.selectedId);
+        var $body = $('#inspectorBody');
+        var $empty = $('#inspectorEmpty');
+        var $del = $('#btnDeleteNode');
+        if (!node) {
+            $body.addClass('d-none').empty();
+            $empty.removeClass('d-none');
+            $del.addClass('d-none');
+            return;
+        }
+        $empty.addClass('d-none');
+        $body.removeClass('d-none');
+        $del.toggleClass('d-none', node.type === 'trigger' && Flow.nodes.filter(function (n) { return n.type === 'trigger'; }).length <= 1);
+
+        var d = node.data || {};
+        var html = '';
+
+        if (node.type === 'trigger') {
+            html += '<label>Trigger</label><select class="form-select insp" data-k="trigger_type">';
+            Object.keys(TRIGGER_LABELS).forEach(function (k) {
+                html += '<option value="' + k + '"' + (d.trigger_type === k ? ' selected' : '') + '>' + TRIGGER_LABELS[k] + '</option>';
+            });
+            html += '</select>';
+            html += renderTriggerFields(d);
+        } else if (node.type === 'condition') {
+            html += '<label>Condition</label><select class="form-select insp" data-k="condition_type">';
+            Object.keys(CONDITION_LABELS).forEach(function (k) {
+                html += '<option value="' + k + '"' + (d.condition_type === k ? ' selected' : '') + '>' + CONDITION_LABELS[k] + '</option>';
+            });
+            html += '</select>';
+            if (d.condition_type === 'message_type') {
+                html += '<label>Message type</label><select class="form-select insp" data-k="value">';
+                ['text', 'image', 'video', 'document', 'audio', 'button', 'interactive'].forEach(function (t) {
+                    html += '<option value="' + t + '"' + ((d.value || 'text') === t ? ' selected' : '') + '>' + t + '</option>';
+                });
+                html += '</select>';
+                html += inspHint('True when inbound WhatsApp message_type matches (image/video captions still fill content).');
+            } else if (d.condition_type === 'caption_contains') {
+                html += '<label>Caption contains</label><input class="form-control insp" data-k="value" value="' + esc(d.value || '') + '">';
+                html += inspHint('Matches text OR media caption (image/video/document).');
+            } else if (d.condition_type === 'attribute_condition') {
+                html += attributeSelectHtml(d);
+                html += '<label>Operator</label><select class="form-select insp" data-k="operator">';
+                [
+                    ['equals', 'Equals'],
+                    ['not_equals', 'Not equals'],
+                    ['contains', 'Contains'],
+                    ['not_contains', 'Does not contain'],
+                    ['empty', 'Is empty'],
+                    ['not_empty', 'Is not empty']
+                ].forEach(function (pair) {
+                    html += '<option value="' + pair[0] + '"' + ((d.operator || 'equals') === pair[0] ? ' selected' : '') + '>' + pair[1] + '</option>';
+                });
+                html += '</select>';
+                if (d.operator !== 'empty' && d.operator !== 'not_empty') {
+                    var condOpts = attrOptions(d.attribute);
+                    var condDef = (Flow.meta.attribute_defs || {})[String(d.attribute || '')] || null;
+                    if (condOpts.length) {
+                        html += '<label>Value</label><select class="form-select insp" data-k="value"><option value="">—</option>';
+                        condOpts.concat(d.value && condOpts.indexOf(d.value) < 0 ? [d.value] : []).forEach(function (o) {
+                            html += '<option value="' + esc(o) + '"' + (String(d.value || '') === String(o) ? ' selected' : '') + '>' + esc(o) + '</option>';
+                        });
+                        html += '</select>';
+                    } else {
+                        html += '<label>Value</label><input class="form-control insp" data-k="value" type="' + (condDef && condDef.type === 'date' ? 'date' : 'text') + '" value="' + esc(d.value || '') + '">';
+                    }
+                }
+            } else if (d.condition_type === 'ab_split') {
+                html += '<label>Percent sent to path A</label><input class="form-control insp" data-k="value" type="number" min="1" max="99" value="' + esc(d.value || 50) + '">';
+                html += inspHint('The rest follow path B. Each contact always gets the same path at this node, so a re-entering contact is not switched.');
+            } else {
+                html += '<label>Value</label><input class="form-control insp" data-k="value" value="' + esc(d.value || '') + '">';
+            }
+            if (d.condition_type !== 'ab_split') {
+                html += tagSelectHtml(d);
+            }
+        } else if (node.type === 'end') {
+            html += inspHint('End node — workflow stops here.');
+        } else {
+            html += '<label>Action</label><select class="form-select insp" data-k="action_type">';
+            Object.keys(ACTION_LABELS).forEach(function (k) {
+                if (k === 'webhook_call' || k === 'end') return;
+                html += '<option value="' + k + '"' + (d.action_type === k || (k === 'webhook' && d.action_type === 'webhook_call') ? ' selected' : '') + '>' + ACTION_LABELS[k] + '</option>';
+            });
+            html += '</select>';
+            html += renderActionFields(d);
+        }
+
+        $body.html(html);
+        if (node.type === 'trigger' && d.trigger_type === 'facebook_lead') {
+            prepareFacebookSdk();
+        }
+        if (node.data && (node.data.action_type === 'set_attribute' || (node.type === 'trigger' && node.data.trigger_type === 'attribute_updated'))) {
+            refreshAttrValueHelp(node.data.attribute);
+        }
+    }
+
+    function applyInspector($el) {
+        var node = findNode(Flow.selectedId);
+        if (!node) return;
+        node.data = node.data || {};
+        var k = $el.data('k');
+        var v = $el.val();
+        node.data[k] = v;
+        if (k === 'trigger_type') {
+            node.data.label = TRIGGER_LABELS[v] || v;
+            $('#flowTriggerPill').text(v);
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+            renderInspector();
+            return;
+        }
+        if (k === 'condition_type') {
+            node.data.label = CONDITION_LABELS[v] || v;
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+            renderInspector();
+            return;
+        }
+        if (k === 'action_type') {
+            node.data.label = ACTION_LABELS[v] || v;
+            if (v === 'response_message' && !node.data.text) node.data.text = 'Hello {{contact.name}}!';
+            if (v === 'collect_images' && !node.data.count) node.data.count = 1;
+            if (v === 'ask_question') applyAskQuestionDefaults(node);
+            if (v === 'send_media' && !node.data.media_type) node.data.media_type = 'image';
+            if (v === 'delay' && !node.data.minutes) { node.data.minutes = 5; node.data.seconds = 300; }
+            if ((v === 'webhook' || v === 'webhook_call') && !Array.isArray(node.data.values)) node.data.values = [];
+            if ((v === 'webhook' || v === 'webhook_call') && (!node.data.header || typeof node.data.header !== 'object')) {
+                node.data.header = { key: 'Content-Type', value: 'application/json' };
+            }
+            if ((v === 'webhook' || v === 'webhook_call') && node.data.branches === undefined) node.data.branches = true;
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+            renderInspector();
+            return;
+        }
+        if (node.data.action_type === 'ask_question' && (k === 'reply_type' || k === 'options')) {
+            pruneAskQuestionEdges(node);
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+            if (k === 'reply_type') renderInspector();
+            return;
+        }
+        if ((node.data.action_type === 'response_message' || node.data.action_type === 'send_text') && (k === 'text' || k === 'save_as' || k === 'media_url')) {
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+            return;
+        }
+        if (node.data.action_type === 'send_media' && k === 'media_type') {
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+            renderInspector();
+            return;
+        }
+        if (k === 'minutes') {
+            node.data.seconds = parseInt(v, 10) * 60;
+        }
+        if (k === 'count') {
+            node.data.max_images = parseInt(v, 10) || 1;
+        }
+        if (k === 'prompt') {
+            node.data.text = v;
+        }
+        if (k === 'text' && node.data.action_type === 'set_attribute') {
+            node.data.attributeNewValue = v;
+        }
+        if (k === 'attribute') {
+            node.data.attribute = v;
+            if (node.data.action_type === 'set_attribute' || node.data.trigger_type === 'attribute_updated') refreshAttrValueHelp(v);
+        }
+        if (node.type === 'condition' && node.data.condition_type === 'attribute_condition' && (k === 'attribute' || k === 'operator')) {
+            if (k === 'attribute') node.data.value = '';
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+            renderInspector();
+            return;
+        }
+        if (k === 'template_name') {
+            var tpl = (Flow.meta.templates || []).find(function (t) { return t.name === v; });
+            if (tpl) node.data.language = tpl.language || node.data.language || 'en_US';
+            node.data.variables = {};
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+            renderInspector();
+            return;
+        }
+        renderNodes();
+        $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+    }
+
+    /** Value suggestions + type hint for "Update attribute" from Contacts → Attributes definitions. */
+    function refreshAttrValueHelp(key) {
+        var def = (Flow.meta.attribute_defs || {})[String(key || '').trim()] || null;
+        var type = def ? def.type : 'text';
+        var options = type === 'boolean' ? ['Yes', 'No'] : (type === 'dropdown' ? (def.options || []) : []);
+        var hints = {
+            number: 'Number attribute — e.g. 1200',
+            date: 'Date attribute — e.g. 2026-09-30 or 30/09/2026',
+            dropdown: 'Dropdown — choose one of: ' + options.join(', '),
+            boolean: 'Yes / No attribute'
+        };
+        $('#inspAttrValueList').html(options.map(function (o) { return '<option value="' + esc(o) + '">'; }).join(''));
+        $('#inspAttrTypeHint').text(def ? (def.label + ': ' + (hints[type] || 'Text attribute')) : (key ? 'Free-text attribute (not defined in Contacts → Attributes)' : ''));
+    }
+
+    function applyAskQuestionDefaults(node) {
+        var d = node.data;
+        if (!d.text) d.text = 'Which city are you from?';
+        if (!d.reply_type) d.reply_type = 'text';
+        if (!d.timeout_minutes) d.timeout_minutes = 1440;
+        if (!d.validation) d.validation = 'any';
+    }
+
+    function addNodeFromPalette(palette, extra, x, y) {
+        var node = { id: nextId(palette), type: palette, x: x, y: y, data: {} };
+        if (palette === 'trigger') {
+            Flow.nodes = Flow.nodes.filter(function (n) { return n.type !== 'trigger'; });
+            node.id = 'trigger';
+            node.data.trigger_type = extra || 'incoming_message';
+            node.data.label = TRIGGER_LABELS[node.data.trigger_type] || node.data.trigger_type;
+            $('#flowTriggerPill').text(node.data.trigger_type);
+        } else if (palette === 'condition') {
+            node.data.condition_type = extra || 'message_contains';
+            node.data.label = CONDITION_LABELS[node.data.condition_type] || 'If / Else';
+            node.data.value = node.data.condition_type === 'ab_split' ? '50' : '';
+        } else if (palette === 'end') {
+            node.type = 'end';
+            node.data.action_type = 'end';
+            node.data.label = 'End';
+        } else {
+            node.data.action_type = extra || 'response_message';
+            node.data.label = ACTION_LABELS[node.data.action_type] || node.data.action_type;
+            if (node.data.action_type === 'response_message' || node.data.action_type === 'send_text') {
+                node.data.text = 'Hello {{contact.name}}!';
+            }
+            if (node.data.action_type === 'collect_images') {
+                node.data.count = 1;
+                node.data.prompt = 'Please send your image.';
+            }
+            if (node.data.action_type === 'delay') {
+                node.data.minutes = 5;
+                node.data.seconds = 300;
+            }
+            if (node.data.action_type === 'webhook') {
+                node.data.branches = true;
+                node.data.values = [];
+                node.data.header = { key: 'Content-Type', value: 'application/json' };
+            }
+            if (node.data.action_type === 'set_attribute') {
+                node.data.attribute = '';
+                node.data.text = '';
+            }
+            if (node.data.action_type === 'set_attributes') {
+                node.data.attributes = [{ attribute: '', value: '' }];
+            }
+            if (node.data.action_type === 'ask_question') applyAskQuestionDefaults(node);
+            if (node.data.action_type === 'send_media') node.data.media_type = 'image';
+        }
+        Flow.nodes.push(node);
+        selectNode(node.id);
+    }
+
+    function deleteSelected() {
+        if (Flow.selectedEdge) {
+            var parts = Flow.selectedEdge.split('|');
+            Flow.edges = Flow.edges.filter(function (e) {
+                return !(e.from === parts[0] && (e.port || 'out') === parts[1] && e.to === parts[2]);
+            });
+            Flow.selectedEdge = null;
+            drawEdges();
+            return;
+        }
+        if (!Flow.selectedId) return;
+        var node = findNode(Flow.selectedId);
+        if (!node) return;
+        if (node.type === 'trigger' && Flow.nodes.filter(function (n) { return n.type === 'trigger'; }).length <= 1) {
+            if (window.APP && APP.toast) APP.toast('Keep at least one trigger', 'warning');
+            return;
+        }
+        Flow.nodes = Flow.nodes.filter(function (n) { return n.id !== Flow.selectedId; });
+        Flow.edges = Flow.edges.filter(function (e) { return e.from !== Flow.selectedId && e.to !== Flow.selectedId; });
+        Flow.selectedId = null;
+        renderNodes();
+        renderInspector();
+    }
+
+    function clientToCanvas(clientX, clientY) {
+        var wrap = document.getElementById('flowCanvasWrap') || document.querySelector('.flow-canvas-wrap');
+        if (!wrap) return { x: 0, y: 0 };
+        var rect = wrap.getBoundingClientRect();
+        return {
+            x: (clientX - rect.left - Flow.panX) / Flow.scale,
+            y: (clientY - rect.top - Flow.panY) / Flow.scale
+        };
+    }
+
+    /**
+     * Node id under the cursor while linking: its input dot or anywhere on the card.
+     * Triggers have no input and a node cannot link to itself.
+     */
+    function linkTargetNodeId(target) {
+        if (!Flow.linkFrom) return null;
+        var $port = $(target).closest('.flow-port.in');
+        var id = $port.length ? $port.attr('data-node') : null;
+        if (!id) {
+            var $node = $(target).closest('.flow-node');
+            if (!$node.length || !$node.find('.flow-port.in').length) return null;
+            id = $node.attr('data-id');
+        }
+        if (!id || id === String(Flow.linkFrom.node)) return null;
+        return id;
+    }
+
+    function upsertEdge(from, to, port) {
+        port = port || 'out';
+        Flow.edges = Flow.edges.filter(function (e) { return !(e.from === from && (e.port || 'out') === port); });
+        if (from === to) return;
+        Flow.edges.push({ from: from, to: to, port: port });
+        Flow.selectedEdge = edgeKey({ from: from, to: to, port: port });
+        drawEdges();
+    }
+
+    function exportGraph() {
+        return { nodes: Flow.nodes, edges: Flow.edges };
+    }
+
+    function buildTriggerConfig(triggerNode) {
+        var d = (triggerNode && triggerNode.data) || {};
+        var cfg = {};
+        TRIGGER_CONFIG_KEYS.forEach(function (k) {
+            if (d[k] !== undefined && d[k] !== null && String(d[k]) !== '') {
+                cfg[k] = d[k];
+            }
+        });
+        if (cfg.keyword && !cfg.content) cfg.content = cfg.keyword;
+        if (cfg.shopify_topic && !cfg.event_topic) cfg.event_topic = cfg.shopify_topic;
+        return cfg;
+    }
+
+    function save() {
+        var $root = $('#flowBuilder');
+        var url = $root.data('save-url');
+        var triggerNode = Flow.nodes.find(function (n) { return n.type === 'trigger'; });
+        var payload = {
+            flow_graph: exportGraph(),
+            name: $('#flowName').val(),
+            is_active: $('#flowActive').is(':checked') ? 1 : 0,
+            trigger_type: triggerNode && triggerNode.data ? triggerNode.data.trigger_type : undefined,
+            trigger_config: buildTriggerConfig(triggerNode)
+        };
+
+        var req = $.ajax({
+            url: url,
+            method: 'POST',
+            contentType: 'application/json; charset=UTF-8',
+            dataType: 'json',
+            data: JSON.stringify(payload),
+            headers: {
+                'X-CSRF-TOKEN': String($root.data('csrf') || $('meta[name="csrf-token"]').attr('content') || ''),
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+
+        req.done(function (res) {
+            APP.toast((res && res.message) || 'Workflow saved', 'success');
+        }).fail(function (xhr) {
+            var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Save failed';
+            APP.toast(msg, 'error');
+        });
+    }
+
+    var facebookSdkStarted = false;
+
+    function fbLeadUrl(path) {
+        return ((window.APP && APP.baseUrl) ? APP.baseUrl : '') + path;
+    }
+
+    function fbLeadFail(xhr, fallback) {
+        var msg = (xhr && xhr.responseJSON && xhr.responseJSON.message) || fallback;
+        $('.js-fb-status').text(msg);
+        if (window.APP && APP.toast) APP.toast(msg, 'error');
+    }
+
+    function fillFbSelect($sel, rows, placeholder, selected) {
+        var html = '<option value="">' + esc(placeholder) + '</option>';
+        (rows || []).forEach(function (row) {
+            if (!row || row.id === undefined || row.id === null || String(row.id) === '') return;
+            html += '<option value="' + esc(row.id) + '"' + (String(selected || '') === String(row.id) ? ' selected' : '') + '>' + esc(row.name || row.id) + '</option>';
+        });
+        $sel.prop('disabled', false).html(html);
+    }
+
+    function prepareFacebookSdk() {
+        var appId = String((Flow.meta && Flow.meta.fb_app_id) || '');
+        if (!appId) return;
+        var version = String((Flow.meta && Flow.meta.fb_version) || 'v21.0');
+        if (window.FB) return;
+        if (facebookSdkStarted) return;
+        facebookSdkStarted = true;
+        window.fbAsyncInit = function () {
+            FB.init({
+                appId: appId,
+                cookie: true,
+                xfbml: false,
+                version: version
+            });
+        };
+        var script = document.createElement('script');
+        script.async = true;
+        script.src = 'https://connect.facebook.net/en_US/sdk.js';
+        script.onerror = function () {
+            facebookSdkStarted = false;
+            $('.js-fb-status').text('Facebook login could not be loaded.');
+        };
+        document.head.appendChild(script);
+    }
+
+    function bind() {
+        var $wrap = $('#flowCanvasWrap, .flow-canvas-wrap');
+        var wrapEl = document.getElementById('flowCanvasWrap') || document.querySelector('.flow-canvas-wrap');
+
+        $('.palette-item').on('dragstart', function (e) {
+            var dt = e.originalEvent.dataTransfer;
+            dt.setData('text/plain', JSON.stringify({
+                palette: $(this).data('palette'),
+                trigger: $(this).data('trigger'),
+                condition: $(this).data('condition'),
+                action: $(this).data('action')
+            }));
+            $(this).addClass('dragging');
+        }).on('dragend', function () {
+            $(this).removeClass('dragging');
+        });
+
+        $wrap.on('dragover', function (e) {
+            e.preventDefault();
+            $(this).addClass('drop-target');
+        });
+        $wrap.on('dragleave', function () { $(this).removeClass('drop-target'); });
+        $wrap.on('drop', function (e) {
+            e.preventDefault();
+            $(this).removeClass('drop-target');
+            var raw = e.originalEvent.dataTransfer.getData('text/plain');
+            try {
+                var p = JSON.parse(raw);
+                var pt = clientToCanvas(e.originalEvent.clientX, e.originalEvent.clientY);
+                var x = snap(pt.x - 100);
+                var y = snap(pt.y - 30);
+                var extra = p.trigger || p.condition || p.action;
+                addNodeFromPalette(p.palette, extra, Math.max(0, x), Math.max(0, y));
+            } catch (err) {
+                // ignore
+            }
+        });
+
+        $('#flowCanvas').on('mousedown', '.flow-node', function (e) {
+            if ($(e.target).closest('.flow-port').length) return;
+            if (Flow.spaceDown || e.button === 1) return;
+            var id = String($(this).attr('data-id'));
+            Flow.selectedEdge = null;
+            selectNode(id);
+            var node = findNode(id);
+            var pt = clientToCanvas(e.clientX, e.clientY);
+            Flow.dragNode = {
+                id: id,
+                ox: pt.x - node.x,
+                oy: pt.y - node.y
+            };
+            $(this).addClass('dragging-node');
+            e.preventDefault();
+        });
+
+        $wrap.on('mousedown', function (e) {
+            var isPan = Flow.spaceDown || e.button === 1 || ($(e.target).is('#flowCanvas, #flowEdges, #flowViewport, .flow-canvas-wrap, .flow-viewport') && !$(e.target).closest('.flow-node, .flow-port').length);
+            if (!isPan) return;
+            e.preventDefault();
+            Flow.pan = { x: e.clientX - Flow.panX, y: e.clientY - Flow.panY };
+            $wrap.addClass('panning');
+            if (!$(e.target).closest('.flow-node').length) {
+                Flow.selectedId = null;
+                Flow.selectedEdge = null;
+                renderNodes();
+                renderInspector();
+            }
+        });
+
+        $(document).on('mousemove', function (e) {
+            if (Flow.pan) {
+                Flow.panX = e.clientX - Flow.pan.x;
+                Flow.panY = e.clientY - Flow.pan.y;
+                applyViewport();
+                return;
+            }
+            if (Flow.dragNode) {
+                var node = findNode(Flow.dragNode.id);
+                if (!node) return;
+                var pt = clientToCanvas(e.clientX, e.clientY);
+                node.x = Math.max(0, snap(pt.x - Flow.dragNode.ox));
+                node.y = Math.max(0, snap(pt.y - Flow.dragNode.oy));
+                $('.flow-node[data-id="' + node.id + '"]').css({ left: node.x, top: node.y });
+                resizeCanvas();
+                drawEdges();
+            }
+            if (Flow.linkFrom) {
+                var cpt = clientToCanvas(e.clientX, e.clientY);
+                drawEdges({
+                    a: Flow.linkFrom.pt,
+                    b: { x: cpt.x, y: cpt.y }
+                });
+                var targetId = linkTargetNodeId(e.target);
+                $('.flow-port.in').removeClass('link-target');
+                $('.flow-node').removeClass('link-target-node');
+                if (targetId !== null) {
+                    $('.flow-port.in[data-node="' + targetId + '"]').addClass('link-target');
+                    $('.flow-node[data-id="' + targetId + '"]').addClass('link-target-node');
+                }
+            }
+        });
+
+        $(document).on('mouseup', function (e) {
+            if (Flow.pan) {
+                Flow.pan = null;
+                $wrap.removeClass('panning');
+            }
+            $('.flow-node').removeClass('dragging-node');
+            Flow.dragNode = null;
+            if (Flow.linkFrom) {
+                var dropId = linkTargetNodeId(e.target);
+                if (dropId !== null) {
+                    upsertEdge(Flow.linkFrom.node, dropId, Flow.linkFrom.port);
+                }
+                Flow.linkFrom = null;
+                $('.flow-port').removeClass('linking link-target');
+                $('.flow-node').removeClass('link-target-node');
+                $wrap.removeClass('linking');
+                drawEdges();
+            }
+        });
+
+        $('#flowCanvas').on('mousedown', '.flow-port.out, .flow-port.true, .flow-port.false', function (e) {
+            e.stopPropagation();
+            e.preventDefault();
+            var nodeId = String($(this).attr('data-node'));
+            var port = String($(this).attr('data-port'));
+            var pt = portCenter(nodeId, port);
+            Flow.linkFrom = { node: nodeId, port: port, pt: pt };
+            Flow.selectedEdge = null;
+            $(this).addClass('linking');
+            $wrap.addClass('linking');
+        });
+
+        $('#flowEdges').on('mousedown', '.flow-edge-hit, .flow-edge', function (e) {
+            e.stopPropagation();
+            Flow.selectedId = null;
+            Flow.selectedEdge = $(this).attr('data-edge-key');
+            renderNodes();
+            renderInspector();
+            drawEdges();
+        });
+
+        $(document).on('keydown', function (e) {
+            if (e.code === 'Space' && !$(e.target).is('input,textarea,select')) {
+                Flow.spaceDown = true;
+                $wrap.addClass('can-pan');
+                e.preventDefault();
+            }
+            if ((e.key === 'Delete' || e.key === 'Backspace') && !$(e.target).is('input,textarea,select')) {
+                deleteSelected();
+            }
+            if ((e.key === '+' || e.key === '=') && (e.ctrlKey || e.metaKey)) {
+                setScale(Flow.scale + 0.1);
+                e.preventDefault();
+            }
+            if ((e.key === '-' || e.key === '_') && (e.ctrlKey || e.metaKey)) {
+                setScale(Flow.scale - 0.1);
+                e.preventDefault();
+            }
+        });
+        $(document).on('keyup', function (e) {
+            if (e.code === 'Space') {
+                Flow.spaceDown = false;
+                $wrap.removeClass('can-pan');
+            }
+        });
+
+        if (wrapEl) {
+            wrapEl.addEventListener('wheel', function (e) {
+                if (!(e.ctrlKey || e.metaKey)) return;
+                e.preventDefault();
+                var delta = e.deltaY > 0 ? -0.08 : 0.08;
+                setScale(Flow.scale + delta, e.clientX, e.clientY);
+            }, { passive: false });
+        }
+
+        $('#inspectorBody').on('change input', '.insp', function () {
+            applyInspector($(this));
+        });
+        $('#inspectorBody').on('click', '.js-fb-login', function () {
+            var appId = String((Flow.meta && Flow.meta.fb_app_id) || '');
+            if (!appId) {
+                $('.js-fb-status').text('Add the Meta App ID and App Secret in Settings first.');
+                return;
+            }
+            if (!window.FB) {
+                $('.js-fb-status').text('Facebook login is still loading. Click again in a second.');
+                prepareFacebookSdk();
+                return;
+            }
+            var configId = String((Flow.meta && Flow.meta.fb_config_id) || '');
+            var loginOptions = { return_scopes: true };
+            if (configId) {
+                // Login for Business takes its permissions from the configuration; scope and auth_type are classic-login options.
+                loginOptions.config_id = configId;
+            } else {
+                loginOptions.auth_type = 'rerequest';
+                loginOptions.scope = 'pages_show_list,pages_read_engagement,pages_manage_metadata,pages_manage_ads,leads_retrieval,business_management,ads_read';
+            }
+            FB.login(function (response) {
+                var auth = response && response.authResponse;
+                if (!auth || (!auth.code && !auth.accessToken)) {
+                    $('.js-fb-status').text('Facebook login was cancelled.');
+                    return;
+                }
+                $('.js-fb-status').text('Loading portfolios…');
+                var payload = auth.accessToken
+                    ? { access_token: auth.accessToken }
+                    : { code: auth.code, redirect_uri: window.location.href.split('#')[0] };
+                APP.post(fbLeadUrl('/automations/facebook/login'), payload).done(function (res) {
+                    var data = (res && res.data) || {};
+                    var businesses = data.businesses || [];
+                    if (data.profile_pages > 0) {
+                        var hasProfile = businesses.some(function (b) { return b.id === 'profile'; });
+                        if (!hasProfile) {
+                            businesses.push({ id: 'profile', name: 'Pages on this Facebook profile' });
+                        }
+                    }
+                    fillFbSelect($('.js-fb-portfolio'), businesses, businesses.length ? 'Choose a portfolio' : 'No portfolio on this profile', '');
+                    fillFbSelect($('.js-fb-account'), [], 'Choose a portfolio first', '');
+                    $('.js-fb-account').prop('disabled', true);
+                    fillFbSelect($('.js-fb-page'), [], 'Choose an ad account first', '');
+                    $('.js-fb-page').prop('disabled', true);
+                    $('.js-fb-status').text((res && res.message) || 'Choose a portfolio.');
+                }).fail(function (xhr) {
+                    fbLeadFail(xhr, 'Facebook login failed.');
+                });
+            }, loginOptions);
+        });
+        $('#inspectorBody').on('change', '.js-fb-portfolio', function () {
+            var businessId = String($(this).val() || '');
+            var node = findNode(Flow.selectedId);
+            if (node) node.data.business_name = businessId ? $(this).find('option:selected').text() : '';
+            fillFbSelect($('.js-fb-page'), [], 'Choose an ad account first', '');
+            $('.js-fb-page').prop('disabled', true);
+            if (!businessId) {
+                fillFbSelect($('.js-fb-account'), [], 'Choose a portfolio first', '');
+                $('.js-fb-account').prop('disabled', true);
+                return;
+            }
+            $('.js-fb-status').text('Loading ad accounts…');
+            APP.post(fbLeadUrl('/automations/facebook/accounts'), { business_id: businessId }).done(function (res) {
+                var rows = (res.data && res.data.accounts) || [];
+                if (!rows.length) {
+                    rows = [{ id: 'none', name: 'No ad account (Pages only)' }];
+                }
+                fillFbSelect($('.js-fb-account'), rows, 'Choose an ad account', '');
+                if (rows.length === 1 && rows[0].id === 'none') {
+                    $('.js-fb-account').val('none').trigger('change');
+                } else {
+                    $('.js-fb-status').text('Choose an ad account.');
+                }
+            }).fail(function (xhr) {
+                fbLeadFail(xhr, 'Could not load ad accounts.');
+            });
+        });
+        $('#inspectorBody').on('change', '.js-fb-account', function () {
+            var accountId = String($(this).val() || '');
+            var node = findNode(Flow.selectedId);
+            if (node) node.data.ad_account_name = accountId && accountId !== 'none' ? $(this).find('option:selected').text() : '';
+            if (node && accountId === 'none') node.data.ad_account_id = '';
+            var businessId = String($('.js-fb-portfolio').val() || (node && node.data.business_id) || '');
+            if (!businessId || !accountId) return;
+            $('.js-fb-status').text('Loading lead pages…');
+            APP.post(fbLeadUrl('/automations/facebook/pages'), {
+                business_id: businessId,
+                ad_account_id: accountId === 'none' ? '' : accountId
+            }).done(function (res) {
+                var rows = (res.data && res.data.pages) || [];
+                fillFbSelect($('.js-fb-page'), rows, rows.length ? 'Choose a lead page' : 'No Page on this account', '');
+                $('.js-fb-status').text(rows.length ? 'Choose the Page that collects leads.' : 'No lead Page found.');
+            }).fail(function (xhr) {
+                fbLeadFail(xhr, 'Could not load lead pages.');
+            });
+        });
+        $('#inspectorBody').on('change', '.js-fb-page', function () {
+            var pageId = String($(this).val() || '');
+            var node = findNode(Flow.selectedId);
+            if (!node || !pageId) return;
+            node.data.page_name = $(this).find('option:selected').text();
+            var accountId = String($('.js-fb-account').val() || '');
+            $('.js-fb-status').text('Connecting ' + node.data.page_name + '…');
+            APP.post(fbLeadUrl('/automations/facebook/connect'), {
+                page_id: pageId,
+                business_id: String($('.js-fb-portfolio').val() || node.data.business_id || ''),
+                ad_account_id: accountId === 'none' ? '' : accountId
+            }).done(function (res) {
+                var data = (res && res.data) || {};
+                node.data.page_name = data.page_name || node.data.page_name;
+                var forms = data.forms || [];
+                var html = '<option value="">Any form on this page</option>';
+                forms.forEach(function (row) {
+                    html += '<option value="' + esc(row.id) + '">' + esc(row.name) + '</option>';
+                });
+                $('.js-fb-form').html(html);
+                node.data.form_id = '';
+                node.data.form_name = '';
+                $('.js-fb-status').text((res && res.message) || ('Connected: ' + node.data.page_name));
+                $('.js-fb-summary-page').html(esc(node.data.page_name) + ' <code class="text-muted">(' + esc(pageId) + ')</code>');
+                $('.js-fb-summary-form').text('Any form on this page');
+                var suiteUrl = 'https://business.facebook.com/latest/instant_forms/forms?asset_id=' + encodeURIComponent(pageId);
+                if ($('.js-fb-suite-forms-btn').length) {
+                    $('.js-fb-suite-forms-btn').attr('href', suiteUrl);
+                } else {
+                    $('<a href="' + esc(suiteUrl) + '" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary w-100 text-center js-fb-suite-forms-btn mt-1" style="font-size:11px;"><i class="fab fa-facebook me-1"></i> View Instant Forms in Meta Suite</a>').insertAfter('.js-fb-test-tool-btn');
+                }
+                renderNodes();
+                $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+            }).fail(function (xhr) {
+                fbLeadFail(xhr, 'Could not connect this lead page.');
+            });
+        });
+        $('#inspectorBody').on('change', '.js-fb-form', function () {
+            var node = findNode(Flow.selectedId);
+            if (!node) return;
+            var formVal = String($(this).val() || '');
+            node.data.form_name = formVal ? $(this).find('option:selected').text() : '';
+            var formText = node.data.form_name || 'Any form on this page';
+            var formCode = formVal ? (' <code class="text-muted">(' + esc(formVal) + ')</code>') : '';
+            $('.js-fb-summary-form').html(esc(formText) + formCode);
+            $('.js-fb-send-test-lead').prop('disabled', !formVal);
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+        });
+        $('#inspectorBody').on('click', '.js-fb-send-test-lead', function () {
+            var $btn = $(this);
+            var node = findNode(Flow.selectedId);
+            if (!node || !node.data) return;
+            var formId = String($('.js-fb-form').val() || node.data.form_id || '');
+            var pageId = String($('.js-fb-page').val() || node.data.page_id || '');
+            var businessId = String($('.js-fb-portfolio').val() || node.data.business_id || '');
+            if (!formId) {
+                if (window.APP && APP.toast) APP.toast('Please select a Lead Form first.', 'warning');
+                return;
+            }
+            var origHtml = $btn.html();
+            $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i> Sending Test Lead…');
+            APP.post(fbLeadUrl('/automations/facebook/test-lead'), {
+                form_id: formId,
+                page_id: pageId,
+                business_id: businessId
+            }).done(function (res) {
+                if (window.APP && APP.toast) APP.toast((res && res.message) || 'Test lead created on Meta! Automation triggered.', 'success');
+                $('.js-fb-status').text('Test lead created (ID: ' + ((res.data && res.data.lead_id) || '') + '). Webhook sent!');
+            }).fail(function (xhr) {
+                fbLeadFail(xhr, 'Could not send test lead.');
+            }).always(function () {
+                $btn.prop('disabled', false).html(origHtml);
+            });
+        });
+        $('#inspectorBody').on('click', '.insp-var-toggle', function () {
+            $(this).siblings('.insp-var-menu').toggleClass('d-none');
+        });
+        $('#inspectorBody').on('mousedown', '.insp-var-insert', function (e) {
+            e.preventDefault();
+        });
+        $('#inspectorBody').on('click', '.insp-var-insert', function () {
+            insertVarToken($(this).closest('.insp-var-picker'), String($(this).data('token')));
+        });
+        $('#inspectorBody').on('change input', '.insp-var', function () {
+            var node = findNode(Flow.selectedId);
+            if (!node) return;
+            node.data = node.data || {};
+            if (!node.data.variables || typeof node.data.variables !== 'object' || Array.isArray(node.data.variables)) node.data.variables = {};
+            node.data.variables[String($(this).data('var'))] = $(this).val();
+        });
+        $('#inspectorBody').on('change', '.insp-check', function () {
+            var node = findNode(Flow.selectedId);
+            if (!node) return;
+            node.data = node.data || {};
+            node.data[$(this).data('k')] = $(this).is(':checked');
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+        });
+        $('#inspectorBody').on('change', '.insp-value-check', function () {
+            syncWebhookValuesFromChecks();
+        });
+        $('#inspectorBody').on('change input', '.insp-header', function () {
+            var node = findNode(Flow.selectedId);
+            if (!node) return;
+            node.data = node.data || {};
+            node.data.header = node.data.header || { key: 'Content-Type', value: 'application/json' };
+            node.data.header[$(this).data('hk')] = $(this).val();
+        });
+        $('#inspectorBody').on('change', '.insp[data-k="media_url"]', function () {
+            var node = findNode(Flow.selectedId);
+            if (!node) return;
+            var a = (node.data || {}).action_type;
+            if (a !== 'response_message' && a !== 'send_text') return;
+            renderInspector();
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+        });
+        $('#inspectorBody').on('input', '.insp-option', function () {
+            var node = findNode(Flow.selectedId);
+            if (!node) return;
+            node.data = node.data || {};
+            if (!Array.isArray(node.data.options)) node.data.options = [];
+            node.data.options[parseInt($(this).data('i'), 10)] = $(this).val();
+            pruneChoiceEdges(node);
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+        });
+        $('#inspectorBody').on('click', '#inspAddOption', function () {
+            var node = findNode(Flow.selectedId);
+            if (!node) return;
+            node.data = node.data || {};
+            var list = Array.isArray(node.data.options) ? node.data.options.slice() : [];
+            if (list.length >= 10) return;
+            list.push('');
+            node.data.options = list;
+            renderInspector();
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+        });
+        $('#inspectorBody').on('click', '.insp-option-remove', function () {
+            var node = findNode(Flow.selectedId);
+            if (!node) return;
+            node.data = node.data || {};
+            var list = Array.isArray(node.data.options) ? node.data.options.slice() : [];
+            list.splice(parseInt($(this).data('i'), 10), 1);
+            node.data.options = list;
+            pruneChoiceEdges(node);
+            renderInspector();
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+        });
+        $('#inspectorBody').on('change input', '.insp-bulk', function () {
+            var node = findNode(Flow.selectedId);
+            if (!node) return;
+            node.data = node.data || {};
+            var rows = bulkAttributeRows(node.data);
+            var row = rows[parseInt($(this).data('row'), 10)];
+            if (!row) return;
+            row[$(this).data('bk')] = $(this).val();
+            node.data.attributes = rows;
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+        });
+        $('#inspectorBody').on('click', '#inspBulkAdd, .insp-bulk-remove', function () {
+            var node = findNode(Flow.selectedId);
+            if (!node) return;
+            node.data = node.data || {};
+            var rows = bulkAttributeRows(node.data).slice();
+            if (this.id === 'inspBulkAdd') rows.push({ attribute: '', value: '' });
+            else rows.splice(parseInt($(this).data('row'), 10), 1);
+            node.data.attributes = rows;
+            renderInspector();
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+        });
+        $('#inspectorBody').on('click', '#inspAddParam', function () {
+            var node = findNode(Flow.selectedId);
+            if (!node) return;
+            var key = String($('#inspNewParam').val() || '').trim();
+            if (!key) return;
+            node.data = node.data || {};
+            var values = Array.isArray(node.data.values) ? node.data.values.slice() : [];
+            if (values.indexOf(key) < 0) values.push(key);
+            node.data.values = values;
+            if ((Flow.meta.attributes || []).indexOf(key) < 0) {
+                Flow.meta.attributes = (Flow.meta.attributes || []).concat([key]);
+            }
+            $('#inspNewParam').val('');
+            renderInspector();
+            renderNodes();
+            $('.flow-node[data-id="' + node.id + '"]').addClass('selected');
+        });
+
+        $('#btnDeleteNode').on('click', deleteSelected);
+        $('#btnFlowSave').on('click', save);
+        $('#btnFlowZoomFit').on('click', fitView);
+        $('#btnFlowZoomIn').on('click', function () { setScale(Flow.scale + 0.1); });
+        $('#btnFlowZoomOut').on('click', function () { setScale(Flow.scale - 0.1); });
+    }
+
+    $(function () {
+        if (!$('#flowBuilder').length) return;
+        decoratePalette();
+        loadGraph();
+        renderNodes();
+        bind();
+        applyViewport();
+        var t = Flow.nodes.find(function (n) { return n.type === 'trigger'; });
+        setTimeout(fitView, 60);
+
+        try {
+            var pending = sessionStorage.getItem('ai_pending_flow');
+            if (pending) {
+                var pData = JSON.parse(pending);
+                sessionStorage.removeItem('ai_pending_flow');
+                if (pData && pData.nodes && pData.nodes.length) {
+                    setTimeout(function () {
+                        Flow.setGraph(pData.nodes, pData.edges, pData.workflow_name);
+                    }, 120);
+                }
+            }
+        } catch (e) { }
+    });
+
+    Flow.setGraph = function (nodes, edges, workflowName) {
+        Flow.nodes = Array.isArray(nodes) ? nodes : [];
+        Flow.edges = Array.isArray(edges) ? edges : [];
+
+        if (workflowName) {
+            $('#flowName').val(String(workflowName).slice(0, 120));
+        }
+
+        var validIds = {};
+        Flow.nodes.forEach(function (n) {
+            if ((n.x === undefined || n.y === undefined) && n.position) {
+                n.x = n.position.x || 40;
+                n.y = n.position.y || 40;
+            }
+            n.id = String(n.id || nextId('node'));
+            n.type = String(n.type || 'action');
+            n.x = Number(n.x);
+            n.y = Number(n.y);
+            if (!isFinite(n.x)) n.x = 40;
+            if (!isFinite(n.y)) n.y = 40;
+            if (!n.data || typeof n.data !== 'object') n.data = {};
+            validIds[n.id] = true;
+
+            var m = String(n.id).match(/(\d+)/);
+            if (m) Flow.uid = Math.max(Flow.uid, parseInt(m[1], 10) + 1);
+        });
+
+        // Drop any dangling edges pointing to non-existent nodes
+        Flow.edges = Flow.edges.filter(function (e) {
+            return e && validIds[e.from] && validIds[e.to];
+        });
+
+        renderNodes();
+        drawEdges();
+        var t = Flow.nodes.find(function (n) { return n.type === 'trigger'; });
+        if (t && t.data) {
+            $('#flowTriggerPill').text(TRIGGER_LABELS[t.data.trigger_type] || t.data.trigger_type || '');
+        }
+        setTimeout(fitView, 60);
+    };
+
+    Flow.getGraph = function () {
+        return {
+            workflow_name: $('#flowName').val() || '',
+            selected_node_id: Flow.selectedId,
+            nodes: Flow.nodes || [],
+            edges: Flow.edges || []
+        };
+    };
+
+    Flow.save = save;
+
+    window.WorkflowFlow = Flow;
+})(window, jQuery);
+

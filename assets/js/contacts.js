@@ -1,0 +1,1167 @@
+/**
+ * Contacts — bulk actions, import helpers
+ */
+(function (window, $) {
+    'use strict';
+
+    var Contacts = {
+        table: null
+    };
+
+    function base() {
+        return (window.APP && APP.baseUrl) || '';
+    }
+
+    Contacts.selectedIds = function () {
+        var ids = [];
+        $('.contact-check:checked').each(function () {
+            ids.push($(this).val());
+        });
+        return ids;
+    };
+
+    Contacts.initDataTable = function () {
+        var $table = $('#contactsTable');
+        if (!$table.length || !$.fn.DataTable) return;
+
+        // Deep link from Attributes page: /contacts?attr_key=city&attr_op=not_empty
+        var qs = new URLSearchParams(window.location.search);
+        if (qs.get('attr_key') && $('#filterAttrKey option[value="' + qs.get('attr_key').replace(/"/g, '') + '"]').length) {
+            $('#filterAttrKey').val(qs.get('attr_key'));
+            if (qs.get('attr_op')) $('#filterAttrOp').val(qs.get('attr_op'));
+            if (qs.get('attr_value')) $('#filterAttrValue').val(qs.get('attr_value'));
+            if (Contacts.syncAttrValueInput) Contacts.syncAttrValueInput();
+        }
+
+        var attrColumns = $table.data('attr-columns') || [];
+        var attrColumnDefs = attrColumns.map(function (col) {
+            return {
+                data: null,
+                name: col.key,
+                defaultContent: '—',
+                render: function (v, type, row) {
+                    var cf = (row && row.custom_fields) || {};
+                    var val = cf[col.key];
+                    if (val === undefined || val === null || String(val) === '') return '<span class="text-muted">—</span>';
+                    var s = String(val);
+                    var short = s.length > 28 ? s.slice(0, 26) + '…' : s;
+                    return '<span class="text-nowrap" title="' + escHtml(s) + '">' + escHtml(short) + '</span>';
+                }
+            };
+        });
+
+        Contacts.table = $table.DataTable({
+            processing: true,
+            serverSide: true,
+            /* Global DT defaults already set scrollX/length/dom — keep contacts-specific bits */
+            scrollX: false,
+            pageLength: 25,
+            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
+            language: {
+                search: '_INPUT_',
+                searchPlaceholder: 'Search contacts…',
+                lengthMenu: 'Show _MENU_',
+                emptyTable: 'No contacts found',
+                info: '_START_–_END_ of _TOTAL_',
+                infoEmpty: '0 contacts',
+                zeroRecords: 'No matching contacts',
+                paginate: { previous: '‹', next: '›' }
+            },
+            ajax: {
+                url: base() + '/contacts',
+                data: function (d) {
+                    d.datatable = 1;
+                    d.status = $('#filterStatus').val();
+                    d.tag_id = $('#filterTag').val();
+                    d.assigned_to = $('#filterAssigned').val();
+                    d.consent = $('#filterConsent').val();
+                    d.source = $('#filterSource').val();
+                    d.archived = $('#filterArchived').val();
+                    $.extend(d, Contacts.attributeFilter());
+                }
+            },
+            columnDefs: [
+                { targets: 0, width: '42px', className: 'dt-check-col', orderable: false, searchable: false },
+                { targets: 4, className: 'dt-tags-col', orderable: false },
+                { targets: -1, width: '108px', className: 'text-end', orderable: false, searchable: false }
+            ],
+            columns: [].concat([
+                {
+                    data: 'id',
+                    orderable: false,
+                    searchable: false,
+                    render: function (id) {
+                        return '<input type="checkbox" class="form-check-input contact-check" value="' + id + '" aria-label="Select contact">';
+                    }
+                },
+                {
+                    data: 'name',
+                    defaultContent: '—',
+                    render: function (v, type, row) {
+                        var name = v ? escHtml(v) : (row && row.mobile ? escHtml(row.mobile) : 'Unnamed Contact');
+                        var initial = (name.replace(/^\+/, '').charAt(0) || '#').toUpperCase();
+                        var colors = ['#25D366', '#128C7E', '#3B82F6', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#06B6D4', '#6366F1'];
+                        var code = initial.charCodeAt(0) || 0;
+                        var bg = colors[code % colors.length];
+
+                        return '<div class="d-flex align-items-center gap-2">' +
+                            '<span class="contact-avatar-circle" style="background:' + bg + ';" aria-hidden="true">' + escHtml(initial) + '</span>' +
+                            '<div class="contact-name-cell">' +
+                                '<span class="contact-name-title">' + name + '</span>' +
+                                (row && row.external_id ? '<span class="text-muted d-block contact-sub-id">ID: ' + escHtml(row.external_id) + '</span>' : '') +
+                            '</div>' +
+                        '</div>';
+                    }
+                },
+                {
+                    data: 'mobile',
+                    defaultContent: '—',
+                    render: function (v) {
+                        if (!v) return '<span class="text-muted">—</span>';
+                        var phone = escHtml(v);
+                        return '<span class="contact-phone-badge"><i class="fab fa-whatsapp text-success me-1"></i>' + phone + '</span>';
+                    }
+                },
+                {
+                    data: 'email',
+                    defaultContent: '—',
+                    render: function (v) {
+                        if (!v) return '<span class="text-muted">—</span>';
+                        return '<span class="text-muted small text-truncate d-inline-block" style="max-width:160px;" title="' + escHtml(v) + '"><i class="far fa-envelope text-secondary me-1"></i>' + escHtml(v) + '</span>';
+                    }
+                },
+                {
+                    data: 'tags',
+                    orderable: false,
+                    render: function (tags) {
+                        var list = [];
+                        if (!tags) return '—';
+                        if (typeof tags === 'string') {
+                            list = tags.split(',').map(function (s) { return s.trim(); }).filter(Boolean)
+                                .map(function (name) { return { name: name }; });
+                        } else if ($.isArray(tags)) {
+                            list = tags;
+                        }
+                        if (!list.length) return '—';
+                        return list.map(function (t) {
+                            var name = String(t.name || t || '');
+                            var color = t.color || '#667085';
+                            var short = name.length > 18 ? name.slice(0, 16) + '…' : name;
+                            return '<span class="badge contact-tag-badge me-1" style="background:' + escHtml(color) + '" title="' +
+                                escHtml(name) + '">' + escHtml(short) + '</span>';
+                        }).join('');
+                    }
+                },
+                {
+                    data: 'status',
+                    render: function (s, type, row) {
+                        var map = { active: 'success', inactive: 'secondary', blocked: 'danger' };
+                        return '<span class="badge bg-' + (map[s] || 'secondary') + '">' + escHtml(s || '') + '</span> '
+                            + consentBadge(row);
+                    }
+                },
+                {
+                    data: 'last_message_at',
+                    defaultContent: '—',
+                    render: function (v) {
+                        if (!v) return '—';
+                        var s = String(v);
+                        // Keep date+time on one line when possible
+                        return '<span class="text-nowrap text-muted small">' + $('<div>').text(s).html() + '</span>';
+                    }
+                }
+            ], attrColumnDefs, [
+                {
+                    data: 'id',
+                    orderable: false,
+                    searchable: false,
+                    render: function (id) {
+                        var html = '<div class="table-actions justify-content-end">';
+                        html += '<a class="btn btn-sm btn-icon-action" href="' + base() + '/contacts/' + id + '" title="View Contact"><i class="fas fa-eye"></i></a>';
+                        html += '<a class="btn btn-sm btn-icon-action" href="' + base() + '/contacts/' + id + '/edit" title="Edit Contact"><i class="fas fa-edit"></i></a>';
+                        html += '<button type="button" class="btn btn-sm btn-icon-action text-danger" data-confirm-delete data-url="' + base() + '/contacts/' + id + '/delete" title="Delete"><i class="fas fa-trash-alt"></i></button>';
+                        html += '</div>';
+                        return html;
+                    }
+                }
+            ]),
+            order: [],
+            createdRow: function (row) {
+                $(row).addClass('contact-row-clickable').css('cursor', 'pointer');
+            }
+        });
+
+        // The cards at the top follow every reload (delete, archive, restore, import) without a page refresh.
+        Contacts.table.on('xhr.dt', function (e, settings, json) {
+            var stats = json && json.stats;
+            if (!stats) return;
+            Object.keys(stats).forEach(function (k) {
+                $('[data-kpi="' + k + '"]').text(Number(stats[k] || 0).toLocaleString());
+            });
+        });
+
+        if (!$table.parent().hasClass('contacts-table-scroll')) {
+            $table.wrap('<div class="contacts-table-scroll"></div>');
+        }
+
+        Contacts.table.on('draw', function () {
+            Contacts.allMatching = false;
+            $('#checkAllContacts').prop('checked', false);
+            if (typeof Contacts.updateBulkBar === 'function') {
+                Contacts.updateBulkBar();
+            }
+        });
+
+        $table.on('click', 'tbody tr', function (e) {
+            if ($(e.target).closest('a, button, input, .table-actions, .dt-check-col').length) {
+                return;
+            }
+            var data = Contacts.table.row(this).data();
+            if (!data || !data.id) {
+                return;
+            }
+            Contacts.showDetail(data);
+        });
+
+        $('#btnFilterContacts').on('click', function () {
+            Contacts.table.ajax.reload();
+        });
+        $('#filterStatus, #filterTag, #filterArchived, #filterSource, #filterAssigned, #filterConsent, #filterAttrOp').on('change', function () {
+            $('#btnBulkArchiveLabel').text($('#filterArchived').val() === '1' ? 'Restore' : 'Archive');
+            Contacts.table.ajax.reload();
+        });
+        $('#filterAttrKey').on('change', function () {
+            var on = !!$(this).val();
+            $('#filterAttrOp').toggleClass('d-none', !on);
+            Contacts.syncAttrValueInput();
+            Contacts.table.ajax.reload();
+        });
+        $('#filterAttrOp').on('change', Contacts.syncAttrValueInput);
+        $('#filterAttrValue').on('keydown', function (e) {
+            if (e.key === 'Enter') Contacts.table.ajax.reload();
+        });
+        $('#btnExportContacts').on('click', function () {
+            var params = Contacts.filterParams();
+            this.href = base() + '/contacts/export' + ($.isEmptyObject(params) ? '' : '?' + $.param(params));
+        });
+    };
+
+    Contacts.attributeFilter = function () {
+        var key = $('#filterAttrKey').val();
+        if (!key) return {};
+        return { attr_key: key, attr_op: $('#filterAttrOp').val(), attr_value: $('#filterAttrValue').val() };
+    };
+
+    Contacts.syncAttrValueInput = function () {
+        var needsValue = !!$('#filterAttrKey').val() && ['is_empty', 'not_empty'].indexOf($('#filterAttrOp').val()) === -1;
+        $('#filterAttrValue').toggleClass('d-none', !needsValue);
+    };
+
+    function escHtml(value) {
+        return APP.escapeHtml(value);
+    }
+
+    function consentState(row) {
+        if (!row) return 'none';
+        if (row.wa_opted_out_at) return 'opted_out';
+        if (row.wa_suppressed_until && new Date(String(row.wa_suppressed_until).replace(' ', 'T')) > new Date()) return 'paused';
+        if (String(row.wa_opt_in) === '1') return 'opted_in';
+        return 'none';
+    }
+
+    function consentBadge(row) {
+        var map = {
+            opted_in: ['success', 'Opted in', 'WhatsApp opt-in recorded'],
+            opted_out: ['danger', 'Opted out', 'Customer sent STOP'],
+            paused: ['warning', 'Paused', row && row.wa_suppress_reason ? row.wa_suppress_reason : 'Delivery failed'],
+            none: ['light text-dark border', 'No opt-in', 'Campaigns skip contacts without WhatsApp consent']
+        };
+        var m = map[consentState(row)];
+        return '<span class="badge bg-' + m[0] + '" title="' + escHtml(m[2]) + '"><i class="fab fa-whatsapp me-1"></i>' + m[1] + '</span>';
+    }
+
+    function detailValue(value) {
+        if (value == null || value === '') {
+            return '<span class="text-muted">—</span>';
+        }
+        return escHtml(value);
+    }
+
+    function detailRow(label, valueHtml) {
+        return '<tr><th class="text-muted fw-normal" style="width:34%">' + escHtml(label)
+            + '</th><td>' + valueHtml + '</td></tr>';
+    }
+
+    Contacts.showDetail = function (row) {
+        if (!row || !row.id) {
+            return;
+        }
+
+        var tags = Array.isArray(row.tags) ? row.tags : [];
+        var tagsHtml = tags.length
+            ? tags.map(function (t) {
+                var name = String(t.name || t || '');
+                var color = t.color || '#667085';
+                return '<span class="badge me-1 mb-1" style="background:' + escHtml(color) + '">'
+                    + escHtml(name) + '</span>';
+            }).join('')
+            : '<span class="text-muted">No groups</span>';
+
+        var custom = row.custom_fields;
+        if (typeof custom === 'string' && custom !== '') {
+            try { custom = JSON.parse(custom); } catch (err) { custom = {}; }
+        }
+        if (!custom || typeof custom !== 'object' || Array.isArray(custom)) {
+            custom = {};
+        }
+
+        var customKeys = Object.keys(custom).filter(function (k) {
+            return String(k).trim() !== '' && String(k).charAt(0) !== '_';
+        }).sort(function (a, b) {
+            return a.localeCompare(b, undefined, { sensitivity: 'base' });
+        });
+
+        var customHtml = customKeys.length
+            ? '<table class="table table-sm mb-0"><tbody>'
+                + customKeys.map(function (key) {
+                    var val = custom[key];
+                    if (val != null && typeof val === 'object') {
+                        val = JSON.stringify(val);
+                    }
+                    return detailRow(key, detailValue(val));
+                }).join('')
+                + '</tbody></table>'
+            : '<div class="text-muted">No custom fields</div>';
+
+        var title = row.name || row.mobile || ('Contact #' + row.id);
+        $('#contactDetailTitle').text(title);
+        $('#contactDetailViewLink').attr('href', base() + '/contacts/' + row.id);
+        $('#contactDetailEditLink').attr('href', base() + '/contacts/' + row.id + '/edit');
+
+        var html = ''
+            + '<div class="mb-3">'
+            +   '<div class="fw-semibold mb-1">Contact columns</div>'
+            +   '<div class="table-responsive"><table class="table table-sm mb-0"><tbody>'
+            +     detailRow('ID', detailValue(row.id))
+            +     detailRow('Name', detailValue(row.name))
+            +     detailRow('Mobile', detailValue(row.mobile))
+            +     detailRow('Email', detailValue(row.email))
+            +     detailRow('Country', detailValue(row.country))
+            +     detailRow('Status', detailValue(row.status))
+            +     (function () {
+                    var sourceMap = {
+                        direct_input: 'Direct Entry',
+                        website_form: 'Website Form',
+                        checkout: 'Checkout',
+                        in_store: 'In-Store',
+                        whatsapp_chat: 'WhatsApp Chat',
+                        whatsapp_keyword: 'START Keyword',
+                        whatsapp_button: 'WhatsApp Button',
+                        click_to_whatsapp: 'Click-to-WhatsApp',
+                        phone_call: 'Phone Call',
+                        paper_form: 'Paper Form',
+                        import: 'Import List',
+                        api: 'API',
+                        other: 'Direct Entry'
+                    };
+                    var srcLabel = row.wa_opt_in_source ? (sourceMap[row.wa_opt_in_source] || row.wa_opt_in_source.replace(/_/g, ' ')) : '';
+                    return detailRow('WhatsApp consent', consentBadge(row)
+                        + (srcLabel ? ' <span class="small text-muted">via ' + escHtml(srcLabel) + '</span>' : ''));
+                  })()
+            +     detailRow('Birthday', detailValue(row.birthday_display || row.birthday))
+            +     detailRow('Channel', detailValue(row.channel))
+            +     detailRow('External ID', detailValue(row.external_id))
+            +     detailRow('Assigned to', detailValue(row.assigned_to))
+            +     detailRow('Last message', detailValue(row.last_message_at_display || row.last_message_at))
+            +     detailRow('Last reply', detailValue(row.last_reply_at_display || row.last_reply_at))
+            +     detailRow('Created', detailValue(row.created_at_display || row.created_at))
+            +     detailRow('Updated', detailValue(row.updated_at_display || row.updated_at))
+            +     detailRow('Notes', detailValue(row.notes))
+            +     detailRow('Groups', tagsHtml)
+            +   '</tbody></table></div>'
+            + '</div>'
+            + '<div>'
+            +   '<div class="fw-semibold mb-1">Custom fields</div>'
+            +   customHtml
+            + '</div>';
+
+        $('#contactDetailBody').html(html);
+        if (window.APP && typeof APP.showModal === 'function') {
+            APP.showModal('#contactDetailModal');
+        } else if (window.bootstrap && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('contactDetailModal')).show();
+        }
+    };
+
+    // Bulk actions send ids as JSON: a form POST with thousands of ids[] is cut off by PHP max_input_vars.
+    Contacts.postJson = function (url, data) {
+        data = $.extend({}, data);
+        if (Contacts.allMatching && data.ids) {
+            // "Select all N matching": the server resolves the contacts from the filters.
+            data.all = true;
+            data.filters = Contacts.filterParams();
+            data.ids = [];
+        }
+        return APP.post(url, JSON.stringify(data), { contentType: 'application/json' });
+    };
+
+    /** Current filters of the list (also used by Export and by "select all matching"). */
+    Contacts.filterParams = function () {
+        var params = $.extend({
+            status: $('#filterStatus').val(),
+            tag_id: $('#filterTag').val(),
+            assigned_to: $('#filterAssigned').val(),
+            consent: $('#filterConsent').val(),
+            source: $('#filterSource').val(),
+            archived: $('#filterArchived').val(),
+            search: Contacts.table ? Contacts.table.search() : ''
+        }, Contacts.attributeFilter());
+        Object.keys(params).forEach(function (k) { if (!params[k]) delete params[k]; });
+        return params;
+    };
+
+    Contacts.matchingTotal = function () {
+        return Contacts.table ? (Contacts.table.page.info().recordsDisplay || 0) : 0;
+    };
+
+    /** How many contacts a bulk action will touch. */
+    Contacts.selectionCount = function (ids) {
+        return Contacts.allMatching ? Contacts.matchingTotal() : (ids ? ids.length : 0);
+    };
+
+    Contacts.bulkArchive = function () {
+        var ids = Contacts.selectedIds();
+        if (!ids.length) {
+            APP.toast('Select at least one contact', 'warning');
+            return;
+        }
+        var restore = $('#filterArchived').val() === '1';
+        APP.confirm({
+            title: (restore ? 'Restore' : 'Archive') + ' selected?',
+            text: restore ? Contacts.selectionCount(ids) + ' contact(s) will be restored and synced to LMS again.'
+                : Contacts.selectionCount(ids) + ' contact(s) will be archived and will not sync to LMS.',
+            confirmText: restore ? 'Restore' : 'Archive'
+        }).then(function (r) {
+            if (!r.isConfirmed) return;
+            Contacts.postJson(base() + '/contacts/bulk-archive', { ids: ids, action: restore ? 'unarchive' : 'archive' }).done(function (res) {
+                APP.toast(res.message || 'Done');
+                if (Contacts.table) Contacts.table.ajax.reload(null, false);
+            }).fail(function (xhr) {
+                APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Archive failed', 'error');
+            });
+        });
+    };
+
+    Contacts.bulkDelete = function () {
+        var ids = Contacts.selectedIds();
+        if (!ids.length) {
+            APP.toast('Select at least one contact', 'warning');
+            return;
+        }
+        APP.confirm({ title: 'Delete selected?', text: Contacts.selectionCount(ids) + ' contact(s) will be deleted.', confirmText: 'Delete' })
+            .then(function (r) {
+                if (!r.isConfirmed) return;
+                Contacts.postJson(base() + '/contacts/bulk-delete', { ids: ids }).done(function (res) {
+                    APP.toast(res.message || 'Deleted');
+                    if (Contacts.table) Contacts.table.ajax.reload(null, false);
+                }).fail(function (xhr) {
+                    APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Bulk delete failed', 'error');
+                });
+            });
+    };
+
+    Contacts.bulkTags = function () {
+        var ids = Contacts.selectedIds();
+        var tagIds = $('#bulkTagIds').val() || [];
+        if (!ids.length) {
+            APP.toast('Select at least one contact', 'warning');
+            return;
+        }
+        if (!tagIds.length) {
+            APP.toast('Select tags to apply', 'warning');
+            return;
+        }
+        Contacts.postJson(base() + '/contacts/bulk-tags', { ids: ids, tag_ids: tagIds, mode: $('#bulkTagAction').val() || 'add' })
+            .done(function (res) {
+                APP.toast(res.message || 'Groups updated');
+                if (window.bootstrap && bootstrap.Modal) {
+                    var el = document.getElementById('bulkTagsModal');
+                    if (el) bootstrap.Modal.getOrCreateInstance(el).hide();
+                } else {
+                    $('#bulkTagsModal').removeClass('show').hide();
+                }
+                if (Contacts.table) Contacts.table.ajax.reload(null, false);
+            })
+            .fail(function (xhr) {
+                APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Group update failed', 'error');
+            });
+    };
+
+    Contacts.bulkConsent = function () {
+        var ids = Contacts.selectedIds();
+        var action = $('#bulkConsentAction').val() || 'opt_in';
+        var source = $('#bulkConsentSource').val() || '';
+        if (!ids.length) {
+            APP.toast('Select at least one contact', 'warning');
+            return;
+        }
+        if (action === 'opt_in' && !source) {
+            APP.toast('Choose how these contacts gave WhatsApp consent', 'warning');
+            return;
+        }
+        Contacts.postJson(base() + '/contacts/bulk-consent', { ids: ids, action: action, source: source })
+            .done(function (res) {
+                APP.toast(res.message || 'Consent updated');
+                if (window.bootstrap && bootstrap.Modal) {
+                    var el = document.getElementById('bulkConsentModal');
+                    if (el) bootstrap.Modal.getOrCreateInstance(el).hide();
+                }
+                if (Contacts.table) Contacts.table.ajax.reload(null, false);
+            })
+            .fail(function (xhr) {
+                APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Consent update failed', 'error');
+            });
+    };
+
+    Contacts.bulkAttributeValue = function () {
+        var $opt = $('#bulkAttrKey option:selected');
+        return $opt.data('type') === 'dropdown' || $opt.data('type') === 'boolean'
+            ? $('#bulkAttrValueSelect').val() || ''
+            : $('#bulkAttrValue').val() || '';
+    };
+
+    Contacts.syncBulkAttributeInput = function () {
+        var $opt = $('#bulkAttrKey option:selected');
+        var type = $opt.data('type') || 'text';
+        var options = type === 'boolean' ? ['Yes', 'No'] : ($opt.data('options') || []);
+        var useSelect = type === 'dropdown' || type === 'boolean';
+        $('#bulkAttrValue').toggleClass('d-none', useSelect)
+            .attr('type', type === 'date' ? 'date' : (type === 'number' ? 'number' : 'text'));
+        $('#bulkAttrValueSelect').toggleClass('d-none', !useSelect).html(
+            '<option value="">(clear value)</option>' + options.map(function (o) {
+                return '<option value="' + escHtml(o) + '">' + escHtml(o) + '</option>';
+            }).join('')
+        );
+    };
+
+    Contacts.bulkAttribute = function () {
+        var ids = Contacts.selectedIds();
+        var key = $('#bulkAttrKey').val();
+        if (!ids.length) {
+            APP.toast('Select at least one contact', 'warning');
+            return;
+        }
+        if (!key) {
+            APP.toast('Choose an attribute', 'warning');
+            return;
+        }
+        var value = Contacts.bulkAttributeValue();
+        var run = function () {
+            Contacts.postJson(base() + '/contacts/bulk-attribute', { ids: ids, attribute: key, value: value })
+                .done(function (res) {
+                    APP.toast(res.message || 'Attribute updated');
+                    APP.hideModal('#bulkAttributeModal');
+                    if (Contacts.table) Contacts.table.ajax.reload(null, false);
+                })
+                .fail(function (xhr) {
+                    APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Attribute update failed', 'error');
+                });
+        };
+        if (String(value).trim() === '') {
+            APP.confirm({ title: 'Clear this attribute?', text: 'The value will be removed from ' + Contacts.selectionCount(ids) + ' contact(s).', confirmText: 'Clear' })
+                .then(function (r) { if (r.isConfirmed) run(); });
+            return;
+        }
+        run();
+    };
+
+    Contacts.initImport = function () {
+        var $form = $('#importContactsForm');
+        if (!$form.length) return;
+
+        var preview = null;
+
+        $('#importOptIn').on('change', function () {
+            $('#importOptInSource').prop('disabled', !this.checked);
+        });
+
+        function esc(s) {
+            return APP.escapeHtml(s);
+        }
+
+        function csrfHeaders() {
+            var h = {};
+            if (window.APP) {
+                h[APP.csrfHeader || 'X-CSRF-TOKEN'] = APP.csrfToken || $('meta[name="csrf-token"]').attr('content') || '';
+            }
+            return h;
+        }
+
+        function destinationOptions(header, selected) {
+            var opts = '';
+            var destinations = (preview && preview.destinations) ? preview.destinations.slice() : [];
+            var newKey = String(selected || '').indexOf('new:') === 0
+                ? String(selected).slice(4)
+                : String(header || '').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'custom';
+            var hasNew = false;
+            destinations.forEach(function (d) {
+                if (d.value === ('new:' + newKey)) hasNew = true;
+            });
+            if (!hasNew) {
+                destinations.push({
+                    value: 'new:' + newKey,
+                    label: 'Create new custom field: ' + newKey
+                });
+            }
+            destinations.forEach(function (d) {
+                opts += '<option value="' + esc(d.value) + '"'
+                    + (String(d.value) === String(selected) ? ' selected' : '') + '>'
+                    + esc(d.label) + '</option>';
+            });
+            return opts;
+        }
+
+        function sampleForHeader(headerIndex) {
+            var rows = (preview && preview.sample_rows) ? preview.sample_rows : [];
+            var samples = [];
+            rows.forEach(function (row) {
+                var v = row[headerIndex];
+                if (v != null && String(v).trim() !== '') {
+                    samples.push(String(v).trim());
+                }
+            });
+            return samples.slice(0, 2).join(' · ') || '—';
+        }
+
+        function renderMapping() {
+            var headers = preview.headers || [];
+            var suggested = preview.suggested_mapping || {};
+            var $tb = $('#importMappingTable tbody').empty();
+            headers.forEach(function (header, idx) {
+                var selected = suggested[header] || 'skip';
+                $tb.append(
+                    '<tr data-header="' + esc(header) + '">'
+                    + '<td class="fw-semibold">' + esc(header) + '</td>'
+                    + '<td class="small text-muted">' + esc(sampleForHeader(idx)) + '</td>'
+                    + '<td><select class="form-select form-select-sm import-map-dest">'
+                    + destinationOptions(header, selected)
+                    + '</select></td>'
+                    + '</tr>'
+                );
+            });
+            $('#importMapMeta').text((preview.filename || 'file') + ' · ' + (preview.row_count || 0) + ' row(s)');
+            $('#importSampleNote').text('Showing up to 5 sample rows for mapping hints.');
+            var $warn = $('#importMapWarning');
+            if (preview.warning) {
+                $warn.text(preview.warning).removeClass('d-none');
+            } else {
+                $warn.addClass('d-none').text('');
+            }
+        }
+
+        function collectMapping() {
+            var mapping = {};
+            $('#importMappingTable tbody tr').each(function () {
+                var header = $(this).attr('data-header') || '';
+                var dest = $(this).find('.import-map-dest').val() || 'skip';
+                if (header) mapping[header] = dest;
+            });
+            return mapping;
+        }
+
+        function allowedImportFile(file) {
+            if (!file || !file.name) return false;
+            var name = String(file.name).toLowerCase();
+            return /\.csv$/i.test(name) || /\.xlsx$/i.test(name);
+        }
+
+        $('#importFile').on('change', function () {
+            var file = this.files && this.files[0];
+            if (file) {
+                if (!allowedImportFile(file)) {
+                    APP.toast('Please choose a CSV or XLSX file.', 'error');
+                    this.value = '';
+                    $('#importFileName').text('Max size: 5 MB · up to 20,000 rows · .csv or .xlsx');
+                    return;
+                }
+                if (file.size > 5 * 1024 * 1024) {
+                    APP.toast('File exceeds 5MB limit.', 'error');
+                    this.value = '';
+                    $('#importFileName').text('Max size: 5 MB · up to 20,000 rows · .csv or .xlsx');
+                    return;
+                }
+                $('#importFileName').text(file.name + ' (' + Math.round(file.size / 1024) + ' KB)');
+            }
+        });
+
+        // ---- ZIP / many files: the file name becomes the customer group -------------------------------------------
+        var mode = 'single';
+        var batch = null;
+
+        function setMode(next) {
+            mode = next;
+            $('.import-mode-btn').each(function () {
+                var on = $(this).data('mode') === next;
+                $(this).toggleClass('active', on).attr('aria-selected', on ? 'true' : 'false');
+            });
+            var isBatch = next === 'batch';
+            $('#singleFileWrap, #singleGroupWrap').toggleClass('d-none', isBatch);
+            $('#batchFileWrap').toggleClass('d-none', !isBatch);
+            $('#importFile').prop('required', !isBatch);
+            $('#btnImportContinue').html(isBatch
+                ? '<i class="fas fa-arrow-right me-1"></i> Read files'
+                : '<i class="fas fa-arrow-right me-1"></i> Continue to mapping');
+        }
+
+        $('.import-mode-btn').on('click', function () { setMode($(this).data('mode')); });
+
+        function batchPicked() {
+            var input = document.getElementById('batchFiles');
+            return input && input.files ? Array.prototype.slice.call(input.files) : [];
+        }
+
+        $('#batchFiles').on('change', function () {
+            var files = batchPicked();
+            var $drop = $('#batchDrop').toggleClass('has-files', files.length > 0);
+            if (!files.length) {
+                $('#batchDropTitle').text('Choose a ZIP, or select several CSV / XLSX files');
+                return;
+            }
+            $('#batchDropTitle').text(files.length === 1
+                ? files[0].name + ' (' + Math.round(files[0].size / 1024) + ' KB)'
+                : files.length + ' files selected');
+        });
+
+        function groupIsNew(name) {
+            var n = String(name || '').trim().toLowerCase();
+            var list = (batch && batch.existing_groups) || [];
+            return n !== '' && !list.some(function (g) { return String(g).toLowerCase() === n; });
+        }
+
+        function columnChips(mapping) {
+            var html = '';
+            Object.keys(mapping || {}).forEach(function (h) {
+                var d = String(mapping[h] || 'skip');
+                if (d === 'skip') return;
+                var isNew = d.indexOf('new:') === 0;
+                html += '<span class="batch-chip' + (isNew ? ' batch-chip-new' : '') + '" title="' + esc(h) + ' → ' + esc(d) + '">'
+                    + esc(isNew ? d.slice(4) : d) + '</span>';
+            });
+            return html || '<span class="text-muted small">No columns mapped</span>';
+        }
+
+        function refreshBatchSummary() {
+            var files = 0, rows = 0, groups = {};
+            $('#batchTable tbody tr').each(function () {
+                var $tr = $(this);
+                var on = $tr.find('.batch-check').is(':checked');
+                var g = $.trim($tr.find('.batch-group').val());
+                $tr.toggleClass('batch-off', !on);
+                if (g !== '') {
+                    $tr.find('.batch-badge').text(groupIsNew(g) ? 'New group' : 'Existing group')
+                        .toggleClass('batch-badge-new', groupIsNew(g));
+                }
+                if (!on) return;
+                files++;
+                rows += parseInt($tr.data('rows'), 10) || 0;
+                if (g !== '') groups[g.toLowerCase()] = true;
+            });
+            $('#batchSummary').html(
+                '<span class="batch-pill"><strong>' + files + '</strong> files</span>'
+                + '<span class="batch-pill"><strong>' + rows.toLocaleString() + '</strong> rows</span>'
+                + '<span class="batch-pill"><strong>' + Object.keys(groups).length + '</strong> groups</span>'
+            );
+            $('#btnBatchCommitLabel').text(files ? 'Import ' + files + (files === 1 ? ' file' : ' files') : 'Import');
+        }
+
+        function renderBatch() {
+            var $tb = $('#batchTable tbody').empty();
+            (batch.items || []).forEach(function (it, idx) {
+                var bad = !!it.error || !it.has_mobile;
+                var note = it.error
+                    ? '<div class="text-danger small mt-1"><i class="fas fa-circle-exclamation me-1"></i>' + esc(it.error) + '</div>'
+                    : (!it.has_mobile ? '<div class="text-danger small mt-1"><i class="fas fa-circle-exclamation me-1"></i>No mobile column found</div>' : '')
+                    + (it.warning ? '<div class="text-warning small mt-1">' + esc(it.warning) + '</div>' : '');
+                $tb.append(
+                    '<tr data-idx="' + idx + '" data-rows="' + (it.rows || 0) + '"' + (bad ? ' class="batch-bad"' : '') + '>'
+                    + '<td><input type="checkbox" class="form-check-input batch-check"' + (bad ? ' disabled' : ' checked') + '></td>'
+                    + '<td><div class="fw-semibold text-break"><i class="fas fa-file-lines text-muted me-1"></i>' + esc(it.filename) + '</div>' + note + '</td>'
+                    + '<td><input type="text" class="form-control form-control-sm batch-group" maxlength="100" value="' + esc(it.group) + '"' + (bad ? ' disabled' : '') + '>'
+                    + '<span class="batch-badge">' + '</span></td>'
+                    + '<td class="text-end">' + (it.rows || 0).toLocaleString() + '</td>'
+                    + '<td class="batch-cols">' + columnChips(it.mapping) + '</td>'
+                    + '</tr>'
+                );
+            });
+            var ign = batch.ignored || [];
+            var $ig = $('#batchIgnored');
+            if (ign.length) {
+                $ig.html('<strong>' + ign.length + ' file(s) left out:</strong> '
+                    + ign.map(function (x) { return esc(x.name) + ' (' + esc(x.reason) + ')'; }).join(', ')).removeClass('d-none');
+            } else {
+                $ig.addClass('d-none').empty();
+            }
+            refreshBatchSummary();
+        }
+
+        $(document).on('input change', '#batchTable .batch-group, #batchTable .batch-check', refreshBatchSummary);
+        $('#batchCheckAll').on('change', function () {
+            $('#batchTable .batch-check:not(:disabled)').prop('checked', this.checked);
+            refreshBatchSummary();
+        });
+
+        function batchPreview() {
+            var files = batchPicked();
+            if (!files.length) {
+                APP.toast('Choose a ZIP or select the CSV / XLSX files.', 'error');
+                return;
+            }
+            var fd = new FormData();
+            var zip = files.length === 1 && /\.zip$/i.test(files[0].name) ? files[0] : null;
+            if (zip) {
+                if (zip.size > 25 * 1024 * 1024) { APP.toast('ZIP exceeds 25 MB.', 'error'); return; }
+                fd.append('zip', zip);
+            } else {
+                var bad = files.filter(function (f) { return !allowedImportFile(f); });
+                if (bad.length) { APP.toast('Only CSV, XLSX or one ZIP: ' + bad[0].name, 'error'); return; }
+                files.forEach(function (f) { fd.append('files[]', f); });
+            }
+
+            var $btn = $('#btnImportContinue').prop('disabled', true);
+            $btn.data('html', $btn.html()).html('<i class="fas fa-spinner fa-spin me-1"></i> Reading files…');
+            $.ajax({
+                url: base() + '/contacts/import/batch-preview', method: 'POST', data: fd,
+                processData: false, contentType: false, headers: csrfHeaders()
+            }).done(function (res) {
+                if (!res || res.success === false) {
+                    APP.toast((res && res.message) || 'Could not read the files.', 'error');
+                    return;
+                }
+                batch = res.data || {};
+                renderBatch();
+                $('#importStepUpload').addClass('d-none');
+                $('#importStepBatch').removeClass('d-none');
+            }).fail(function (xhr) {
+                APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Could not read the files.', 'error');
+            }).always(function () {
+                $btn.prop('disabled', false).html($btn.data('html') || 'Read files');
+            });
+        }
+
+        $('#btnBatchBack').on('click', function () {
+            $('#importStepBatch').addClass('d-none');
+            $('#importStepUpload').removeClass('d-none');
+        });
+
+        $('#btnBatchCommit').on('click', function () {
+            var items = [];
+            var names = {};
+            var invalid = false;
+            $('#batchTable tbody tr').each(function () {
+                var $tr = $(this);
+                if (!$tr.find('.batch-check').is(':checked')) return;
+                var it = batch.items[parseInt($tr.attr('data-idx'), 10)];
+                var g = $.trim($tr.find('.batch-group').val());
+                if (!g) { invalid = true; $tr.find('.batch-group').addClass('is-invalid'); return; }
+                $tr.find('.batch-group').removeClass('is-invalid');
+                names[g.toLowerCase()] = (names[g.toLowerCase()] || 0) + 1;
+                items.push({ token: it.token, filename: it.filename, group: g, mapping: it.mapping });
+            });
+            if (invalid) { APP.toast('Enter a group name for every selected file.', 'error'); return; }
+            if (!items.length) { APP.toast('Select at least one file.', 'error'); return; }
+            var optIn = $('#importOptIn').is(':checked');
+            if (optIn && !$('#importOptInSource').val()) {
+                APP.toast('Choose how WhatsApp consent was collected.', 'error');
+                return;
+            }
+
+            var $btn = $(this).prop('disabled', true);
+            $btn.data('html', $btn.html()).html('<i class="fas fa-spinner fa-spin me-1"></i> Importing ' + items.length + ' file(s)…');
+            $.ajax({
+                url: base() + '/contacts/import/batch-commit', method: 'POST', contentType: 'application/json',
+                headers: csrfHeaders(), timeout: 0,
+                data: JSON.stringify({
+                    items: items,
+                    default_country_code: $('#importDefaultCountry').val(),
+                    skip_duplicates: $('#skipDup').is(':checked'),
+                    extra_fields: $('#batchExtraFields').is(':checked'),
+                    wa_opt_in: optIn,
+                    wa_opt_in_source: optIn ? $('#importOptInSource').val() : ''
+                })
+            }).done(function (res) {
+                if (!res || res.success === false) {
+                    APP.toast((res && res.message) || 'Import failed.', 'error');
+                    return;
+                }
+                var d = res.data || {};
+                var $rt = $('#batchResultTable tbody').empty();
+                (d.results || []).forEach(function (r) {
+                    var notes = r.error
+                        ? '<span class="text-danger small">' + esc(r.error) + '</span>'
+                        : (r.errors || []).map(function (m) { return '<div class="small text-muted">' + esc(m) + '</div>'; }).join('');
+                    $rt.append('<tr class="' + (r.error ? 'batch-bad' : '') + '"><td class="text-break">' + esc(r.filename) + '</td><td>' + esc(r.group) + '</td>'
+                        + '<td class="text-end">' + r.imported + '</td><td class="text-end">' + r.updated + '</td><td class="text-end">' + r.skipped + '</td>'
+                        + '<td>' + (notes || '<span class="text-success small"><i class="fas fa-check me-1"></i>Done</span>') + '</td></tr>');
+                });
+                var t = d.totals || {};
+                $('#batchDoneSummary').html(
+                    '<span class="batch-pill"><strong>' + (t.imported || 0).toLocaleString() + '</strong> new</span>'
+                    + '<span class="batch-pill"><strong>' + (t.updated || 0).toLocaleString() + '</strong> updated</span>'
+                    + '<span class="batch-pill"><strong>' + (t.skipped || 0).toLocaleString() + '</strong> skipped</span>'
+                    + (t.files_failed ? '<span class="batch-pill batch-pill-bad"><strong>' + t.files_failed + '</strong> failed</span>' : '')
+                );
+                $('#importStepBatch').addClass('d-none');
+                $('#importStepBatchDone').removeClass('d-none');
+                APP.toast(res.message || 'Import complete.', t.files_failed ? 'warning' : 'success');
+                // Everything imported: go to All Contacts. When a file failed, stay so its error can be read.
+                if (!t.files_failed) {
+                    setTimeout(function () { window.location.href = d.redirect || (base() + '/contacts'); }, 1500);
+                }
+            }).fail(function (xhr) {
+                APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Import failed.', 'error');
+            }).always(function () {
+                $btn.prop('disabled', false).html($btn.data('html') || 'Import');
+            });
+        });
+
+        $form.on('submit', function (e) {
+            e.preventDefault();
+            if (mode === 'batch') {
+                batchPreview();
+                return;
+            }
+            var fileInput = document.getElementById('importFile');
+            var file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+            if (!file) {
+                APP.toast('Please choose a CSV or XLSX file.', 'error');
+                return;
+            }
+            if (!allowedImportFile(file)) {
+                APP.toast('Please choose a CSV or XLSX file.', 'error');
+                return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                APP.toast('File exceeds 5MB limit.', 'error');
+                return;
+            }
+
+            var $btn = $('#btnImportContinue').prop('disabled', true);
+            $btn.data('html', $btn.html()).html('<i class="fas fa-spinner fa-spin me-1"></i> Reading…');
+
+            var fd = new FormData();
+            fd.append('file', file);
+
+            $.ajax({
+                url: base() + '/contacts/import/preview',
+                method: 'POST',
+                data: fd,
+                processData: false,
+                contentType: false,
+                headers: csrfHeaders()
+            }).done(function (res) {
+                if (!res || res.success === false) {
+                    APP.toast((res && res.message) || 'Could not read file.', 'error');
+                    return;
+                }
+                preview = res.data || res;
+                renderMapping();
+                if (preview.warning) {
+                    APP.toast(preview.warning, 'warning');
+                }
+                $('#importStepUpload').addClass('d-none');
+                $('#importStepMap').removeClass('d-none');
+            }).fail(function (xhr) {
+                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Could not read file.';
+                APP.toast(msg, 'error');
+            }).always(function () {
+                $btn.prop('disabled', false).html($btn.data('html') || 'Continue to mapping');
+            });
+        });
+
+        $('#btnImportBack').on('click', function () {
+            $('#importStepMap').addClass('d-none');
+            $('#importStepUpload').removeClass('d-none');
+        });
+
+        $('#btnImportCommit').on('click', function () {
+            if (!preview || !preview.token) {
+                APP.toast('Upload the file again.', 'error');
+                return;
+            }
+            var mapping = collectMapping();
+            var hasMobile = Object.keys(mapping).some(function (k) { return mapping[k] === 'mobile'; });
+            if (!hasMobile) {
+                APP.toast('Map at least one column to Mobile / Phone.', 'error');
+                return;
+            }
+
+            var optIn = $('#importOptIn').is(':checked');
+            if (optIn && !$('#importOptInSource').val()) {
+                APP.toast('Choose how WhatsApp consent was collected.', 'error');
+                return;
+            }
+
+            var $btn = $(this).prop('disabled', true);
+            $btn.data('html', $btn.html()).html('<i class="fas fa-spinner fa-spin me-1"></i> Importing…');
+
+            $.ajax({
+                url: base() + '/contacts/import/commit',
+                method: 'POST',
+                data: {
+                    token: preview.token,
+                    default_country_code: $('#importDefaultCountry').val(),
+                    group_id: $('#importGroupId').val() || '',
+                    skip_duplicates: $('#skipDup').is(':checked') ? 1 : 0,
+                    wa_opt_in: optIn ? 1 : 0,
+                    wa_opt_in_source: optIn ? $('#importOptInSource').val() : '',
+                    mapping: JSON.stringify(mapping)
+                },
+                headers: csrfHeaders()
+            }).done(function (res) {
+                if (!res || res.success === false) {
+                    APP.toast((res && res.message) || 'Import failed.', 'error');
+                    return;
+                }
+                var data = res.data || {};
+                var toastType = (data.errors && data.errors.length) ? 'warning' : 'success';
+                APP.toast(res.message || 'Import complete.', toastType);
+                var redirect = data.redirect || (base() + '/contacts');
+                setTimeout(function () { window.location.href = redirect; }, 900);
+            }).fail(function (xhr) {
+                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Import failed.';
+                APP.toast(msg, 'error');
+            }).always(function () {
+                $btn.prop('disabled', false).html($btn.data('html') || 'Import contacts');
+            });
+        });
+    };
+
+    Contacts.updateBulkBar = function () {
+        var total = $('.contact-check').length;
+        var checked = $('.contact-check:checked').length;
+        var pageAll = total > 0 && total === checked;
+        $('#checkAllContacts').prop('checked', pageAll);
+        if (!pageAll) Contacts.allMatching = false;
+        var matching = Contacts.matchingTotal();
+        var $bar = $('#contactsBulkBar');
+        if ($bar.length) {
+            var $hint = $('#selectAllHint').empty();
+            if (Contacts.allMatching) {
+                $('#selectedContactsCount').text(matching.toLocaleString());
+                $hint.append('All ' + matching.toLocaleString() + ' matching contacts are selected. ')
+                    .append($('<a href="#" class="select-all-clear">Clear selection</a>'));
+            } else {
+                $('#selectedContactsCount').text(checked);
+                if (pageAll && matching > total) {
+                    $hint.append('All ' + total + ' on this page are selected. ')
+                        .append($('<a href="#" class="select-all-matching">Select all ' + matching.toLocaleString() + ' contacts</a>'));
+                }
+            }
+            if (checked > 0) {
+                $bar.stop(true, true).slideDown(150);
+            } else {
+                $bar.stop(true, true).slideUp(150);
+            }
+        }
+    };
+
+    $(function () {
+        $(document).on('change', '#checkAllContacts', function () {
+            Contacts.allMatching = false;
+            $('.contact-check').prop('checked', this.checked);
+            Contacts.updateBulkBar();
+        });
+        $(document).on('click', '.select-all-matching', function (e) {
+            e.preventDefault();
+            Contacts.allMatching = true;
+            Contacts.updateBulkBar();
+        });
+        $(document).on('click', '.select-all-clear', function (e) {
+            e.preventDefault();
+            Contacts.allMatching = false;
+            $('#checkAllContacts, .contact-check').prop('checked', false);
+            Contacts.updateBulkBar();
+        });
+        $(document).on('change', '.contact-check', function () {
+            Contacts.updateBulkBar();
+        });
+        $(document).on('click', '#btnDeselectAllContacts', function () {
+            Contacts.allMatching = false;
+            $('#checkAllContacts, .contact-check').prop('checked', false);
+            Contacts.updateBulkBar();
+        });
+        $('#btnBulkDelete').on('click', function () { Contacts.bulkDelete(); });
+        $('#kpiArchived').on('click', function () { $('#filterArchived').val('1').trigger('change'); });
+        $('#btnBulkArchive').on('click', function () { Contacts.bulkArchive(); });
+        $('#btnBulkTags').on('click', function () { APP.showModal('#bulkTagsModal'); });
+        $('#btnApplyBulkTags').on('click', function () { Contacts.bulkTags(); });
+        $('#btnBulkConsent').on('click', function () {
+            if (!Contacts.selectedIds().length) {
+                APP.toast('Select at least one contact', 'warning');
+                return;
+            }
+            APP.showModal('#bulkConsentModal');
+        });
+        $('#bulkConsentAction').on('change', function () {
+            $('#bulkConsentSourceWrap').toggleClass('d-none', $(this).val() !== 'opt_in');
+        });
+        $('#btnApplyBulkConsent').on('click', function () { Contacts.bulkConsent(); });
+        $('#btnBulkAttribute').on('click', function () {
+            if (!Contacts.selectedIds().length) {
+                APP.toast('Select at least one contact', 'warning');
+                return;
+            }
+            Contacts.syncBulkAttributeInput();
+            APP.showModal('#bulkAttributeModal');
+        });
+        $('#bulkAttrKey').on('change', Contacts.syncBulkAttributeInput);
+        $('#btnApplyBulkAttribute').on('click', function () { Contacts.bulkAttribute(); });
+        $('#btnDetectDuplicates').on('click', function () {
+            APP.get(base() + '/contacts/duplicates').done(function (res) {
+                var rows = res.data || res.duplicates || [];
+                var html = !rows.length ? '<p class="text-muted mb-0">No duplicates found.</p>' :
+                    '<ul class="mb-0">' + rows.map(function (r) {
+                        return '<li>' + $('<div>').text((r.mobile || '') + ' — ' + (r.cnt || r.count || '') + ' records').html() + '</li>';
+                    }).join('') + '</ul>';
+                $('#duplicatesModalBody').html(html);
+                APP.showModal('#duplicatesModal');
+            });
+        });
+
+        $('#formSyncCheerioContacts').on('submit', function () {
+            var $btn = $('#btnSyncCheerioContacts').prop('disabled', true);
+            $btn.data('html', $btn.html());
+            $btn.html('<i class="fas fa-spinner fa-spin me-1"></i> Syncing…');
+        });
+
+        $('#formSyncElintOmContacts').on('submit', function (e) {
+            e.preventDefault();
+            var $form = $(this);
+            var $btn = $('#btnSyncElintOmContacts').prop('disabled', true);
+            $btn.data('html', $btn.html());
+            $btn.html('<i class="fas fa-spinner fa-spin me-1"></i> Syncing…');
+
+            APP.post(base() + '/contacts/sync-elintom', $form.serialize())
+                .done(function (res) {
+                    var msg = (res && res.message) || 'ElintOm sync complete.';
+                    APP.toast(msg, res && res.success === false ? 'error' : 'success');
+                    if (Contacts.table) {
+                        Contacts.table.ajax.reload(null, false);
+                    }
+                })
+                .fail(function (xhr) {
+                    var msg = (xhr.responseJSON && xhr.responseJSON.message)
+                        || 'ElintOm sync failed. Set elintom_base_url and elintom_api_private_key in settings.';
+                    APP.toast(msg, 'error');
+                })
+                .always(function () {
+                    $btn.prop('disabled', false).html($btn.data('html') || 'Sync ElintOm customers');
+                });
+        });
+
+        Contacts.initDataTable();
+        Contacts.initImport();
+    });
+
+    window.ContactsApp = Contacts;
+})(window, jQuery);

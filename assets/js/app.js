@@ -1,0 +1,1531 @@
+/**
+ * Global app helpers — CSRF, DataTables, SweetAlert, toasts, chat utils
+ */
+(function (window, $) {
+    'use strict';
+
+    var APP = window.APP || {};
+    window.APP = APP;
+
+    /**
+     * Parse a DB/API timestamp (stored UTC, naive MySQL datetime) into a Date.
+     */
+    APP.parseUtcDate = function (ts) {
+        if (ts == null || ts === '') return null;
+        if (ts instanceof Date) {
+            return isNaN(ts.getTime()) ? null : ts;
+        }
+        var s = String(ts).trim();
+        if (!s) return null;
+
+        if (/^\d{10,13}$/.test(s)) {
+            var n = parseInt(s, 10);
+            if (s.length <= 10) n *= 1000;
+            var fromEpoch = new Date(n);
+            return isNaN(fromEpoch.getTime()) ? null : fromEpoch;
+        }
+
+        // Already has zone
+        if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) {
+            var withZone = new Date(s);
+            return isNaN(withZone.getTime()) ? null : withZone;
+        }
+
+        // Naive MySQL / ISO → treat as UTC
+        var normalized = s.replace(' ', 'T');
+        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(normalized)) {
+            if (normalized.length === 16) normalized += ':00';
+            var asUtc = new Date(normalized + 'Z');
+            return isNaN(asUtc.getTime()) ? null : asUtc;
+        }
+
+        var fallback = new Date(s);
+        return isNaN(fallback.getTime()) ? null : fallback;
+    };
+
+    /**
+     * Interpret datetime-local / wall-clock string as APP.timezone → Date.
+     */
+    APP.parseAppLocalInput = function (localStr) {
+        var m = String(localStr || '').trim().match(
+            /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/
+        );
+        if (!m) return null;
+
+        var y = +m[1];
+        var mo = +m[2] - 1;
+        var d = +m[3];
+        var h = +m[4];
+        var mi = +m[5];
+        var sec = +(m[6] || 0);
+        var tz = String(APP.timezone || 'UTC').trim() || 'UTC';
+
+        var want = Date.UTC(y, mo, d, h, mi, sec);
+        var fmt;
+        try {
+            fmt = new Intl.DateTimeFormat('en-US', {
+                timeZone: tz,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+        } catch (e) {
+            return new Date(want);
+        }
+
+        function asUtcMs(ms) {
+            var parts = {};
+            fmt.formatToParts(new Date(ms)).forEach(function (p) {
+                if (p.type !== 'literal') parts[p.type] = p.value;
+            });
+            var hour = parseInt(parts.hour, 10);
+            if (hour === 24) hour = 0;
+            return Date.UTC(
+                parseInt(parts.year, 10),
+                parseInt(parts.month, 10) - 1,
+                parseInt(parts.day, 10),
+                hour,
+                parseInt(parts.minute, 10),
+                parseInt(parts.second, 10)
+            );
+        }
+
+        var guess = want;
+        for (var i = 0; i < 3; i++) {
+            guess = guess + (want - asUtcMs(guess));
+        }
+        return new Date(guess);
+    };
+
+    /**
+     * Format stored UTC datetime in APP.timezone.
+     * style: 'datetime' | 'time' | 'date' | Intl options object
+     */
+    APP.formatDateTime = function (ts, style) {
+        var d = APP.parseUtcDate(ts);
+        if (!d) return ts == null || ts === '' ? '' : String(ts);
+
+        var tz = String(APP.timezone || 'UTC').trim() || 'UTC';
+        var opts;
+
+        if (style && typeof style === 'object') {
+            opts = Object.assign({ timeZone: tz }, style);
+        } else if (style === 'time') {
+            opts = { timeZone: tz, hour: '2-digit', minute: '2-digit' };
+        } else if (style === 'date') {
+            opts = { timeZone: tz, day: '2-digit', month: 'short', year: 'numeric' };
+        } else {
+            opts = {
+                timeZone: tz,
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            };
+        }
+
+        try {
+            return new Intl.DateTimeFormat(undefined, opts).format(d);
+        } catch (e) {
+            try {
+                opts.timeZone = 'UTC';
+                return new Intl.DateTimeFormat(undefined, opts).format(d);
+            } catch (e2) {
+                return d.toISOString();
+            }
+        }
+    };
+
+    APP.formatTime = function (ts) {
+        return APP.formatDateTime(ts, 'time');
+    };
+
+    function csrfToken() {
+        return $('meta[name="csrf-token"]').attr('content') || APP.csrfToken || '';
+    }
+
+    function csrfHeader() {
+        return $('meta[name="csrf-header"]').attr('content') || APP.csrfHeader || 'X-CSRF-TOKEN';
+    }
+
+    function refreshCsrfFromResponse(xhr) {
+        var next = xhr.getResponseHeader(csrfHeader()) || xhr.getResponseHeader('X-CSRF-TOKEN');
+        if (next) {
+            APP.csrfToken = next;
+            $('meta[name="csrf-token"]').attr('content', next);
+        }
+    }
+
+    $.ajaxSetup({
+        headers: {},
+        beforeSend: function (xhr, settings) {
+            var method = (settings.type || 'GET').toUpperCase();
+            if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+                xhr.setRequestHeader(csrfHeader(), csrfToken());
+            }
+        },
+        complete: function (xhr) {
+            refreshCsrfFromResponse(xhr);
+        }
+    });
+
+    $(document).ajaxError(function (_event, xhr) {
+        if (!xhr) return;
+
+        refreshCsrfFromResponse(xhr);
+
+        if (xhr.status === 403) {
+            var message = 'Your form/session security token expired or is invalid. Refresh the page and try again.';
+            if (xhr.responseJSON && xhr.responseJSON.message) {
+                message = xhr.responseJSON.message;
+            }
+            APP.toast(message, 'error');
+        }
+    });
+
+    // Append CSRF to forms that omit csrf_field (safety net for dynamic forms)
+    $(document).on('submit', 'form[method="post"], form[method="POST"]', function () {
+        var $form = $(this);
+        var name = APP.csrfName || 'csrf_test_name';
+        if (!$form.find('input[name="' + name + '"]').length && !$form.find('input[name^="csrf"]').length) {
+            $('<input>', { type: 'hidden', name: name, value: csrfToken() }).appendTo($form);
+        }
+    });
+
+    APP.toast = function (message, icon) {
+        if (window.Swal) {
+            Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon: icon || 'success',
+                title: message,
+                showConfirmButton: false,
+                timer: 2800,
+                timerProgressBar: true
+            });
+        } else {
+            alert(message);
+        }
+    };
+
+    APP.escapeHtml = function (value) {
+        return $('<div>').text(value == null ? '' : String(value)).html()
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    };
+
+    /**
+     * Render a WhatsApp template header for preview.
+     *
+     * Media headers store a CDN sample URL in header_content, so printing it
+     * raw shows an unreadable link instead of the media the customer will see.
+     *
+     * @returns {string} HTML safe to inject
+     */
+    APP.templateHeaderPreviewHtml = function (headerType, headerContent) {
+        var type = String(headerType || '').toLowerCase();
+        var content = String(headerContent || '').trim();
+        if (content === '') {
+            return '';
+        }
+
+        var isUrl = /^(https?:|blob:)/i.test(content);
+        if (type === 'text' || (type === '' && !isUrl)) {
+            return '<div class="fw-semibold">' + APP.escapeHtml(content) + '</div>';
+        }
+
+        if (type === '' && isUrl) {
+            if (/\.(jpe?g|png|webp|gif)(\?|$)/i.test(content)) {
+                type = 'image';
+            } else if (/\.(mp4|3gp|mov)(\?|$)/i.test(content)) {
+                type = 'video';
+            } else {
+                type = 'document';
+            }
+        }
+
+        var safeUrl = APP.escapeHtml(content);
+        var label = type.charAt(0).toUpperCase() + type.slice(1) + ' header';
+
+        if (type === 'image') {
+            return '<img src="' + safeUrl + '" alt="' + APP.escapeHtml(label)
+                + '" class="img-fluid rounded mb-2" style="max-height:220px">';
+        }
+
+        if (type === 'video') {
+            return '<video src="' + safeUrl + '" controls preload="metadata"'
+                + ' class="rounded mb-2" style="max-width:100%;max-height:220px"></video>';
+        }
+
+        return '<a href="' + safeUrl + '" target="_blank" rel="noopener"'
+            + ' class="d-inline-flex align-items-center gap-2 border rounded px-2 py-1 mb-2 text-decoration-none">'
+            + '<i class="fas fa-file-lines"></i><span>' + APP.escapeHtml(label) + '</span></a>';
+    };
+
+    /**
+     * Wire a click/drag-drop upload box to a hidden file input.
+     *
+     * The file input usually lives inside the box, so a plain re-trigger would
+     * bubble back into the box handler and recurse until the stack overflows.
+     *
+     * options: { box, input, chooseBtn, ignore, onFile, dropZone }
+     */
+    APP.bindUploadBox = function (options) {
+        options = options || {};
+
+        var $box = $(options.box);
+        var $input = $(options.input);
+        if (!$box.length || !$input.length) {
+            return;
+        }
+
+        var chooseSelector = options.chooseBtn || '';
+        var ignoreSelector = [options.input, chooseSelector, options.ignore, 'a, button, input, textarea, select']
+            .filter(Boolean)
+            .join(', ');
+
+        function openPicker() {
+            $input.trigger('click');
+        }
+
+        function handleFile(file) {
+            if (file && typeof options.onFile === 'function') {
+                options.onFile(file);
+            }
+        }
+
+        if (chooseSelector) {
+            $(chooseSelector).on('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                openPicker();
+            });
+        }
+
+        $box.on('click', function (e) {
+            if ($(e.target).closest(ignoreSelector).length) {
+                return;
+            }
+            openPicker();
+        });
+
+        $input.on('change', function () {
+            handleFile(this.files && this.files[0] ? this.files[0] : null);
+            $(this).val('');
+        });
+
+        $box.on('dragenter dragover', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            $(this).addClass('is-dragover');
+        }).on('dragleave dragend drop', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            $(this).removeClass('is-dragover');
+        }).on('drop', function (e) {
+            var dt = e.originalEvent && e.originalEvent.dataTransfer;
+            handleFile(dt && dt.files && dt.files[0] ? dt.files[0] : null);
+        });
+
+        if (options.dropZone) {
+            $(options.dropZone).on('dragover drop', function (e) {
+                e.preventDefault();
+            });
+        }
+    };
+
+    APP.confirm = function (options) {
+        options = options || {};
+        return Swal.fire({
+            title: options.title || 'Are you sure?',
+            text: options.text || 'This action cannot be undone.',
+            icon: options.icon || 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#e11d48',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: options.confirmText || 'Yes, continue',
+            cancelButtonText: options.cancelText || 'Cancel'
+        });
+    };
+
+    /** Ask for one line of text (replaces native prompt()). Resolves like Swal: result.isConfirmed, result.value. */
+    APP.prompt = function (options) {
+        options = options || {};
+        return Swal.fire({
+            title: options.title || 'Enter a value',
+            text: options.text || '',
+            input: options.inputType || 'text',
+            inputValue: options.value || '',
+            showCancelButton: true,
+            confirmButtonColor: '#e11d48',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: options.confirmText || 'OK',
+            cancelButtonText: options.cancelText || 'Cancel'
+        });
+    };
+
+    APP.deleteConfirm = function (url, options) {
+        options = options || {};
+        return APP.confirm({
+            title: options.title || 'Delete item?',
+            text: options.text || 'This cannot be undone.',
+            confirmText: options.confirmText || 'Yes, delete'
+        }).then(function (result) {
+            if (!result.isConfirmed) {
+                return;
+            }
+            var $form = $('<form>', { method: 'POST', action: url });
+            $form.append($('<input>', { type: 'hidden', name: APP.csrfName || 'csrf_test_name', value: csrfToken() }));
+            if (options.method) {
+                $form.append($('<input>', { type: 'hidden', name: '_method', value: options.method }));
+            }
+            $('body').append($form);
+            $form.trigger('submit');
+            if ($form[0] && typeof $form[0].submit === 'function') {
+                $form[0].submit();
+            }
+        });
+    };
+
+    $(document).on('click', '[data-confirm-delete]', function (e) {
+        e.preventDefault();
+        var $el = $(this);
+        var url = $el.data('url') || $el.attr('href');
+        APP.deleteConfirm(url, {
+            title: $el.data('title') || 'Delete?',
+            text: $el.data('text') || 'This cannot be undone.'
+        });
+    });
+
+    $(document).on('click', '[data-confirm]', function (e) {
+        e.preventDefault();
+        var $el = $(this);
+        var href = $el.attr('href');
+        var form = $el.closest('form');
+        APP.confirm({
+            title: $el.data('confirm-title') || 'Confirm',
+            text: $el.data('confirm') || 'Continue?',
+            confirmText: $el.data('confirm-text') || 'Yes'
+        }).then(function (result) {
+            if (!result.isConfirmed) {
+                return;
+            }
+            if ($el.is('button') || $el.is('input') || form.length) {
+                if (form.length) {
+                    form.trigger('submit');
+                }
+            } else if (href) {
+                window.location = href;
+            }
+        });
+    });
+
+    if ($.fn.dataTable) {
+        $.extend(true, $.fn.dataTable.defaults, {
+            pageLength: 25,
+            scrollX: false,
+            autoWidth: false,
+            lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+            language: {
+                search: '_INPUT_',
+                searchPlaceholder: 'Search…',
+                lengthMenu: 'Show _MENU_',
+                emptyTable: 'No records found',
+                zeroRecords: 'No matching records',
+                info: '_START_–_END_ of _TOTAL_',
+                infoEmpty: '0 records',
+                paginate: { previous: '‹', next: '›' }
+            },
+            dom:
+                "<'dt-toolbar'<'dt-length'l><'dt-search'f>>" +
+                "<'dt-table'tr>" +
+                "<'dt-footer'<'dt-info'i><'dt-paginate'p>>"
+        });
+    }
+
+    APP.post = function (url, data, options) {
+        options = options || {};
+        return $.ajax($.extend({
+            url: url,
+            method: 'POST',
+            data: data || {},
+            dataType: 'json'
+        }, options));
+    };
+
+    APP.get = function (url, data, options) {
+        options = options || {};
+        return $.ajax($.extend({
+            url: url,
+            method: 'GET',
+            data: data || {},
+            dataType: 'json'
+        }, options));
+    };
+
+    APP.showModal = function (selector) {
+        var el = typeof selector === 'string' ? document.querySelector(selector) : selector;
+        if (!el) return null;
+        if (window.bootstrap && bootstrap.Modal) {
+            var instance = bootstrap.Modal.getOrCreateInstance(el);
+            instance.show();
+            return instance;
+        }
+        $(el).addClass('show').css('display', 'block').attr('aria-modal', 'true');
+        return null;
+    };
+
+    APP.hideModal = function (selector) {
+        var el = typeof selector === 'string' ? document.querySelector(selector) : selector;
+        if (!el) return;
+        if (window.bootstrap && bootstrap.Modal) {
+            var instance = bootstrap.Modal.getInstance(el);
+            if (instance) instance.hide();
+            return;
+        }
+        $(el).removeClass('show').css('display', 'none');
+    };
+
+    // jQuery-compatible shim for Bootstrap 5 modals
+    if (!$.fn.modal) {
+        $.fn.modal = function (action) {
+            return this.each(function () {
+                if (action === 'show') APP.showModal(this);
+                else if (action === 'hide') APP.hideModal(this);
+            });
+        };
+    }
+
+    // Password visibility toggle
+    $(document).on('click', '.toggle-secret', function () {
+        var $input = $($(this).data('target'));
+        if (!$input.length) {
+            $input = $(this).closest('.input-group').find('input');
+        }
+        var type = $input.attr('type') === 'password' ? 'text' : 'password';
+        $input.attr('type', type);
+        $(this).find('i').toggleClass('fa-eye fa-eye-slash');
+    });
+
+    // Auto-dismiss alerts
+    setTimeout(function () {
+        $('.alert-dismissible').not('.alert-permanent').fadeOut(400, function () {
+            $(this).remove();
+        });
+    }, 6000);
+
+    /**
+     * Live header bell + browser Notification API (no page refresh).
+     */
+    var LiveNotif = {
+        timer: null,
+        lastId: 0,
+        knownIds: {},
+        pollMsVisible: 2500,
+        pollMsHidden: 8000,
+        titleBase: document.title,
+        flashTimer: null,
+        soundReady: false
+    };
+
+    function notifEsc(str) {
+        return $('<div>').text(str == null ? '' : String(str)).html();
+    }
+
+    function notifDisplay(n) {
+        n = n || {};
+        return {
+            id: parseInt(n.id, 10) || 0,
+            title: n.display_title || n.contact_name || n.title || 'Notification',
+            phone: n.display_subtitle || n.contact_phone || '',
+            body: n.display_body || n.message || '',
+            link: n.link || '#',
+            initials: n.avatar_initials || 'N',
+            color: n.avatar_color || '#e11d48',
+            created: n.created_at || '',
+            type: (n.type || 'info').toLowerCase()
+        };
+    }
+
+    function notifRelativeTime(raw) {
+        if (!raw) return '';
+        var t = Date.parse(String(raw).replace(' ', 'T'));
+        if (!t) return APP.formatDateTime ? APP.formatDateTime(raw) : '';
+        var sec = Math.max(0, Math.floor((Date.now() - t) / 1000));
+        if (sec < 45) return 'Just now';
+        if (sec < 3600) return Math.floor(sec / 60) + 'm';
+        if (sec < 86400) return Math.floor(sec / 3600) + 'h';
+        return APP.formatDateTime ? APP.formatDateTime(raw) : '';
+    }
+
+    function storageKey(suffix) {
+        return 'whstapp_notif_' + suffix;
+    }
+
+    LiveNotif.loadKnown = function () {
+        try {
+            var raw = localStorage.getItem(storageKey('last_id'));
+            LiveNotif.lastId = raw ? parseInt(raw, 10) || 0 : 0;
+        } catch (e) {
+            LiveNotif.lastId = 0;
+        }
+        // Seed from DOM so first poll does not re-alert existing items
+        $('#navNotifList .nav-notif-item').each(function () {
+            var id = parseInt($(this).attr('data-id'), 10) || 0;
+            if (id > 0) {
+                LiveNotif.knownIds[id] = true;
+                if (id > LiveNotif.lastId) LiveNotif.lastId = id;
+            }
+        });
+    };
+
+    LiveNotif.saveLastId = function (id) {
+        if (id > LiveNotif.lastId) {
+            LiveNotif.lastId = id;
+            try {
+                localStorage.setItem(storageKey('last_id'), String(id));
+            } catch (e) { /* ignore */ }
+        }
+    };
+
+    LiveNotif.renderList = function (items) {
+        var $list = $('#navNotifList');
+        if (!$list.length) return;
+        if (!Array.isArray(items) || !items.length) {
+            $list.html(
+                '<div class="notif-empty nav-notif-empty">' +
+                '<i class="far fa-bell-slash"></i>' +
+                '<div class="notif-empty-title">No new notifications</div>' +
+                '<div class="notif-empty-sub">New WhatsApp replies will appear here live.</div>' +
+                '</div>'
+            );
+            return;
+        }
+        var html = '';
+        items.slice(0, 10).forEach(function (raw) {
+            var n = notifDisplay(raw);
+            html +=
+                '<a href="' + notifEsc(n.link) + '" class="notif-item nav-notif-item" data-id="' + n.id + '">' +
+                '<span class="notif-avatar" style="background:' + notifEsc(n.color) + '">' + notifEsc(n.initials) + '</span>' +
+                '<span class="notif-item-body">' +
+                '<span class="notif-item-top">' +
+                '<span class="notif-item-name">' + notifEsc(n.title) + '</span>' +
+                '<span class="notif-item-time">' + notifEsc(notifRelativeTime(n.created)) + '</span>' +
+                '</span>' +
+                (n.phone ? ('<span class="notif-item-phone">' + notifEsc(n.phone) + '</span>') : '') +
+                (n.body ? ('<span class="notif-item-msg">' + notifEsc(n.body) + '</span>') : '') +
+                '</span></a>';
+            if (n.id > 0) LiveNotif.knownIds[n.id] = true;
+        });
+        $list.html(html);
+    };
+
+    LiveNotif.setBadge = function (count) {
+        count = parseInt(count, 10) || 0;
+        var $badge = $('#navNotifBadge');
+        var $header = $('#navNotifHeader');
+        var $mark = $('#navNotifMarkAll');
+        if ($badge.length) {
+            if (count > 0) {
+                $badge.text(count > 99 ? '99+' : String(count)).removeClass('d-none');
+            } else {
+                $badge.text('0').addClass('d-none').removeClass('is-live');
+            }
+        }
+        if ($header.length) {
+            $header.text(count > 0 ? (count + ' unread') : "You're all caught up");
+        }
+        if ($mark.length) {
+            $mark.prop('disabled', count <= 0);
+        }
+        if (count > 0) {
+            document.title = '(' + count + ') ' + LiveNotif.titleBase;
+        } else {
+            document.title = LiveNotif.titleBase;
+            LiveNotif.stopTitleFlash();
+        }
+        LiveNotif.setInboxBadges(count);
+    };
+
+    LiveNotif.pulseBadge = function () {
+        var $badge = $('#navNotifBadge');
+        if (!$badge.length) return;
+        $badge.removeClass('is-live');
+        // force reflow so animation can replay
+        void $badge[0].offsetWidth;
+        $badge.addClass('is-live');
+    };
+
+    /** Sidebar Team Inbox + mobile Inbox badge (no page refresh). */
+    LiveNotif.setInboxBadges = function (count) {
+        count = parseInt(count, 10) || 0;
+        var label = count > 99 ? '99+' : String(count);
+
+        var $menuLabel = $('.app-sidebar-item[data-menu-label="team inbox"] .elint-menu-label');
+        if ($menuLabel.length) {
+            var $menuBadge = $menuLabel.siblings('.elint-menu-badge');
+            if (count > 0) {
+                if (!$menuBadge.length) {
+                    $menuBadge = $('<span class="elint-menu-badge" data-live-badge="inbox"></span>');
+                    $menuLabel.after($menuBadge);
+                }
+                $menuBadge.attr('data-live-badge', 'inbox').text(label);
+            } else {
+                $menuBadge.remove();
+            }
+        }
+
+        var $mobileLink = $('.mobile-bottom-nav a[href*="chat"]').first();
+        if ($mobileLink.length) {
+            var $wrap = $mobileLink.find('.mobile-bottom-nav__icon-wrap');
+            if (!$wrap.length) {
+                $wrap = $mobileLink;
+            }
+            var $mobBadge = $wrap.find('.mobile-bottom-nav__badge');
+            if (count > 0) {
+                if (!$mobBadge.length) {
+                    $mobBadge = $('<span class="mobile-bottom-nav__badge" data-live-badge="inbox"></span>');
+                    $wrap.append($mobBadge);
+                }
+                $mobBadge.attr('data-live-badge', 'inbox').text(label);
+            } else {
+                $mobBadge.remove();
+            }
+        }
+    };
+
+    /** Apply unread count returned from chat mark-read (immediate, no wait for poll). */
+    LiveNotif.applyUnreadFromServer = function (count) {
+        if (typeof count === 'undefined' || count === null) {
+            LiveNotif.poll();
+            return;
+        }
+        LiveNotif.setBadge(count);
+        LiveNotif.poll();
+    };
+
+    LiveNotif.playBeep = function () {
+        try {
+            var Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return;
+            var ctx = new Ctx();
+            var o = ctx.createOscillator();
+            var g = ctx.createGain();
+            o.type = 'sine';
+            o.frequency.value = 880;
+            g.gain.value = 0.04;
+            o.connect(g);
+            g.connect(ctx.destination);
+            o.start();
+            setTimeout(function () {
+                o.stop();
+                ctx.close();
+            }, 140);
+        } catch (e) { /* ignore */ }
+    };
+
+    LiveNotif.browserSupported = function () {
+        return typeof window.Notification !== 'undefined';
+    };
+
+    LiveNotif.browserAllowed = function () {
+        return LiveNotif.browserSupported() && Notification.permission === 'granted';
+    };
+
+    LiveNotif.updateBrowserBtn = function () {
+        var $btn = $('#navNotifBrowserBtn');
+        if (!$btn.length) return;
+        if (!LiveNotif.browserSupported()) {
+            $btn.text('Browser alerts not supported').prop('disabled', true);
+            return;
+        }
+        if (Notification.permission === 'granted') {
+            $btn.text('Browser alerts on').prop('disabled', true);
+        } else if (Notification.permission === 'denied') {
+            $btn.text('Alerts blocked in browser').prop('disabled', true);
+        } else {
+            $btn.text('Enable browser alerts').prop('disabled', false);
+        }
+    };
+
+    LiveNotif.requestBrowser = function () {
+        if (!LiveNotif.browserSupported()) {
+            APP.toast('This browser does not support desktop notifications', 'info');
+            return;
+        }
+        Notification.requestPermission().then(function (perm) {
+            LiveNotif.updateBrowserBtn();
+            if (perm === 'granted') {
+                APP.toast('Browser alerts enabled');
+                try {
+                    localStorage.setItem(storageKey('browser'), '1');
+                } catch (e) { /* ignore */ }
+            } else {
+                APP.toast('Permission not granted', 'warning');
+            }
+        });
+    };
+
+    LiveNotif.showBrowser = function (note) {
+        if (!LiveNotif.browserAllowed()) return;
+        var n = notifDisplay(note);
+        var body = [n.phone, n.body].filter(Boolean).join(' · ');
+        var desktop;
+        try {
+            desktop = new Notification(n.title, {
+                body: body || 'New message',
+                icon: APP.favicon || undefined,
+                tag: 'whstapp-n-' + (n.id || Date.now()),
+                renotify: true
+            });
+        } catch (e) {
+            return;
+        }
+        desktop.onclick = function () {
+            window.focus();
+            if (n.link && n.link !== '#') {
+                window.location.href = n.link;
+            }
+            try { desktop.close(); } catch (e2) { /* ignore */ }
+        };
+        setTimeout(function () {
+            try { desktop.close(); } catch (e3) { /* ignore */ }
+        }, 8000);
+    };
+
+    LiveNotif.showLiveBanner = function (note) {
+        var $stack = $('#notifLiveStack');
+        if (!$stack.length) return;
+        var n = notifDisplay(note);
+        var $card = $(
+            '<div class="notif-live-card" role="status">' +
+            '<span class="notif-avatar" style="background:' + notifEsc(n.color) + '">' + notifEsc(n.initials) + '</span>' +
+            '<div class="notif-live-copy">' +
+            '<div class="notif-live-name">' + notifEsc(n.title) + '</div>' +
+            (n.phone ? ('<div class="notif-live-phone">' + notifEsc(n.phone) + '</div>') : '') +
+            (n.body ? ('<div class="notif-live-msg">' + notifEsc(n.body) + '</div>') : '') +
+            '<div class="notif-live-meta"><i class="fab fa-whatsapp"></i> New message</div>' +
+            '</div></div>'
+        );
+        $card.on('click', function () {
+            if (n.link && n.link !== '#') {
+                window.location.href = n.link;
+            }
+        });
+        $stack.prepend($card);
+        setTimeout(function () {
+            $card.addClass('is-out');
+            setTimeout(function () { $card.remove(); }, 220);
+        }, 5200);
+        // Keep stack short
+        $stack.children('.notif-live-card').slice(3).remove();
+    };
+
+    LiveNotif.flashTitle = function (preview) {
+        LiveNotif.stopTitleFlash();
+        var alt = preview ? ('● ' + preview) : '● New message';
+        var flip = false;
+        LiveNotif.flashTimer = setInterval(function () {
+            document.title = flip ? LiveNotif.titleBase : alt;
+            flip = !flip;
+        }, 1200);
+    };
+
+    LiveNotif.stopTitleFlash = function () {
+        if (LiveNotif.flashTimer) {
+            clearInterval(LiveNotif.flashTimer);
+            LiveNotif.flashTimer = null;
+        }
+    };
+
+    LiveNotif.handleFresh = function (fresh) {
+        if (!Array.isArray(fresh) || !fresh.length) return;
+        var reallyNew = [];
+        fresh.forEach(function (n) {
+            var id = parseInt(n.id, 10) || 0;
+            if (id > 0 && !LiveNotif.knownIds[id]) {
+                LiveNotif.knownIds[id] = true;
+                reallyNew.push(n);
+                LiveNotif.saveLastId(id);
+            }
+        });
+        if (!reallyNew.length) return;
+
+        reallyNew.forEach(function (n) {
+            LiveNotif.showBrowser(n);
+            LiveNotif.showLiveBanner(n);
+        });
+
+        var last = notifDisplay(reallyNew[reallyNew.length - 1]);
+        LiveNotif.playBeep();
+        LiveNotif.pulseBadge();
+        if (document.hidden) {
+            LiveNotif.flashTitle(last.title || 'New notification');
+        }
+    };
+
+    LiveNotif.poll = function () {
+        if (!$('#navNotifWrap').length) return;
+        APP.get((APP.baseUrl || '') + '/notifications/poll', {
+            since_id: LiveNotif.lastId || 0,
+            limit: 12
+        }).done(function (res) {
+            var data = (res && res.data) ? res.data : res;
+            if (!data) return;
+            if (data.poll_hint_ms) {
+                var hint = parseInt(data.poll_hint_ms, 10) || 0;
+                if (hint >= 1500 && hint <= 10000 && hint !== LiveNotif.pollMsVisible) {
+                    LiveNotif.pollMsVisible = hint;
+                    if (!document.hidden) LiveNotif.schedule();
+                }
+            }
+            LiveNotif.setBadge(data.unread_count || 0);
+            if (Array.isArray(data.items)) {
+                LiveNotif.renderList(data.items);
+            }
+            if (Array.isArray(data.fresh) && data.fresh.length) {
+                LiveNotif.handleFresh(data.fresh);
+            }
+            if (data.max_id) {
+                LiveNotif.saveLastId(parseInt(data.max_id, 10) || 0);
+            }
+        });
+    };
+
+    LiveNotif.schedule = function () {
+        if (LiveNotif.timer) {
+            clearInterval(LiveNotif.timer);
+            LiveNotif.timer = null;
+        }
+        if (!$('#navNotifWrap').length || APP.liveNotif === false) return;
+        var ms = document.hidden ? LiveNotif.pollMsHidden : LiveNotif.pollMsVisible;
+        LiveNotif.timer = setInterval(LiveNotif.poll, ms);
+    };
+
+    LiveNotif.start = function () {
+        if (!$('#navNotifWrap').length) return;
+        LiveNotif.titleBase = document.title.replace(/^\(\d+\)\s*/, '');
+        LiveNotif.loadKnown();
+        LiveNotif.updateBrowserBtn();
+        LiveNotif.poll();
+        LiveNotif.schedule();
+
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) {
+                LiveNotif.stopTitleFlash();
+                document.title = LiveNotif.titleBase;
+                LiveNotif.poll();
+            }
+            LiveNotif.schedule();
+        });
+
+        $(document).on('click', '#navNotifBrowserBtn', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            LiveNotif.requestBrowser();
+        });
+
+        $(document).on('click', '#navNotifMarkAll', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            APP.post((APP.baseUrl || '') + '/notifications/read-all', {}).done(function () {
+                LiveNotif.setBadge(0);
+                LiveNotif.renderList([]);
+                APP.toast('All notifications marked read');
+            });
+        });
+
+        $(document).on('click', '#navNotifList .nav-notif-item', function () {
+            var id = parseInt($(this).attr('data-id'), 10) || 0;
+            var $item = $(this);
+            if (id > 0) {
+                // Optimistic: drop count immediately (no refresh)
+                var cur = parseInt(String($('#navNotifBadge').text()).replace('+', ''), 10) || 0;
+                if (!$('#navNotifBadge').hasClass('d-none') && cur > 0) {
+                    LiveNotif.setBadge(cur - 1);
+                }
+                $item.remove();
+                if (!$('#navNotifList .nav-notif-item').length) {
+                    LiveNotif.renderList([]);
+                }
+                APP.post((APP.baseUrl || '') + '/notifications/' + id + '/read', {}).done(function () {
+                    LiveNotif.poll();
+                }).fail(function () {});
+            }
+        });
+    };
+
+    function initNavTimezoneClock() {
+        var $wrap = $('#navAppClock');
+        if (!$wrap.length) return;
+
+        var tz = String($wrap.attr('data-timezone') || APP.timezone || 'UTC').trim() || 'UTC';
+        var $time = $('#navAppClockTime');
+        var $date = $('#navAppClockDate');
+        var timeFmt;
+        var dateFmt;
+
+        try {
+            timeFmt = new Intl.DateTimeFormat('en-GB', {
+                timeZone: tz,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+            dateFmt = new Intl.DateTimeFormat('en-GB', {
+                timeZone: tz,
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric'
+            });
+        } catch (e) {
+            tz = 'UTC';
+            $wrap.attr('data-timezone', tz).attr('title', tz);
+            timeFmt = new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'UTC',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+            dateFmt = new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'UTC',
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric'
+            });
+        }
+
+        function tick() {
+            var now = new Date();
+            $time.text(timeFmt.format(now));
+            $date.text(dateFmt.format(now));
+        }
+
+        tick();
+        if ($wrap.data('clock-timer')) {
+            clearInterval($wrap.data('clock-timer'));
+        }
+        $wrap.data('clock-timer', setInterval(tick, 1000));
+    }
+
+    function applyWaIdentity(identity) {
+        if (!identity || typeof identity !== 'object') return;
+        var name = String(identity.display_name || identity.verified_name || '').trim();
+        var phone = String(identity.phone || identity.display_phone || '').trim();
+        var pic = String(identity.profile_picture_url || '').trim();
+
+        if (name) {
+            $('.js-wa-name').text(name);
+            $('.js-wa-avatar').attr('alt', name);
+        }
+        if (phone) {
+            $('.js-wa-phone').text(phone);
+            $('.js-wa-phone-row').removeClass('d-none');
+        }
+        if (pic) {
+            $('.js-wa-avatar').not('.is-client-logo').attr('src', pic);
+        }
+        APP.waAccount = Object.assign({}, APP.waAccount || {}, identity, {
+            display_name: name || (APP.waAccount && APP.waAccount.display_name) || '',
+            phone: phone || (APP.waAccount && APP.waAccount.phone) || '',
+            profile_picture_url: pic || (APP.waAccount && APP.waAccount.profile_picture_url) || ''
+        });
+    }
+
+    function refreshWaIdentity(force) {
+        if (String(APP.whatsappProvider || '') !== 'meta' && !force) return;
+        APP.get((APP.baseUrl || '') + '/wa-identity/refresh', { force: force ? 1 : 0 })
+            .done(function (res) {
+                var data = (res && res.data) ? res.data : res;
+                if (!data) return;
+                applyWaIdentity(data);
+                APP.waIdentityNeedsRefresh = false;
+            })
+            .fail(function () {
+                // Keep cached chrome; Settings → Test Meta can repair.
+            });
+    }
+
+    function refreshWaIdentityIfNeeded() {
+        if (String(APP.whatsappProvider || '') !== 'meta') return;
+        if (!APP.waIdentityNeedsRefresh && APP.waAccount && APP.waAccount.profile_picture_url) return;
+        refreshWaIdentity(false);
+    }
+
+    APP.applyWaIdentity = applyWaIdentity;
+    APP.refreshWaIdentity = refreshWaIdentity;
+
+    /**
+     * Background sync (contacts, ElintOm customers, templates) when the app is opened.
+     * Jobs run in parallel; a failing job is reported but never stops the others.
+     * Server throttles each job per tenant; the browser also skips calls within the same window.
+     */
+    var AutoSync = {
+        storeKey: 'appAutoSyncState:' + (APP.baseUrl || ''),
+        intervalMs: 15 * 60 * 1000,
+        running: false,
+
+        jobs: function () {
+            return Array.isArray(APP.autoSyncJobs) ? APP.autoSyncJobs : [];
+        },
+
+        loadState: function () {
+            try { return JSON.parse(window.localStorage.getItem(this.storeKey) || '{}') || {}; } catch (e) { return {}; }
+        },
+
+        saveState: function (state) {
+            try { window.localStorage.setItem(this.storeKey, JSON.stringify(state)); } catch (e) {}
+        },
+
+        render: function (state) {
+            var jobs = this.jobs();
+            var failed = 0;
+            var html = jobs.map(function (job) {
+                var r = (state.results || {})[job.key] || {};
+                var icon = 'fa-circle text-muted';
+                var text = 'Waiting for first sync';
+                if (r.status === 'running') {
+                    icon = 'fa-spinner fa-spin text-primary';
+                    text = 'Syncing…';
+                } else if (r.status === 'ok') {
+                    icon = 'fa-circle-check text-success';
+                    text = r.message || 'Up to date';
+                } else if (r.status === 'error') {
+                    failed++;
+                    icon = 'fa-circle-exclamation text-danger';
+                    text = r.message || 'Sync failed';
+                }
+                var meta = r.at ? APP.formatTime(new Date(r.at).toISOString()) + (r.ms ? ' · ' + (r.ms / 1000).toFixed(1) + 's' : '') : '';
+                return '<div class="notif-item d-flex gap-2 align-items-start px-3 py-2">' +
+                    '<i class="fas ' + icon + ' mt-1"></i>' +
+                    '<div class="flex-grow-1 small"><div class="fw-semibold">' + APP.escapeHtml(job.label) + '</div>' +
+                    '<div class="text-break' + (r.status === 'error' ? ' text-danger' : ' text-muted') + '">' + APP.escapeHtml(text) + '</div>' +
+                    (meta ? '<div class="text-muted" style="font-size:.75rem">' + APP.escapeHtml(meta) + '</div>' : '') +
+                    '</div></div>';
+            }).join('');
+
+            $('#navSyncList').html(html);
+            $('#navSyncIcon').toggleClass('fa-spin', this.running);
+            $('#navSyncNow').prop('disabled', this.running).text(this.running ? 'Syncing…' : 'Sync now');
+            $('#navSyncBadge').toggleClass('d-none', this.running || failed === 0).text(failed || '!');
+            $('#navSyncHeader').text(this.running ? 'Sync in progress…'
+                : (failed ? failed + ' sync' + (failed > 1 ? 's' : '') + ' failed — others completed'
+                    : 'Runs automatically every 15 minutes'));
+        },
+
+        runJob: function (job, force, state) {
+            var self = this;
+            var started = Date.now();
+            state.results[job.key] = $.extend({}, state.results[job.key], { status: 'running' });
+            self.render(state);
+
+            return APP.post((APP.baseUrl || '') + '/sync/auto', { job: job.key, force: force ? 1 : 0 }, { global: false, timeout: 310000 })
+                .then(function (res) {
+                    var d = (res && res.data) || {};
+                    if (!d.ran && res && res.success) {
+                        state.results[job.key] = $.extend({}, state.results[job.key], { status: state.results[job.key].prev || 'ok' });
+                        return { job: job, ok: true, changed: 0 };
+                    }
+                    state.results[job.key] = {
+                        status: res && res.success ? 'ok' : 'error',
+                        message: (res && res.message) || '',
+                        ms: d.ms || (Date.now() - started),
+                        at: Date.now()
+                    };
+                    return { job: job, ok: !!(res && res.success), changed: d.changed || 0, message: res && res.message };
+                }, function (xhr) {
+                    var msg = (xhr.responseJSON && xhr.responseJSON.message) || (xhr.statusText === 'timeout' ? 'Timed out' : 'Request failed (' + (xhr.status || 'network') + ')');
+                    state.results[job.key] = { status: 'error', message: msg, ms: Date.now() - started, at: Date.now() };
+                    return $.Deferred().resolve({ job: job, ok: false, changed: 0, message: msg }).promise();
+                })
+                .always(function () {
+                    self.saveState(state);
+                    self.render(state);
+                });
+        },
+
+        run: function (force) {
+            var self = this;
+            var jobs = self.jobs();
+            var state = self.loadState();
+            state.results = state.results || {};
+            if (!jobs.length || self.running) return $.Deferred().resolve([]).promise();
+            if (!force && Date.now() - (state.lastRun || 0) < self.intervalMs - 5000) {
+                self.render(state);
+                return $.Deferred().resolve([]).promise();
+            }
+
+            Object.keys(state.results).forEach(function (k) { state.results[k].prev = state.results[k].status; });
+            state.lastRun = Date.now();
+            self.running = true;
+            self.saveState(state);
+
+            return $.when.apply($, jobs.map(function (job) { return self.runJob(job, force, state); }))
+                .then(function () {
+                    var outcomes = Array.prototype.slice.call(arguments);
+                    self.running = false;
+                    self.saveState(state);
+                    self.render(state);
+                    self.afterRun(outcomes, force);
+                    return outcomes;
+                });
+        },
+
+        afterRun: function (outcomes, force) {
+            var failed = outcomes.filter(function (o) { return o && !o.ok; });
+            var changed = outcomes.filter(function (o) { return o && o.ok && o.changed > 0; });
+
+            if (changed.some(function (o) { return o.job.key === 'contacts' || o.job.key === 'elintom'; })
+                && $.fn.DataTable && $.fn.DataTable.isDataTable('#contactsTable')) {
+                $('#contactsTable').DataTable().ajax.reload(null, false);
+            }
+            var errorKey = failed.map(function (o) { return o.job.key + ':' + o.message; }).join('|');
+            var state = this.loadState();
+            if (failed.length && (force || errorKey !== state.lastErrorKey)) {
+                APP.toast('Sync issue — ' + failed.map(function (o) { return o.job.label + ': ' + o.message; }).join(' | '), 'warning');
+            } else if (force && !failed.length) {
+                APP.toast('Sync complete.', 'success');
+            }
+            state.lastErrorKey = errorKey;
+            this.saveState(state);
+            $(document).trigger('app:autosync', [outcomes]);
+        },
+
+        init: function () {
+            if (!this.jobs().length) return;
+            var self = this;
+            $('#navSyncWrap').removeClass('d-none');
+            $(document).on('click', '#navSyncNow', function (e) {
+                e.preventDefault();
+                self.run(true);
+            });
+            self.run(false);
+            // Keep syncing while the app stays open; hidden tabs skip, the next visible tick catches up.
+            window.setInterval(function () {
+                if (!document.hidden) self.run(false);
+            }, self.intervalMs);
+            $(document).on('visibilitychange', function () {
+                if (!document.hidden) self.run(false);
+            });
+        }
+    };
+
+    APP.autoSync = function (force) { return AutoSync.run(!!force); };
+
+    /**
+     * Scheduler tick: while the app is open, ask the server about once a minute to run what cron would run
+     * (scheduled social posts, scheduled campaigns, the message queue). Hidden tabs skip; the server throttles.
+     */
+    var SchedulerTick = {
+        intervalMs: 60 * 1000,
+        busy: false,
+
+        run: function () {
+            var self = this;
+            if (self.busy || document.hidden) return;
+            self.busy = true;
+            APP.post((APP.baseUrl || '') + '/sync/tick', {}, { global: false, timeout: 190000 })
+                .done(function (res) {
+                    var d = (res && res.data) || {};
+                    if (d.ran) { $(document).trigger('app:tick', [d]); }
+                    if (d.ran && res && !res.success && d.errors && d.errors.length) {
+                        APP.toast('Scheduler: ' + d.errors.join(' '), 'warning');
+                    }
+                })
+                .always(function () { self.busy = false; });
+        },
+
+        init: function () {
+            if (!APP.schedulerTick) return;
+            var self = this;
+            window.setTimeout(function () { self.run(); }, 4000);
+            window.setInterval(function () { self.run(); }, self.intervalMs);
+            $(document).on('visibilitychange', function () { if (!document.hidden) self.run(); });
+        }
+    };
+
+    /**
+     * Searchable timezone picker. The native select stays in the form so the
+     * posted value is unchanged when JavaScript is off.
+     */
+    function initTimezoneSearch() {
+        $('select.js-timezone-select').each(function () {
+            var select = this;
+            if (select.dataset.tzReady === '1') return;
+            select.dataset.tzReady = '1';
+
+            var items = [];
+            Array.prototype.forEach.call(select.querySelectorAll('option'), function (opt) {
+                var group = opt.parentElement && opt.parentElement.tagName === 'OPTGROUP'
+                    ? opt.parentElement.getAttribute('label') || ''
+                    : '';
+                items.push({
+                    value: opt.value,
+                    label: (opt.textContent || '').trim(),
+                    keywords: (opt.getAttribute('data-keywords') || '').trim(),
+                    group: group
+                });
+            });
+
+            var wrap = document.createElement('div');
+            wrap.className = 'tz-search';
+            select.parentNode.insertBefore(wrap, select);
+
+            var input = document.createElement('input');
+            input.type = 'search';
+            input.className = 'form-control tz-search-input';
+            input.placeholder = 'Search timezone, e.g. UAE or Dubai';
+            input.autocomplete = 'off';
+            input.setAttribute('role', 'combobox');
+            input.setAttribute('aria-expanded', 'false');
+            input.setAttribute('aria-autocomplete', 'list');
+            if (!document.getElementById('appTimezoneSearch')) {
+                input.id = 'appTimezoneSearch';
+            }
+
+            var menu = document.createElement('div');
+            menu.className = 'tz-search-menu';
+            menu.hidden = true;
+            menu.setAttribute('role', 'listbox');
+
+            wrap.appendChild(input);
+            document.body.appendChild(menu);
+            select.classList.add('tz-search-native');
+
+            var activeIndex = -1;
+            var visible = [];
+
+            function selectedItem() {
+                var value = select.value;
+                for (var i = 0; i < items.length; i++) {
+                    if (items[i].value === value) return items[i];
+                }
+                return null;
+            }
+
+            function showSelectedLabel() {
+                var current = selectedItem();
+                input.value = current ? current.label : '';
+            }
+
+            function placeMenu() {
+                var rect = input.getBoundingClientRect();
+                var spaceBelow = window.innerHeight - rect.bottom;
+                menu.style.left = rect.left + 'px';
+                menu.style.width = rect.width + 'px';
+                if (spaceBelow < 220 && rect.top > spaceBelow) {
+                    menu.style.top = 'auto';
+                    menu.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+                } else {
+                    menu.style.bottom = 'auto';
+                    menu.style.top = (rect.bottom + 4) + 'px';
+                }
+            }
+
+            function closeMenu() {
+                menu.hidden = true;
+                input.setAttribute('aria-expanded', 'false');
+                activeIndex = -1;
+            }
+
+            function paint() {
+                menu.innerHTML = '';
+                if (!visible.length) {
+                    var empty = document.createElement('div');
+                    empty.className = 'tz-search-empty';
+                    empty.textContent = 'No timezone found';
+                    menu.appendChild(empty);
+                    return;
+                }
+                var lastGroup = null;
+                visible.forEach(function (item, index) {
+                    if (item.group && item.group !== lastGroup) {
+                        var heading = document.createElement('div');
+                        heading.className = 'tz-search-group';
+                        heading.textContent = item.group;
+                        menu.appendChild(heading);
+                        lastGroup = item.group;
+                    }
+                    var row = document.createElement('button');
+                    row.type = 'button';
+                    row.className = 'tz-search-option' + (item.value === select.value ? ' is-selected' : '') + (index === activeIndex ? ' is-active' : '');
+                    row.textContent = item.label;
+                    row.setAttribute('role', 'option');
+                    row.addEventListener('mousedown', function (e) {
+                        e.preventDefault();
+                        choose(item);
+                    });
+                    menu.appendChild(row);
+                });
+                var active = menu.querySelector('.tz-search-option.is-active');
+                if (active && typeof active.scrollIntoView === 'function') {
+                    active.scrollIntoView({ block: 'nearest' });
+                }
+            }
+
+            function openMenu(query) {
+                var q = String(query || '').trim().toLowerCase();
+                visible = items.filter(function (item) {
+                    if (!q) return true;
+                    var hay = (item.label + ' ' + item.value + ' ' + item.keywords + ' ' + item.group).toLowerCase();
+                    return hay.indexOf(q) !== -1;
+                });
+                activeIndex = -1;
+                if (visible.length) {
+                    activeIndex = 0;
+                    if (!q) {
+                        for (var i = 0; i < visible.length; i++) {
+                            if (visible[i].value === select.value) {
+                                activeIndex = i;
+                                break;
+                            }
+                        }
+                    }
+                }
+                placeMenu();
+                paint();
+                menu.hidden = false;
+                input.setAttribute('aria-expanded', 'true');
+            }
+
+            function choose(item) {
+                select.value = item.value;
+                input.value = item.label;
+                closeMenu();
+            }
+
+            input.addEventListener('focus', function () {
+                input.select();
+                openMenu('');
+            });
+            input.addEventListener('input', function () {
+                openMenu(input.value);
+            });
+            input.addEventListener('keydown', function (e) {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (menu.hidden) openMenu(input.value);
+                    if (!visible.length) return;
+                    activeIndex = Math.min(visible.length - 1, activeIndex + 1);
+                    paint();
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (!visible.length) return;
+                    activeIndex = Math.max(0, activeIndex - 1);
+                    paint();
+                } else if (e.key === 'Enter') {
+                    if (menu.hidden || activeIndex < 0 || !visible[activeIndex]) return;
+                    e.preventDefault();
+                    choose(visible[activeIndex]);
+                } else if (e.key === 'Escape') {
+                    showSelectedLabel();
+                    closeMenu();
+                }
+            });
+            input.addEventListener('blur', function () {
+                window.setTimeout(function () {
+                    showSelectedLabel();
+                    closeMenu();
+                }, 120);
+            });
+
+            window.addEventListener('resize', function () {
+                if (!menu.hidden) placeMenu();
+            });
+            document.addEventListener('scroll', function () {
+                if (!menu.hidden) placeMenu();
+            }, true);
+
+            showSelectedLabel();
+        });
+    }
+
+    $(function () {
+        initTimezoneSearch();
+        initNavTimezoneClock();
+        LiveNotif.start();
+        refreshWaIdentityIfNeeded();
+        AutoSync.init();
+        SchedulerTick.init();
+
+        function refreshLucideIcons() {
+            if (window.lucide && typeof window.lucide.createIcons === 'function') {
+                window.lucide.createIcons();
+            }
+        }
+        refreshLucideIcons();
+
+        /** AdminLTE sometimes writes inline margin-left; strip it on tablet/phone. */
+        function clearMobileSidebarOffset() {
+            if (window.innerWidth > 991) return;
+            document.querySelectorAll('.content-wrapper, .main-header, .main-footer').forEach(function (el) {
+                if (el.style && el.style.marginLeft) {
+                    el.style.marginLeft = '';
+                }
+            });
+        }
+        clearMobileSidebarOffset();
+        $(window).on('resize.mobileSidebar', clearMobileSidebarOffset);
+        $(document).on('click', '[data-widget="pushmenu"]', function () {
+            window.setTimeout(clearMobileSidebarOffset, 0);
+            window.setTimeout(clearMobileSidebarOffset, 220);
+        });
+
+        // Sidebar: click parent to expand/collapse submenu (Team Inbox, Contacts, …)
+        $(document).on('click', '.app-sidebar-item.has-tree > .nav-link.app-sidebar-toggle', function (e) {
+            var $link = $(this);
+            var $item = $link.closest('.app-sidebar-item');
+            var $tree = $item.children('.app-sidebar-tree');
+            if (!$tree.length) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            var willOpen = !$item.hasClass('menu-open');
+            $item.siblings('.has-tree.menu-open').removeClass('menu-open');
+            $item.toggleClass('menu-open', willOpen);
+            refreshLucideIcons();
+        });
+
+        // Menu search filter
+        $(document).on('input', '#sidebarMenuSearch', function () {
+            var q = String($(this).val() || '').trim().toLowerCase();
+            var $nav = $('#elintSidebarNav');
+            if (!$nav.length) return;
+
+            $nav.find('.app-sidebar-item').each(function () {
+                var $item = $(this);
+                var label = String($item.attr('data-menu-label') || '').toLowerCase();
+                var childHit = false;
+                $item.find('[data-menu-label]').each(function () {
+                    var childLabel = String($(this).attr('data-menu-label') || '').toLowerCase();
+                    if (q !== '' && childLabel.indexOf(q) !== -1) {
+                        childHit = true;
+                    }
+                });
+                var match = q === '' || label.indexOf(q) !== -1 || childHit;
+                $item.toggleClass('is-filtered-out', !match);
+                if (match && childHit && q !== '') {
+                    $item.addClass('menu-open');
+                }
+            });
+
+            $nav.find('.app-sidebar-group-title').each(function () {
+                var $title = $(this);
+                var $list = $title.next('.app-sidebar-list');
+                var visible = $list.find('.app-sidebar-item:not(.is-filtered-out)').length > 0;
+                $title.toggleClass('is-filtered-out', !visible);
+            });
+        });
+    });
+
+    APP.LiveNotif = LiveNotif;
+
+})(window, jQuery);

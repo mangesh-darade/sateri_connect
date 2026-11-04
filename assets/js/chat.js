@@ -1,0 +1,1514 @@
+/**
+ * Live Chat — conversations, messages, send, upload, emoji, poll, notes, assign
+ */
+(function (window, $) {
+    'use strict';
+
+    var Chat = {
+        contactId: null,
+        conversationId: null,
+        conversationStatus: 'open',
+        channel: 'whatsapp',
+        contactChannel: 'whatsapp',
+        pollTimer: null,
+        pollMs: 3000,
+        pollMsHidden: 10000,
+        lastMessageId: 0,
+        lastDayKey: '',
+        sending: false,
+        within24h: true,
+        inboxStatus: 'open',
+        unreadOnly: false,
+        assigneeFilter: 'all',
+        oldChatsFirst: false,
+        scopeFilter: 'all',
+        currentUserId: null,
+        _searchT: null,
+        _convSig: '',
+        pageTitle: document.title,
+        currentConversations: []
+    };
+
+    function base() {
+        return (window.APP && APP.baseUrl) || '';
+    }
+
+    function initials(name) {
+        name = (name || '?').trim();
+        var parts = name.split(/\s+/);
+        if (parts.length >= 2) {
+            return (parts[0][0] + parts[1][0]).toUpperCase();
+        }
+        return name.substring(0, 2).toUpperCase();
+    }
+
+    function escapeHtml(str) {
+        return APP.escapeHtml(str);
+    }
+
+    function formatTime(ts) {
+        if (!ts) return '';
+        if (window.APP && typeof APP.formatTime === 'function') {
+            return APP.formatTime(ts);
+        }
+        var d = new Date(String(ts).replace(' ', 'T') + 'Z');
+        if (isNaN(d.getTime())) return ts;
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function fmtInTz(ts, opts) {
+        if (window.APP && typeof APP.formatDateTime === 'function') {
+            return APP.formatDateTime(ts, opts);
+        }
+        var d = ts instanceof Date ? ts : new Date(String(ts).replace(' ', 'T') + 'Z');
+        return isNaN(d.getTime()) ? '' : d.toLocaleString('en-GB', opts);
+    }
+
+    /** Calendar day of a message in the app timezone, used to group like WhatsApp. */
+    function dayKey(ts) {
+        if (!ts) return '';
+        return fmtInTz(ts, { year: 'numeric', month: '2-digit', day: '2-digit' });
+    }
+
+    /** "Today", "Yesterday", weekday within the last week, else "17 September 2026". */
+    function dayLabel(ts) {
+        var key = dayKey(ts);
+        var now = new Date();
+        if (key === dayKey(now)) return 'Today';
+        if (key === dayKey(new Date(now.getTime() - 86400000))) return 'Yesterday';
+        for (var i = 2; i < 7; i++) {
+            if (key === dayKey(new Date(now.getTime() - i * 86400000))) {
+                return fmtInTz(ts, { weekday: 'long' });
+            }
+        }
+        return fmtInTz(ts, { day: 'numeric', month: 'long', year: 'numeric' });
+    }
+
+    /** Conversation list stamp: time today, then "Yesterday", weekday, or short date. */
+    function listTime(ts) {
+        if (!ts) return '';
+        var label = dayLabel(ts);
+        if (label === 'Today') return formatTime(ts);
+        if (label === 'Yesterday' || label.indexOf(' ') < 0) return label;
+        return fmtInTz(ts, { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
+
+    function daySeparator(ts) {
+        return '<div class="chat-day-sep" data-day="' + escapeHtml(dayKey(ts)) + '"><span>' + escapeHtml(dayLabel(ts)) + '</span></div>';
+    }
+
+    /** Message HTML, prefixed with a date separator when the day changes. */
+    function renderWithDay(msg) {
+        var ts = msg.created_at || msg.timestamp;
+        var key = dayKey(ts);
+        var html = '';
+        if (key && key !== Chat.lastDayKey) {
+            html = daySeparator(ts);
+            Chat.lastDayKey = key;
+        }
+        return html + renderMessage(msg);
+    }
+
+    function statusIcon(status) {
+        status = (status || '').toLowerCase();
+        if (status === 'read') return '<i class="fas fa-check-double msg-status msg-status-read"></i>';
+        if (status === 'delivered') return '<i class="fas fa-check-double msg-status"></i>';
+        if (status === 'sent') return '<i class="fas fa-check msg-status"></i>';
+        if (status === 'failed') return '<i class="fas fa-exclamation-circle text-danger msg-status"></i>';
+        return '<i class="far fa-clock msg-status"></i>';
+    }
+
+    /** Voice note / audio player: a bare <audio controls> collapses to a tiny pill inside a shrink-to-fit bubble. */
+    function voiceNoteHtml(url) {
+        return '<div class="voice-note">' +
+            '<button type="button" class="vn-play" title="Play"><i class="fas fa-play"></i></button>' +
+            '<div class="vn-body"><div class="vn-bar"><span class="vn-fill"></span></div><span class="vn-time">0:00</span></div>' +
+            '<i class="fas fa-microphone vn-mic"></i>' +
+            '<audio preload="metadata" src="' + escapeHtml(url) + '"></audio></div>';
+    }
+
+    function vnFmt(sec) {
+        sec = isFinite(sec) ? Math.max(0, Math.floor(sec)) : 0;
+        return Math.floor(sec / 60) + ':' + ('0' + (sec % 60)).slice(-2);
+    }
+
+    function vnSync(audio, ended) {
+        var box = audio.closest('.voice-note');
+        if (!box) return;
+        var dur = audio.duration;
+        var fill = box.querySelector('.vn-fill');
+        if (fill) fill.style.width = (!ended && dur > 0 ? (audio.currentTime / dur * 100) : 0) + '%';
+        var t = box.querySelector('.vn-time');
+        if (t) t.textContent = vnFmt(audio.paused && !audio.currentTime ? dur : audio.currentTime);
+        var icon = box.querySelector('.vn-play i');
+        if (icon) icon.className = 'fas ' + (audio.paused ? 'fa-play' : 'fa-pause');
+    }
+
+    (function initVoiceNotes() {
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest ? e.target.closest('.vn-play') : null;
+            var bar = e.target.closest ? e.target.closest('.vn-bar') : null;
+            var box = (btn || bar) && (btn || bar).closest('.voice-note');
+            var audio = box && box.querySelector('audio');
+            if (!audio) return;
+            if (btn) {
+                document.querySelectorAll('.voice-note audio').forEach(function (a) { if (a !== audio) a.pause(); });
+                if (audio.paused) { audio.play().catch(function () {}); } else { audio.pause(); }
+            } else if (audio.duration > 0) {
+                var r = bar.getBoundingClientRect();
+                audio.currentTime = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * audio.duration;
+            }
+        });
+        // media events do not bubble: listen in the capture phase
+        ['timeupdate', 'play', 'pause', 'loadedmetadata'].forEach(function (ev) {
+            document.addEventListener(ev, function (e) {
+                if (e.target && e.target.tagName === 'AUDIO') vnSync(e.target, false);
+            }, true);
+        });
+        document.addEventListener('ended', function (e) {
+            if (e.target && e.target.tagName === 'AUDIO') { e.target.currentTime = 0; vnSync(e.target, true); }
+        }, true);
+    })();
+
+    // Buttons / list rows of a sent interactive message, shown under its text in the thread.
+    function interactiveOptionsHtml(msg) {
+        var mtype = (msg.message_type || msg.type || '').toLowerCase();
+        if (mtype !== 'interactive_buttons' && mtype !== 'interactive_list') return '';
+        var p = msg.payload;
+        if (typeof p === 'string') {
+            try { p = JSON.parse(p); } catch (e) { p = null; }
+        }
+        var req = p && p.request ? p.request : null;
+        if (!req) return '';
+        var titles = [];
+        if (Array.isArray(req.buttons)) {
+            req.buttons.forEach(function (b) { if (b && b.title) titles.push(b.title); });
+        }
+        if (Array.isArray(req.sections)) {
+            req.sections.forEach(function (s) {
+                (s.rows || []).forEach(function (r) { if (r && r.title) titles.push(r.title); });
+            });
+        }
+        if (!titles.length) return '';
+        return '<div class="msg-options">' + titles.map(function (t) {
+            return '<span class="msg-option">' + escapeHtml(t) + '</span>';
+        }).join('') + '</div>';
+    }
+
+    // Ad / product the customer came from (click-to-WhatsApp referral), shown above their first message.
+    function referralCardHtml(msg) {
+        var p = msg.payload;
+        if (typeof p === 'string') {
+            try { p = JSON.parse(p); } catch (e) { p = null; }
+        }
+        var ref = p && p.message && p.message.referral ? p.message.referral : (p && p.referral ? p.referral : null);
+        if (!ref) return '';
+        var img = ref.image_url || ref.thumbnail_url || '';
+        // Only http(s) / site-relative URLs: the payload comes from a webhook, never allow javascript: or data: schemes.
+        function safeUrl(u) { u = String(u || '').trim(); return /^(https?:\/\/|\/)/i.test(u) ? u : ''; }
+        img = safeUrl(img);
+        var title = String(ref.headline || '').trim();
+        var text = String(ref.body || '').trim();
+        if (!img && !title && !text) return '';
+        var html = '<div class="msg-referral">';
+        if (img) {
+            html += '<img src="' + escapeHtml(img) + '" class="msg-referral-img" alt="ad" referrerpolicy="no-referrer" onerror="this.remove()">';
+        }
+        if (title) html += '<div class="msg-referral-title">' + escapeHtml(title).replace(/\n/g, '<br>') + '</div>';
+        if (text) html += '<div class="msg-referral-text">' + escapeHtml(text.length > 160 ? text.slice(0, 157) + '...' : text) + '</div>';
+        if (safeUrl(ref.source_url)) {
+            html += '<a class="msg-referral-link" href="' + escapeHtml(safeUrl(ref.source_url)) + '" target="_blank" rel="noopener">View ad</a>';
+        }
+        return html + '</div>';
+    }
+
+    function renderMessage(msg) {
+        var dir = (msg.direction === 'outbound' || msg.direction === 'out') ? 'outbound' : 'inbound';
+        var body = msg.body || msg.content || msg.message || '';
+        if (msg.media_url) {
+            var type = (msg.message_type || msg.type || '').toLowerCase();
+            if (type.indexOf('image') >= 0) {
+                body = '<img src="' + escapeHtml(msg.media_url) + '" class="img-fluid rounded mb-1" alt="media"><br>' + escapeHtml(body);
+            } else if (type.indexOf('video') >= 0) {
+                body = '<video src="' + escapeHtml(msg.media_url) + '" controls class="w-100 rounded mb-1"></video><br>' + escapeHtml(body);
+            } else if (type.indexOf('audio') >= 0) {
+                body = voiceNoteHtml(msg.media_url) + (String(body).trim() !== '' ? '<br>' + escapeHtml(body) : '');
+            } else {
+                body = '<a href="' + escapeHtml(msg.media_url) + '" target="_blank" rel="noopener">Attachment</a><br>' + escapeHtml(body);
+            }
+        } else if (String(body).trim() === '') {
+            var mtype = (msg.message_type || msg.type || '').toLowerCase();
+            var note = mtype === 'unsupported'
+                ? 'This message type isn\'t supported here. Open WhatsApp on the phone to view it.'
+                : (mtype ? mtype.charAt(0).toUpperCase() + mtype.slice(1) + ' message' : 'Message');
+            body = '<span class="msg-unsupported"><i class="fas fa-info-circle me-1"></i>' + escapeHtml(note) + '</span>';
+        } else {
+            body = escapeHtml(body).replace(/\n/g, '<br>');
+        }
+        body = referralCardHtml(msg) + body + interactiveOptionsHtml(msg);
+        var plain = String(msg.content || msg.body || msg.message || '');
+        var type = (msg.message_type || msg.type || 'text').toLowerCase();
+        var waId = String(msg.wa_message_id || msg.wamid || msg.external_message_id || '');
+        var canRevise = dir === 'outbound'
+            && (msg.channel || 'whatsapp') !== 'instagram'
+            && (msg.channel || 'whatsapp') !== 'messenger'
+            && (type === 'text' || type === '')
+            && !msg.media_url
+            && plain.trim() !== '';
+        var editBtn = canRevise
+            ? '<button type="button" class="msg-edit" title="Edit or resend" data-text="' + escapeHtml(plain) + '" data-created="' + escapeHtml(msg.created_at || msg.timestamp || '') + '" data-waid="' + escapeHtml(waId.indexOf('import:') === 0 ? '' : waId) + '"><i class="fas fa-pen"></i></button>'
+            : '';
+        var edited = msg.edited_at ? '<span class="msg-edited">Edited</span>' : '';
+        return (
+            '<div class="msg-row ' + dir + '" data-id="' + escapeHtml(msg.id) + '" data-status="' + escapeHtml(msg.status || '') + '">' +
+            '<div class="msg-bubble">' + editBtn + body +
+            '<span class="msg-time" title="' + escapeHtml(fmtInTz(msg.created_at || msg.timestamp, { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })) + '">' +
+            edited + escapeHtml(formatTime(msg.created_at || msg.timestamp)) +
+            (dir === 'outbound' ? statusIcon(msg.status) : '') +
+            '</span></div></div>'
+        );
+    }
+
+    function messageAgeMs(created) {
+        var ts = Date.parse(String(created || '').replace(' ', 'T'));
+        if (!ts) return Number.POSITIVE_INFINITY;
+        return Date.now() - ts;
+    }
+
+    function clearMessageEdit() {
+        Chat.editingId = 0;
+        Chat.editMode = '';
+        $('#chatEditBar').addClass('d-none');
+        $('#chatInput').val('');
+        setWindowState(Chat.within24h !== false);
+    }
+
+    function scrollBottom() {
+        var box = document.getElementById('chatMessages');
+        if (!box) return;
+        box.scrollTop = box.scrollHeight;
+    }
+
+    function setComposerLocked(locked) {
+        if (Chat.editingId) locked = false;
+        var $composer = $('#chatComposer');
+        if (!$composer.length) return;
+        $composer.toggleClass('is-locked', !!locked);
+        $('#chatComposerFree').toggleClass('d-none', !!locked);
+        $('#chatComposerTemplateCta').toggleClass('d-none', !locked);
+        // Never leave free-text controls half-disabled; hide them when locked.
+        $('#chatInput, #btnChatSend, #btnAttach, #chatFile, #btnEmoji, #btnQuickReply').prop('disabled', !!locked);
+        var isWa = (Chat.contactChannel || 'whatsapp') === 'whatsapp';
+        $('#btnComposerTemplate').toggleClass('d-none', !isWa);
+        $('#btnTemplateReply').toggleClass('d-none', !isWa);
+        if (!isWa) {
+            $('#chatComposerLockCopy').text('Free-form replies need a recent customer message on this channel.');
+        } else {
+            $('#chatComposerLockCopy').text('Free-form WhatsApp messages need a recent customer reply. Send an approved template instead.');
+        }
+        // Template actions must stay clickable (WhatsApp only).
+        $('#btnTemplateReply, #btnComposerTemplate').prop('disabled', false);
+    }
+
+    function setWindowState(within24h) {
+        Chat.within24h = within24h !== false;
+        var isWa = (Chat.contactChannel || 'whatsapp') === 'whatsapp';
+        var $banner = $('#chatWindowBanner');
+        var $channelBanner = $('#chatChannelLockBanner');
+        var $input = $('#chatInput');
+        if (Chat.within24h) {
+            $banner.addClass('d-none');
+            $channelBanner.addClass('d-none');
+            $input.attr('placeholder', 'Type a message');
+            $('#btnTemplateReply').removeClass('btn-wa').addClass('btn-outline-secondary');
+            setComposerLocked(false);
+        } else if (isWa) {
+            $banner.removeClass('d-none');
+            $channelBanner.addClass('d-none');
+            $input.attr('placeholder', '24h window closed — use Template');
+            $('#btnTemplateReply').removeClass('btn-outline-secondary').addClass('btn-wa');
+            setComposerLocked(true);
+        } else {
+            $banner.addClass('d-none');
+            $channelBanner.removeClass('d-none');
+            $input.attr('placeholder', '24h window closed');
+            setComposerLocked(true);
+        }
+        $('#btnTemplateReply').toggleClass('d-none', !isWa);
+    }
+
+    function channelBadge(channel) {
+        channel = (channel || 'whatsapp').toLowerCase();
+        if (channel === 'instagram') {
+            return '<span class="chat-channel-badge chat-channel-ig" title="Instagram"><i class="fab fa-instagram"></i></span>';
+        }
+        if (channel === 'messenger') {
+            return '<span class="chat-channel-badge chat-channel-fb" title="Messenger"><i class="fab fa-facebook-messenger"></i></span>';
+        }
+        return '<span class="chat-channel-badge chat-channel-wa" title="WhatsApp"><i class="fab fa-whatsapp"></i></span>';
+    }
+
+    function applyStatusUpdates(updates) {
+        if (!Array.isArray(updates)) return;
+        updates.forEach(function (u) {
+            var id = u.id;
+            var st = (u.status || '').toLowerCase();
+            var $row = $('.msg-row[data-id="' + id + '"]');
+            if (!$row.length || !$row.hasClass('outbound')) return;
+            if (String($row.attr('data-status') || '') === st) return;
+            $row.attr('data-status', st);
+            var $time = $row.find('.msg-time');
+            $time.find('.msg-status').remove();
+            $time.append(statusIcon(st));
+        });
+    }
+
+    function renderNotes(notes) {
+        var $list = $('#chatNotesList').empty();
+        if (!Array.isArray(notes) || !notes.length) {
+            $list.html('<div class="note-item text-muted">No internal notes yet.</div>');
+            return;
+        }
+        notes.forEach(function (n) {
+            $list.append(
+                '<div class="note-item">' +
+                '<div class="text-muted small">' + escapeHtml(
+                    (window.APP && APP.formatDateTime) ? APP.formatDateTime(n.created_at || '') : (n.created_at || '')
+                ) +
+                (n.user_name ? (' · ' + escapeHtml(n.user_name)) : '') + '</div>' +
+                '<div>' + escapeHtml(n.note || n.content || '') + '</div></div>'
+            );
+        });
+    }
+
+    function syncConversationChrome(conversation) {
+        if (!conversation) return;
+        Chat.conversationId = conversation.id || Chat.conversationId;
+        Chat.conversationStatus = conversation.status || 'open';
+        var resolved = Chat.conversationStatus === 'resolved' || Chat.conversationStatus === 'closed';
+        $('#btnChatClose').toggleClass('d-none', resolved);
+        $('#btnChatReopen').toggleClass('d-none', !resolved);
+        if ($('#chatStatusSelect').length) {
+            var st = Chat.conversationStatus === 'closed' ? 'resolved' : Chat.conversationStatus;
+            if ($('#chatStatusSelect option[value="' + st + '"]').length) {
+                $('#chatStatusSelect').val(st);
+            }
+        }
+        if ($('#chatAssignSelect').length && conversation.assigned_to !== undefined && conversation.assigned_to !== null) {
+            $('#chatAssignSelect').val(String(conversation.assigned_to || ''));
+        } else if ($('#chatAssignSelect').length && (conversation.assigned_to === null || conversation.assigned_to === '')) {
+            $('#chatAssignSelect').val('');
+        }
+    }
+
+    function collectTemplateVariables() {
+        var vars = {};
+        $('#templateVarsFields [data-var-key]').each(function () {
+            vars[$(this).data('var-key')] = ($(this).val() || '').trim();
+        });
+        return vars;
+    }
+
+    function renderTemplateVariableFields(variables) {
+        var $wrap = $('#templateVarsWrap');
+        var $fields = $('#templateVarsFields').empty();
+        var list = Array.isArray(variables) ? variables : [];
+        if (!list.length) {
+            $wrap.addClass('d-none');
+            return;
+        }
+        list.forEach(function (v, idx) {
+            var key = String(idx + 1);
+            var label = 'Variable {{' + key + '}}';
+            if (typeof v === 'string' && v !== '' && !/^\d+$/.test(v)) {
+                label += ' (' + v + ')';
+            }
+            $fields.append(
+                '<div class="mb-2">' +
+                '<label class="form-label small mb-1">' + escapeHtml(label) + '</label>' +
+                '<input type="text" class="form-control form-control-sm" data-var-key="' + escapeHtml(key) + '" placeholder="Value for {{' + escapeHtml(key) + '}}">' +
+                '</div>'
+            );
+        });
+        $wrap.removeClass('d-none');
+    }
+
+    Chat._templateHeader = {
+        needed: false,
+        type: '',
+        mediaId: '',
+        mediaUrl: '',
+        uploading: false,
+        ready: false
+    };
+
+    Chat.loadTemplateVars = function (templateId) {
+        Chat._templateHeader = { needed: false, type: '', mediaId: '', mediaUrl: '', uploading: false, ready: false };
+        $('#templateHeaderMediaFile').val('');
+        $('#templateHeaderMediaStatus').addClass('d-none').removeClass('text-success text-danger text-muted').text('');
+        $('#templateHeaderMediaWrap').addClass('d-none');
+        $('#btnSendTemplate').prop('disabled', false);
+
+        if (!templateId) {
+            renderTemplateVariableFields([]);
+            return;
+        }
+        APP.get(base() + '/templates/' + templateId + '/preview').done(function (res) {
+            var data = (res && res.data) ? res.data : res;
+            renderTemplateVariableFields((data && data.variables) || []);
+
+            var headerType = String((data && data.header_type) || '').toLowerCase();
+            var needsUpload = !!(data && data.needs_header_upload);
+            if (!needsUpload && ['image', 'video', 'document'].indexOf(headerType) !== -1) {
+                // Fallback when older preview payloads omit the flag.
+                needsUpload = true;
+            }
+            if (needsUpload && ['image', 'video', 'document'].indexOf(headerType) !== -1) {
+                Chat._templateHeader.needed = true;
+                Chat._templateHeader.type = headerType;
+                $('#templateHeaderMediaLabel').text('Header ' + headerType);
+                $('#templateHeaderMediaHint').text(
+                    'Template "' + ((data && data.name) || '') + '" requires a '
+                    + headerType.toUpperCase()
+                    + ' header. Meta approval samples cannot be reused — upload a file, then Send.'
+                );
+                var accept = headerType === 'video'
+                    ? 'video/mp4,video/3gpp'
+                    : (headerType === 'document' ? 'application/pdf' : 'image/jpeg,image/png,image/webp,image/gif');
+                $('#templateHeaderMediaFile').attr('accept', accept);
+                $('#templateHeaderMediaWrap').removeClass('d-none');
+            }
+        }).fail(function () {
+            renderTemplateVariableFields([]);
+        });
+    };
+
+    Chat.sendTemplate = function (templateId, variables) {
+        if (!Chat.contactId || !templateId) return;
+
+        if (Chat._templateHeader.needed && !Chat._templateHeader.mediaId && !Chat._templateHeader.mediaUrl) {
+            var fileEl = document.getElementById('templateHeaderMediaFile');
+            if (!fileEl || !fileEl.files || !fileEl.files.length) {
+                APP.toast('Upload a ' + (Chat._templateHeader.type || 'media') + ' header file first', 'error');
+                return;
+            }
+        }
+
+        var fd = new FormData();
+        fd.append('contact_id', String(Chat.contactId));
+        fd.append('type', 'template');
+        fd.append('template_id', String(templateId));
+        Object.keys(variables || {}).forEach(function (k) {
+            fd.append('variables[' + k + ']', variables[k]);
+        });
+        if (Chat._templateHeader.mediaId) {
+            fd.append('header_media_id', Chat._templateHeader.mediaId);
+        }
+        if (Chat._templateHeader.mediaUrl) {
+            fd.append('header_media_url', Chat._templateHeader.mediaUrl);
+        }
+        var fileInput = document.getElementById('templateHeaderMediaFile');
+        if (fileInput && fileInput.files && fileInput.files[0] && !Chat._templateHeader.mediaId) {
+            fd.append('header_media', fileInput.files[0]);
+        }
+        fd.append(APP.csrfName || 'csrf_test_name', $('meta[name="csrf-token"]').attr('content'));
+
+        $('#btnSendTemplate').prop('disabled', true);
+        $.ajax({
+            url: base() + '/chat/send',
+            method: 'POST',
+            data: fd,
+            processData: false,
+            contentType: false,
+            dataType: 'json'
+        }).done(function () {
+            if (window.APP && typeof APP.hideModal === 'function') {
+                APP.hideModal('#templateReplyModal');
+            } else {
+                var el = document.getElementById('templateReplyModal');
+                if (el && window.bootstrap) {
+                    bootstrap.Modal.getOrCreateInstance(el).hide();
+                }
+            }
+            Chat._templateHeader = { needed: false, type: '', mediaId: '', mediaUrl: '', uploading: false, ready: false };
+            $('#templateHeaderMediaFile').val('');
+            Chat.loadMessages(Chat.contactId, false);
+            APP.toast('Template sent');
+        }).fail(function (xhr) {
+            var res = xhr.responseJSON || {};
+            var noOptIn = res.errors && res.errors.policy_reason === 'no_opt_in';
+            APP.toast(res.message || 'Template send failed', noOptIn ? 'warning' : 'error');
+            if (noOptIn) {
+                Chat.loadMessages(Chat.contactId, false);
+            }
+        }).always(function () {
+            $('#btnSendTemplate').prop('disabled', false);
+        });
+    };
+
+    function setHeader(conv) {
+        $('#chatHeaderName').text(conv.name || conv.mobile || 'Contact');
+        $('#chatHeaderMobile').text(conv.mobile || '');
+        $('#chatHeaderAvatar').text(initials(conv.name || conv.mobile || '?'));
+        $('#chatMainEmpty').addClass('d-none').hide();
+        $('#chatMainActive').removeClass('d-none').css('display', 'flex');
+    }
+
+    function extractList(res) {
+        if (!res) return [];
+        if (Array.isArray(res)) return res;
+        if (Array.isArray(res.data)) return res.data;
+        if (Array.isArray(res.conversations)) return res.conversations;
+        if (res.data && Array.isArray(res.data.conversations)) return res.data.conversations;
+        return [];
+    }
+
+    function extractMessages(res) {
+        if (!res) return [];
+        if (Array.isArray(res)) return res;
+        if (Array.isArray(res.messages)) return res.messages;
+        if (res.data && Array.isArray(res.data.messages)) return res.data.messages;
+        if (Array.isArray(res.data)) return res.data;
+        return [];
+    }
+
+    function normalizeConversation(c) {
+        return {
+            contact_id: c.contact_id || c.id,
+            name: c.name || c.contact_name || '',
+            mobile: c.mobile || c.external_id || '',
+            channel: (c.channel || 'whatsapp').toLowerCase(),
+            external_id: c.external_id || '',
+            last_message_at: c.last_message_at || c.updated_at || '',
+            last_message: c.last_message || c.last_message_content || c.preview || '',
+            unread_count: parseInt(c.unread_count || c.unread || 0, 10) || 0,
+            last_message_direction: c.last_message_direction || '',
+            status: c.status || 'open',
+            status_label: c.status_label || c.status || 'open',
+            assigned_to: c.assigned_to,
+            within_24h: !!c.within_24h,
+            window_state: c.window_state || (c.within_24h ? 'active' : 'expired'),
+            frt_exceeded: !!c.frt_exceeded,
+            is_ctwa: !!c.is_ctwa,
+            ctwa_referral: c.ctwa_referral || null
+        };
+    }
+
+    function statusBadgeHtml(c) {
+        var status = String(c.status || 'open');
+        var label = c.status_label || status;
+        var cls = 'chat-conv-status chat-conv-status-' + status.replace(/_/g, '-');
+        return '<span class="' + cls + '">' + escapeHtml(label) + '</span>';
+    }
+
+    function conversationSignature(list) {
+        return list.map(function (c) {
+            return [c.contact_id, c.channel || '', c.unread_count, c.last_message_at, c.last_message, c.status, c.assigned_to || '', c.frt_exceeded ? 1 : 0, c.is_ctwa ? 1 : 0].join(':');
+        }).join('|');
+    }
+
+    function scopeLabel(count) {
+        var labels = {
+            all: 'All Chats',
+            assigned: 'Assigned to Agents',
+            open: 'Open',
+            pending: 'Pending',
+            chatbot: 'Chatbot',
+            intervened: 'Intervened',
+            resolved: 'Resolved',
+            closed: 'Resolved',
+            active: 'Active',
+            expired: 'Expired',
+            unread: 'Unread',
+            unassigned: 'Unassigned',
+            frt_exceeded: 'FRT Exceeded',
+            ctwa: 'CTWA'
+        };
+        return (labels[Chat.scopeFilter] || 'All Chats') + ' (' + count + ')';
+    }
+
+    function exportRows(filename, rows) {
+        if (!rows.length) {
+            APP.toast('No conversations to export', 'warning');
+            return;
+        }
+        var csv = rows.map(function (row) {
+            return row.map(function (cell) {
+                var value = cell == null ? '' : String(cell);
+                return '"' + value.replace(/"/g, '""') + '"';
+            }).join(',');
+        }).join('\n');
+        var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    Chat.loadConversations = function (q) {
+        var assignedTo = '';
+        if (Chat.assigneeFilter === 'mine' && Chat.currentUserId) {
+            assignedTo = Chat.currentUserId;
+        } else if (Chat.assigneeFilter === 'unassigned') {
+            assignedTo = 'unassigned';
+        }
+        var status = Chat.inboxStatus || 'open';
+        var filter = '';
+        var composite = ['active', 'expired', 'frt_exceeded', 'ctwa', 'unassigned', 'assigned', 'unread'];
+        if (composite.indexOf(status) !== -1) {
+            filter = status;
+            status = 'all';
+        }
+        return APP.get(base() + '/chat/conversations', {
+            q: q || '',
+            status: status,
+            filter: filter,
+            channel: Chat.channel || 'all',
+            unread_only: Chat.unreadOnly ? 1 : 0,
+            assigned_to: assignedTo,
+            tag_id: (Chat.extraFilters || {}).tag_id || '',
+            attr_key: (Chat.extraFilters || {}).attr_key || '',
+            attr_op: (Chat.extraFilters || {}).attr_op || '',
+            attr_value: (Chat.extraFilters || {}).attr_value || ''
+        }).done(function (res) {
+            var list = extractList(res).map(normalizeConversation);
+            if (Chat.scopeFilter === 'assigned') {
+                list = list.filter(function (c) { return c.assigned_to !== null && c.assigned_to !== ''; });
+            } else if (Chat.scopeFilter === 'unassigned') {
+                list = list.filter(function (c) { return c.assigned_to === null || c.assigned_to === ''; });
+            } else if (Chat.scopeFilter === 'unread') {
+                list = list.filter(function (c) { return (c.unread_count || 0) > 0; });
+            }
+            list.sort(function (a, b) {
+                var aTime = new Date(String(a.last_message_at || '').replace(' ', 'T')).getTime() || 0;
+                var bTime = new Date(String(b.last_message_at || '').replace(' ', 'T')).getTime() || 0;
+                return Chat.oldChatsFirst ? aTime - bTime : bTime - aTime;
+            });
+            Chat.currentConversations = list.slice();
+            var sig = conversationSignature(list);
+            if (sig === Chat._convSig && $('#chatConvList .chat-conv-item').length) {
+                return;
+            }
+            Chat._convSig = sig;
+            var html = '';
+            var unreadTotal = 0;
+            if (!list.length) {
+                html = '<div class="chat-empty-inline">' +
+                    '<div class="empty-orb"><i class="fab fa-whatsapp"></i></div>' +
+                    '<p class="mb-0">No conversations</p>' +
+                    '<span class="text-muted small">Inbound messages appear when webhooks are connected</span>' +
+                    '</div>';
+            } else {
+                list.forEach(function (c) {
+                    // Open thread: never show unread on the active conversation
+                    if (String(c.contact_id) === String(Chat.contactId)) {
+                        c.unread_count = 0;
+                    }
+                    unreadTotal += c.unread_count > 0 ? c.unread_count : 0;
+                    var active = String(c.contact_id) === String(Chat.contactId) ? ' active' : '';
+                    var hasUnread = c.unread_count > 0;
+                    var unreadClass = hasUnread ? ' has-unread' : '';
+                    var statusBadge = statusBadgeHtml(c);
+                    var flags = '';
+                    if (c.unread_count > 0) {
+                        flags += '<span class="chat-flag chat-flag-new">New</span>';
+                    }
+                    if (c.is_ctwa) {
+                        flags += '<span class="chat-flag chat-flag-ctwa">CTWA</span>';
+                    }
+                    if (c.frt_exceeded) {
+                        flags += '<span class="chat-flag chat-flag-frt">FRT</span>';
+                    }
+                    if (c.window_state === 'expired') {
+                        flags += '<span class="chat-flag chat-flag-expired">Expired</span>';
+                    }
+                    if (!c.assigned_to) {
+                        flags += '<span class="chat-flag chat-flag-chatbot">Unassigned</span>';
+                    } else if (String(c.assigned_to) === String(Chat.currentUserId || '')) {
+                        flags += '<span class="chat-flag chat-flag-chatbot">My Chat</span>';
+                    }
+                    html +=
+                        '<button type="button" class="chat-conv-item' + active + unreadClass + '" data-contact-id="' + escapeHtml(c.contact_id) + '"' +
+                        ' data-name="' + escapeHtml(c.name) + '" data-mobile="' + escapeHtml(c.mobile) + '"' +
+                        ' data-channel="' + escapeHtml(c.channel) + '"' +
+                        ' data-status="' + escapeHtml(c.status) + '">' +
+                        '<div class="chat-avatar">' + escapeHtml(initials(c.name || c.mobile)) + channelBadge(c.channel) + '</div>' +
+                        '<div class="chat-conv-meta">' +
+                        '<div class="d-flex justify-content-between"><span class="name">' + escapeHtml(c.name || c.mobile) + '</span>' +
+                        '<span class="time">' + escapeHtml(listTime(c.last_message_at)) + '</span></div>' +
+                        '<div class="d-flex justify-content-between align-items-center">' +
+                        '<span class="preview">' + escapeHtml(c.last_message) + '</span>' +
+                        statusBadge +
+                        (c.unread_count > 0 ? '<span class="chat-unread">' + c.unread_count + '</span>' : '') +
+                        '</div>' +
+                        '<div class="chat-conv-flags">' + flags +
+                        '</div></div></button>';
+                });
+            }
+            $('#chatConvList').html(html);
+            $('#chatSidebarAllCount').text(scopeLabel(list.length));
+            $('#chatSidebarUnreadCount').text('Unread ' + unreadTotal);
+        }).fail(function () {
+            $('#chatConvList').html('<div class="p-3 text-danger text-center">Failed to load conversations</div>');
+            $('#chatSidebarAllCount').text(scopeLabel(0));
+            $('#chatSidebarUnreadCount').text('Unread 0');
+        });
+    };
+
+    Chat.clearConversationUnreadUi = function (contactId) {
+        var id = String(contactId || '');
+        if (!id) return;
+        var cleared = 0;
+        var $item = $('#chatConvList .chat-conv-item[data-contact-id="' + id + '"]');
+        if ($item.length) {
+            var $badge = $item.find('.chat-unread');
+            if ($badge.length) {
+                cleared = parseInt($badge.text(), 10) || 0;
+                $badge.remove();
+            }
+            $item.removeClass('has-unread');
+            $item.find('.chat-flag-new').remove();
+        }
+        if (Array.isArray(Chat.currentConversations)) {
+            Chat.currentConversations.forEach(function (c) {
+                if (String(c.contact_id) === id) {
+                    cleared = cleared || (parseInt(c.unread_count, 10) || 0);
+                    c.unread_count = 0;
+                }
+            });
+            Chat._convSig = '';
+        }
+        if (cleared > 0) {
+            var $total = $('#chatSidebarUnreadCount');
+            if ($total.length) {
+                var curText = String($total.text() || '');
+                var m = curText.match(/(\d+)/);
+                var cur = m ? (parseInt(m[1], 10) || 0) : 0;
+                $total.text('Unread ' + Math.max(0, cur - cleared));
+            }
+        }
+    };
+
+    Chat.markConversationRead = function (contactId) {
+        contactId = parseInt(contactId, 10) || 0;
+        if (contactId <= 0) return;
+        Chat.clearConversationUnreadUi(contactId);
+        APP.post(base() + '/chat/mark-read', { contact_id: contactId })
+            .done(function (res) {
+                var data = (res && res.data) || {};
+                if (window.APP && APP.LiveNotif && APP.LiveNotif.applyUnreadFromServer) {
+                    APP.LiveNotif.applyUnreadFromServer(data.unread_notifications);
+                } else if (window.APP && APP.LiveNotif && APP.LiveNotif.setBadge
+                    && typeof data.unread_notifications !== 'undefined') {
+                    APP.LiveNotif.setBadge(data.unread_notifications);
+                }
+            })
+            .fail(function () {});
+    };
+
+    Chat.loadMessages = function (contactId, silent) {
+        Chat.contactId = contactId;
+        var params = {};
+        if (silent && Chat.lastMessageId > 0) {
+            params.after_id = Chat.lastMessageId;
+        }
+        return APP.get(base() + '/chat/messages/' + contactId, params).done(function (res) {
+            var payload = (res && res.data && !Array.isArray(res.data)) ? res.data : res;
+            var msgs = extractMessages(res);
+            if (payload && payload.contact && !silent) {
+                Chat.contactChannel = (payload.contact.channel || (payload.conversation && payload.conversation.channel) || 'whatsapp').toLowerCase();
+                setHeader({
+                    name: payload.contact.name || payload.contact.mobile || payload.contact.external_id,
+                    mobile: payload.contact.mobile || payload.contact.external_id || ''
+                });
+                if (payload.contact.assigned_to !== undefined && $('#chatAssignSelect').length) {
+                    $('#chatAssignSelect').val(String(payload.contact.assigned_to || ''));
+                }
+            }
+            if (payload && payload.conversation) {
+                if (payload.conversation.channel) {
+                    Chat.contactChannel = String(payload.conversation.channel).toLowerCase();
+                }
+                syncConversationChrome(payload.conversation);
+            }
+            if (payload && typeof payload.within_24h !== 'undefined') {
+                setWindowState(!!payload.within_24h);
+            }
+            if (!silent) {
+                Chat.lastDayKey = '';
+                var html = msgs.map(renderWithDay).join('');
+                $('#chatMessages').html(html || '<div class="text-center text-muted py-4">No messages yet</div>');
+                Chat.lastMessageId = msgs.reduce(function (max, m) { return Math.max(max, parseInt(m.id, 10) || 0); }, 0);
+                renderNotes(payload && payload.notes ? payload.notes : []);
+                scrollBottom();
+                Chat.markConversationRead(contactId);
+            } else if (msgs.length) {
+                var hadInbound = false;
+                msgs.forEach(function (m) {
+                    var mid = parseInt(m.id, 10) || 0;
+                    if (mid > Chat.lastMessageId) {
+                        $('#chatMessages').append(renderWithDay(m));
+                        Chat.lastMessageId = mid;
+                        if ((m.direction || '') === 'inbound') {
+                            hadInbound = true;
+                        }
+                    }
+                });
+                scrollBottom();
+                if (hadInbound) {
+                    // Viewing this thread — mark read so list/bell counts drop without refresh
+                    Chat.markConversationRead(contactId);
+                    try {
+                        if (window.APP && APP.LiveNotif && APP.LiveNotif.playBeep) {
+                            APP.LiveNotif.playBeep();
+                        }
+                    } catch (e) { /* ignore */ }
+                    if (!document.hidden) {
+                        if (window.APP && APP.toast) {
+                            APP.toast('New message', 'info');
+                        }
+                    } else if (window.APP && APP.LiveNotif && APP.LiveNotif.flashTitle) {
+                        APP.LiveNotif.flashTitle('New chat message');
+                    }
+                }
+            }
+            if (payload && payload.status_updates) {
+                applyStatusUpdates(payload.status_updates);
+            }
+        }).fail(function (xhr) {
+            if (!silent) {
+                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to load messages';
+                APP.toast(msg, 'error');
+            }
+        });
+    };
+
+    Chat.openConversation = function ($item) {
+        var id = $item.attr('data-contact-id') || $item.data('contact-id');
+        if (!id) {
+            APP.toast('Invalid conversation', 'error');
+            return;
+        }
+        Chat.contactChannel = String($item.attr('data-channel') || $item.data('channel') || 'whatsapp').toLowerCase();
+        setHeader({
+            name: $item.attr('data-name') || $item.data('name'),
+            mobile: $item.attr('data-mobile') || $item.data('mobile')
+        });
+        $('.chat-conv-item').removeClass('active');
+        $item.addClass('active');
+        Chat.clearConversationUnreadUi(id);
+        Chat.lastMessageId = 0;
+        $('#chatNotesPanel').removeClass('open');
+        Chat.loadMessages(id, false);
+        Chat.startPoll();
+        $('#chatLayout').addClass('chat-thread-open');
+    };
+
+    Chat.closeThread = function () {
+        $('#chatLayout').removeClass('chat-thread-open');
+    };
+
+    Chat.beginRevise = function ($btn) {
+        var id = parseInt($btn.closest('.msg-row').attr('data-id'), 10) || 0;
+        var text = $btn.attr('data-text') || '';
+        var created = $btn.attr('data-created') || '';
+        var waId = $btn.attr('data-waid') || '';
+        if (!id || !text) return;
+        var withinEdit = waId !== '' && messageAgeMs(created) <= (15 * 60 * 1000);
+        if (!withinEdit && !Chat.within24h) {
+            APP.toast('WhatsApp only lets you edit a message for 15 minutes. The 24-hour window is closed, so send a template.', 'warning');
+            return;
+        }
+        Chat.editingId = id;
+        Chat.editMode = withinEdit ? 'edit' : 'resend';
+        $('#chatEditTitle').text(withinEdit ? 'Edit message' : 'Send again');
+        $('#chatEditHint').text(withinEdit
+            ? 'WhatsApp updates this same message.'
+            : 'This is older than 15 minutes, so it will be sent as a new message.');
+        $('#chatEditBar').removeClass('d-none');
+        setComposerLocked(false);
+        $('#chatInput').val(text).trigger('focus');
+    };
+
+    Chat.send = function () {
+        if (Chat.sending || !Chat.contactId) return;
+        if (Chat.editingId) {
+            var editText = ($('#chatInput').val() || '').trim();
+            if (!editText) return;
+            Chat.sending = true;
+            $('#btnChatSend').prop('disabled', true);
+            APP.post(base() + '/chat/messages/' + Chat.editingId + '/edit', { message: editText })
+                .done(function (res) {
+                    var data = (res && res.data) ? res.data : {};
+                    var msg = data.message || data;
+                    var mode = data.mode || Chat.editMode;
+                    if (mode === 'edited' && msg && msg.id) {
+                        var $row = $('.msg-row[data-id="' + msg.id + '"]');
+                        var html = renderMessage(msg);
+                        if ($row.length) $row.replaceWith(html);
+                    } else if (msg && msg.id) {
+                        $('#chatMessages').append(renderWithDay(msg));
+                        Chat.lastMessageId = Math.max(Chat.lastMessageId, parseInt(msg.id, 10) || 0);
+                        scrollBottom();
+                    }
+                    clearMessageEdit();
+                    APP.toast((res && res.message) || 'Sent', 'success');
+                })
+                .fail(function (xhr) {
+                    var msg = (xhr.responseJSON && (xhr.responseJSON.message || xhr.responseJSON.error)) || 'Could not update the message';
+                    APP.toast(msg, 'error');
+                })
+                .always(function () {
+                    Chat.sending = false;
+                    if (Chat.within24h || Chat.editingId) {
+                        $('#btnChatSend').prop('disabled', false);
+                    }
+                });
+            return;
+        }
+        if (!Chat.within24h) {
+            if ((Chat.contactChannel || 'whatsapp') === 'whatsapp') {
+                APP.toast('Outside 24h window — use Template', 'warning');
+            } else {
+                APP.toast('Outside 24h messaging window for this channel', 'warning');
+            }
+            return;
+        }
+        var text = ($('#chatInput').val() || '').trim();
+        var fileInput = document.getElementById('chatFile');
+        var hasFile = fileInput && fileInput.files && fileInput.files.length;
+        if (!text && !hasFile) return;
+
+        Chat.sending = true;
+        $('#btnChatSend').prop('disabled', true);
+
+        var fd = new FormData();
+        fd.append('contact_id', Chat.contactId);
+        fd.append('message', text);
+        fd.append('type', hasFile ? 'media' : 'text');
+        if (hasFile) {
+            fd.append('file', fileInput.files[0]);
+        }
+        fd.append(APP.csrfName || 'csrf_test_name', $('meta[name="csrf-token"]').attr('content'));
+
+        $.ajax({
+            url: base() + '/chat/send',
+            method: 'POST',
+            data: fd,
+            processData: false,
+            contentType: false,
+            dataType: 'json'
+        }).done(function (res) {
+            $('#chatInput').val('');
+            if (fileInput) fileInput.value = '';
+            var msg = res.data || res.message_row || res;
+            if (msg && msg.id) {
+                $('#chatMessages').find('> .text-muted.py-4').remove();
+                $('#chatMessages').append(renderWithDay(msg));
+                Chat.lastMessageId = Math.max(Chat.lastMessageId, parseInt(msg.id, 10) || 0);
+                scrollBottom();
+            } else {
+                Chat.loadMessages(Chat.contactId, false);
+            }
+            Chat._convSig = '';
+            Chat.loadConversations($('#chatSearch').val());
+        }).fail(function (xhr) {
+            var msg = (xhr.responseJSON && (xhr.responseJSON.message || xhr.responseJSON.error)) || 'Failed to send';
+            APP.toast(msg, 'error');
+        }).always(function () {
+            Chat.sending = false;
+            if (Chat.within24h) {
+                $('#btnChatSend').prop('disabled', false);
+            }
+        });
+    };
+
+    Chat.addNote = function () {
+        if (!Chat.contactId) return;
+        var note = ($('#chatNoteInput').val() || '').trim();
+        if (!note) return;
+        APP.post(base() + '/chat/note', {
+            contact_id: Chat.contactId,
+            note: note
+        }).done(function (res) {
+            $('#chatNoteInput').val('');
+            var saved = (res && res.data) ? res.data : null;
+            if (saved) {
+                var cur = [];
+                $('#chatNotesList .note-item').each(function () {
+                    if (!$(this).hasClass('text-muted')) {
+                        /* keep existing rendered — reload simpler */
+                    }
+                });
+                Chat.loadMessages(Chat.contactId, false);
+                $('#chatNotesPanel').addClass('open');
+            }
+            APP.toast('Note added');
+        }).fail(function (xhr) {
+            APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Failed to add note', 'error');
+        });
+    };
+
+    Chat.assign = function (userId) {
+        if (!Chat.contactId) return;
+        APP.post(base() + '/chat/assign', {
+            contact_id: Chat.contactId,
+            assigned_to: userId || ''
+        }).done(function () {
+            APP.toast(userId ? 'Assigned' : 'Unassigned');
+        }).fail(function (xhr) {
+            APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Assign failed', 'error');
+        });
+    };
+
+    Chat.setStatus = function (status) {
+        if (!Chat.contactId) return;
+        if (status === 'closed') {
+            status = 'resolved';
+        }
+        APP.post(base() + '/chat/status', {
+            contact_id: Chat.contactId,
+            status: status,
+            channel: Chat.contactChannel || Chat.channel || 'whatsapp'
+        }).done(function () {
+            Chat.conversationStatus = status;
+            syncConversationChrome({ status: status, id: Chat.conversationId });
+            Chat._convSig = '';
+            Chat.loadConversations($('#chatSearch').val());
+            APP.toast(status === 'resolved' ? 'Conversation resolved' : 'Conversation updated');
+            if (status === 'resolved' && Chat.inboxStatus === 'open') {
+                Chat.closeThread();
+            }
+        }).fail(function (xhr) {
+            APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Status update failed', 'error');
+        });
+    };
+
+    Chat.startPoll = function () {
+        Chat.stopPoll();
+        var tick = function () {
+            if (Chat.contactId) {
+                Chat.loadMessages(Chat.contactId, true);
+            }
+            Chat.loadConversations($('#chatSearch').val());
+        };
+        var ms = document.hidden ? Chat.pollMsHidden : Chat.pollMs;
+        Chat.pollTimer = setInterval(tick, ms);
+    };
+
+    Chat.stopPoll = function () {
+        if (Chat.pollTimer) {
+            clearInterval(Chat.pollTimer);
+            Chat.pollTimer = null;
+        }
+    };
+
+    Chat.insertEmoji = function (emoji) {
+        if (!Chat.within24h) return;
+        var $input = $('#chatInput');
+        var el = $input[0];
+        if (!el) return;
+        var start = el.selectionStart || 0;
+        var end = el.selectionEnd || 0;
+        var val = $input.val() || '';
+        $input.val(val.slice(0, start) + emoji + val.slice(end));
+        el.focus();
+        el.selectionStart = el.selectionEnd = start + emoji.length;
+    };
+
+    $(function () {
+        if (!$('#chatLayout').length) return;
+
+        Chat.pageTitle = document.title;
+        Chat.channel = ($('#chatLayout').attr('data-channel') || 'whatsapp').toLowerCase();
+        Chat.currentUserId = $('#chatLayout').attr('data-current-user-id') || null;
+        Chat.loadConversations();
+        Chat.startPoll();
+
+        document.addEventListener('visibilitychange', function () {
+            Chat.startPoll();
+            if (!document.hidden) {
+                if (Chat.contactId) {
+                    Chat.loadMessages(Chat.contactId, true);
+                }
+                Chat.loadConversations($('#chatSearch').val());
+            }
+        });
+
+        // Open contact from ?contact_id= in URL (notification deep-link)
+        try {
+            var params = new URLSearchParams(window.location.search || '');
+            var deepId = params.get('contact_id');
+            var deepChannel = params.get('channel');
+            if (deepChannel) {
+                Chat.channel = String(deepChannel).toLowerCase();
+            }
+            if (deepId) {
+                setTimeout(function () {
+                    var $item = $('.chat-conv-item[data-contact-id="' + deepId + '"]');
+                    if ($item.length) {
+                        Chat.openConversation($item);
+                    } else {
+                        Chat.loadMessages(parseInt(deepId, 10), false);
+                    }
+                }, 400);
+            }
+        } catch (e) { /* ignore */ }
+
+        $(document).on('click', '.chat-conv-item', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            Chat.openConversation($(this));
+        });
+
+        $('.chat-status-filter').on('click', function () {
+            $('.chat-status-filter').removeClass('active btn-wa').addClass('btn-outline-secondary');
+            $(this).addClass('active btn-wa').removeClass('btn-outline-secondary');
+            Chat.inboxStatus = $(this).data('status') || 'open';
+            Chat._convSig = '';
+            Chat.loadConversations($('#chatSearch').val());
+        });
+
+        $('.chat-extra-filter').on('click', function () {
+            var $btn = $(this);
+            var filter = String($btn.data('filter') || '');
+            var isActive = $btn.hasClass('active');
+            if (filter === 'unread') {
+                Chat.unreadOnly = !isActive;
+            } else if (filter === 'mine') {
+                Chat.assigneeFilter = isActive ? 'all' : 'mine';
+            } else if (filter === 'unassigned') {
+                Chat.assigneeFilter = isActive ? 'all' : 'unassigned';
+            }
+
+            if (filter !== 'unread') {
+                $('.chat-extra-filter[data-filter="mine"], .chat-extra-filter[data-filter="unassigned"]').removeClass('active btn-wa').addClass('btn-outline-secondary');
+                if (Chat.assigneeFilter !== 'all') {
+                    $('.chat-extra-filter[data-filter="' + Chat.assigneeFilter + '"]').addClass('active btn-wa').removeClass('btn-outline-secondary');
+                }
+            }
+
+            if (filter === 'unread') {
+                if (Chat.unreadOnly) {
+                    $btn.addClass('active btn-wa').removeClass('btn-outline-secondary');
+                } else {
+                    $btn.removeClass('active btn-wa').addClass('btn-outline-secondary');
+                }
+                $('#chatUnreadToggle').prop('checked', Chat.unreadOnly);
+            }
+
+            Chat._convSig = '';
+            Chat.loadConversations($('#chatSearch').val());
+        });
+
+        $('#btnChatBack').on('click', function () {
+            Chat.closeThread();
+        });
+        $(document).on('click', '.chat-scope-dropdown .dropdown-item', function () {
+            var scope = String($(this).data('scope') || 'all');
+            Chat.scopeFilter = scope;
+            $('.chat-scope-dropdown .dropdown-item').removeClass('active');
+            $(this).addClass('active');
+
+            var workflow = ['open', 'pending', 'chatbot', 'intervened', 'resolved', 'closed'];
+            var composite = ['active', 'expired', 'frt_exceeded', 'ctwa', 'unassigned', 'assigned', 'unread', 'all'];
+            if (workflow.indexOf(scope) !== -1) {
+                Chat.inboxStatus = scope === 'closed' ? 'resolved' : scope;
+            } else if (composite.indexOf(scope) !== -1) {
+                Chat.inboxStatus = scope === 'all' ? 'all' : scope;
+            }
+
+            Chat.unreadOnly = scope === 'unread';
+            if (scope === 'unassigned') {
+                Chat.assigneeFilter = 'unassigned';
+            } else if (scope === 'assigned') {
+                Chat.assigneeFilter = 'all';
+            } else if (scope !== 'mine') {
+                Chat.assigneeFilter = 'all';
+            }
+
+            $('.chat-status-filter').removeClass('active btn-wa').addClass('btn-outline-secondary');
+            var chipStatus = workflow.indexOf(Chat.inboxStatus) !== -1 ? Chat.inboxStatus : 'all';
+            $('.chat-status-filter[data-status="' + chipStatus + '"]').addClass('active btn-wa').removeClass('btn-outline-secondary');
+            $('.chat-extra-filter').removeClass('active btn-wa').addClass('btn-outline-secondary');
+            if (Chat.unreadOnly) {
+                $('.chat-extra-filter[data-filter="unread"]').addClass('active btn-wa').removeClass('btn-outline-secondary');
+            }
+            if (Chat.assigneeFilter === 'unassigned') {
+                $('.chat-extra-filter[data-filter="unassigned"]').addClass('active btn-wa').removeClass('btn-outline-secondary');
+            }
+            $('#chatUnreadToggle').prop('checked', Chat.unreadOnly);
+            Chat._convSig = '';
+            Chat.loadConversations($('#chatSearch').val());
+        });
+        $('#chatUnreadToggle').on('change', function () {
+            Chat.unreadOnly = !!this.checked;
+            Chat.scopeFilter = Chat.unreadOnly ? 'unread' : 'all';
+            $('.chat-scope-dropdown .dropdown-item').removeClass('active');
+            $('.chat-scope-dropdown .dropdown-item[data-scope="' + Chat.scopeFilter + '"]').addClass('active');
+            $('.chat-extra-filter[data-filter="unread"]').toggleClass('active btn-wa', Chat.unreadOnly).toggleClass('btn-outline-secondary', !Chat.unreadOnly);
+            Chat._convSig = '';
+            Chat.loadConversations($('#chatSearch').val());
+        });
+        $('#btnInboxFilters').on('click', function () {
+            $('#chatFilterStatusSelect').val(Chat.inboxStatus || 'open');
+            $('#chatFilterUnreadSelect').val(Chat.unreadOnly ? 'unread' : '');
+            $('#chatFilterAssigneeSelect').val(Chat.assigneeFilter || 'all');
+            $('#chatOldChatsFirst').prop('checked', !!Chat.oldChatsFirst);
+            bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('chatFilterCanvas')).show();
+        });
+        $('#btnOldChatsToggle').on('click', function () {
+            Chat.oldChatsFirst = !Chat.oldChatsFirst;
+            $(this).toggleClass('is-active', Chat.oldChatsFirst);
+            $('#chatOldChatsFirst').prop('checked', Chat.oldChatsFirst);
+            Chat._convSig = '';
+            Chat.loadConversations($('#chatSearch').val());
+        });
+        $('#btnApplyChatFilters').on('click', function () {
+            Chat.inboxStatus = $('#chatFilterStatusSelect').val() || 'open';
+            Chat.unreadOnly = $('#chatFilterUnreadSelect').val() === 'unread';
+            Chat.assigneeFilter = $('#chatFilterAssigneeSelect').val() || 'all';
+            Chat.oldChatsFirst = $('#chatOldChatsFirst').is(':checked');
+            Chat.extraFilters = {
+                tag_id: $('#chatFilterTagSelect').val() || '',
+                attr_key: $('#chatFilterAttrKey').val() || '',
+                attr_op: $('#chatFilterAttrOp').val() || '',
+                attr_value: $('#chatFilterAttrValue').val() || ''
+            };
+            Chat.scopeFilter = Chat.unreadOnly ? 'unread' : (Chat.assigneeFilter === 'unassigned' ? 'unassigned' : (Chat.inboxStatus === 'all' ? 'all' : Chat.inboxStatus));
+
+            $('.chat-status-filter').removeClass('active btn-wa').addClass('btn-outline-secondary');
+            $('.chat-status-filter[data-status="' + Chat.inboxStatus + '"]').addClass('active btn-wa').removeClass('btn-outline-secondary');
+
+            $('.chat-extra-filter').removeClass('active btn-wa').addClass('btn-outline-secondary');
+            if (Chat.unreadOnly) {
+                $('.chat-extra-filter[data-filter="unread"]').addClass('active btn-wa').removeClass('btn-outline-secondary');
+            }
+            if (Chat.assigneeFilter === 'mine' || Chat.assigneeFilter === 'unassigned') {
+                $('.chat-extra-filter[data-filter="' + Chat.assigneeFilter + '"]').addClass('active btn-wa').removeClass('btn-outline-secondary');
+            }
+
+            $('#chatUnreadToggle').prop('checked', Chat.unreadOnly);
+            $('.chat-scope-dropdown .dropdown-item').removeClass('active');
+            $('.chat-scope-dropdown .dropdown-item[data-scope="' + Chat.scopeFilter + '"]').addClass('active');
+            $('#btnOldChatsToggle').toggleClass('is-active', Chat.oldChatsFirst);
+            Chat._convSig = '';
+            Chat.loadConversations($('#chatSearch').val());
+            bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('chatFilterCanvas')).hide();
+        });
+        $('#btnExportReport').on('click', function () {
+            var rows = [['Name', 'Phone', 'Status', 'Unread', 'Last message', 'Last activity']].concat(
+                Chat.currentConversations.map(function (c) {
+                    return [c.name || '', c.mobile || '', c.status || '', c.unread_count || 0, c.last_message || '', c.last_message_at || ''];
+                })
+            );
+            exportRows('chat-report.csv', rows);
+        });
+        $('#btnExportFormMessages').on('click', function () {
+            var rows = [['Name', 'Phone', 'Preview']].concat(
+                Chat.currentConversations.map(function (c) {
+                    return [c.name || '', c.mobile || '', c.last_message || ''];
+                })
+            );
+            exportRows('chat-form-messages.csv', rows);
+        });
+        $('#chatSearch').on('input', function () {
+            clearTimeout(Chat._searchT);
+            var q = $(this).val();
+            Chat._searchT = setTimeout(function () {
+                Chat._convSig = '';
+                Chat.loadConversations(q);
+            }, 300);
+        });
+
+        $('#btnChatSend').on('click', function () { Chat.send(); });
+        $(document).on('click', '.msg-edit', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            Chat.beginRevise($(this));
+        });
+        $('#btnCancelEdit').on('click', function () { clearMessageEdit(); });
+        $('#chatInput').on('keydown', function (e) {
+            if (window.ChatQuickReplies && ChatQuickReplies.handleKey(e)) {
+                return;
+            }
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                Chat.send();
+            }
+        });
+
+        $('#btnEmoji').on('click', function () {
+            if (!Chat.within24h) return;
+            $('#emojiPicker').toggleClass('open');
+        });
+        $(document).on('click', '#emojiPicker button', function () {
+            Chat.insertEmoji($(this).text());
+        });
+        $(document).on('click', function (e) {
+            if (!$(e.target).closest('#btnEmoji, #emojiPicker').length) {
+                $('#emojiPicker').removeClass('open');
+            }
+        });
+
+        $('#btnAttach').on('click', function () {
+            if (!Chat.within24h) {
+                APP.toast('Outside 24h window — use Template', 'warning');
+                return;
+            }
+            $('#chatFile').trigger('click');
+        });
+        $('#chatFile').on('change', function () {
+            if (this.files && this.files.length) {
+                APP.toast('File ready: ' + this.files[0].name, 'info');
+            }
+        });
+
+        $('#btnChatNotes').on('click', function () {
+            $('#chatNotesPanel').toggleClass('open');
+        });
+        $('#btnAddChatNote').on('click', function () { Chat.addNote(); });
+        $('#chatNoteInput').on('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                Chat.addNote();
+            }
+        });
+
+        $('#chatAssignSelect').on('change', function () {
+            Chat.assign($(this).val());
+        });
+        $('#btnChatClose').on('click', function () { Chat.setStatus('resolved'); });
+        $('#btnChatReopen').on('click', function () { Chat.setStatus('open'); });
+        $('#chatStatusSelect').on('change', function () {
+            var status = String($(this).val() || '').trim();
+            if (status) {
+                Chat.setStatus(status);
+            }
+        });
+
+        $('#btnTemplateReply, #btnComposerTemplate').on('click', function () {
+            if (window.APP && typeof APP.showModal === 'function') {
+                APP.showModal('#templateReplyModal');
+            } else {
+                var el = document.getElementById('templateReplyModal');
+                if (el && window.bootstrap) {
+                    bootstrap.Modal.getOrCreateInstance(el).show();
+                }
+            }
+            Chat.loadTemplateVars($('#templateSelect').val());
+        });
+        $('#templateSelect').on('change', function () {
+            Chat.loadTemplateVars($(this).val());
+        });
+        $('#templateHeaderMediaFile').on('change', function () {
+            Chat._templateHeader.mediaId = '';
+            Chat._templateHeader.mediaUrl = '';
+            Chat._templateHeader.ready = false;
+            var file = this.files && this.files[0];
+            if (!file) {
+                $('#templateHeaderMediaStatus').addClass('d-none').text('');
+                return;
+            }
+            $('#templateHeaderMediaStatus')
+                .removeClass('d-none text-success text-danger')
+                .addClass('text-muted')
+                .html('<i class="fas fa-spinner fa-spin me-1"></i>Uploading ' + escapeHtml(file.name) + '…');
+            Chat._templateHeader.uploading = true;
+            $('#btnSendTemplate').prop('disabled', true);
+
+            var fd = new FormData();
+            fd.append('file', file);
+            fd.append(APP.csrfName || 'csrf_test_name', $('meta[name="csrf-token"]').attr('content'));
+            $.ajax({
+                url: base() + '/templates/header-media',
+                method: 'POST',
+                data: fd,
+                processData: false,
+                contentType: false,
+                dataType: 'json'
+            }).done(function (res) {
+                if (res && res.success === false) {
+                    Chat._templateHeader.ready = false;
+                    $('#templateHeaderMediaStatus')
+                        .removeClass('text-muted text-success')
+                        .addClass('text-danger')
+                        .html('<i class="fas fa-times-circle me-1"></i>' + escapeHtml(res.message || 'Header upload failed'));
+                    APP.toast(res.message || 'Header upload failed', 'error');
+                    return;
+                }
+                var data = (res && res.data) ? res.data : res;
+                var mediaId = String((data && data.wa_media_id) || '').trim();
+                var mediaUrl = String((data && (data.preview_url || data.url || data.source)) || '').trim();
+                Chat._templateHeader.mediaId = mediaId;
+                Chat._templateHeader.mediaUrl = mediaUrl;
+                Chat._templateHeader.ready = !!(mediaId || mediaUrl);
+
+                if (!Chat._templateHeader.ready) {
+                    $('#templateHeaderMediaStatus')
+                        .removeClass('text-muted text-success')
+                        .addClass('text-danger')
+                        .html('<i class="fas fa-times-circle me-1"></i>Upload finished but no media id/url returned');
+                    APP.toast('Header upload incomplete — try another image', 'error');
+                    return;
+                }
+
+                $('#templateHeaderMediaStatus')
+                    .removeClass('d-none text-muted text-danger')
+                    .addClass('text-success')
+                    .html('<i class="fas fa-check-circle me-1"></i>Uploaded ✓ ' + escapeHtml(file.name || 'header media')
+                        + (mediaId ? ' (media ready)' : ''));
+                APP.toast('Header media uploaded — you can Send now', 'success');
+            }).fail(function (xhr) {
+                Chat._templateHeader.mediaId = '';
+                Chat._templateHeader.mediaUrl = '';
+                Chat._templateHeader.ready = false;
+                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Header upload failed';
+                $('#templateHeaderMediaStatus')
+                    .removeClass('d-none text-muted text-success')
+                    .addClass('text-danger')
+                    .html('<i class="fas fa-times-circle me-1"></i>' + escapeHtml(msg));
+                APP.toast(msg, 'error');
+            }).always(function () {
+                Chat._templateHeader.uploading = false;
+                $('#btnSendTemplate').prop('disabled', false);
+            });
+        });
+        $('#btnSendTemplate').on('click', function () {
+            var id = $('#templateSelect').val();
+            if (!id) {
+                APP.toast('Select a template', 'error');
+                return;
+            }
+            if (Chat._templateHeader.uploading) {
+                APP.toast('Upload still running — wait for Uploaded ✓', 'warning');
+                return;
+            }
+            if (Chat._templateHeader.needed && !Chat._templateHeader.ready
+                && !(document.getElementById('templateHeaderMediaFile')
+                    && document.getElementById('templateHeaderMediaFile').files
+                    && document.getElementById('templateHeaderMediaFile').files.length)) {
+                APP.toast('Pehle header image upload kara — Uploaded ✓ dikhe nantar Send', 'error');
+                return;
+            }
+            Chat.sendTemplate(id, collectTemplateVariables());
+        });
+
+        var preselect = $('#chatLayout').data('contact-id');
+        Chat.currentUserId = parseInt($('#chatLayout').data('current-user-id'), 10) || null;
+        if (preselect) {
+            Chat.contactId = preselect;
+            setHeader({
+                name: $('#chatLayout').data('contact-name'),
+                mobile: $('#chatLayout').data('contact-mobile')
+            });
+            Chat.loadMessages(preselect, false);
+        }
+    });
+
+    window.Chat = Chat;
+})(window, jQuery);

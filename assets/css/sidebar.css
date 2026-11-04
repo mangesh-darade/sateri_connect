@@ -1,0 +1,694 @@
+/**
+ * ElintOm CRM — Stack Rail Sidebar (new layout)
+ * Linear / GitHub style: strip user, icon column, inset submenu panel
+ */
+:root {
+    --sidebar-w: 256px;
+    --sidebar-collapsed-w: 72px;
+    --elint-primary: #e11d48;
+    --elint-primary-soft: #fff1f2;
+    --elint-border: #E5E7EB;
+    --elint-text: #1a1228;
+    --elint-muted: #6b7280;
+    --elint-heading: #94A3B8;
+    --elint-danger: #EF4444;
+    --elint-hover: #F3F4F6;
+    --elint-sidebar-font: 'DM Sans', 'Onest', system-ui, -apple-system, sans-serif;
+}
+
+.main-sidebar.elint-sidebar,
+.main-sidebar { width: var(--sidebar-w) !important; }
+
+.main-sidebar.elint-sidebar {
+    background: #fff !important;
+    border-right: 1px solid var(--elint-border) !important;
+    box-shadow: none !important;
+    font-family: var(--elint-sidebar-font);
+}
+
+/*
+ * Keep the rail inside the viewport: brand/user/search/settings stay pinned;
+ * only the menu list scrolls. Fixes cut-off items (e.g. Setup Workspace).
+ */
+body.layout-fixed .main-sidebar.elint-sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    height: auto !important;
+    max-height: 100vh !important;
+    max-height: 100dvh !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+}
+body.layout-fixed .main-sidebar.elint-sidebar > .elint-menu-search {
+    flex: 0 0 auto !important;
+    height: var(--header-h, 58px);
+    min-height: var(--header-h, 58px);
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center;
+    padding: 0 12px !important;
+    border-bottom: 1px solid var(--elint-border);
+    background: #fff;
+}
+body.layout-fixed .main-sidebar.elint-sidebar > .sidebar {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    padding-bottom: 0 !important;
+}
+.elint-sidebar .elint-menu-search,
+.elint-sidebar .sidebar-footer-links {
+    flex: 0 0 auto !important;
+}
+
+/* Desktop only — never reserve sidebar gutter on tablet/phone (was causing mobile half-width flash) */
+@media (min-width: 992px) {
+    /* Open: body offset matches full sidebar */
+    html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .content-wrapper,
+    html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-footer,
+    html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-header {
+        margin-left: var(--sidebar-w) !important;
+        transition: margin-left .3s ease;
+    }
+
+    /* Collapsed: body must shrink with the rail (wins over AdminLTE + older copies) */
+    html body.sidebar-mini.sidebar-collapse .main-sidebar {
+        width: var(--sidebar-collapsed-w) !important;
+    }
+    html body.sidebar-mini.sidebar-collapse .content-wrapper,
+    html body.sidebar-mini.sidebar-collapse .main-footer,
+    html body.sidebar-mini.sidebar-collapse .main-header {
+        margin-left: var(--sidebar-collapsed-w) !important;
+        transition: margin-left .3s ease;
+    }
+}
+
+/* Brand — shop identity only (user lives in topbar) */
+.elint-brand.brand-link {
+    height: var(--header-h, 58px) !important;
+    min-height: var(--header-h, 58px) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 11px;
+    padding: 0 14px !important;
+    border-bottom: 1px solid var(--elint-border) !important;
+    background:
+        linear-gradient(180deg, #faf8ff 0%, #ffffff 72%) !important;
+}
+.elint-brand.elint-workspace {
+    text-decoration: none !important;
+    color: inherit !important;
+}
+.elint-brand-mark {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    background: linear-gradient(145deg, #e11d48 0%, #9f1239 100%);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    flex: 0 0 auto;
+    box-shadow: 0 4px 10px rgba(91, 47, 214, 0.22);
+    letter-spacing: -0.02em;
+}
+.elint-brand-copy {
+    min-width: 0;
+    flex: 1 1 auto;
+    line-height: 1.15;
+}
+.elint-brand .brand-text {
+    font-family: var(--elint-sidebar-font) !important;
+    font-weight: 700 !important;
+    font-size: 14.5px !important;
+    color: var(--elint-text) !important;
+    margin: 0 !important;
+    opacity: 1 !important;
+    display: block !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: -0.02em;
+    text-transform: none !important;
+}
+.elint-brand .brand-sub {
+    font-size: 10.5px !important;
+    font-weight: 600 !important;
+    color: var(--elint-muted) !important;
+    margin: 2px 0 0 !important;
+    display: block !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-transform: uppercase !important;
+    letter-spacing: 0.06em !important;
+}
+.elint-brand.has-logo-only {
+    justify-content: flex-start !important;
+}
+.elint-brand.has-logo-only .brand-logo-img {
+    max-height: 30px !important;
+    height: 30px !important;
+    width: auto !important;
+    flex: 0 0 auto;
+}
+
+/* Legacy user strip removed */
+.elint-user-strip { display: none !important; }
+.elint-user-chip {
+    flex: 0 0 auto;
+    font-size: 10px;
+    font-weight: 700;
+    color: #065F46;
+    background: var(--elint-primary-soft);
+    border-radius: 6px;
+    padding: 3px 6px;
+}
+
+/* Hide old profile card if present */
+.elint-sidebar .elint-profile-card,
+.elint-sidebar .user-panel { display: none !important; }
+
+/* Search */
+.elint-menu-search {
+    position: relative;
+    margin: 10px 12px 6px;
+}
+.elint-menu-search-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 14px !important;
+    height: 14px !important;
+    color: var(--elint-heading);
+    pointer-events: none;
+}
+.elint-menu-search-input {
+    width: 100%;
+    height: 34px;
+    border: 1px solid var(--elint-border);
+    border-radius: 8px;
+    background: #fff;
+    padding: 0 10px 0 32px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--elint-text);
+    outline: none;
+}
+.elint-menu-search-input:focus {
+    border-color: #6EE7B7;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
+}
+
+/* Scroll — always show a thin thumb so users know more items exist */
+.elint-sidebar .sidebar-nav-scroll {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding: 4px 0 10px;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: #c5cdd6 transparent;
+}
+.elint-sidebar .sidebar-nav-scroll::-webkit-scrollbar { width: 6px; }
+.elint-sidebar .sidebar-nav-scroll::-webkit-scrollbar-track { background: transparent; }
+.elint-sidebar .sidebar-nav-scroll::-webkit-scrollbar-thumb {
+    background: #c5cdd6;
+    border-radius: 99px;
+}
+.elint-sidebar .sidebar-nav-scroll:hover::-webkit-scrollbar-thumb { background: #9aa5b1; }
+
+/* Sections */
+.elint-sidebar .app-sidebar-group-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.6px;
+    color: var(--elint-heading);
+    margin: 14px 0 6px;
+    padding: 0 12px;
+    text-transform: uppercase;
+}
+.elint-sidebar .app-sidebar-list { margin: 0; padding: 0; }
+
+/* Parent row — icon column layout */
+.elint-sidebar .nav-sidebar > .nav-item > .nav-link,
+.elint-sidebar .sidebar-footer-links .nav-link {
+    height: 40px !important;
+    min-height: 40px !important;
+    margin: 0 !important;
+    padding: 0 12px !important;
+    border-radius: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    color: var(--elint-text) !important;
+    display: grid !important;
+    grid-template-columns: 28px minmax(0, 1fr) 18px;
+    align-items: center !important;
+    column-gap: 10px !important;
+    box-shadow: none !important;
+    transition: background .18s ease, color .18s ease !important;
+}
+.elint-sidebar .nav-sidebar > .nav-item > .nav-link:not(.app-sidebar-toggle) {
+    grid-template-columns: 28px minmax(0, 1fr);
+}
+.elint-sidebar .nav-sidebar > .nav-item > .nav-link p,
+.elint-sidebar .sidebar-footer-links .nav-link p {
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    font-size: 13.5px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-align: left !important;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.elint-sidebar .nav-sidebar > .nav-item > .nav-link .nav-icon,
+.elint-sidebar .sidebar-footer-links .nav-link .nav-icon {
+    width: 28px !important;
+    height: 28px !important;
+    margin: 0 !important;
+    border-radius: 7px;
+    color: #6B7280 !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+}
+.elint-sidebar .nav-sidebar > .nav-item > .nav-link .nav-icon svg,
+.elint-sidebar .sidebar-footer-links .nav-link .nav-icon svg {
+    width: 18px;
+    height: 18px;
+    stroke-width: 1.75;
+}
+
+.elint-sidebar .nav-sidebar > .nav-item > .nav-link:hover {
+    background: var(--elint-hover) !important;
+}
+.elint-sidebar .nav-sidebar > .nav-item > .nav-link:focus-visible,
+.elint-sidebar .sidebar-footer-links .nav-link:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.16) !important;
+}
+
+/* Parent active */
+.elint-sidebar .nav-sidebar > .nav-item > .nav-link.active,
+.elint-sidebar .nav-sidebar > .nav-item > .nav-link.active:hover,
+.elint-sidebar .sidebar-footer-links .nav-link.active {
+    background: #F3F4F6 !important;
+    color: var(--elint-text) !important;
+    box-shadow: none !important;
+}
+.elint-sidebar .nav-sidebar > .nav-item > .nav-link.active .nav-icon {
+    background: var(--elint-primary-soft);
+    color: var(--elint-primary) !important;
+}
+.elint-sidebar .nav-sidebar > .nav-item > .nav-link.active .nav-icon svg {
+    stroke: var(--elint-primary) !important;
+}
+
+.elint-menu-badge {
+    margin-left: auto;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--elint-danger);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.elint-sidebar .sidebar-link-arrow {
+    width: 14px !important;
+    height: 14px !important;
+    color: #9CA3AF !important;
+    justify-self: end;
+    transition: transform .2s ease;
+}
+.elint-sidebar .sidebar-link-arrow svg { width: 14px; height: 14px; }
+.elint-sidebar .app-sidebar-item.menu-open > .nav-link .sidebar-link-arrow {
+    transform: rotate(180deg);
+    color: var(--elint-primary) !important;
+}
+
+/* Submenu = inset panel, left-aligned content */
+.elint-sidebar .app-sidebar-tree {
+    display: none;
+    list-style: none;
+    position: relative;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-left: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    text-align: left !important;
+    float: none !important;
+}
+.elint-sidebar .app-sidebar-item.menu-open > .app-sidebar-tree {
+    display: block !important;
+}
+.elint-sidebar .app-sidebar-tree > .nav-item {
+    display: block !important;
+    float: none !important;
+    width: 100%;
+}
+.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link {
+    width: 100% !important;
+    min-height: 38px !important;
+    margin: 0 !important;
+    padding: 8px 12px 8px 28px !important;
+    border-radius: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    color: inherit !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 9px !important;
+    text-align: left !important;
+    float: none !important;
+    box-shadow: none !important;
+    transition: padding-left .18s ease !important;
+}
+.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link p {
+    flex: 1 1 auto !important;
+    margin: 0 !important;
+    width: auto !important;
+    float: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 1px;
+    text-align: left !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    line-height: 1.2 !important;
+    color: inherit !important;
+}
+.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link .nav-icon,
+.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link .nav-icon svg {
+    width: 14px !important;
+    height: 14px !important;
+    min-width: 14px;
+    margin: 0 !important;
+    float: none !important;
+    color: inherit !important;
+    stroke: currentColor !important;
+}
+.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link:hover,
+.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link.active {
+    padding-left: 32px !important;
+}
+.elint-sidebar .flyout-hint {
+    display: block;
+    font-size: 10px;
+    font-weight: 500;
+    margin-top: 0;
+    opacity: .85;
+    color: inherit;
+}
+
+/* Footer */
+.elint-sidebar .sidebar-footer-links {
+    border-top: 1px solid var(--elint-border);
+    background: #fff;
+    padding: 8px 6px;
+}
+.elint-sidebar .sidebar-footer-links .nav-link {
+    grid-template-columns: 28px minmax(0, 1fr) !important;
+}
+.app-sidebar-flyout { display: none !important; }
+
+/* Collapse */
+body.sidebar-mini.sidebar-collapse .elint-sidebar .elint-brand-copy,
+body.sidebar-mini.sidebar-collapse .elint-sidebar .elint-menu-search,
+body.sidebar-mini.sidebar-collapse .elint-sidebar .app-sidebar-group-title,
+body.sidebar-mini.sidebar-collapse .elint-sidebar .nav-link p,
+body.sidebar-mini.sidebar-collapse .elint-sidebar .sidebar-link-arrow,
+body.sidebar-mini.sidebar-collapse .elint-sidebar .app-sidebar-tree,
+body.sidebar-mini.sidebar-collapse .elint-sidebar .elint-menu-badge {
+    display: none !important;
+}
+body.sidebar-mini.sidebar-collapse .elint-sidebar .elint-brand.elint-workspace {
+    justify-content: center !important;
+    padding: 0 !important;
+}
+body.sidebar-mini.sidebar-collapse .elint-sidebar .nav-sidebar > .nav-item > .nav-link,
+body.sidebar-mini.sidebar-collapse .elint-sidebar .sidebar-footer-links .nav-link {
+    grid-template-columns: 1fr !important;
+    justify-items: center;
+    padding: 0 !important;
+    width: 40px;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+
+.app-sidebar-item.is-filtered-out,
+.app-sidebar-group-title.is-filtered-out { display: none !important; }
+
+.elint-sidebar .nav-sidebar .nav-treeview > .nav-item > .nav-link > p {
+    display: block !important;
+    width: auto !important;
+    text-align: left !important;
+}
+
+@media (max-width: 991.98px) {
+    :root { --sidebar-w: 240px; }
+
+    /*
+     * Overlay sidebar on tablet/phone — match desktop selector specificity
+     * so margin-left: 256px never wins and flashes a half-width layout.
+     */
+    html body.sidebar-mini .content-wrapper,
+    html body.sidebar-mini .main-footer,
+    html body.sidebar-mini .main-header,
+    html body.sidebar-mini.sidebar-collapse .content-wrapper,
+    html body.sidebar-mini.sidebar-collapse .main-footer,
+    html body.sidebar-mini.sidebar-collapse .main-header,
+    html body.sidebar-mini:not(.sidebar-collapse) .content-wrapper,
+    html body.sidebar-mini:not(.sidebar-collapse) .main-footer,
+    html body.sidebar-mini:not(.sidebar-collapse) .main-header,
+    html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .content-wrapper,
+    html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-footer,
+    html body.sidebar-mini:not(.sidebar-collapse):not(.sidebar-mini-md):not(.sidebar-mini-xs):not(.layout-top-nav) .main-header,
+    html body.sidebar-open .content-wrapper,
+    html body.sidebar-open .main-footer,
+    html body.sidebar-open .main-header {
+        margin-left: 0 !important;
+        transition: none !important;
+    }
+
+    html body.sidebar-mini .main-sidebar,
+    html body.sidebar-mini.sidebar-collapse .main-sidebar {
+        width: var(--sidebar-w) !important;
+    }
+}
+
+/* ==========================================================================
+   Menu polish: submenus, active states and the bottom "Settings" group
+   (loaded last on purpose, so it refines the rules above)
+   ========================================================================== */
+
+/* Submenu panel: a thin guide line with rounded, evenly spaced items */
+.elint-sidebar .app-sidebar-item.menu-open > .app-sidebar-tree {
+    margin: 2px 10px 6px 24px !important;
+    padding: 2px 0 2px 8px !important;
+    border-left: 1px solid var(--elint-border) !important;
+    animation: elint-tree-in .18s ease-out;
+}
+@keyframes elint-tree-in {
+    from { opacity: 0; transform: translateY(-3px); }
+    to   { opacity: 1; transform: none; }
+}
+.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link {
+    min-height: 34px !important;
+    height: 34px !important;
+    margin: 1px 0 !important;
+    padding: 0 10px !important;
+    border-radius: 8px !important;
+    color: #4B5563 !important;
+    font-size: 13px;
+    transition: background .15s ease, color .15s ease !important;
+}
+.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link:hover {
+    padding-left: 10px !important;
+    background: var(--elint-hover) !important;
+    color: var(--elint-text) !important;
+}
+.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link.active,
+.elint-sidebar .app-sidebar-tree > .nav-item.is-active > .nav-link {
+    padding-left: 10px !important;
+    background: var(--elint-primary-soft) !important;
+    color: var(--elint-primary) !important;
+    font-weight: 600;
+    box-shadow: inset 3px 0 0 var(--elint-primary) !important;
+}
+.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link .nav-icon,
+.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link .nav-icon svg {
+    width: 15px !important;
+    height: 15px !important;
+    min-width: 15px;
+}
+.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link.active p,
+.elint-sidebar .app-sidebar-tree > .nav-item.is-active > .nav-link p {
+    font-weight: 600 !important;
+}
+
+/* Open parent: soft tint on the icon so the open branch is easy to follow */
+.elint-sidebar .app-sidebar-item.menu-open > .nav-link .nav-icon {
+    background: var(--elint-primary-soft);
+    color: var(--elint-primary) !important;
+}
+.elint-sidebar .app-sidebar-item.menu-open > .nav-link .nav-icon svg {
+    stroke: var(--elint-primary) !important;
+}
+
+/* Bottom "Settings" group */
+.elint-sidebar .sidebar-footer-links {
+    padding: 8px 8px 6px;
+    box-shadow: 0 -6px 14px -10px rgba(17, 24, 39, .18);
+}
+.elint-sidebar .sidebar-footer-links .nav-link.app-sidebar-toggle {
+    grid-template-columns: 28px minmax(0, 1fr) 18px !important;
+    border-radius: 10px !important;
+}
+.elint-sidebar .sidebar-footer-links .app-sidebar-item.menu-open > .nav-link.app-sidebar-toggle,
+.elint-sidebar .sidebar-footer-links .nav-link.app-sidebar-toggle.active {
+    background: var(--elint-primary-soft) !important;
+    color: var(--elint-primary) !important;
+}
+.elint-sidebar .sidebar-footer-links .nav-link.app-sidebar-toggle.active .nav-icon {
+    background: #fff;
+    box-shadow: 0 0 0 1px rgba(225, 29, 72, .15);
+}
+.elint-sidebar .sidebar-footer-links .app-sidebar-tree > .nav-item > .nav-link {
+    display: flex !important;
+    grid-template-columns: none !important;
+}
+.elint-sidebar .sidebar-footer-links .app-sidebar-tree > .nav-item > .nav-link p {
+    font-size: 13px !important;
+}
+
+/* Collapsed rail: no guide line or tint needed */
+body.sidebar-mini.sidebar-collapse .elint-sidebar .app-sidebar-item.menu-open > .app-sidebar-tree {
+    display: none !important;
+}
+
+/* ==========================================================================
+   Menu colours: every section has its own accent (--grp) used for its icons,
+   hover, active row and submenu. Group keys come from data-grp in layouts/main.php.
+   ========================================================================== */
+.elint-sidebar [data-grp] { --grp: var(--elint-primary); }
+.elint-sidebar [data-grp="home"]       { --grp: #e11d48; }
+.elint-sidebar [data-grp="inbox"]      { --grp: #2563eb; }
+.elint-sidebar [data-grp="data"]       { --grp: #0d9488; }
+.elint-sidebar [data-grp="marketing"]  { --grp: #ea580c; }
+.elint-sidebar [data-grp="automation"] { --grp: #7c3aed; }
+.elint-sidebar [data-grp="social"]     { --grp: #db2777; }
+.elint-sidebar [data-grp="analytics"]  { --grp: #16a34a; }
+.elint-sidebar [data-grp="reports"]    { --grp: #4f46e5; }
+.elint-sidebar [data-grp="system"]     { --grp: #475569; }
+.elint-sidebar [data-grp="settings"]   { --grp: #0284c7; }
+
+/* Section titles get a small coloured marker */
+.elint-sidebar .app-sidebar-group-title[data-grp] {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+.elint-sidebar .app-sidebar-group-title[data-grp]::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--grp);
+    flex: 0 0 auto;
+}
+
+/* Icons: a tinted tile in the section colour */
+.elint-sidebar .nav-sidebar > .nav-item > .nav-link .nav-icon {
+    background: color-mix(in srgb, var(--grp) 12%, #fff) !important;
+    color: var(--grp) !important;
+    border-radius: 8px !important;
+}
+.elint-sidebar .nav-sidebar > .nav-item > .nav-link .nav-icon svg {
+    stroke: var(--grp) !important;
+}
+
+/* Hover */
+.elint-sidebar .nav-sidebar > .nav-item > .nav-link:hover {
+    background: color-mix(in srgb, var(--grp) 7%, #fff) !important;
+}
+
+/* Active row and the open branch: soft section tint, solid icon tile */
+.elint-sidebar .nav-sidebar > .nav-item > .nav-link.active,
+.elint-sidebar .nav-sidebar > .nav-item > .nav-link.active:hover,
+.elint-sidebar .sidebar-footer-links .nav-link.active,
+.elint-sidebar .sidebar-footer-links .app-sidebar-item.menu-open > .nav-link.app-sidebar-toggle,
+.elint-sidebar .sidebar-footer-links .nav-link.app-sidebar-toggle.active {
+    background: linear-gradient(90deg, color-mix(in srgb, var(--grp) 14%, #fff), color-mix(in srgb, var(--grp) 4%, #fff)) !important;
+    color: var(--elint-text) !important;
+    box-shadow: inset 3px 0 0 var(--grp) !important;
+}
+.elint-sidebar .nav-sidebar > .nav-item > .nav-link.active .nav-icon,
+.elint-sidebar .sidebar-footer-links .nav-link.app-sidebar-toggle.active .nav-icon,
+.elint-sidebar .app-sidebar-item.menu-open > .nav-link .nav-icon {
+    background: var(--grp) !important;
+    box-shadow: 0 3px 8px -2px color-mix(in srgb, var(--grp) 55%, transparent) !important;
+}
+.elint-sidebar .nav-sidebar > .nav-item > .nav-link.active .nav-icon svg,
+.elint-sidebar .sidebar-footer-links .nav-link.app-sidebar-toggle.active .nav-icon svg,
+.elint-sidebar .app-sidebar-item.menu-open > .nav-link .nav-icon svg {
+    stroke: #fff !important;
+}
+.elint-sidebar .app-sidebar-item.menu-open > .nav-link .sidebar-link-arrow {
+    color: var(--grp) !important;
+}
+
+/* Submenu: guide line, icons and the active item in the section colour */
+.elint-sidebar .app-sidebar-item.menu-open > .app-sidebar-tree {
+    border-left-color: color-mix(in srgb, var(--grp) 35%, transparent) !important;
+}
+.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link .nav-icon {
+    background: transparent !important;
+    box-shadow: none !important;
+    color: color-mix(in srgb, var(--grp) 70%, #6B7280) !important;
+}
+.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link .nav-icon svg {
+    stroke: currentColor !important;
+}
+.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link:hover {
+    background: color-mix(in srgb, var(--grp) 8%, #fff) !important;
+    color: var(--grp) !important;
+}
+.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link.active,
+.elint-sidebar .app-sidebar-tree > .nav-item.is-active > .nav-link {
+    background: color-mix(in srgb, var(--grp) 13%, #fff) !important;
+    color: var(--grp) !important;
+    box-shadow: inset 3px 0 0 var(--grp) !important;
+}
+.elint-sidebar .app-sidebar-tree > .nav-item > .nav-link.active .nav-icon,
+.elint-sidebar .app-sidebar-tree > .nav-item.is-active > .nav-link .nav-icon {
+    color: var(--grp) !important;
+}

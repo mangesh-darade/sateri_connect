@@ -1,0 +1,1590 @@
+/**
+ * Campaigns hub + multi-step New Campaign wizard (WhatsApp / Email).
+ */
+(function (window, $) {
+    'use strict';
+
+    var Campaigns = {};
+    var state = {
+        channel: 'whatsapp',
+        step: 1,
+        data: null,
+        labelIds: [],
+        labelName: '',
+        templateId: 0,
+        template: null,
+        builderId: 0,
+        attributes: [],
+        audience: { total: 0, phone_count: 0, email_count: 0, contact_ids: [] },
+        campaignId: 0,
+        mediaUrl: '',
+        mediaId: '',
+        mediaMime: '',
+        mediaFile: null,
+        mediaPreviewUrl: '',
+        variables: {}
+    };
+
+    function base() {
+        return (window.APP && APP.baseUrl) || '';
+    }
+
+    function esc(s) {
+        return APP.escapeHtml(s);
+    }
+
+    function toast(msg, type) {
+        if (window.APP && typeof APP.toast === 'function') {
+            APP.toast(msg, type || 'info');
+        } else {
+            window.alert(msg);
+        }
+    }
+
+    function clearWizardErrors() {
+        $('#cwFormError').addClass('d-none').text('');
+        $('#campaignWizardModal .is-invalid').removeClass('is-invalid');
+        $('#cwMediaUrlError').addClass('d-none');
+    }
+
+    function showWizardError(message, $field) {
+        var msg = String(message || 'Please fix the highlighted fields.');
+        $('#cwFormError').removeClass('d-none').text(msg);
+        toast(msg, 'error');
+        if ($field && $field.length) {
+            $field.addClass('is-invalid').trigger('focus');
+        }
+        return false;
+    }
+
+    function isLocalMediaUrl(url) {
+        url = String(url || '').trim();
+        if (!url) return false;
+        try {
+            var host = String((new URL(url, window.location.origin)).hostname || '').toLowerCase();
+            return host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local');
+        } catch (e) {
+            return /localhost|127\.0\.0\.1/i.test(url);
+        }
+    }
+
+    function apiErrorMessage(xhr, fallback) {
+        if (xhr && xhr.responseJSON) {
+            if (xhr.responseJSON.message) {
+                return String(xhr.responseJSON.message);
+            }
+            if (xhr.responseJSON.error && xhr.responseJSON.error.technical) {
+                return String(xhr.responseJSON.error.technical);
+            }
+            if (xhr.responseJSON.errors && typeof xhr.responseJSON.errors === 'object') {
+                var first = Object.values(xhr.responseJSON.errors)[0];
+                if (Array.isArray(first) && first[0]) return String(first[0]);
+                if (first) return String(first);
+            }
+        }
+        return fallback || 'Request failed.';
+    }
+
+    function clearLocalPreview() {
+        if (state.mediaPreviewUrl && String(state.mediaPreviewUrl).indexOf('blob:') === 0) {
+            try { URL.revokeObjectURL(state.mediaPreviewUrl); } catch (e) { /* already revoked */ }
+        }
+        state.mediaPreviewUrl = '';
+        state.mediaFile = null;
+    }
+
+    function rememberMediaFile(file) {
+        clearLocalPreview();
+        state.mediaFile = file || null;
+        state.mediaMime = String((file && file.type) || state.mediaMime || '').trim();
+        if (file && window.URL && typeof URL.createObjectURL === 'function') {
+            state.mediaPreviewUrl = URL.createObjectURL(file);
+        }
+    }
+
+    function previewSource() {
+        if (state.mediaPreviewUrl) {
+            return state.mediaPreviewUrl;
+        }
+        var typed = String($('#cwMediaUrl').val() || '').trim();
+        if (/^(https?:|blob:)/i.test(typed)) {
+            return typed;
+        }
+        var stored = String(state.mediaUrl || '').trim();
+        if (/^(https?:|blob:)/i.test(stored)) {
+            return stored;
+        }
+        return '';
+    }
+
+    function isBadMediaUrl(url) {
+        url = String(url || '').trim();
+        if (!url) return true;
+        return url.indexOf('must be of type') !== -1
+            || url.indexOf('Argument #') !== -1
+            || url.indexOf('App\\Controllers') !== -1
+            || url.indexOf('<') !== -1;
+    }
+
+    function showModal() {
+        var el = document.getElementById('campaignWizardModal');
+        if (!el) return;
+        if (window.bootstrap && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(el).show();
+        } else if (window.APP && typeof APP.showModal === 'function') {
+            APP.showModal('#campaignWizardModal');
+        } else {
+            $(el).modal('show');
+        }
+    }
+
+    function hideModal() {
+        var el = document.getElementById('campaignWizardModal');
+        if (!el) return;
+        if (window.bootstrap && bootstrap.Modal) {
+            var inst = bootstrap.Modal.getInstance(el);
+            if (inst) inst.hide();
+        } else {
+            $(el).modal('hide');
+        }
+    }
+
+    function setStep(step) {
+        state.step = step;
+        $('#cwStep').val(String(step));
+        clearWizardErrors();
+        if (APP.emailEditor && APP.emailEditor.closeAi) APP.emailEditor.closeAi();
+        $('.campaign-wizard-step').removeClass('is-active');
+        $('.campaign-wizard-step[data-step="' + step + '"]').addClass('is-active');
+        $('#cwBackBtn').toggleClass('d-none', step <= 1);
+
+        var titles = {
+            1: 'New Campaign',
+            2: 'New Campaign',
+            3: state.channel === 'email' ? 'Choose email content' : 'Choose campaign template',
+            4: state.channel === 'email' ? 'Enter Email Details' : 'Enter Custom Template Details',
+            5: state.channel === 'email' ? 'Share Email Campaign' : 'Share Custom Template'
+        };
+        $('#cwTitle').text(titles[step] || 'New Campaign');
+        $('#campaignWizardDialog').toggleClass('modal-xl', step === 3 || step === 4);
+
+        $('#cwNextBtn').toggleClass('d-none', step >= 5);
+        $('#cwScheduleBtn, #cwRunBtn').toggleClass('d-none', step < 5);
+        // Schedule picker stays hidden until user clicks "Schedule Campaign".
+        if (step === 5) {
+            $('#cwScheduleWrap').addClass('d-none');
+            $('#cwScheduledAt').val('').removeClass('is-invalid');
+            $('#cwScheduleBtn').html('<i class="fas fa-clock me-1"></i> Schedule Campaign');
+        } else {
+            $('#cwScheduleWrap').addClass('d-none');
+        }
+
+        if (step === 3) {
+            renderTemplateStep();
+        }
+        if (step === 4) {
+            renderDetailsStep();
+        }
+        if (step === 5) {
+            renderShareStep();
+        }
+    }
+
+    function loadWizardData(force) {
+        if (state.data && !force) {
+            return $.Deferred().resolve(state.data).promise();
+        }
+        return APP.get(base() + '/campaigns/wizard-data').then(function (res) {
+            state.data = (res && res.data) ? res.data : res;
+            populateLabels();
+            populateEmailBuilders();
+            populateEmailSenders();
+            return state.data;
+        });
+    }
+
+    function populateLabels() {
+        var $wrap = $('#cwLabelOptions');
+        var checked = selectedLabelIds();
+        $wrap.empty();
+        var labels = state.data.labels || [];
+        $('#cwLabelEmpty').toggleClass('d-none', labels.length > 0);
+        labels.forEach(function (label) {
+            var id = parseInt(label.id, 10);
+            var isOn = checked.indexOf(id) !== -1;
+            var $row = $(
+                // No d-flex here: AdminLTE loads after Bootstrap 5 and its .d-flex beats .d-none, so search could never hide a row.
+                '<label class="cw-label-opt" style="cursor:pointer;">' +
+                    '<input type="checkbox" class="form-check-input cw-label-check" value="' + id + '">' +
+                    '<span class="cw-label-name flex-grow-1 text-truncate"></span>' +
+                    '<span class="badge rounded-pill cw-label-count"></span>' +
+                '</label>'
+            );
+            $row.find('.cw-label-check').prop('checked', isOn);
+            $row.find('.cw-label-name').text(label.name).attr('data-name', label.name);
+            $row.find('.cw-label-count').text(label.contact_count || 0);
+            $wrap.append($row);
+        });
+        updateLabelSummary();
+    }
+
+    function selectedLabelIds() {
+        var ids = [];
+        $('#cwLabelOptions .cw-label-check:checked').each(function () {
+            var id = parseInt($(this).val(), 10);
+            if (id > 0) { ids.push(id); }
+        });
+        return ids;
+    }
+
+    function selectedLabelNames() {
+        var names = [];
+        $('#cwLabelOptions .cw-label-check:checked').each(function () {
+            names.push($(this).closest('.cw-label-opt').find('.cw-label-name').data('name') || '');
+        });
+        return names.filter(Boolean);
+    }
+
+    function updateLabelSummary() {
+        var names = selectedLabelNames();
+        var $sum = $('#cwLabelSummary');
+        if (!names.length) {
+            $sum.text('Select contact group(s)').addClass('text-muted');
+        } else if (names.length <= 2) {
+            $sum.text(names.join(', ')).removeClass('text-muted');
+        } else {
+            $sum.text(names.slice(0, 2).join(', ') + ' +' + (names.length - 2) + ' more').removeClass('text-muted');
+        }
+        // Keep the selected highlight, counter and the Select-all tri-state in sync.
+        $('#cwLabelOptions .cw-label-opt').each(function () {
+            $(this).toggleClass('is-checked', $(this).find('.cw-label-check').prop('checked'));
+        });
+        $('#cwLabelSelectedCount').text(names.length);
+        var $all = $('#cwLabelOptions .cw-label-check');
+        var $on = $all.filter(':checked');
+        var $allBox = $('#cwLabelSelectAll');
+        $allBox.prop('checked', $all.length > 0 && $on.length === $all.length);
+        $allBox.prop('indeterminate', $on.length > 0 && $on.length < $all.length);
+    }
+
+    function filterLabels(term) {
+        term = String(term || '').toLowerCase().trim();
+        $('#cwLabelOptions .cw-label-opt').each(function () {
+            var name = String($(this).find('.cw-label-name').data('name') || '').toLowerCase();
+            $(this).toggleClass('d-none', term !== '' && name.indexOf(term) === -1);
+        });
+    }
+
+    function populateEmailBuilders() {
+        var $sel = $('#cwEmailBuilder');
+        $sel.empty().append('<option value="">Custom HTML</option>');
+        (state.data.email_builders || []).forEach(function (b) {
+            $sel.append(
+                $('<option>')
+                    .val(b.id)
+                    .text(b.name)
+                    .attr('data-subject', b.subject || '')
+                    .attr('data-html', b.html_content || '')
+                    .attr('data-cheerio', b.cheerio_builder_id || '')
+            );
+        });
+    }
+
+    /** Email-only From picker: "" = default sender. Hidden for WhatsApp and for providers without sender choice. */
+    function populateEmailSenders() {
+        var cfg = state.data.email_senders || {};
+        var $sel = $('#cwSender');
+        var def = cfg.default || {};
+        var defText = def.email || '';
+        $('#cwSenderDefault').text(defText).attr('title', defText).toggleClass('d-none', !defText);
+        $sel.empty().append($('<option>').val('').text('Default'));
+        (cfg.senders || []).forEach(function (s) {
+            $sel.append($('<option>').val(s.id).text(s.email).attr('title', s.name || ''));
+        });
+        $sel.val('').prop('disabled', !cfg.enabled)
+            .attr('title', cfg.enabled ? '' : 'Your email provider sends from the sender configured in its own dashboard.');
+        toggleSenderPicker();
+    }
+
+    function toggleSenderPicker() {
+        var show = state.channel === 'email';
+        $('#cwSenderWrap').toggleClass('d-none', !show).toggleClass('d-flex', show);
+    }
+
+    function selectedSenderText() {
+        if (!$('#cwSender').val()) {
+            var def = $('#cwSenderDefault').text();
+            return def ? def + ' (Default)' : 'Default sender';
+        }
+        return $('#cwSender option:selected').text();
+    }
+
+    function selectedLabelName() {
+        return selectedLabelNames().join(', ');
+    }
+
+    function collectAttributes() {
+        var rows = [];
+        $('#cwAttrRows .cw-attr-row').each(function () {
+            var name = String($(this).find('.cw-attr-name').val() || '').trim();
+            var condition = String($(this).find('.cw-attr-condition').val() || 'equals').trim();
+            var value = String($(this).find('.cw-attr-value').val() || '').trim();
+            if (name && value) {
+                rows.push({ name: name, condition: condition, value: value });
+            }
+        });
+        state.attributes = rows;
+        return rows;
+    }
+
+    function addAttrRow(prefill) {
+        prefill = prefill || {};
+        var fields = (state.data && state.data.attribute_fields) || [
+            { value: 'name', label: 'Name' },
+            { value: 'mobile', label: 'Phone' },
+            { value: 'email', label: 'Email' },
+            { value: 'status', label: 'Status' }
+        ];
+        var conditions = (state.data && state.data.conditions) || [
+            { value: 'equals', label: 'Equals' },
+            { value: 'contains', label: 'Contains' }
+        ];
+        var groups = {};
+        var groupOrder = [];
+        fields.forEach(function (f) {
+            var g = f.group || 'Contact';
+            if (!groups[g]) { groups[g] = []; groupOrder.push(g); }
+            groups[g].push('<option value="' + esc(f.value) + '"' + (prefill.name === f.value ? ' selected' : '') + '>' + esc(f.label) + '</option>');
+        });
+        var fieldOpts = groupOrder.map(function (g) {
+            return groupOrder.length > 1 ? '<optgroup label="' + esc(g) + '">' + groups[g].join('') + '</optgroup>' : groups[g].join('');
+        }).join('');
+        var condOpts = conditions.map(function (c) {
+            return '<option value="' + esc(c.value) + '"' + (prefill.condition === c.value ? ' selected' : '') + '>' + esc(c.label) + '</option>';
+        }).join('');
+        var html =
+            '<div class="cw-attr-row">' +
+            '<select class="form-select form-select-sm cw-attr-name"><option value="">Select</option>' + fieldOpts + '</select>' +
+            '<select class="form-select form-select-sm cw-attr-condition">' + condOpts + '</select>' +
+            '<input type="text" class="form-control form-control-sm cw-attr-value" placeholder="Attribute Value" value="' + esc(prefill.value || '') + '">' +
+            '<button type="button" class="btn btn-link text-danger p-0 cw-attr-remove" title="Remove"><i class="fas fa-trash"></i></button>' +
+            '</div>';
+        var $row = $(html);
+        $('#cwAttrRows').append($row);
+        refreshAttrValueOptions($row);
+    }
+
+    /** Suggest allowed values (dropdown / Yes-No attributes) for the value box of an audience filter row. */
+    function refreshAttrValueOptions($row) {
+        var name = String($row.find('.cw-attr-name').val() || '');
+        var field = ((state.data && state.data.attribute_fields) || []).find(function (f) { return f.value === name; }) || null;
+        var options = (field && field.options) || [];
+        var listId = 'cwAttrOpts' + ($row.index() + 1) + '_' + Date.now();
+        $row.find('datalist').remove();
+        var $input = $row.find('.cw-attr-value');
+        if (!options.length) {
+            $input.removeAttr('list').attr('placeholder', field && field.type === 'date' ? 'YYYY-MM-DD' : (field && field.type === 'number' ? 'Number' : 'Attribute Value'));
+            return;
+        }
+        $input.attr({ list: listId, placeholder: options.slice(0, 3).join(' / ') });
+        $row.append('<datalist id="' + listId + '">' + options.map(function (o) { return '<option value="' + esc(o) + '">'; }).join('') + '</datalist>');
+    }
+
+    function previewAudience() {
+        var tagIds = selectedLabelIds();
+        if (!tagIds.length) {
+            toast('Select at least one contact group.', 'error');
+            return $.Deferred().reject().promise();
+        }
+        collectAttributes();
+        return APP.post(base() + '/campaigns/audience-preview', {
+            tag_ids: tagIds,
+            attributes: state.attributes
+        }).done(function (res) {
+            var data = (res && res.data) ? res.data : {};
+            var eligibleList = data.wa_eligible_list || [];
+            var excludedList = data.wa_excluded_list || [];
+
+            var all = [];
+            eligibleList.forEach(function (c) {
+                all.push($.extend({}, c, { is_eligible: true, is_skipped: false }));
+            });
+            excludedList.forEach(function (c) {
+                all.push($.extend({}, c, { is_eligible: false, is_skipped: true }));
+            });
+
+            state.audience = {
+                total: data.total || 0,
+                phone_count: data.phone_count || 0,
+                email_count: data.email_count || 0,
+                contact_ids: data.contact_ids || [],
+                wa_eligible_count: data.wa_eligible_count || 0,
+                wa_excluded_text: data.wa_excluded_text || '',
+                wa_eligible_list: eligibleList,
+                wa_excluded_list: excludedList,
+                all_contacts: all
+            };
+
+            // Update interactive count pills
+            $('#cwTotalCount').text(state.audience.total);
+            $('#cwPhoneCount').text(state.audience.phone_count);
+            $('#cwEmailCount').text(state.audience.email_count);
+            $('#cwEligibleCount').text(state.audience.wa_eligible_count);
+            var skippedCount = excludedList.length;
+            $('#cwSkippedCount').text(skippedCount);
+            $('#cwSkippedChip').toggleClass('d-none', skippedCount <= 0);
+
+            if (state.channel === 'whatsapp') {
+                $('#cwEligibleChip').removeClass('d-none');
+                $('#cwAudienceExcludedNote').text(state.audience.wa_excluded_text || '');
+            } else {
+                $('#cwEligibleChip, #cwSkippedChip').addClass('d-none');
+                $('#cwAudienceExcludedNote').empty();
+            }
+
+            var countsText = 'Phone Numbers fetched: ' + state.audience.phone_count +
+                ' | Emails fetched: ' + state.audience.email_count;
+            if (state.channel === 'whatsapp') {
+                countsText += ' | WhatsApp eligible (opted-in): ' + state.audience.wa_eligible_count +
+                    (state.audience.wa_excluded_text ? ' — ' + state.audience.wa_excluded_text : '');
+            }
+            $('#cwAudienceCounts').text(countsText);
+            $('#cwShareCounts').text(state.audience.total + ' contacts');
+        }).fail(function (xhr) {
+            showWizardError(apiErrorMessage(xhr, 'Audience preview failed'));
+        });
+    }
+
+    function openAudienceModal(initialTab) {
+        initialTab = initialTab || 'all';
+        var list = (state.audience && state.audience.all_contacts) ? state.audience.all_contacts : [];
+        if (!list.length && (!state.audience || !state.audience.total)) {
+            toast('Please verify label and attributes first to fetch audience.', 'warning');
+            return;
+        }
+
+        // Set counts in modal tabs
+        $('.tab-count-all').text(list.length || (state.audience ? state.audience.total : 0));
+        $('.tab-count-eligible').text(state.audience ? state.audience.wa_eligible_count : 0);
+        var skippedCount = (state.audience && state.audience.wa_excluded_list) ? state.audience.wa_excluded_list.length : 0;
+        $('.tab-count-skipped').text(skippedCount);
+        $('.tab-count-phone').text(state.audience ? state.audience.phone_count : 0);
+
+        $('#cwAudienceModalFilterTabs button').removeClass('active');
+        var $activeBtn = $('#cwAudienceModalFilterTabs button[data-tab="' + initialTab + '"]');
+        if ($activeBtn.length) {
+            $activeBtn.addClass('active');
+        } else {
+            $('#cwAudienceModalFilterTabs button[data-tab="all"]').addClass('active');
+        }
+
+        $('#cwAudienceSearchInput').val('');
+        renderAudienceTable(initialTab, '');
+
+        var el = document.getElementById('cwAudienceModal');
+        if (el && window.bootstrap && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(el).show();
+        } else {
+            $('#cwAudienceModal').modal('show');
+        }
+    }
+
+    function renderAudienceTable(tab, search) {
+        search = String(search || '').toLowerCase().trim();
+        var contacts = (state.audience && state.audience.all_contacts) ? state.audience.all_contacts : [];
+
+        var filtered = contacts.filter(function (c) {
+            if (tab === 'eligible' && !c.is_eligible) return false;
+            if (tab === 'skipped' && !c.is_skipped) return false;
+            if (tab === 'phone' && !c.mobile) return false;
+            if (tab === 'email' && !c.email) return false;
+
+            if (search) {
+                var hay = (String(c.name || '') + ' ' + String(c.mobile || '') + ' ' + String(c.email || '') + ' ' + String(c.reason || '')).toLowerCase();
+                if (hay.indexOf(search) === -1) return false;
+            }
+            return true;
+        });
+
+        if (!filtered.length) {
+            $('#cwAudienceTableBody').html(
+                '<tr><td colspan="6" class="text-center text-muted py-4"><i class="fas fa-search me-1"></i> No matching contacts found.</td></tr>'
+            );
+            $('#cwAudienceSummaryText').text('Showing 0 contacts');
+            return;
+        }
+
+        var html = '';
+        filtered.forEach(function (c, idx) {
+            var name = c.name ? esc(c.name) : 'Unnamed Contact';
+            var initial = (name.replace(/^\+/, '').charAt(0) || '#').toUpperCase();
+            var phone = c.mobile ? esc(c.mobile) : '<span class="text-muted">—</span>';
+            var email = c.email ? esc(c.email) : '<span class="text-muted">—</span>';
+            
+            var statusBadge = c.is_eligible
+                ? '<span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1"><i class="fas fa-check-circle me-1"></i>Eligible</span>'
+                : '<span class="badge bg-warning-subtle text-warning border border-warning-subtle px-2 py-1"><i class="fas fa-ban me-1"></i>Skipped</span>';
+
+            var reasonHtml = c.reason
+                ? (c.is_eligible
+                    ? '<span class="small text-success"><i class="fab fa-whatsapp me-1"></i>' + esc(c.reason) + '</span>'
+                    : '<span class="small text-danger fw-medium"><i class="fas fa-circle-exclamation me-1"></i>' + esc(c.reason) + '</span>')
+                : '<span class="text-muted small">—</span>';
+
+            html += '<tr>' +
+                '<td class="text-muted small">' + (idx + 1) + '</td>' +
+                '<td>' +
+                    '<div class="d-flex align-items-center gap-2">' +
+                        '<span class="badge bg-secondary-subtle text-secondary rounded-circle px-2 py-1 small fw-bold">' + esc(initial) + '</span>' +
+                        '<span class="fw-semibold text-dark">' + name + '</span>' +
+                    '</div>' +
+                '</td>' +
+                '<td><span class="font-monospace small">' + phone + '</span></td>' +
+                '<td><span class="small text-muted">' + email + '</span></td>' +
+                '<td>' + statusBadge + '</td>' +
+                '<td>' + reasonHtml + '</td>' +
+            '</tr>';
+        });
+
+        $('#cwAudienceTableBody').html(html);
+        $('#cwAudienceSummaryText').text('Showing ' + filtered.length + ' of ' + contacts.length + ' contacts');
+    }
+
+    function renderTemplateStep() {
+        var isEmail = state.channel === 'email';
+        $('#cwTplSyncAlert, #cwTemplateSearchWrap, #cwTemplateGrid').toggleClass('d-none', isEmail);
+        $('#cwEmailTemplateWrap').toggleClass('d-none', !isEmail);
+        if (!isEmail) {
+            renderTemplateCards($('#cwTemplateSearch').val() || '');
+        }
+    }
+
+    function renderTemplateCards(query) {
+        query = String(query || '').toLowerCase();
+        var html = '';
+        (state.data.templates || []).forEach(function (tpl) {
+            var hay = (tpl.name + ' ' + (tpl.body || '') + ' ' + (tpl.category || '')).toLowerCase();
+            if (query && hay.indexOf(query) === -1) return;
+            var selected = String(state.templateId) === String(tpl.id) ? ' is-selected' : '';
+            html +=
+                '<div class="cw-template-card' + selected + '" data-id="' + tpl.id + '">' +
+                '<div class="d-flex flex-wrap gap-1">' +
+                '<span class="badge text-bg-success">WhatsApp</span>' +
+                '<span class="badge text-bg-light border">' + esc(tpl.status || 'APPROVED') + '</span>' +
+                '<span class="badge text-bg-light border">' + esc(tpl.category || '') + '</span>' +
+                '</div>' +
+                '<div class="cw-tpl-name">' + esc(tpl.name) + '</div>' +
+                '<div class="cw-tpl-body">' + esc(tpl.body || '') + '</div>' +
+                '<button type="button" class="btn btn-wa btn-sm cw-use-template">Use Template</button>' +
+                '</div>';
+        });
+        if (!html) {
+            html = '<div class="text-muted">No approved templates found. Sync from Template Library.</div>';
+        }
+        $('#cwTemplateGrid').html(html);
+    }
+
+    function selectTemplate(id) {
+        var tpl = (state.data.templates || []).find(function (t) { return String(t.id) === String(id); });
+        if (!tpl) {
+            toast('Template not found', 'error');
+            return;
+        }
+        state.templateId = parseInt(id, 10);
+        state.template = tpl;
+        state.variables = {};
+        renderTemplateCards($('#cwTemplateSearch').val() || '');
+        setStep(4);
+    }
+
+    function renderVariableMap(variables) {
+        var $wrap = $('#cwVariableMap');
+        $wrap.empty();
+        if (!variables || !variables.length) {
+            $wrap.html('<p class="text-muted small mb-0">This template has no variables.</p>');
+            return;
+        }
+        variables.forEach(function (v) {
+            var definition = (v && typeof v === 'object') ? v : { key: String(v) };
+            var key = String(definition.key || '');
+            if (!key) return;
+            var example = String(definition.example || '');
+            var suggested = String(definition.suggested_source || '');
+            var selected = Object.prototype.hasOwnProperty.call(state.variables, key)
+                ? String(state.variables[key] || '')
+                : suggested;
+            var isAttr = selected.indexOf('attr:') === 0;
+            var isCustom = selected === 'custom' || (selected !== '' && !isAttr && ['name', 'mobile', 'email'].indexOf(selected) === -1);
+            var customValue = selected === 'custom'
+                ? example
+                : (isCustom ? selected : '');
+            var attrOpts = ((state.data && state.data.attribute_fields) || []).filter(function (f) {
+                return ['name', 'mobile', 'email'].indexOf(f.value) === -1;
+            }).map(function (f) {
+                var v = 'attr:' + f.value;
+                return '<option value="' + esc(v) + '"' + (selected === v ? ' selected' : '') + '>' + esc(f.label) + '</option>';
+            }).join('');
+            var row =
+                '<div class="row g-2 mb-2 align-items-center">' +
+                '<div class="col-4"><code>{{' + esc(key) + '}}</code>' +
+                (example ? '<div class="small text-muted text-break">Example: ' + esc(example) + '</div>' : '') +
+                '</div>' +
+                '<div class="col-8">' +
+                '<select class="form-select form-select-sm cw-var-source" data-var="' + esc(key) + '">' +
+                '<option value=""' + (selected === '' ? ' selected' : '') + '>Select contact field…</option>' +
+                '<option value="name"' + (selected === 'name' ? ' selected' : '') + '>Contact Name</option>' +
+                '<option value="mobile"' + (selected === 'mobile' ? ' selected' : '') + '>Mobile</option>' +
+                '<option value="email"' + (selected === 'email' ? ' selected' : '') + '>Email</option>' +
+                (attrOpts ? '<optgroup label="Attributes">' + attrOpts + '</optgroup>' : '') +
+                '<option value="custom"' + (isCustom && selected.indexOf('{{') === -1 ? ' selected' : '') + '>Custom value…</option>' +
+                '</select>' +
+                '<input type="text" class="form-control form-control-sm mt-1 cw-var-custom' +
+                (isCustom ? '' : ' d-none') +
+                '" data-var="' + esc(key) + '" placeholder="Custom value" value="' +
+                esc(customValue) + '">' +
+                '</div></div>';
+            $wrap.append(row);
+        });
+    }
+
+    function collectVariables() {
+        var map = {};
+        $('#cwVariableMap .cw-var-source').each(function () {
+            var key = String($(this).data('var'));
+            var val = $(this).val();
+            if (val === 'custom') {
+                map[key] = $('#cwVariableMap .cw-var-custom[data-var="' + key + '"]').val() || '';
+            } else {
+                map[key] = val;
+            }
+        });
+        state.variables = map;
+        return map;
+    }
+
+    function renderDetailsStep() {
+        var isEmail = state.channel === 'email';
+        $('#cwPreviewChannelLabel').text(isEmail ? 'Email' : 'WhatsApp');
+        if (isEmail) {
+            $('#cwUploadBox, #cwVarMapWrap').addClass('d-none');
+            var subject = $('#cwEmailSubject').val() || '';
+            var html = $('#cwEmailHtml').val() || '';
+            $('#cwPreviewBody').html('<strong>' + esc(subject) + '</strong><hr class="border-secondary my-2">' + (html || '<em>No HTML</em>'));
+            return;
+        }
+        $('#cwVarMapWrap').removeClass('d-none');
+        var tpl = state.template || {};
+        var needsMedia = !!tpl.needs_media;
+        var mediaOptional = !!tpl.media_optional;
+        var showMedia = needsMedia || mediaOptional;
+        // IMAGE/VIDEO/DOCUMENT: show upload. If approved sample exists, upload is optional.
+        $('#cwUploadBox').toggleClass('d-none', !showMedia);
+        $('#cwMediaCol').toggleClass('d-none', !showMedia);
+        $('#cwMediaFile').attr('accept', tpl.media_accept || 'image/png,image/jpeg,image/webp,video/mp4,application/pdf');
+        if (!showMedia) {
+            clearLocalPreview();
+            state.mediaUrl = '';
+            state.mediaId = '';
+            state.mediaMime = '';
+            $('#cwMediaUrl').val('');
+            $('#cwMediaFile').val('');
+            $('#cwMediaStatus').addClass('d-none').text('');
+        } else if (mediaOptional) {
+            // Drop stale override from a previous template/upload so sample can be used.
+            clearLocalPreview();
+            state.mediaUrl = '';
+            state.mediaId = '';
+            state.mediaMime = '';
+            $('#cwMediaUrl').val('');
+            $('#cwMediaFile').val('');
+            $('#cwMediaStatus').addClass('d-none').text('');
+            $('#cwMediaUrlError').addClass('d-none');
+            $('#cwMediaUrl').removeClass('is-invalid');
+            $('#cwUploadTitle').text('Replace header media (optional)');
+            $('#cwUploadHint').text('Approved template already has a reusable ' + (tpl.header_type || 'media')
+                + ' sample. Leave empty to use that sample, or upload to override.');
+        } else if (needsMedia) {
+            clearLocalPreview();
+            state.mediaUrl = '';
+            state.mediaId = '';
+            state.mediaMime = '';
+            $('#cwMediaUrl').val('');
+            $('#cwMediaFile').val('');
+            $('#cwMediaStatus').addClass('d-none').text('');
+            $('#cwUploadTitle').text('Upload ' + String(tpl.header_type || 'media').toUpperCase() + ' file');
+            var expected = tpl.media_expected || 'a supported media file';
+            var why = tpl.has_sample_media
+                ? 'Meta approval sample cannot be reused at send time. Upload ' + expected + ' again.'
+                : 'This template header needs ' + expected + '.';
+            $('#cwUploadHint').text(why);
+        } else {
+            $('#cwUploadTitle').text('Upload media here');
+            $('#cwUploadHint').text('Drag & drop or click — required for this template header (' + (tpl.header_type || 'media') + ')');
+        }
+        renderVariableMap(tpl.variable_definitions || tpl.variables || []);
+        updateWaPreview();
+    }
+
+    /**
+     * Mirrors WhatsAppTemplateMedia::matchesHeaderType so a wrong file is caught
+     * before it is uploaded, instead of failing when the wizard is submitted.
+     *
+     * @return {string} empty when the file fits the template header
+     */
+    function headerMediaMismatch(mime) {
+        var tpl = state.template || {};
+        var headerType = String(tpl.header_type || '').toLowerCase();
+        mime = String(mime || '').toLowerCase();
+        if (!mime || ['image', 'video', 'document'].indexOf(headerType) === -1) {
+            return '';
+        }
+
+        var ok = headerType === 'image' ? mime.indexOf('image/') === 0
+            : headerType === 'video' ? mime.indexOf('video/') === 0
+                : mime === 'application/pdf' || mime.indexOf('document') !== -1 || mime === 'application/msword';
+        if (ok) {
+            return '';
+        }
+
+        return 'Template "' + (tpl.name || 'this template') + '" has a ' + headerType.toUpperCase()
+            + ' header, so it needs ' + (tpl.media_expected || 'a supported media file')
+            + '. You uploaded ' + mime + '.';
+    }
+
+    function previewHeaderType() {
+        var headerType = String((state.template && state.template.header_type) || '').toLowerCase();
+        var mime = String(state.mediaMime || (state.mediaFile && state.mediaFile.type) || '').toLowerCase();
+        if (headerType === 'image' || headerType === 'video' || headerType === 'document') {
+            return headerType;
+        }
+        if (mime.indexOf('video/') === 0) return 'video';
+        if (mime === 'application/pdf') return 'document';
+        return 'image';
+    }
+
+    function mediaPreviewHtml(src) {
+        src = String(src || '').trim();
+        if (!src) return '';
+        var headerType = previewHeaderType();
+        var safe = esc(src);
+        if (headerType === 'video') {
+            return '<video src="' + safe + '" controls preload="metadata" class="cw-preview-media"></video>';
+        }
+        if (headerType === 'document') {
+            return '<a href="' + safe + '" target="_blank" rel="noopener" class="cw-preview-doc">PDF attached</a>';
+        }
+        return '<img src="' + safe + '" alt="Uploaded header" class="cw-preview-media">';
+    }
+
+    function updateWaPreview() {
+        var tpl = state.template || {};
+        var body = String(tpl.body || 'Select a template to preview.');
+        var footer = String(tpl.footer || '');
+        var src = previewSource();
+        var html = mediaPreviewHtml(src);
+        if (!html && (state.mediaId || state.mediaUrl)) {
+            html = '<div class="mb-2 small text-info">[Media attached]</div>';
+        } else if (!html && tpl.media_optional) {
+            html = '<div class="mb-2 small text-muted">[Using approved template sample media]</div>';
+        } else if (!html && tpl.needs_media) {
+            html = '<div class="mb-2 small text-warning">[Upload required: Meta sample cannot be reused]</div>';
+        }
+        html += esc(body).replace(/\n/g, '<br>');
+        if (footer) {
+            html += '<div class="small text-muted mt-2">' + esc(footer) + '</div>';
+        }
+        $('#cwPreviewBody').html(html);
+    }
+
+    function renderShareStep() {
+        $('#cwSelectedLabelChip, #cwShareLabelChip').text(state.labelName || selectedLabelName() || '—');
+        var countLabel = state.channel === 'email'
+            ? (state.audience.email_count + ' emails')
+            : ((state.audience.wa_eligible_count || 0) + ' opted-in of ' + state.audience.phone_count + ' phones / ' + state.audience.total + ' contacts');
+        $('#cwShareCounts').text(countLabel);
+        var showSender = state.channel === 'email';
+        $('#cwShareSenderWrap').toggleClass('d-none', !showSender);
+        $('#cwShareSender').text(showSender ? selectedSenderText() : '—');
+        if (state.channel === 'email') {
+            $('#cwShareTplName').text($('#cwEmailSubject').val() || 'Email campaign');
+            $('#cwShareTplBody').text(($('#cwEmailHtml').val() || '').replace(/<[^>]+>/g, ' ').slice(0, 160));
+        } else {
+            $('#cwShareTplName').text((state.template && state.template.name) || '—');
+            $('#cwShareTplBody').text((state.template && state.template.body) || '');
+        }
+    }
+
+    function validateStep(step) {
+        clearWizardErrors();
+
+        if (step === 1) {
+            var name = String($('#cwName').val() || '').trim();
+            var labelIds = selectedLabelIds();
+            if (!name) {
+                return showWizardError('Enter a campaign name.', $('#cwName'));
+            }
+            if (name.length > 30) {
+                return showWizardError('Campaign name must be 30 characters or less.', $('#cwName'));
+            }
+            if (!labelIds.length) {
+                $('#cwLabelError').removeClass('d-none');
+                return showWizardError('Select at least one contact group.', $('#cwLabelToggle'));
+            }
+            state.labelIds = labelIds;
+            state.labelName = selectedLabelName();
+            return true;
+        }
+        if (step === 2) {
+            collectAttributes();
+            var incomplete = false;
+            $('#cwAttrRows .cw-attr-row').each(function () {
+                var attrName = String($(this).find('.cw-attr-name').val() || '').trim();
+                var value = String($(this).find('.cw-attr-value').val() || '').trim();
+                if (attrName && !value) {
+                    $(this).find('.cw-attr-value').addClass('is-invalid');
+                    incomplete = true;
+                }
+            });
+            if (incomplete) {
+                return showWizardError('Enter a value for each selected attribute, or clear the attribute row.');
+            }
+            if (!state.audience.total) {
+                return showWizardError('No contacts found for this label. Click Verify attribute or choose another label.');
+            }
+            if (state.channel === 'whatsapp' && !state.audience.phone_count) {
+                return showWizardError('No phone numbers found for this audience. Add mobiles to the label contacts.');
+            }
+            if (state.channel === 'whatsapp' && !state.audience.wa_eligible_count) {
+                return showWizardError('No contact in this audience has WhatsApp opt-in'
+                    + (state.audience.wa_excluded_text ? ' (' + state.audience.wa_excluded_text + ')' : '')
+                    + '. Record consent on Contacts before sending — Meta bans numbers that message people without opt-in.');
+            }
+            if (state.channel === 'email' && !state.audience.email_count) {
+                return showWizardError('No emails found for this audience. Add emails to the label contacts.');
+            }
+            return true;
+        }
+        if (step === 3) {
+            if (state.channel === 'whatsapp') {
+                if (!state.templateId) {
+                    return showWizardError('Select a WhatsApp template (click Use Template).');
+                }
+                return true;
+            }
+            var subject = String($('#cwEmailSubject').val() || '').trim();
+            if (!subject) {
+                return showWizardError('Email subject is required.', $('#cwEmailSubject'));
+            }
+            return true;
+        }
+        if (step === 4) {
+            // needs_media already means Meta sample is not reusable — require upload even if has_sample_media.
+            if (state.channel === 'whatsapp' && state.template && state.template.needs_media) {
+                var url = String($('#cwMediaUrl').val() || state.mediaUrl || '').trim();
+                if ((isBadMediaUrl(url) || (isLocalMediaUrl(url) && !state.mediaId)) && !state.mediaId) {
+                    $('#cwMediaUrl').addClass('is-invalid');
+                    $('#cwMediaUrlError').removeClass('d-none');
+                    var ht = String(state.template.header_type || 'media').toUpperCase();
+                    return showWizardError(
+                        url && isLocalMediaUrl(url)
+                            ? 'Upload the ' + ht + ' again. Localhost media URLs cannot be sent via Meta — WhatsApp needs a Meta media ID.'
+                            : 'Upload a ' + ht + ' file for this template. The Meta approval sample cannot be reused at send time.',
+                        $('#cwMediaUrl')
+                    );
+                }
+                state.mediaUrl = url;
+            }
+            var missingVar = null;
+            $('#cwVariableMap .cw-var-source').each(function () {
+                if (!$(this).val()) {
+                    $(this).addClass('is-invalid');
+                    missingVar = $(this);
+                } else if ($(this).val() === 'custom') {
+                    var key = $(this).data('var');
+                    var $custom = $('#cwVariableMap .cw-var-custom[data-var="' + key + '"]');
+                    if (!String($custom.val() || '').trim()) {
+                        $custom.addClass('is-invalid');
+                        missingVar = $custom;
+                    }
+                }
+            });
+            if (missingVar) {
+                return showWizardError('Select a contact field or enter a custom value for every variable.', missingVar);
+            }
+            collectVariables();
+            return true;
+        }
+        return true;
+    }
+
+    function goNext() {
+        if (!validateStep(state.step)) {
+            return;
+        }
+        if (state.step === 1) {
+            $('#cwSelectedLabelChip').text(state.labelName);
+            var $next = $('#cwNextBtn').prop('disabled', true);
+            previewAudience().done(function () {
+                // Attribute rows appear only when user clicks "Add attribute".
+                setStep(2);
+            }).always(function () {
+                $next.prop('disabled', false);
+            });
+            return;
+        }
+        if (state.step === 2) {
+            var $btn2 = $('#cwNextBtn').prop('disabled', true);
+            previewAudience().done(function () {
+                if (!validateStep(2)) return;
+                setStep(3);
+            }).always(function () {
+                $btn2.prop('disabled', false);
+            });
+            return;
+        }
+        if (state.step === 3) {
+            if (state.channel === 'whatsapp' && !state.templateId) {
+                showWizardError('Click Use Template on a card, or select one.');
+                return;
+            }
+            setStep(4);
+            return;
+        }
+        if (state.step === 4) {
+            saveDraft().done(function () {
+                setStep(5);
+            });
+        }
+    }
+
+    function goBack() {
+        if (state.step <= 1) return;
+        clearWizardErrors();
+        setStep(state.step - 1);
+    }
+
+    function saveDraft() {
+        clearWizardErrors();
+        var payload = {
+            channel: state.channel,
+            name: String($('#cwName').val() || '').trim(),
+            tag_ids: state.labelIds,
+            attributes: state.attributes
+        };
+        if (state.channel === 'whatsapp') {
+            payload.template_id = state.templateId;
+            payload.variables = collectVariables();
+            if (state.template && state.template.needs_media) {
+                payload.header_media_url = String($('#cwMediaUrl').val() || state.mediaUrl || '').trim();
+                if (state.mediaId) {
+                    payload.header_media_id = String(state.mediaId).trim();
+                }
+                if (state.mediaMime) {
+                    payload.header_media_mime = String(state.mediaMime).trim();
+                }
+            } else if (state.template && state.template.media_optional) {
+                // Only treat as override when the URL field has a value (fresh upload/paste).
+                // Orphan mediaId from an earlier PNG attempt must not force DOCUMENT validation.
+                var overrideUrl = String($('#cwMediaUrl').val() || '').trim();
+                if (overrideUrl) {
+                    payload.header_media_url = overrideUrl;
+                    if (state.mediaId && state.mediaUrl === overrideUrl) {
+                        payload.header_media_id = String(state.mediaId).trim();
+                    }
+                    if (state.mediaMime && state.mediaUrl === overrideUrl) {
+                        payload.header_media_mime = String(state.mediaMime).trim();
+                    }
+                }
+                // Empty field → approved template sample is used automatically.
+            }
+        } else {
+            payload.subject = String($('#cwEmailSubject').val() || '').trim();
+            payload.html_content = String($('#cwEmailHtml').val() || '');
+            payload.builder_id = parseInt($('#cwEmailBuilder').val() || '0', 10) || null;
+            var $opt = $('#cwEmailBuilder option:selected');
+            payload.cheerio_builder_id = $opt.data('cheerio') || '';
+            payload.sender_id = parseInt($('#cwSender').val() || '0', 10) || null;
+        }
+
+        var $btn = $('#cwNextBtn').prop('disabled', true);
+        var deferred = $.Deferred();
+        APP.post(base() + '/campaigns/wizard', payload)
+            .done(function (res) {
+                if (!res || res.success === false) {
+                    showWizardError((res && res.message) || 'Could not save campaign.');
+                    deferred.reject(res);
+                    return;
+                }
+                var data = res.data || {};
+                state.campaignId = parseInt(data.id || 0, 10);
+                if (!state.campaignId) {
+                    showWizardError('Campaign was saved but no ID was returned.');
+                    deferred.reject(res);
+                    return;
+                }
+                $('#cwCampaignId').val(String(state.campaignId));
+                toast(res.message || 'Draft saved.');
+                deferred.resolve(res);
+            })
+            .fail(function (xhr) {
+                var msg = apiErrorMessage(xhr, 'Could not save campaign.');
+                var mediaRelated = /media|upload|header|localhost/i.test(msg);
+                showWizardError(msg, mediaRelated ? $('#cwMediaUrl') : null);
+                if (mediaRelated) {
+                    $('#cwMediaUrlError').removeClass('d-none');
+                }
+                deferred.reject(xhr);
+            })
+            .always(function () {
+                $btn.prop('disabled', false);
+            });
+        return deferred.promise();
+    }
+
+    function runCampaign() {
+        clearWizardErrors();
+        if (!state.campaignId) {
+            showWizardError('Save the campaign draft first.');
+            return;
+        }
+        var $btn = $('#cwRunBtn').prop('disabled', true);
+        APP.post(base() + '/campaigns/wizard/' + state.channel + '/' + state.campaignId + '/run', {})
+            .done(function (res) {
+                if (!res || res.success === false) {
+                    showWizardError((res && res.message) || 'Run failed.');
+                    return;
+                }
+                toast(res.message || 'Campaign started.');
+                hideModal();
+                var redirect = res.data && res.data.redirect ? res.data.redirect : (base() + '/campaigns');
+                window.location.href = redirect;
+            })
+            .fail(function (xhr) {
+                showWizardError(apiErrorMessage(xhr, 'Run failed.'));
+            })
+            .always(function () {
+                $btn.prop('disabled', false);
+            });
+    }
+
+    function scheduleCampaign() {
+        clearWizardErrors();
+        if (!state.campaignId) {
+            showWizardError('Save the campaign draft first.');
+            return;
+        }
+
+        // First click reveals the schedule picker; second click submits.
+        if ($('#cwScheduleWrap').hasClass('d-none')) {
+            $('#cwScheduleWrap').removeClass('d-none');
+            $('#cwScheduleBtn').html('<i class="fas fa-check me-1"></i> Confirm Schedule');
+            $('#cwScheduledAt').trigger('focus');
+            return;
+        }
+
+        var when = String($('#cwScheduledAt').val() || '').trim();
+        if (!when) {
+            return showWizardError('Pick a schedule date/time.', $('#cwScheduledAt'));
+        }
+        var whenDate = (window.APP && typeof APP.parseAppLocalInput === 'function')
+            ? APP.parseAppLocalInput(when)
+            : new Date(when);
+        var whenTs = whenDate ? whenDate.getTime() : NaN;
+        if (!whenTs || whenTs < Date.now() - 60000) {
+            return showWizardError('Schedule time must be in the future (' + ((APP && APP.timezone) || 'app timezone') + ').', $('#cwScheduledAt'));
+        }
+        var $btn = $('#cwScheduleBtn').prop('disabled', true);
+        APP.post(base() + '/campaigns/wizard/' + state.channel + '/' + state.campaignId + '/schedule', {
+            scheduled_at: when
+        }).done(function (res) {
+            if (!res || res.success === false) {
+                showWizardError((res && res.message) || 'Schedule failed.');
+                return;
+            }
+            toast(res.message || 'Campaign scheduled.');
+            hideModal();
+            window.location.href = (res.data && res.data.redirect) || (base() + '/campaigns');
+        }).fail(function (xhr) {
+            showWizardError(apiErrorMessage(xhr, 'Schedule failed.'));
+        }).always(function () {
+            $btn.prop('disabled', false);
+        });
+    }
+
+    function openWizard(channel) {
+        channel = channel === 'email' ? 'email' : 'whatsapp';
+        if (channel === 'whatsapp' && $('#campaignHub').data('can-wa') === 0) {
+            toast('You do not have permission to create WhatsApp campaigns.', 'error');
+            return;
+        }
+        if (channel === 'email' && $('#campaignHub').data('can-email') === 0) {
+            toast('You do not have permission to create Email campaigns.', 'error');
+            return;
+        }
+
+        state.channel = channel;
+        state.step = 1;
+        state.templateId = 0;
+        state.template = null;
+        state.builderId = 0;
+        state.campaignId = 0;
+        clearLocalPreview();
+        state.mediaUrl = '';
+        state.mediaId = '';
+        state.mediaMime = '';
+        state.variables = {};
+        state.attributes = [];
+        state.audience = { total: 0, phone_count: 0, email_count: 0, contact_ids: [] };
+
+        $('#cwChannel').val(channel);
+        $('#cwCampaignId').val('');
+        $('#cwName').val('');
+        $('#cwNameCount').text('0');
+        state.labelIds = [];
+        $('#cwLabelOptions .cw-label-check').prop('checked', false);
+        $('#cwLabelSearch').val('');
+        filterLabels('');
+        updateLabelSummary();
+        $('#cwLabelError').addClass('d-none');
+        $('#cwAttrRows').empty();
+        $('#cwMediaUrl').val('');
+        $('#cwMediaFile').val('');
+        $('#cwMediaStatus').addClass('d-none').text('');
+        $('#cwEmailSubject').val('');
+        $('#cwEmailHtml').val('');
+        $('#cwSender').val('');
+        toggleSenderPicker();
+        $('#cwTemplateSearch').val('');
+        $('#cwScheduledAt').val('');
+        $('#cwTotalCount, #cwPhoneCount, #cwEmailCount, #cwEligibleCount, #cwSkippedCount').text('0');
+        $('#cwSkippedChip').addClass('d-none');
+        $('#cwAudienceExcludedNote').empty();
+        $('#cwAudienceCounts').text('Phone Numbers fetched: 0 | Emails fetched: 0');
+
+        loadWizardData(true).done(function () {
+            var preset = parseInt($('#campaignHub').data('preset-label') || '0', 10);
+            if (preset > 0) {
+                $('#cwLabelOptions .cw-label-check[value="' + preset + '"]').prop('checked', true);
+                updateLabelSummary();
+            }
+            setStep(1);
+            showModal();
+        }).fail(function () {
+            toast('Could not load campaign wizard data.', 'error');
+        });
+    }
+
+    // ---- Legacy edit-form helpers (campaigns/form.php) ----
+    Campaigns.renderVariableMap = function (variables) {
+        var $wrap = $('#variableMap');
+        if (!$wrap.length) return;
+        $wrap.empty();
+        if (!variables || !variables.length) {
+            $wrap.html('<p class="text-muted mb-0">This template has no variables.</p>');
+            return;
+        }
+        var $form = $('#campaignForm');
+        var saved = $form.data('variables') || {};
+        var attrFields = $form.data('attr-fields') || [];
+        variables.forEach(function (v, idx) {
+            var key = typeof v === 'string' ? v : (v.name || v.key || ('var' + (idx + 1)));
+            var label = typeof v === 'string' ? v : (v.label || key);
+            var example = typeof v === 'object' ? String(v.example || '') : '';
+            var selected = Object.prototype.hasOwnProperty.call(saved, key)
+                ? String(saved[key] || '')
+                : (typeof v === 'object' ? String(v.suggested_source || '') : '');
+            var isAttr = selected.indexOf('attr:') === 0;
+            var isCustom = selected === 'custom' || (selected !== '' && !isAttr && ['name', 'mobile', 'email'].indexOf(selected) === -1);
+            var customValue = selected === 'custom' ? example : (isCustom ? selected : '');
+            var attrOpts = attrFields.filter(function (f) {
+                return ['name', 'mobile', 'email'].indexOf(f.value) === -1;
+            }).map(function (f) {
+                var val = 'attr:' + f.value;
+                return '<option value="' + esc(val) + '"' + (selected === val ? ' selected' : '') + '>' + esc(f.label) + '</option>';
+            }).join('');
+            var row =
+                '<div class="row var-map-row">' +
+                '<div class="col-md-4"><label class="mb-0 fw-semibold">{{' + esc(label) + '}}</label>' +
+                (example ? '<div class="small text-muted text-break">Example: ' + esc(example) + '</div>' : '') +
+                '</div>' +
+                '<div class="col-md-8">' +
+                '<select class="form-select form-select-sm var-source" name="variables[' + esc(key) + ']" data-var="' + esc(key) + '">' +
+                '<option value=""' + (selected === '' ? ' selected' : '') + '>Select contact field…</option>' +
+                '<option value="name"' + (selected === 'name' ? ' selected' : '') + '>Contact Name</option>' +
+                '<option value="mobile"' + (selected === 'mobile' ? ' selected' : '') + '>Mobile</option>' +
+                '<option value="email"' + (selected === 'email' ? ' selected' : '') + '>Email</option>' +
+                (attrOpts ? '<optgroup label="Attributes">' + attrOpts + '</optgroup>' : '') +
+                '<option value="custom"' + (isCustom ? ' selected' : '') + '>Custom value…</option>' +
+                '</select>' +
+                '<input type="text" class="form-control form-control-sm mt-1 var-custom' +
+                (isCustom ? '' : ' d-none') +
+                '" name="variables_custom[' + esc(key) + ']" placeholder="Custom value" data-var="' +
+                esc(key) + '" value="' + esc(customValue) + '">' +
+                '</div></div>';
+            $wrap.append(row);
+        });
+    };
+
+    Campaigns.loadTemplateVars = function (templateId) {
+        if (!templateId) {
+            Campaigns.renderVariableMap([]);
+            return;
+        }
+        APP.get(base() + '/templates/' + templateId + '/preview').done(function (res) {
+            var tpl = res.data || res.template || res;
+            var vars = tpl.variable_definitions || tpl.variables || [];
+            if (typeof vars === 'string') {
+                try { vars = JSON.parse(vars); } catch (e) { vars = []; }
+            }
+            Campaigns.renderVariableMap(vars);
+            $('#templatePreviewBody').text(tpl.body || '');
+            $('#templatePreviewCard').removeClass('d-none');
+        }).fail(function () {
+            toast('Could not load template', 'error');
+        });
+    };
+
+    Campaigns.openWizard = openWizard;
+
+    $(function () {
+        $(document).on('click', '.js-open-campaign-wizard', function (e) {
+            e.preventDefault();
+            openWizard($(this).data('channel') || 'whatsapp');
+        });
+
+        var open = String($('#campaignHub').data('open-channel') || '');
+        if (open === 'whatsapp' || open === 'email') {
+            openWizard(open);
+        }
+
+        $('#cwName').on('input', function () {
+            $('#cwNameCount').text(String($(this).val() || '').length);
+            $(this).removeClass('is-invalid');
+            clearWizardErrors();
+        });
+        $('#cwEmailSubject, #cwMediaUrl, #cwScheduledAt').on('change input', function () {
+            $(this).removeClass('is-invalid');
+        });
+        $('#cwLabelOptions').on('change', '.cw-label-check', function () {
+            updateLabelSummary();
+            $('#cwLabelError').addClass('d-none');
+        });
+        // "Select all" toggles only the rows currently visible (respects the search filter).
+        $('#cwLabelSelectAll').on('change', function () {
+            var on = $(this).prop('checked');
+            $('#cwLabelOptions .cw-label-opt:not(.d-none) .cw-label-check').prop('checked', on);
+            updateLabelSummary();
+            $('#cwLabelError').addClass('d-none');
+        });
+        $('#cwLabelClear').on('click', function (e) {
+            e.preventDefault();
+            $('#cwLabelOptions .cw-label-check').prop('checked', false);
+            updateLabelSummary();
+        });
+        $('#cwLabelSearch').on('input', function () {
+            filterLabels($(this).val());
+        }).on('click', function (e) {
+            e.stopPropagation();
+        });
+
+        $('#cwBackBtn').on('click', function (e) {
+            e.preventDefault();
+            goBack();
+        });
+        $('#cwNextBtn').on('click', function (e) {
+            e.preventDefault();
+            goNext();
+        });
+        $('#cwRunBtn').on('click', function (e) {
+            e.preventDefault();
+            runCampaign();
+        });
+        $('#cwScheduleBtn').on('click', function (e) {
+            e.preventDefault();
+            scheduleCampaign();
+        });
+
+        $('#cwCreateLabelBtn').on('click', function () {
+            $('#cwNewLabelWrap').toggleClass('d-none');
+        });
+        $('#cwSaveLabelBtn').on('click', function () {
+            var name = String($('#cwNewLabelName').val() || '').trim();
+            if (!name) {
+                toast('Enter a label name.', 'error');
+                return;
+            }
+            APP.post(base() + '/campaigns/labels', { name: name }).done(function (res) {
+                var label = (res && res.data) ? res.data : {};
+                toast(res.message || 'Label created.');
+                loadWizardData(true).done(function () {
+                    $('#cwLabelOptions .cw-label-check[value="' + parseInt(label.id || 0, 10) + '"]').prop('checked', true);
+                    updateLabelSummary();
+                    $('#cwNewLabelWrap').addClass('d-none');
+                    $('#cwNewLabelName').val('');
+                });
+            }).fail(function (xhr) {
+                toast((xhr.responseJSON && xhr.responseJSON.message) || 'Could not create label.', 'error');
+            });
+        });
+
+        $('#cwAddAttrBtn').on('click', function () {
+            addAttrRow();
+            $('#cwAttrRows .cw-attr-row').last().find('.cw-attr-name').trigger('focus');
+        });
+        $(document).on('click', '.cw-attr-remove', function () {
+            $(this).closest('.cw-attr-row').remove();
+        });
+        $(document).on('change', '.cw-attr-name', function () {
+            refreshAttrValueOptions($(this).closest('.cw-attr-row'));
+        });
+        $('#cwVerifyAttrBtn').on('click', function () {
+            clearWizardErrors();
+            var incomplete = false;
+            $('#cwAttrRows .cw-attr-row').each(function () {
+                var attrName = String($(this).find('.cw-attr-name').val() || '').trim();
+                var value = String($(this).find('.cw-attr-value').val() || '').trim();
+                if (attrName && !value) {
+                    $(this).find('.cw-attr-value').addClass('is-invalid');
+                    incomplete = true;
+                }
+            });
+            if (incomplete) {
+                showWizardError('Enter a value for each selected attribute before verifying.');
+                return;
+            }
+            var $btn = $(this).prop('disabled', true);
+            previewAudience().done(function () {
+                toast('Audience verified: ' + state.audience.total + ' contacts.', 'success');
+            }).always(function () {
+                $btn.prop('disabled', false);
+            });
+        });
+
+        $('#cwTemplateSearch').on('input', function () {
+            renderTemplateCards($(this).val());
+        });
+        $(document).on('click', '.cw-use-template, .cw-template-card', function (e) {
+            if ($(e.target).closest('button').length || $(this).hasClass('cw-use-template') || $(this).hasClass('cw-template-card')) {
+                var $card = $(this).closest('.cw-template-card');
+                if (!$card.length && $(this).hasClass('cw-template-card')) {
+                    $card = $(this);
+                }
+                if ($card.length) {
+                    e.preventDefault();
+                    selectTemplate($card.data('id'));
+                }
+            }
+        });
+
+        $('#cwSyncTemplatesBtn').on('click', function () {
+            var $btn = $(this).prop('disabled', true).text('Syncing…');
+            APP.post(base() + '/templates/sync', {}).done(function (res) {
+                toast(res.message || 'Templates synced.');
+                loadWizardData(true).done(function () {
+                    renderTemplateCards($('#cwTemplateSearch').val() || '');
+                });
+            }).fail(function (xhr) {
+                toast((xhr.responseJSON && xhr.responseJSON.message) || 'Sync failed.', 'error');
+            }).always(function () {
+                $btn.prop('disabled', false).text('SYNC');
+            });
+        });
+
+        // Shared AI writer (email-editor.js) replaced the content — it no longer matches the chosen builder.
+        $('#cwEmailHtml').on('email-ai:applied', function () { $('#cwEmailBuilder').val(''); });
+
+        $('#cwEmailBuilder').on('change', function () {
+            var $opt = $(this).find('option:selected');
+            if ($opt.val()) {
+                if ($opt.data('subject')) $('#cwEmailSubject').val($opt.data('subject'));
+                if ($opt.data('html')) $('#cwEmailHtml').val($opt.data('html'));
+            }
+        });
+
+        var settingMediaUrl = false;
+        function setMediaUrlField(value) {
+            settingMediaUrl = true;
+            $('#cwMediaUrl').val(value);
+            settingMediaUrl = false;
+        }
+
+        $('#cwMediaUrl').on('input', function () {
+            if (settingMediaUrl) {
+                return;
+            }
+            $('#cwMediaUrlError').addClass('d-none');
+            $('#cwMediaUrl').removeClass('is-invalid');
+            var v = String($(this).val() || '').trim();
+            if (!v) {
+                // Cleared → fall back to approved sample; drop stale override ids.
+                clearLocalPreview();
+                state.mediaUrl = '';
+                state.mediaId = '';
+                state.mediaMime = '';
+                $('#cwMediaFile').val('');
+                $('#cwMediaStatus').addClass('d-none').text('');
+            } else {
+                clearLocalPreview();
+                state.mediaUrl = v;
+            }
+            updateWaPreview();
+        });
+
+        function uploadCampaignMediaFile(file) {
+            if (!file) return;
+            var allowed = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'video/mp4', 'application/pdf'];
+            var mime = String(file.type || '').toLowerCase();
+            if (mime && allowed.indexOf(mime) === -1) {
+                toast('Unsupported file type. Use PNG, JPEG, WEBP, MP4, or PDF.', 'error');
+                return;
+            }
+            var mismatch = headerMediaMismatch(mime);
+            if (mismatch) {
+                $('#cwMediaStatus').removeClass('d-none text-muted text-success').addClass('text-danger').text(mismatch);
+                toast(mismatch, 'error');
+                return;
+            }
+            if (file.size > 16 * 1024 * 1024) {
+                toast('File exceeds 16MB limit.', 'error');
+                return;
+            }
+
+            rememberMediaFile(file);
+            updateWaPreview();
+
+            var $status = $('#cwMediaStatus').removeClass('d-none text-danger text-success').addClass('text-muted').text('Uploading ' + file.name + '…');
+            var fd = new FormData();
+            fd.append('file', file);
+            $.ajax({
+                url: base() + '/templates/header-media',
+                method: 'POST',
+                data: fd,
+                processData: false,
+                contentType: false,
+                headers: (function () {
+                    var h = {};
+                    if (window.APP) {
+                        h[APP.csrfHeader || 'X-CSRF-TOKEN'] = APP.csrfToken || $('meta[name="csrf-token"]').attr('content') || '';
+                    }
+                    return h;
+                })()
+            }).done(function (res) {
+                if (!res || res.success === false) {
+                    var err = (res && res.message) ? res.message : 'Upload failed';
+                    $status.removeClass('text-muted').addClass('text-danger').text(err);
+                    toast(err, 'error');
+                    return;
+                }
+                var data = (res && res.data) ? res.data : res;
+                var url = String(data.preview_url || data.url || data.source || '').trim();
+                if (!url || url.indexOf('must be of type') !== -1 || url.indexOf('Argument #') !== -1) {
+                    $status.removeClass('text-muted').addClass('text-danger').text('Upload did not return a media URL.');
+                    toast('Upload did not return a media URL.', 'error');
+                    return;
+                }
+                state.mediaUrl = url;
+                state.mediaId = String(data.wa_media_id || data.media_id || '').trim();
+                state.mediaMime = String(data.mime_type || file.type || '').trim();
+                // Keep the visible URL field blank for local serve paths; state.mediaUrl holds the real value.
+                var showUrl = /^https?:\/\//i.test(url)
+                    && !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(url)
+                    && url.indexOf('/media/serve/') === -1;
+                setMediaUrlField(showUrl ? url : '');
+                if (!state.mediaPreviewUrl && /^https?:\/\//i.test(url)) {
+                    state.mediaPreviewUrl = url;
+                }
+                $('#cwMediaUrlError').addClass('d-none');
+                $('#cwMediaUrl').removeClass('is-invalid');
+                $status.removeClass('text-muted').addClass('text-success').text('Uploaded ✓');
+                updateWaPreview();
+                toast('Media uploaded.', 'success');
+            }).fail(function (xhr) {
+                var err = (xhr.responseJSON && xhr.responseJSON.message) || 'Upload failed';
+                clearLocalPreview();
+                state.mediaUrl = '';
+                state.mediaId = '';
+                state.mediaMime = '';
+                $('#cwMediaUrl').val('').addClass('is-invalid');
+                $('#cwMediaUrlError').removeClass('d-none');
+                $status.removeClass('text-muted').addClass('text-danger').text(err);
+                updateWaPreview();
+                showWizardError(err, $('#cwMediaUrl'));
+            });
+        }
+
+        APP.bindUploadBox({
+            box: '#cwUploadBox',
+            input: '#cwMediaFile',
+            chooseBtn: '#cwChooseFileBtn',
+            ignore: '#cwMediaUrl',
+            onFile: uploadCampaignMediaFile,
+            // Stop the browser opening a file dropped elsewhere in the modal
+            dropZone: '#campaignWizardModal'
+        });
+
+        $(document).on('change', '.cw-var-source', function () {
+            var key = $(this).data('var');
+            var $custom = $('#cwVariableMap .cw-var-custom[data-var="' + key + '"]');
+            $custom.toggleClass('d-none', $(this).val() !== 'custom');
+        });
+
+        // Audience Breakdown Modal Triggers
+        $(document).on('click', '.cw-filter-chip', function () {
+            var tab = $(this).data('tab') || 'all';
+            openAudienceModal(tab);
+        });
+
+        $(document).on('click', '#cwViewAudienceDetailsBtn', function () {
+            openAudienceModal('all');
+        });
+
+        $(document).on('click', '#cwAudienceModalFilterTabs button', function () {
+            $('#cwAudienceModalFilterTabs button').removeClass('active');
+            $(this).addClass('active');
+            renderAudienceTable($(this).data('tab'), $('#cwAudienceSearchInput').val());
+        });
+
+        $(document).on('input', '#cwAudienceSearchInput', function () {
+            var activeTab = $('#cwAudienceModalFilterTabs button.active').data('tab') || 'all';
+            renderAudienceTable(activeTab, $(this).val());
+        });
+
+        $('#campaignRefreshBtn').on('click', function () {
+            window.location.reload();
+        });
+
+        $('#btnAckWaHealth').on('click', function () {
+            var $btn = $(this).prop('disabled', true);
+            APP.post(base() + '/campaigns/health/acknowledge', {}).done(function (res) {
+                toast((res && res.message) || 'Marked as reviewed.');
+                $('#waHealthBanner').remove();
+            }).fail(function (xhr) {
+                $btn.prop('disabled', false);
+                toast(apiErrorMessage(xhr, 'Could not update status'), 'error');
+            });
+        });
+
+        // Legacy form page
+        if ($('#campaignForm').length && $('#variableMap').length) {
+            $('#templateId').on('change', function () {
+                Campaigns.loadTemplateVars($(this).val());
+            });
+            if ($('#templateId').val()) {
+                Campaigns.loadTemplateVars($('#templateId').val());
+            }
+            $(document).on('change', '.var-source', function () {
+                var key = $(this).data('var');
+                var $custom = $('#variableMap .var-custom[data-var="' + key + '"]');
+                $custom.toggleClass('d-none', $(this).val() !== 'custom').prop('required', $(this).val() === 'custom');
+            });
+            $('#scheduleToggle').on('change', function () {
+                $('#scheduleFields').toggleClass('d-none', !this.checked);
+            });
+            $('#audienceAll').on('change', function () {
+                $('#contactIds, #tagIds').prop('disabled', this.checked);
+            });
+        }
+    });
+
+    window.CampaignsApp = Campaigns;
+})(window, jQuery);
