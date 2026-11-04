@@ -1214,7 +1214,7 @@ class Chat extends BaseController
             $mediaUrl = $publicUrl;
         }
 
-        $header = WhatsAppTemplatePayload::buildHeaderComponent($headerType, $mediaId, $mediaUrl);
+        $header = WhatsAppTemplatePayload::buildHeaderComponent($headerType, $mediaId, $mediaUrl, isset($file) ? (string) $file->getClientName() : '');
 
         return $header !== null ? [$header] : [];
     }

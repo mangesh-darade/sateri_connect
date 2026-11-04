@@ -53,7 +53,7 @@ final class WhatsAppTemplatePayload
      *
      * @return array<string, mixed>|null
      */
-    public static function buildHeaderComponent(string $headerType, string $mediaId = '', string $mediaUrl = ''): ?array
+    public static function buildHeaderComponent(string $headerType, string $mediaId = '', string $mediaUrl = '', string $filename = ''): ?array
     {
         $headerType = strtolower(trim($headerType));
         if (! in_array($headerType, ['image', 'video', 'document'], true)) {
@@ -62,13 +62,15 @@ final class WhatsAppTemplatePayload
 
         $mediaId  = trim($mediaId);
         $mediaUrl = trim($mediaUrl);
+        // Without a filename WhatsApp shows a document header as "Untitled.pdf".
+        $name = $headerType === 'document' ? self::documentFilename($filename, $mediaId, $mediaUrl) : '';
 
         if ($mediaId !== '') {
             return [
                 'type'       => 'header',
                 'parameters' => [[
                     'type'      => $headerType,
-                    $headerType => ['id' => $mediaId],
+                    $headerType => ['id' => $mediaId] + ($name !== '' ? ['filename' => $name] : []),
                 ]],
             ];
         }
@@ -82,7 +84,7 @@ final class WhatsAppTemplatePayload
                 'type'       => 'header',
                 'parameters' => [[
                     'type'      => $headerType,
-                    $headerType => ['link' => $mediaUrl],
+                    $headerType => ['link' => $mediaUrl] + ($name !== '' ? ['filename' => $name] : []),
                 ]],
             ];
         }
@@ -122,7 +124,8 @@ final class WhatsAppTemplatePayload
         $header = self::buildHeaderComponent(
             $type,
             (string) ($payload['header_media_id'] ?? ''),
-            (string) ($payload['header_media_url'] ?? '')
+            (string) ($payload['header_media_url'] ?? ''),
+            (string) ($payload['header_media_filename'] ?? $payload['header_media_name'] ?? '')
         );
         if ($header === null) {
             return $components;
@@ -131,6 +134,39 @@ final class WhatsAppTemplatePayload
         array_unshift($components, $header);
 
         return array_values($components);
+    }
+
+    /**
+     * The name WhatsApp shows for a document: the one given, else the original upload name from the media library
+     * (looked up by WhatsApp media id or URL), else the last part of the URL.
+     */
+    private static function documentFilename(string $given, string $mediaId, string $mediaUrl): string
+    {
+        $name = trim($given);
+
+        if ($name === '') {
+            try {
+                $model = model(\App\Models\MediaModel::class);
+                $row   = null;
+                if ($mediaId !== '') {
+                    $row = $model->where('wa_media_id', $mediaId)->orderBy('id', 'DESC')->first();
+                }
+                if ($row === null && $mediaUrl !== '') {
+                    $row = $model->where('url', $mediaUrl)->orderBy('id', 'DESC')->first();
+                }
+                $name = trim((string) ($row['original_name'] ?? ''));
+            } catch (\Throwable) {
+                $name = '';
+            }
+        }
+        if ($name === '' && $mediaUrl !== '') {
+            $name = rawurldecode(basename((string) parse_url($mediaUrl, PHP_URL_PATH)));
+        }
+
+        // Plain file name only: no folders, no control characters, a sane length.
+        $name = trim(str_replace(['/', '\\'], '', (string) preg_replace('/[\x00-\x1F\x7F]+/', '', $name)));
+
+        return mb_substr($name, 0, 200);
     }
 
     /**
