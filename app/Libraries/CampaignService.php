@@ -1188,6 +1188,9 @@ class CampaignService
         $builder = $this->contacts->builder();
         $builder->where('contacts.status', 'active');
         $builder->where('contacts.deleted_at', null);
+        // Email-only contacts (store signups without a phone) cannot receive WhatsApp.
+        $builder->where('contacts.mobile IS NOT NULL', null, false);
+        $builder->where('contacts.mobile <>', '');
 
         if ($hasContacts) {
             $builder->whereIn('contacts.id', array_map('intval', $contactIds));
