@@ -180,10 +180,10 @@ $crDisable = $canEdit ? '' : 'disabled';
             <div class="accordion-body">
                 <div class="table-responsive">
                     <table class="table table-sm align-middle mb-0">
-                        <thead><tr><th>Store</th><th>Customer</th><th>Items</th><th class="text-end">Total</th><th>Status</th><th class="text-end">Reminders</th><th>Last activity</th></tr></thead>
+                        <thead><tr><th>Store</th><th>Customer</th><th>Items</th><th class="text-end">Total</th><th>Status</th><th class="text-end">Reminders</th><th>Last activity</th><?php if ($canEdit): ?><th class="text-end">Action</th><?php endif; ?></tr></thead>
                         <tbody>
                         <?php if (empty($cartOverview['rows'])): ?>
-                            <tr><td colspan="7" class="text-center text-muted py-4">No carts yet. They appear when your store sends an event.</td></tr>
+                            <tr><td colspan="8" class="text-center text-muted py-4">No carts yet. They appear when your store sends an event.</td></tr>
                         <?php endif; ?>
                         <?php foreach ($cartOverview['rows'] as $c): ?>
                             <?php $badge = ['open' => 'warning', 'reminded' => 'info', 'recovered' => 'success', 'skipped' => 'secondary'][$c['status']] ?? 'secondary'; ?>
@@ -198,7 +198,14 @@ $crDisable = $canEdit ? '' : 'disabled';
                                         <div class="small text-<?= $dl[0] ?>"><?= esc($dl[1]) ?><?= ($c['delivery_status'] === 'failed' && (string) $c['delivery_error'] !== '') ? ': ' . esc(mb_substr((string) $c['delivery_error'], 0, 160)) : '' ?></div>
                                     <?php endif; ?></td>
                                 <td class="text-end"><?= (int) $c['reminders_sent'] ?></td>
-                                <td class="small"><?= esc((string) $c['last_activity_at']) ?></td>
+                                <td class="small"><?= esc(format_app_datetime($c['last_activity_at'], 'd M Y, g:i A')) ?></td>
+                                <?php if ($canEdit): ?>
+                                    <td class="text-end text-nowrap">
+                                        <?php if ($c['status'] !== 'recovered' && $c['phone'] !== ''): ?>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary js-cr-send" data-id="<?= (int) $c['id'] ?>" title="Send the reminder now"><i class="fab fa-whatsapp me-1"></i> Send now</button>
+                                        <?php endif; ?>
+                                    </td>
+                                <?php endif; ?>
                             </tr>
                         <?php endforeach; ?>
                         </tbody>

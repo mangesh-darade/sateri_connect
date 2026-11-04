@@ -862,6 +862,22 @@ class Settings extends BaseController
         return $this->jsonResponse(true, null, $res['message']);
     }
 
+    /** Sends the cart reminder for one cart right now (ignores the delay). */
+    public function sendCartReminder(int $id): ResponseInterface
+    {
+        if ($denied = $this->guardSettings('settings.edit')) {
+            return $denied;
+        }
+
+        $res = (new \App\Libraries\CartRecoveryService())->sendNow($id);
+        if (! $res['ok']) {
+            return $this->jsonResponse(false, null, $res['message'], [], $res['status']);
+        }
+        log_activity('send', 'cart_recovery', 'Cart reminder sent manually', ['cart_id' => $id]);
+
+        return $this->jsonResponse(true, null, $res['message']);
+    }
+
     public function rotateCartSecret(): ResponseInterface
     {
         if ($denied = $this->guardSettings('settings.edit')) {

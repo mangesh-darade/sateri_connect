@@ -976,6 +976,15 @@ class PlatformClients extends BaseController
             : $this->response->setStatusCode(500)->setJSON(['success' => false, 'message' => 'Could not revoke API key.']);
     }
 
+    public function clientSettingsCartSend(string $key, int $id): ResponseInterface
+    {
+        $result = $this->runClientSettings($key, 'sendCartReminder', [$id]);
+
+        return $result instanceof ResponseInterface
+            ? $result
+            : $this->response->setStatusCode(500)->setJSON(['success' => false, 'message' => 'Could not send the reminder.']);
+    }
+
     public function clientMcpServer(string $key): string|ResponseInterface
     {
         return $this->runClientSettings($key, 'mcpServer');

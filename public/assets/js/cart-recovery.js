@@ -43,6 +43,19 @@
             .always(function () { $btns.prop('disabled', false); });
     });
 
+    $page.on('click', '.js-cr-send', function () {
+        var $btn = $(this).prop('disabled', true);
+        APP.post(base + '/' + $btn.data('id') + '/send', {})
+            .done(function (res) {
+                APP.toast(res.message || 'Reminder sent.', 'success');
+                window.setTimeout(function () { window.location.reload(); }, 1200);
+            })
+            .fail(function (xhr) {
+                APP.toast(errorMessage(xhr, 'Could not send the reminder.'), 'error');
+                $btn.prop('disabled', false);
+            });
+    });
+
     $('#crRotate').on('click', function () {
         APP.confirm({
             title: 'Create a new secret?',
