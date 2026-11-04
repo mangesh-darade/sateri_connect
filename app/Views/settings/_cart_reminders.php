@@ -37,53 +37,53 @@ $crDisable = $canEdit ? '' : 'disabled';
         </h2>
         <div id="crAccSettings" class="accordion-collapse collapse show cr-acc-panel">
             <div class="accordion-body">
-                <form id="crForm">
+                <div id="crForm">
                     <div class="row g-3">
                         <div class="col-12">
                             <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" role="switch" id="crEnabled" name="enabled" value="1" <?= $crOn ? 'checked' : '' ?> <?= $crDisable ?>>
+                                <input class="form-check-input" type="checkbox" role="switch" id="crEnabled" data-cr="enabled" value="1" <?= $crOn ? 'checked' : '' ?> <?= $crDisable ?>>
                                 <label class="form-check-label" for="crEnabled">Send WhatsApp reminders for abandoned carts</label>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label small mb-1" for="crTemplate">Approved template</label>
-                            <select class="form-select form-select-sm" id="crTemplate" name="template_name" <?= $crDisable ?>>
+                            <select class="form-select form-select-sm" id="crTemplate" data-cr="template_name" <?= $crDisable ?>>
                                 <option value="">Choose a template</option>
                                 <?php foreach ($cartTemplates as $t): ?>
                                     <option value="<?= esc((string) $t['name'], 'attr') ?>" data-lang="<?= esc((string) $t['language'], 'attr') ?>" <?= $t['name'] === $cartCfg['template_name'] ? 'selected' : '' ?>><?= esc((string) $t['name']) ?> (<?= esc((string) $t['language']) ?>)</option>
                                 <?php endforeach; ?>
                             </select>
-                            <input type="hidden" name="template_language" id="crLang" value="<?= esc($cartCfg['template_language'], 'attr') ?>">
+                            <input type="hidden" data-cr="template_language" id="crLang" value="<?= esc($cartCfg['template_language'], 'attr') ?>">
                             <div class="form-text">Template variables, in order: {{1}} customer name, {{2}} items, {{3}} total, {{4}} checkout link.</div>
                         </div>
                         <div class="col-6 col-md-2">
                             <label class="form-label small mb-1" for="crDelay">Send after (min)</label>
-                            <input type="number" class="form-control form-control-sm" id="crDelay" name="delay_minutes" min="15" max="10080" value="<?= (int) $cartCfg['delay_minutes'] ?>" <?= $crDisable ?>>
+                            <input type="number" class="form-control form-control-sm" id="crDelay" data-cr="delay_minutes" min="2" max="10080" value="<?= (int) $cartCfg['delay_minutes'] ?>" <?= $crDisable ?>>
                         </div>
                         <div class="col-6 col-md-2">
                             <label class="form-label small mb-1" for="crMax">Max reminders</label>
-                            <input type="number" class="form-control form-control-sm" id="crMax" name="max_reminders" min="1" max="3" value="<?= (int) $cartCfg['max_reminders'] ?>" <?= $crDisable ?>>
+                            <input type="number" class="form-control form-control-sm" id="crMax" data-cr="max_reminders" min="1" max="3" value="<?= (int) $cartCfg['max_reminders'] ?>" <?= $crDisable ?>>
                         </div>
                         <div class="col-6 col-md-2">
                             <label class="form-label small mb-1" for="crGap">Gap (hours)</label>
-                            <input type="number" class="form-control form-control-sm" id="crGap" name="gap_hours" min="1" max="168" value="<?= (int) $cartCfg['gap_hours'] ?>" <?= $crDisable ?>>
+                            <input type="number" class="form-control form-control-sm" id="crGap" data-cr="gap_hours" min="1" max="168" value="<?= (int) $cartCfg['gap_hours'] ?>" <?= $crDisable ?>>
                         </div>
                         <div class="col-6 col-md-2">
                             <label class="form-label small mb-1" for="crCc">Country code</label>
-                            <input type="text" class="form-control form-control-sm" id="crCc" name="country_code" maxlength="4" value="<?= esc($cartCfg['country_code'], 'attr') ?>" <?= $crDisable ?>>
+                            <input type="text" class="form-control form-control-sm" id="crCc" data-cr="country_code" maxlength="4" value="<?= esc($cartCfg['country_code'], 'attr') ?>" <?= $crDisable ?>>
                             <div class="form-text">Added to 10 digit numbers.</div>
                         </div>
                         <div class="col-12">
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="crOptin" name="assume_optin" value="1" <?= $cartCfg['assume_optin'] ? 'checked' : '' ?> <?= $crDisable ?>>
+                                <input class="form-check-input" type="checkbox" id="crOptin" data-cr="assume_optin" value="1" <?= $cartCfg['assume_optin'] ? 'checked' : '' ?> <?= $crDisable ?>>
                                 <label class="form-check-label" for="crOptin">My checkout asks customers for WhatsApp consent (record it as opt-in)</label>
                             </div>
                             <div class="form-text">Leave off unless that is true. Without a recorded opt-in, reminders to that customer are skipped.</div>
                         </div>
                     </div>
-                </form>
+                </div>
                 <?php if ($canEdit): ?>
-                    <div class="mt-3"><button type="submit" form="crForm" class="btn btn-wa btn-sm"><i class="fas fa-save me-1"></i> Save cart reminder settings</button></div>
+                    <div class="mt-3"><button type="button" class="btn btn-wa btn-sm js-cr-save"><i class="fas fa-save me-1"></i> Save cart reminder settings</button></div>
                 <?php endif; ?>
             </div>
         </div>
@@ -160,8 +160,8 @@ $crDisable = $canEdit ? '' : 'disabled';
                 <input type="text" class="form-control form-control-sm font-monospace mb-2" value="<?= esc($cartUrls['shopify'], 'attr') ?>" readonly>
                 <?php if ($canEdit): ?>
                     <label class="form-label small mb-1" for="crShopifySecret">Shopify signing key</label>
-                    <input type="password" class="form-control form-control-sm font-monospace mb-2" style="max-width:560px" id="crShopifySecret" name="shopify_secret" form="crForm" autocomplete="off" placeholder="<?= ! empty($cartShopifySet) ? 'Leave blank to keep the saved key' : 'Paste the key from Shopify' ?>">
-                    <button type="submit" form="crForm" class="btn btn-wa btn-sm mb-2"><i class="fas fa-save me-1"></i> Save</button>
+                    <input type="password" class="form-control form-control-sm font-monospace mb-2" style="max-width:560px" id="crShopifySecret" data-cr="shopify_secret" autocomplete="off" placeholder="<?= ! empty($cartShopifySet) ? 'Leave blank to keep the saved key' : 'Paste the key from Shopify' ?>">
+                    <button type="button" class="btn btn-wa btn-sm mb-2 js-cr-save"><i class="fas fa-save me-1"></i> Save</button>
                 <?php endif; ?>
                 <div class="text-muted">Only checkouts where the customer entered a phone number can get a reminder.</div>
             </div>

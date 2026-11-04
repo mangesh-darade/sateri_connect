@@ -22,13 +22,25 @@
         $('#crLang').val($(this).find('option:selected').data('lang') || 'en');
     });
 
-    $('#crForm').on('submit', function (e) {
-        e.preventDefault();
-        var $btn = $('button[form="crForm"]').prop('disabled', true);
-        APP.post(base, $(this).serialize())
-            .done(function (res) { APP.toast(res.message || 'Saved.', 'success'); })
+    // The tab sits inside the main settings form, so it has no <form> of its own: fields are read by data-cr.
+    function collect() {
+        var data = {};
+        $('#crPage [data-cr]').each(function () {
+            var $f = $(this);
+            data[$f.data('cr')] = $f.is(':checkbox') ? ($f.is(':checked') ? '1' : '0') : $f.val();
+        });
+        return data;
+    }
+
+    $page.on('click', '.js-cr-save', function () {
+        var $btns = $('.js-cr-save').prop('disabled', true);
+        APP.post(base, collect())
+            .done(function (res) {
+                APP.toast(res.message || 'Saved.', 'success');
+                $('#crShopifySecret').val('');
+            })
             .fail(function (xhr) { APP.toast(errorMessage(xhr, 'Could not save.'), 'error'); })
-            .always(function () { $btn.prop('disabled', false); });
+            .always(function () { $btns.prop('disabled', false); });
     });
 
     $('#crRotate').on('click', function () {
