@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-tick-url="<?= esc(site_url('platform/sync/tick'), 'attr') ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -158,5 +158,6 @@ $brandInitial = mb_strtoupper(mb_substr($platformSiteName !== '' ? $platformSite
     </div>
 </div>
 <?= $this->renderSection('scripts') ?>
+<script src="<?= asset_url('assets/js/platform-tick.js') ?>"></script>
 </body>
 </html>

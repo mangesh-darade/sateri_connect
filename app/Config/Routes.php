@@ -64,6 +64,8 @@ $routes->post('webhooks/ses/(:segment)', 'SesWebhook::receive/$1');
  * --------------------------------------------------------------------
  */
 $routes->group('platform', ['filter' => 'platformAuth'], static function ($routes) {
+    // Scheduler tick while a platform page is open (cart reminders for the admin's clients)
+    $routes->post('sync/tick', 'PlatformSync::tick', ['filter' => 'csrf']);
     $routes->get('clients', 'PlatformClients::index');
     $routes->get('clients/all', 'PlatformClients::all');
     $routes->post('clients/refresh-stats', 'PlatformClients::refreshStats', ['filter' => 'csrf']);
