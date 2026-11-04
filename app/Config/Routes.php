@@ -102,6 +102,8 @@ $routes->group('platform', ['filter' => 'platformAuth'], static function ($route
     $routes->post('clients/(:segment)/settings/test-whatsapp', 'PlatformClients::clientSettingsAction/$1/test-whatsapp', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/settings/setup-webhook', 'PlatformClients::clientSettingsAction/$1/setup-webhook', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/settings/test-ai', 'PlatformClients::clientSettingsAction/$1/test-ai', ['filter' => 'csrf']);
+    $routes->post('clients/(:segment)/settings/cart-reminders', 'PlatformClients::clientSettingsAction/$1/cart-reminders', ['filter' => 'csrf']);
+    $routes->post('clients/(:segment)/settings/cart-reminders/rotate', 'PlatformClients::clientSettingsAction/$1/cart-reminders-rotate', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/settings/api-tokens/generate', 'PlatformClients::clientSettingsAction/$1/api-tokens-generate', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/settings/api-tokens/(:num)/delete', 'PlatformClients::clientSettingsDeleteToken/$1/$2', ['filter' => 'csrf']);
     $routes->get('clients/(:segment)/settings/mcp-server', 'PlatformClients::clientMcpServer/$1');
@@ -182,6 +184,8 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('settings/test-whatsapp', 'Settings::testCheerio', ['filter' => 'csrf']); // active provider via UI uses specific buttons
     $routes->post('settings/setup-webhook', 'Settings::setupWebhook', ['filter' => 'csrf']);
     $routes->post('settings/test-ai', 'Settings::testAi', ['filter' => 'csrf']);
+    $routes->post('settings/cart-reminders', 'Settings::saveCartReminders', ['filter' => 'csrf']);
+    $routes->post('settings/cart-reminders/rotate', 'Settings::rotateCartSecret', ['filter' => 'csrf']);
     $routes->post('settings/api-tokens/generate', 'Settings::generateApiToken', ['filter' => 'csrf']);
     $routes->post('settings/api-tokens/(:num)/delete', 'Settings::deleteApiToken/$1', ['filter' => 'csrf']);
     $routes->get('settings/mcp-server', 'Settings::mcpServer');

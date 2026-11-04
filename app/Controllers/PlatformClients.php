@@ -950,6 +950,8 @@ class PlatformClients extends BaseController
             'setup-webhook'         => 'setupWebhook',
             'test-ai'               => 'testAi',
             'api-tokens-generate'   => 'generateApiToken',
+            'cart-reminders'        => 'saveCartReminders',
+            'cart-reminders-rotate' => 'rotateCartSecret',
         ];
 
         $method = $map[$action] ?? '';

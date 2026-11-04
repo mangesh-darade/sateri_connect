@@ -148,6 +148,15 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabCartReminders" type="button" role="tab" aria-controls="tabCartReminders" aria-selected="false">
+                        <i class="fas fa-shopping-cart" aria-hidden="true"></i>
+                        <span>
+                            <span class="settings-nav-label">Cart Reminders</span>
+                            <span class="settings-nav-hint">WooCommerce · Shopify</span>
+                        </span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
                     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabApiKeys" type="button" role="tab" aria-controls="tabApiKeys" aria-selected="false">
                         <i class="fas fa-key" aria-hidden="true"></i>
                         <span>
@@ -1476,6 +1485,11 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                         </div>
                     </div>
 
+                    <!-- Abandoned cart reminders Tab -->
+                    <div class="tab-pane fade" id="tabCartReminders" role="tabpanel">
+                        <?= view('settings/_cart_reminders', get_defined_vars()) ?>
+                    </div>
+
                     <!-- Developer API Keys Tab -->
                     <div class="tab-pane fade" id="tabApiKeys" role="tabpanel">
                         <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom flex-wrap gap-2">
@@ -1704,6 +1718,7 @@ window.APP = window.APP || {
 </script>
 <script src="<?= asset_url('assets/js/app.js') ?>"></script>
 <?php endif; ?>
+<script src="<?= asset_url('assets/js/cart-recovery.js') ?>"></script>
 <script>
 var SETTINGS_API = <?= json_encode($settingsBase) ?>;
 $(function () {

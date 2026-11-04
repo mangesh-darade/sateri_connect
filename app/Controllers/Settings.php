@@ -237,6 +237,19 @@ class Settings extends BaseController
         $data['apiUsage']       = $apiLogModel->usageByToken(30);
         $data['apiRecentCalls'] = $apiLogModel->recent(50);
 
+        $cart = new \App\Libraries\CartRecoveryService($settings);
+        $tenantKey = (string) \App\Libraries\TenantContext::get();
+        $data['cartCfg']       = $cart->config();
+        $data['cartOverview']  = $cart->overview(50);
+        $data['cartSecret']    = $cart->secret();
+        $data['cartShopifySet'] = $cart->hasShopifySecret();
+        $data['cartHealth']    = $cart->health();
+        $data['cartTemplates'] = model(\App\Models\TemplateModel::class)->where('status', 'APPROVED')->orderBy('name', 'ASC')->findAll(200);
+        $data['cartUrls']      = [];
+        foreach (array_keys(\App\Libraries\CartRecoveryService::PLATFORMS) as $p) {
+            $data['cartUrls'][$p] = site_url('webhooks/store/' . $p . ($tenantKey !== '' ? '/' . $tenantKey : ''));
+        }
+
         return $this->render('settings/index', $this->applyPlatformView($data));
     }
 
@@ -831,6 +844,34 @@ class Settings extends BaseController
             'plain_text' => $result['plain_text'],
             'created_at' => date('Y-m-d H:i:s'),
         ], 'API Key generated successfully.');
+    }
+
+    /** Abandoned cart reminders (WooCommerce, Shopify): save the client's reminder settings. */
+    public function saveCartReminders(): ResponseInterface
+    {
+        if ($denied = $this->guardSettings('settings.edit')) {
+            return $denied;
+        }
+
+        $res = (new \App\Libraries\CartRecoveryService())->saveConfig($this->request->getPost() ?: []);
+        if (! $res['ok']) {
+            return $this->jsonResponse(false, null, $res['message'], [], $res['status']);
+        }
+        log_activity('update', 'cart_recovery', 'Cart reminder settings saved');
+
+        return $this->jsonResponse(true, null, $res['message']);
+    }
+
+    public function rotateCartSecret(): ResponseInterface
+    {
+        if ($denied = $this->guardSettings('settings.edit')) {
+            return $denied;
+        }
+
+        $secret = (new \App\Libraries\CartRecoveryService())->secret(true);
+        log_activity('update', 'cart_recovery', 'Cart reminder webhook secret rotated');
+
+        return $this->jsonResponse(true, ['secret' => $secret], 'New secret created. Update it in your stores.');
     }
 
     /** Download a local MCP connector (Node, no dependencies) for Claude Code, Claude Desktop, Antigravity or Cursor. */
