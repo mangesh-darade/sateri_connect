@@ -73,6 +73,17 @@ $crDisable = $canEdit ? '' : 'disabled';
                             </div>
                             <div class="form-text">Leave off unless that is true. Without a recorded opt-in, reminders to that customer are skipped.</div>
                         </div>
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="crSyncCustomers" data-cr="sync_customers" value="1" <?= ! empty($cartCfg['sync_customers']) ? 'checked' : '' ?> <?= $crDisable ?>>
+                                <label class="form-check-label" for="crSyncCustomers">Create a contact when a customer signs up on the store</label>
+                            </div>
+                            <div class="form-text">Needs the customer webhooks below. Customers without a phone number are skipped until they add one.</div>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" id="crCustomerOptin" data-cr="customer_optin" value="1" <?= ! empty($cartCfg['customer_optin']) ? 'checked' : '' ?> <?= $crDisable ?>>
+                                <label class="form-check-label" for="crCustomerOptin">My signup form asks customers for WhatsApp consent (record it as opt-in)</label>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <?php if ($canEdit): ?>
@@ -95,6 +106,7 @@ $crDisable = $canEdit ? '' : 'disabled';
                     <li>WordPress admin, WooCommerce, Settings, Advanced, Webhooks, Add webhook.</li>
                     <li>Topic <strong>Order created</strong>, status Active, API version <strong>WP REST API Integration v3</strong>. Use the URL and secret below.</li>
                     <li>Add a second webhook the same way with topic <strong>Order updated</strong>.</li>
+                    <li>Optional, to save new customers as contacts: add webhooks with topics <strong>Customer created</strong> and <strong>Customer updated</strong>.</li>
                 </ol>
                 <label class="form-label small mb-1">Delivery URL</label>
                 <input type="text" class="form-control form-control-sm font-monospace mb-2" value="<?= esc($cartUrls['woocommerce'], 'attr') ?>" readonly>
@@ -131,6 +143,7 @@ $crDisable = $canEdit ? '' : 'disabled';
                     <li>Scroll down to <strong>Webhooks</strong> and click <strong>Create webhook</strong>.</li>
                     <li><strong>Event</strong>: choose <em>Checkout creation</em>. <strong>Format</strong>: <em>JSON</em>. <strong>URL</strong>: the Webhook URL below. <strong>Webhook API version</strong>: the latest stable one.</li>
                     <li>Click <strong>Save</strong>. Create two more the same way with events <em>Checkout update</em> and <em>Order creation</em>.</li>
+                    <li>Optional, to save new customers as contacts: also create <em>Customer creation</em> and <em>Customer update</em>. They get the tag "Shopify" and the source "Shopify account".</li>
                 </ol>
                 <div class="fw-semibold mb-1">Connect the signing key</div>
                 <ol class="ps-3 mb-3" start="5">

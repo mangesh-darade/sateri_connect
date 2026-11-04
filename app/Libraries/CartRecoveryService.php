@@ -47,7 +47,7 @@ class CartRecoveryService
     }
 
     /**
-     * @return array{enabled: bool, delay_minutes: int, max_reminders: int, gap_hours: int, template_name: string, template_language: string, assume_optin: bool, country_code: string}
+     * @return array{enabled: bool, delay_minutes: int, max_reminders: int, gap_hours: int, template_name: string, template_language: string, assume_optin: bool, country_code: string, sync_customers: bool, customer_optin: bool}
      */
     public function config(): array
     {
@@ -62,6 +62,8 @@ class CartRecoveryService
             'template_language' => trim((string) $get('template_language', 'en')) ?: 'en',
             'assume_optin'      => (string) $get('assume_optin', '0') === '1',
             'country_code'      => preg_replace('/\D+/', '', (string) $get('country_code', '91')) ?? '91',
+            'sync_customers'    => (string) $get('sync_customers', '1') === '1',
+            'customer_optin'    => (string) $get('customer_optin', '0') === '1',
         ];
     }
 
@@ -95,6 +97,8 @@ class CartRecoveryService
             'template_language' => trim((string) ($in['template_language'] ?? 'en')) ?: 'en',
             'assume_optin'      => (string) ($in['assume_optin'] ?? '0') === '1' ? '1' : '0',
             'country_code'      => substr(preg_replace('/\D+/', '', (string) ($in['country_code'] ?? '91')) ?? '', 0, 4),
+            'sync_customers'    => (string) ($in['sync_customers'] ?? '0') === '1' ? '1' : '0',
+            'customer_optin'    => (string) ($in['customer_optin'] ?? '0') === '1' ? '1' : '0',
         ];
         foreach ($values as $k => $v) {
             $this->settings->set(self::GROUP . '.' . $k, $v, self::GROUP, false);
@@ -155,19 +159,29 @@ class CartRecoveryService
             return ['ok' => true, 'status' => 200, 'message' => 'Pong.'];
         }
 
+        $topic = strtolower((string) ($headers[$platform === 'shopify' ? 'x-shopify-topic' : 'x-wc-webhook-topic'] ?? ''));
         try {
-            $platform === 'shopify'
-                ? $this->handleShopify($data, strtolower((string) ($headers['x-shopify-topic'] ?? '')))
-                : $this->handleWoo($data, strtolower((string) ($headers['x-wc-webhook-topic'] ?? '')));
+            $platform === 'shopify' ? $this->handleShopify($data, $topic) : $this->handleWoo($data, $topic);
         } catch (Throwable $e) {
             log_message('error', 'CartRecoveryService::handleWebhook ' . $e::class . ': ' . $e->getMessage());
-            $this->note($platform, 'failed', 'An event could not be saved. Check that the cart table is migrated.');
+            $this->note($platform, 'failed', 'An event could not be saved. Check the server log (and that the cart table is migrated).');
 
             return ['ok' => false, 'status' => 500, 'message' => 'Could not process the event.'];
         }
         $this->note($platform, 'ok', '');
 
         return ['ok' => true, 'status' => 200, 'message' => 'OK'];
+    }
+
+    /**
+     * @param array<string, mixed> $c
+     */
+    private function saveCustomer(string $platform, array $c): void
+    {
+        $res = (new StoreCustomerSync($this))->sync($platform, $c);
+        if (! $res['ok']) {
+            throw new RuntimeException($res['message']);
+        }
     }
 
     /** Remembers the latest webhook outcome per store so the settings tab can show what is wrong. */
@@ -260,6 +274,11 @@ class CartRecoveryService
      */
     private function handleWoo(array $o, string $topic): void
     {
+        if (str_starts_with($topic, 'customer.')) {
+            $this->saveCustomer('woocommerce', $o);
+
+            return;
+        }
         $id = (string) ($o['id'] ?? '');
         if ($id === '' || $topic === 'order.deleted') {
             return;
@@ -303,6 +322,11 @@ class CartRecoveryService
      */
     private function handleShopify(array $o, string $topic): void
     {
+        if (str_starts_with($topic, 'customers/')) {
+            $this->saveCustomer('shopify', $o);
+
+            return;
+        }
         if (str_starts_with($topic, 'orders/')) {
             $token = (string) ($o['checkout_token'] ?? '');
             $phone = $this->normalizePhone((string) ($o['phone'] ?? $o['billing_address']['phone'] ?? $o['customer']['phone'] ?? $o['customer']['default_address']['phone'] ?? ''));
@@ -446,6 +470,12 @@ class CartRecoveryService
         $name = trim(explode(' | ', $title)[0]);
 
         return mb_strlen($name) > 40 ? rtrim(mb_substr($name, 0, 39)) . '…' : $name;
+    }
+
+    /** A phone number in the form WhatsApp needs (digits with country code), '' when it is not usable. */
+    public function phoneFor(string $raw): string
+    {
+        return $this->normalizePhone($raw);
     }
 
     private function normalizePhone(string $raw): string
