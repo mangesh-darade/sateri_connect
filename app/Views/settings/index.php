@@ -1148,7 +1148,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                             </div>
                         </div>
 
-                        <?php $voiceAgent = $voiceAgent ?? ['enabled' => false, 'url' => '', 'api_key' => '', 'consent_ok' => false, 'max_per_hour' => 50]; ?>
+                        <?php $voiceAgent = $voiceAgent ?? ['enabled' => false, 'url' => '', 'api_key' => '', 'consent_ok' => false, 'max_per_hour' => 50, 'use_platform' => false, 'platform_ready' => false]; ?>
                         <div class="accordion" id="aiAccordion">
 
                         <div class="accordion-item border-0 shadow-sm rounded mb-3 overflow-hidden">
@@ -1290,6 +1290,17 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                         </div>
                         <div class="row g-3">
                             <div class="col-lg-8">
+                                <div class="col-12">
+                                    <div class="form-check form-switch mb-1">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="voice_agent_use_platform" <?= ! empty($voiceAgent['use_platform']) ? 'checked' : '' ?>>
+                                        <label class="form-check-label" for="voice_agent_use_platform">Use the platform's voice agent</label>
+                                    </div>
+                                    <div class="form-text mb-2">
+                                        <?= ! empty($voiceAgent['platform_ready'])
+                                            ? 'The platform admin has set up a voice agent. With this on, you can leave the address and key below blank.'
+                                            : 'The platform admin has not set up a voice agent yet, so enter your own address and key below.' ?>
+                                    </div>
+                                </div>
                                 <div class="mb-3">
                                     <label class="form-label" for="voice_agent_url">Voice agent URL</label>
                                     <input type="url" id="voice_agent_url" class="form-control"
@@ -2122,6 +2133,7 @@ $(function () {
             voice_agent_api_key: ($('#voice_agent_api_key').val() || '').toString(),
             voice_agent_enabled: $('#voice_agent_enabled').is(':checked') ? '1' : '0',
             voice_agent_consent_ok: $('#voice_agent_consent_ok').is(':checked') ? '1' : '0',
+            voice_agent_use_platform: $('#voice_agent_use_platform').is(':checked') ? '1' : '0',
             voice_agent_max_per_hour: $('#voice_agent_max_per_hour').val() || '50'
         };
     }

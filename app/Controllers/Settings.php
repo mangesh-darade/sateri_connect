@@ -214,6 +214,8 @@ class Settings extends BaseController
             'api_key'      => $this->maskSecret($voiceCfg['api_key']),
             'consent_ok'   => $voiceCfg['consent_ok'],
             'max_per_hour' => $voiceCfg['max_per_hour'],
+            'use_platform' => $voiceCfg['use_platform'],
+            'platform_ready' => (new \App\Libraries\VoiceAgentLeadService())->platformReady(),
         ];
 
         $aiCfg = $settings->getAiConfig();
@@ -630,6 +632,7 @@ class Settings extends BaseController
                     'enabled'      => (string) $this->request->getPost('voice_agent_enabled') === '1',
                     'consent_ok'   => (string) $this->request->getPost('voice_agent_consent_ok') === '1',
                     'max_per_hour' => (int) ($this->request->getPost('voice_agent_max_per_hour') ?: 50),
+                    'use_platform' => (string) $this->request->getPost('voice_agent_use_platform') === '1',
                 ];
                 $voiceKey = trim((string) $this->request->getPost('voice_agent_api_key'));
                 if ($voiceKey !== '' && ! str_contains($voiceKey, '•')) {
@@ -999,7 +1002,7 @@ class Settings extends BaseController
         }
 
         $voice   = new \App\Libraries\VoiceAgentLeadService();
-        $payload = ['url' => trim((string) $this->request->getPost('voice_agent_url'))];
+        $payload = ['url' => trim((string) $this->request->getPost('voice_agent_url')), 'use_platform' => (string) $this->request->getPost('voice_agent_use_platform') === '1'];
         $key     = trim((string) $this->request->getPost('voice_agent_api_key'));
         if ($key !== '' && ! str_contains($key, '•')) {
             $payload['api_key'] = $key;
