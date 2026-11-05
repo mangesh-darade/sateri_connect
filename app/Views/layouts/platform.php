@@ -77,6 +77,12 @@ $brandInitial = mb_strtoupper(mb_substr($platformSiteName !== '' ? $platformSite
                 <span>Online payments</span>
             </a>
             <?php endif; ?>
+            <?php if ($isMainPlatformAdmin): ?>
+            <a href="<?= site_url('platform/voice-agent') ?>" class="platform-side-link<?= $navActive === 'voice-agent' ? ' is-active' : '' ?>">
+                <i class="fas fa-phone-volume" aria-hidden="true"></i>
+                <span>AI voice agent</span>
+            </a>
+            <?php endif; ?>
             <a href="<?= site_url('platform/api-usage') ?>" class="platform-side-link<?= $navActive === 'api-usage' ? ' is-active' : '' ?>">
                 <i class="fas fa-plug" aria-hidden="true"></i>
                 <span>API Usage</span>

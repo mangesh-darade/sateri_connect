@@ -111,6 +111,17 @@ $routes->group('platform', ['filter' => 'platformAuth'], static function ($route
     $routes->post('clients/(:segment)/settings/api-tokens/generate', 'PlatformClients::clientSettingsAction/$1/api-tokens-generate', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/settings/api-tokens/(:num)/delete', 'PlatformClients::clientSettingsDeleteToken/$1/$2', ['filter' => 'csrf']);
     $routes->get('clients/(:segment)/settings/mcp-server', 'PlatformClients::clientMcpServer/$1');
+    // AI voice agent (main platform admin): connection, agent script and server settings
+    $routes->get('voice-agent', 'PlatformVoiceAgent::index');
+    $routes->get('voice-agent/load', 'PlatformVoiceAgent::load');
+    $routes->post('voice-agent/connection', 'PlatformVoiceAgent::saveConnection', ['filter' => 'csrf']);
+    $routes->post('voice-agent/ping', 'PlatformVoiceAgent::ping', ['filter' => 'csrf']);
+    $routes->post('voice-agent/agent', 'PlatformVoiceAgent::saveAgent', ['filter' => 'csrf']);
+    $routes->post('voice-agent/settings', 'PlatformVoiceAgent::saveSettings', ['filter' => 'csrf']);
+    $routes->post('voice-agent/leads-key', 'PlatformVoiceAgent::generateKey', ['filter' => 'csrf']);
+    $routes->post('voice-agent/client-account', 'PlatformVoiceAgent::createAccount', ['filter' => 'csrf']);
+    $routes->post('voice-agent/sip-setup', 'PlatformVoiceAgent::sipSetup', ['filter' => 'csrf']);
+    $routes->post('voice-agent/test-webhook', 'PlatformVoiceAgent::testWebhook', ['filter' => 'csrf']);
     $routes->get('payments', 'PlatformPayments::index');
     $routes->post('payments', 'PlatformPayments::save', ['filter' => 'csrf']);
     $routes->post('payments/test', 'PlatformPayments::test', ['filter' => 'csrf']);
