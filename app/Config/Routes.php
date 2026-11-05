@@ -53,6 +53,7 @@ $routes->match(['get', 'post'], 'emails/unsubscribe', 'Emails::unsubscribe');
 $routes->post('webhooks/razorpay', 'RazorpayWebhook::receive');
 $routes->post('webhooks/mswipe', 'MswipeWebhook::receive');
 $routes->get('social/media/(:segment)', 'SocialMedia::show/$1');
+$routes->get('files/(:segment)', 'PublicFiles::show/$1');
 $routes->post('webhooks/store/(:segment)', 'StoreWebhook::receive/$1');
 $routes->post('webhooks/store/(:segment)/(:segment)', 'StoreWebhook::receive/$1/$2');
 $routes->post('webhooks/ses', 'SesWebhook::receive');
@@ -666,6 +667,13 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1', 'filter' => '
     // Automations & Webhooks
     $routes->post('automations/trigger', 'AutomationsController::trigger');
     $routes->get('automations/schema', 'AutomationsController::schema');
+    $routes->post('automations/validate', 'AutomationsController::validateGraph');
+    $routes->get('files', 'FilesController::index');
+    $routes->post('files', 'FilesController::upload');
+    $routes->post('files/([a-f0-9]{40}\.[a-z0-9]+)/delete', 'FilesController::delete/$1');
+    $routes->get('knowledge-base', 'KnowledgeController::index');
+    $routes->post('knowledge-base', 'KnowledgeController::create');
+    $routes->post('knowledge-base/(:num)', 'KnowledgeController::update/$1');
     $routes->get('automations/agents', 'AutomationsController::agents');
     $routes->get('automations', 'AutomationsController::index');
     $routes->post('automations', 'AutomationsController::create');

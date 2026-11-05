@@ -436,6 +436,12 @@ class ApiAuthFilter implements FilterInterface
 
             return preg_match('#/automations(/\d+/duplicate)?$#', $uri) === 1 ? 'automations.create' : 'automations.edit';
         }
+        if (str_contains($uri, '/files')) {
+            return $read ? 'chat.view' : 'chat.send'; // files that a message or workflow will send
+        }
+        if (str_contains($uri, '/knowledge-base')) {
+            return 'ai.use';
+        }
         if (str_contains($uri, '/email/identities')) {
             return $read ? 'emails.view' : 'emails.send';
         }
@@ -507,6 +513,12 @@ class ApiAuthFilter implements FilterInterface
         }
         if (str_contains($uri, 'email/identities')) {
             return $method === 'GET' ? 'email_identities:read' : 'email_identities:write';
+        }
+        if (str_contains($uri, '/files')) {
+            return $method === 'GET' ? 'files:read' : 'files:write';
+        }
+        if (str_contains($uri, '/knowledge-base')) {
+            return $method === 'GET' ? 'knowledge:read' : 'knowledge:write';
         }
         if (str_contains($uri, '/social/')) {
             return $method === 'GET' ? 'social:read' : 'social:write';

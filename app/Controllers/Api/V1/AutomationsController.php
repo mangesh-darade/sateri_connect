@@ -125,6 +125,22 @@ class AutomationsController extends BaseV1Controller
     }
 
     /**
+     * POST /api/v1/automations/validate {flow_graph}: dry run. Checks the graph and previews the steps without saving.
+     */
+    public function validateGraph(): ResponseInterface
+    {
+        $in    = $this->getJsonPayload();
+        $graph = $in['flow_graph'] ?? null;
+        if (! is_array($graph) || empty($graph['nodes'])) {
+            return $this->respondError('Send flow_graph with nodes and edges.', 422);
+        }
+
+        $res = (new \App\Libraries\WorkflowValidator())->check($graph);
+
+        return $this->respondSuccess($res, $res['ok'] ? 'The workflow graph is valid.' : 'The workflow graph has errors. Nothing was saved.');
+    }
+
+    /**
      * GET /api/v1/automations/agents: the team members a workflow can assign a chat to (id, name, role).
      * No email or phone is returned.
      */
