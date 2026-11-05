@@ -202,6 +202,7 @@ class AutomationsController extends BaseV1Controller
                 'update_chat_status' => ['data' => ['status' => 'open | pending | resolved | intervened']],
                 'add_note'           => ['data' => ['text' => 'internal note on the contact']],
                 'delay'              => ['data' => ['minutes' => 'or seconds'], 'note' => 'Pauses the flow, then continues with the next node.'],
+                'ai_call'            => ['data' => ['source' => 'short label for the call, e.g. "Sample request"', 'notice' => 'optional WhatsApp message sent when the call is accepted'], 'note' => 'The AI voice agent phones the contact within its calling hours. Needs the voice agent switched on with consent confirmed in Settings. Use only where the contact asked to be called.'],
                 'ai_reply'           => ['data' => ['text' => 'optional extra instruction for the AI, e.g. "answer only about delivery"'], 'note' => 'Needs the AI bot enabled in Settings. The AI hands over to a person when unsure.'],
                 'webhook_call'       => ['data' => ['url' => 'https endpoint', 'method' => 'POST | GET', 'body' => 'optional']],
                 'send_email'         => ['data' => ['subject' => 'subject', 'text' => 'body']],

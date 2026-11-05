@@ -405,6 +405,7 @@ class AutomationEngine
             'send_email', 'sendemail', 'email' => 'send_email',
             'update_chat_status', 'updatechatstatus', 'chat_status' => 'update_chat_status',
             'assign_bot', 'assignbot', 'cheerio_assignchattobot' => 'assign_bot',
+            'ai_call', 'aicall', 'voice_call', 'voicecall', 'ai_voice_call' => 'ai_call',
             default => $actionType,
         };
     }
@@ -664,6 +665,12 @@ class AutomationEngine
                     db_connect()->table('conversations')
                         ->where('contact_id', $contactId)
                         ->update(['assigned_to' => $agentId ?: null]);
+                }
+                break;
+
+            case 'ai_call':
+                if ($contactId > 0) {
+                    $this->aiCall($contactId, $config, $context);
                 }
                 break;
 
@@ -1004,6 +1011,48 @@ class AutomationEngine
      *
      * @param array<string, mixed> $context
      */
+    /**
+     * "AI call" node: ask the AI voice agent to phone the contact. Skips (and writes why in a contact note) when the voice
+     * agent is off, the contact opted out, has no phone, was already sent in 24 hours or the hourly cap is reached.
+     * An optional WhatsApp heads-up ("notice") is sent only when the call was accepted.
+     *
+     * @param array<string, mixed> $config
+     * @param array<string, mixed> $context
+     */
+    protected function aiCall(int $contactId, array $config, array &$context): void
+    {
+        try {
+            $contact = $this->contacts->find($contactId);
+            if (! is_array($contact)) {
+                return;
+            }
+            $source = trim($this->interpolate((string) ($config['source'] ?? ''), $context));
+            $res    = (new VoiceAgentLeadService())->callNow($contact, $source !== '' ? $source : 'workflow');
+
+            if ($res['ok']) {
+                $notice = trim($this->interpolate((string) ($config['notice'] ?? ''), $context));
+                if ($notice !== '') {
+                    $this->queue->enqueue($contactId, 'text', ['text' => $notice], null, (int) ($config['priority'] ?? 3));
+                }
+            } else {
+                log_message('notice', 'AI call node skipped for contact #{id}: {msg}', ['id' => $contactId, 'msg' => $res['message']]);
+            }
+
+            // A note only when it tells the team something: not for "voice agent is off" (every pass of every flow) or a repeat
+            // inside the same 24 hours.
+            if (! in_array($res['code'], ['off', 'already', 'archived'], true)) {
+                model(\App\Models\InternalNoteModel::class)->skipValidation(true)->insert([
+                    'contact_id'  => $contactId,
+                    'user_id'     => (int) ($config['user_id'] ?? $context['user_id'] ?? 1) ?: 1,
+                    'note'        => ($res['ok'] ? 'AI call requested. ' : 'AI call not requested. ') . $res['message'],
+                    'is_internal' => 1,
+                ]);
+            }
+        } catch (\Throwable $e) {
+            log_message('error', 'AI call node failed for contact #{id}: {msg}', ['id' => $contactId, 'msg' => $e->getMessage()]);
+        }
+    }
+
     /**
      * AI Reply node: Gemini answers the customer's last message. Same safety gate as the global AI bot
      * (opt-out, 24h window, human takeover, cooldown, consecutive cap) plus the WhatsApp consent check.

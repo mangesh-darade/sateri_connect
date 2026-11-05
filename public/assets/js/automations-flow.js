@@ -68,6 +68,7 @@
         set_attribute: 'Update attribute',
         set_attributes: 'Update attributes',
         ai_reply: 'AI reply',
+        ai_call: 'AI call',
         end: 'End'
     };
 
@@ -92,7 +93,7 @@
         birthday: '#ec4899', campaign_replied: '#06b6d4', schedule: '#0ea5e9',
         system_initiated: '#0ea5e9', response_message: '#22c55e', ask_question: '#10b981', send_media: '#06b6d4',
         collect_images: '#0891b2', send_template: '#16a34a', send_text: '#22c55e', send_email: '#f97316',
-        set_attribute: '#e11d48', set_attributes: '#be123c', ai_reply: '#8b5cf6', add_tag: '#14b8a6', remove_tag: '#64748b', assign_agent: '#2563eb', assign_bot: '#0ea5e9',
+        set_attribute: '#e11d48', set_attributes: '#be123c', ai_reply: '#8b5cf6', ai_call: '#7c3aed', add_tag: '#14b8a6', remove_tag: '#64748b', assign_agent: '#2563eb', assign_bot: '#0ea5e9',
         update_chat_status: '#6366f1', add_note: '#eab308', delay: '#f59e0b', webhook: '#f43f5e', webhook_call: '#f43f5e',
         end: '#ef4444'
     };
@@ -824,7 +825,7 @@
             html += '<label>New value</label><input class="form-control insp-bulk" data-bk="value" data-row="' + i + '" value="' + esc(r.value || '') + '" placeholder="Value or {{contact.name}}">';
             html += '<button type="button" class="btn btn-sm btn-outline-danger mt-2 insp-bulk-remove" data-row="' + i + '"><i class="fas fa-trash"></i> Remove</button></div>';
         });
-        html += '<button type="button" class="btn btn-sm btn-outline-primary" id="inspBulkAdd"><i class="fas fa-plus"></i> Add attribute</button>';
+        html += '<button type="button" class="btn btn-sm btn-outline-secondary" id="inspBulkAdd"><i class="fas fa-plus"></i> Add attribute</button>';
         html += inspHint('Sets or adds every listed attribute in one step. Variables like {{contact.name}} work in values.');
         return html;
     }
@@ -1122,6 +1123,10 @@
         } else if (a === 'ai_reply') {
             html += '<label>Extra instruction (optional)</label><textarea class="form-control insp" data-k="text" rows="3" maxlength="500" placeholder="e.g. Answer only about delivery and pricing">' + esc(d.text || '') + '</textarea>';
             html += inspHint('Gemini writes the reply from the last customer message, in their language. It follows the AI Bot settings and is skipped for opted-out contacts, outside the 24h window, during human takeover and past the consecutive-reply cap. The flow then continues.');
+        } else if (a === 'ai_call') {
+            html += '<label>Call label (optional)</label><input class="form-control insp" data-k="source" maxlength="40" value="' + esc(d.source || '') + '" placeholder="e.g. Sample request">';
+            html += '<label>WhatsApp heads-up (optional)</label><textarea class="form-control insp" data-k="notice" rows="2" maxlength="300" placeholder="e.g. Our assistant will call you in a few minutes.">' + esc(d.notice || '') + '</textarea>';
+            html += inspHint('The AI voice agent phones the contact within its calling hours. Skipped (and noted on the contact) if the contact opted out, has no phone, was already sent in the last 24 hours or the hourly limit is reached. Use it only where the contact asked to be called.');
         } else if (a === 'set_attributes') {
             html += bulkAttributesHtml(d);
         } else if (a === 'assign_agent') {

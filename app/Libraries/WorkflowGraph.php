@@ -541,7 +541,7 @@ class WorkflowGraph
     public const LOCAL_ACTIONS = [
             'send_text', 'response_message', 'send_template', 'system_initiated',
             'collect_images', 'ask_question', 'send_media', 'assign_bot', 'update_chat_status',
-            'add_tag', 'remove_tag', 'assign_agent', 'add_note',
+            'add_tag', 'remove_tag', 'assign_agent', 'add_note', 'ai_call',
             'delay', 'webhook', 'webhook_call', 'set_attribute', 'set_attributes', 'ai_reply', 'send_email', 'end',
         ];
 

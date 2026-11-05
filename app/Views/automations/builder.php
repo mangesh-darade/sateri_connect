@@ -139,6 +139,11 @@ $graph = $flowGraph ?? ['nodes' => [], 'edges' => []];
                 <i class="fas fa-wand-magic-sparkles"></i> AI reply
             </div>
             <?php endif; ?>
+            <?php if ((new \App\Libraries\VoiceAgentLeadService())->isActive()): ?>
+            <div class="palette-item" draggable="true" data-palette="action" data-action="ai_call">
+                <i class="fas fa-phone-volume"></i> AI call
+            </div>
+            <?php endif; ?>
             <div class="palette-item" draggable="true" data-palette="action" data-action="add_tag">
                 <i class="fas fa-tag"></i> Add tag
             </div>
