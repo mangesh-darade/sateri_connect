@@ -103,6 +103,8 @@ class StoreCustomerSync
 
         try {
             $contacts = model(ContactModel::class);
+            // A store customer is not a lead that asked for a call: never hand them to the AI voice agent as a new contact.
+            $contacts->skipVoiceAgent = true;
             $tags     = model(TagModel::class);
             $source   = (string) ($c['_source'] ?? ($label . ' account'));
 
@@ -193,6 +195,9 @@ class StoreCustomerSync
             log_message('error', 'StoreCustomerSync ' . $e::class . ': ' . $e->getMessage());
 
             return ['ok' => false, 'status' => 500, 'message' => 'Could not save the customer as a contact.'];
+        } finally {
+            // The model is shared for the rest of the request: later contacts must behave normally.
+            model(ContactModel::class)->skipVoiceAgent = false;
         }
     }
 }
