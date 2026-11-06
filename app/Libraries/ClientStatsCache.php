@@ -22,7 +22,7 @@ class ClientStatsCache
     public const FILTERS = [
         'health'   => ['ok' => "health = 'ok'", 'warn' => "health = 'warn'", 'down' => "health = 'down'"],
         'wallet'   => ['on' => 'wallet_enabled = 1', 'off' => 'wallet_enabled = 0', 'funded' => "wallet_state = 'ok'", 'low' => "wallet_state = 'low'", 'empty' => "wallet_state = 'empty'"],
-        'wa'       => ['ready' => 'meta_ready = 1', 'setup' => 'meta_ready = 0'],
+        'wa'       => ['ready' => 'meta_ready > 0', 'setup' => 'meta_ready = 0'],
         'email'    => ['ready' => 'email_ready = 1', 'setup' => 'email_ready = 0'],
         'activity' => ['sending' => 'sent > 0', 'idle' => 'sent = 0 AND email_sent = 0', 'failures' => 'failed > 0', 'chats' => 'open_chats > 0'],
     ];
@@ -104,7 +104,8 @@ class ClientStatsCache
             'country_code'    => (string) ($snap['country_code'] ?? ''),
             'health'          => $h,
             'health_rank'     => ['ok' => 0, 'warn' => 1, 'down' => 2][$h],
-            'meta_ready'      => ! empty($snap['meta_ready']) ? 1 : 0,
+            // 0 = not ready, 1 = Meta ready, 2 = External ready
+            'meta_ready'      => empty($snap['meta_ready']) ? 0 : (($snap['wa_provider'] ?? '') === 'cheerio' ? 2 : 1),
             'email_ready'     => ! empty($snap['email_ready']) ? 1 : 0,
             'users'           => (int) ($snap['users'] ?? 0),
             'contacts'        => (int) ($snap['contacts'] ?? 0),
@@ -204,7 +205,7 @@ class ClientStatsCache
             . "SUM(health='ok') AS h_ok, SUM(health='warn') AS h_warn, SUM(health='down') AS h_down,"
             . 'SUM(wallet_enabled=1) AS w_on, SUM(wallet_enabled=0) AS w_off,'
             . "SUM(wallet_state='ok') AS w_funded, SUM(wallet_state='low') AS w_low, SUM(wallet_state='empty') AS w_empty,"
-            . 'SUM(meta_ready=1) AS wa_ready, SUM(meta_ready=0) AS wa_setup, SUM(email_ready=1) AS em_ready, SUM(email_ready=0) AS em_setup,'
+            . 'SUM(meta_ready>0) AS wa_ready, SUM(meta_ready=0) AS wa_setup, SUM(email_ready=1) AS em_ready, SUM(email_ready=0) AS em_setup,'
             . 'SUM(sent>0) AS a_sending, SUM(sent=0 AND email_sent=0) AS a_idle, SUM(failed>0) AS a_failures, SUM(open_chats>0) AS a_chats,'
             . 'COALESCE(SUM(wallet_inr),0) AS wallet_total, MIN(refreshed_at) AS oldest',
             false

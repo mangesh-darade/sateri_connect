@@ -428,22 +428,32 @@ class PlatformStatsService
                 }
             }
 
-            $metaReady = false;
-            $phoneId   = '';
+            $metaReady  = false;
+            $waProvider = 'meta';
+            $phoneId    = '';
             $appName   = $name;
             if ($db->tableExists('settings')) {
                 // Fresh instance — shared SettingsService caches values across tenants.
                 $settings = new SettingsService();
-                $meta = $settings->getMetaConfig();
-                $phoneId = trim((string) ($meta['phone_number_id'] ?? ''));
-                $token   = trim((string) ($meta['access_token'] ?? ''));
-                $metaReady = $phoneId !== '' && $token !== '';
+                // "WhatsApp ready" follows the ACTIVE provider (External needs its API key, Meta its phone id + token).
+                if ($settings->isCheerioProvider()) {
+                    $waProvider = 'cheerio';
+                    $cheerio   = $settings->getCheerioConfig();
+                    $phoneId   = trim((string) ($cheerio['phone_number_id'] ?? ''));
+                    $metaReady = trim((string) ($cheerio['api_key'] ?? '')) !== '';
+                } else {
+                    $meta      = $settings->getMetaConfig();
+                    $phoneId   = trim((string) ($meta['phone_number_id'] ?? ''));
+                    $token     = trim((string) ($meta['access_token'] ?? ''));
+                    $metaReady = $phoneId !== '' && $token !== '';
+                }
                 $appName = (string) $settings->get('app_name', $name);
                 $base['email_provider']       = $settings->getEmailProvider();
                 $base['email_provider_label'] = $settings->emailProviderLabel();
                 $base['email_configured']     = $settings->isEmailConfigured();
             }
             $base['meta_ready']      = $metaReady;
+            $base['wa_provider']     = $waProvider;
             $base['phone_number_id'] = $phoneId;
             $base['app_name']        = $appName;
 

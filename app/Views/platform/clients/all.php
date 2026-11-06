@@ -210,7 +210,7 @@ $hue = static fn (string $key): int => hexdec(substr(md5($key), 0, 4)) % 360;
                         <td data-label="Channels">
                             <div class="platform-channel-badges">
                                 <span class="platform-badge <?= ! empty($c['meta_ready']) ? 'platform-badge-ok' : 'platform-badge-warn' ?>" title="WhatsApp">
-                                    WA <?= ! empty($c['meta_ready']) ? 'ready' : 'setup' ?>
+                                    WA<?= ((int) ($c['meta_ready'] ?? 0) === 2 || ($c['wa_provider'] ?? '') === 'cheerio') ? ' External' : '' ?> <?= ! empty($c['meta_ready']) ? 'ready' : 'setup' ?>
                                 </span>
                                 <span class="platform-badge <?= ! empty($c['email_ready']) ? 'platform-badge-ok' : 'platform-badge-warn' ?>" title="Email · <?= esc((string) ($c['email_provider_label'] ?? '—')) ?>">
                                     Email <?= ! empty($c['email_ready']) ? 'ready' : 'setup' ?>
