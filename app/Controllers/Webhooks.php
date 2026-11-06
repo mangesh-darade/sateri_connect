@@ -1018,6 +1018,16 @@ class Webhooks extends Controller
                 log_message('error', 'Sequence exit-on-reply failed: {msg}', ['msg' => $e->getMessage()]);
             }
 
+            log_message('info', 'Inbound WhatsApp automation: contact {c} text "{t}" matched={m} executed={x} errors={e} (source={s}, active={a})', [
+                'c' => $contactId,
+                't' => mb_substr($keywordText, 0, 60),
+                'm' => (int) ($autoRes1['matched'] ?? 0),
+                'x' => (int) ($autoRes1['executed'] ?? 0),
+                'e' => json_encode($autoRes1['errors'] ?? []),
+                's' => $sourceProvider,
+                'a' => $activeProvider,
+            ]);
+
             $autoRes2 = ['matched' => 0, 'executed' => 0];
             // Keyword bot already answered — a second keyword-flow reply is a duplicate.
             if ($runKeywordMatch && ! $botMatched) {
@@ -1126,6 +1136,29 @@ class Webhooks extends Controller
         }
 
         $ccModel = model(CampaignContactModel::class);
+
+        // External (Cheerio) bulk campaigns return no per-message id, so the recipient row has no
+        // wa_message_id yet. Link the first status of a message to the recipient's latest open campaign row.
+        if ($ccModel->where('wa_message_id', $waId)->countAllResults() === 0) {
+            try {
+                $recipient = normalize_phone((string) ($status['recipient_id'] ?? ''));
+                $contact   = $recipient !== '' ? model(ContactModel::class)->findByMobile($recipient) : null;
+                if (is_array($contact) && ! empty($contact['id'])) {
+                    $open = $ccModel->where('contact_id', (int) $contact['id'])
+                        ->whereIn('status', ['sent', 'delivered'])
+                        ->groupStart()->where('wa_message_id', null)->orWhere('wa_message_id', '')->groupEnd()
+                        ->where('updated_at >=', date('Y-m-d H:i:s', time() - 3 * 86400))
+                        ->orderBy('id', 'DESC')
+                        ->first();
+                    if (is_array($open)) {
+                        $ccModel->update((int) $open['id'], ['wa_message_id' => $waId]);
+                    }
+                }
+            } catch (Throwable $e) {
+                log_message('warning', 'Campaign status link failed: {msg}', ['msg' => $e->getMessage()]);
+            }
+        }
+
         $ccModel->updateStatusByWaMessageId($waId, $newStatus);
 
         // Also update by joining if wa_message_id was set on send

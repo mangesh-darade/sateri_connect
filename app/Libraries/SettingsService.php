@@ -177,7 +177,24 @@ class SettingsService
         if (! in_array($provider, [self::PROVIDER_CHEERIO, self::PROVIDER_META], true)) {
             throw new RuntimeException('Invalid WhatsApp provider. Use External or Meta.');
         }
+        $previous = $this->getWhatsAppProvider();
         $this->set('whatsapp_provider', $provider, 'whatsapp', false);
+
+        // Switching to External disconnects Meta (so Meta's phone number id cannot hijack External messages);
+        // the id is parked and restored when the user switches back to Meta.
+        if ($provider === self::PROVIDER_CHEERIO && $previous !== self::PROVIDER_CHEERIO) {
+            $metaPnid = trim((string) $this->get('meta_phone_number_id', ''));
+            if ($metaPnid !== '') {
+                $this->set('meta_phone_number_id_parked', $metaPnid, 'meta', false);
+                $this->set('meta_phone_number_id', '', 'meta', false);
+            }
+        } elseif ($provider === self::PROVIDER_META) {
+            $parked = trim((string) $this->get('meta_phone_number_id_parked', ''));
+            if ($parked !== '' && trim((string) $this->get('meta_phone_number_id', '')) === '') {
+                $this->set('meta_phone_number_id', $parked, 'meta', false);
+            }
+            $this->set('meta_phone_number_id_parked', '', 'meta', false);
+        }
     }
 
     public function isCheerioProvider(): bool
@@ -277,11 +294,18 @@ class SettingsService
         $display = preg_replace('/\D+/', '', (string) $displayPhone) ?? '';
 
         $metaPnid = trim((string) $this->get('meta_phone_number_id', ''));
+        $cheerioPnid = trim((string) $this->get('cheerio_phone_number_id', ''));
+
+        // Same number id saved for both providers: the active provider owns it.
+        if ($pnid !== '' && $metaPnid !== '' && $cheerioPnid !== ''
+            && hash_equals($metaPnid, $pnid) && hash_equals($cheerioPnid, $pnid)) {
+            return $this->getWhatsAppProvider();
+        }
+
         if ($pnid !== '' && $metaPnid !== '' && hash_equals($metaPnid, $pnid)) {
             return self::PROVIDER_META;
         }
 
-        $cheerioPnid = trim((string) $this->get('cheerio_phone_number_id', ''));
         if ($pnid !== '' && $cheerioPnid !== '' && hash_equals($cheerioPnid, $pnid)) {
             return self::PROVIDER_CHEERIO;
         }

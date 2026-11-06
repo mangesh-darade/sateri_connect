@@ -1348,6 +1348,15 @@ class AutomationEngine
             return false;
         }
 
+        // A typed "back" / "menu" / "exit" (or any keyword another workflow listens for) while a question is open
+        // is not an answer: drop the question and let the normal keyword workflows handle the message.
+        if ($this->isEscapeMessage($job, $inbound)) {
+            $db->table('automation_delayed_jobs')->where('id', $jobId)->where('status', 'awaiting_reply')
+                ->update(['status' => 'cancelled', 'updated_at' => date('Y-m-d H:i:s')]);
+
+            return false;
+        }
+
         $db->table('automation_delayed_jobs')->where('id', $jobId)->where('status', 'awaiting_reply')
             ->update(['status' => 'processing', 'updated_at' => date('Y-m-d H:i:s')]);
         if ($db->affectedRows() !== 1) {
@@ -1488,6 +1497,42 @@ class AutomationEngine
         }
 
         return null;
+    }
+
+    /**
+     * True when a typed message (not a button/list tap) is not an option of the open question and is either an
+     * exit word or matches the keyword trigger of another active workflow.
+     *
+     * @param array<string, mixed> $job
+     * @param array<string, mixed> $inbound
+     */
+    protected function isEscapeMessage(array $job, array $inbound): bool
+    {
+        $text = trim((string) ($inbound['content'] ?? ''));
+        if ($text === '' || (string) ($inbound['reply_id'] ?? '') !== '') {
+            return false;
+        }
+        $rule    = $this->rules->find((int) ($job['resume_rule_id'] ?? 0));
+        $options = is_array($rule) ? self::questionOptions($this->decodeJson($rule['config'] ?? null)) : [];
+        if ($options !== [] && $this->matchOption($options, '', $text) !== null) {
+            return false; // a real answer
+        }
+        if (KeywordMatcher::matches($text, 'exit, quit, stop, cancel, end', 'exact')) {
+            return true;
+        }
+        if ($options === []) {
+            return false; // free-text questions keep every typed answer
+        }
+        foreach ($this->automations->where('is_active', 1)->where('id !=', (int) ($job['automation_id'] ?? 0))
+            ->whereIn('trigger_type', $this->triggerAliases('incoming_message'))->findAll() as $auto) {
+            $cfg = $this->decodeJson($auto['trigger_config'] ?? null);
+            $kw  = trim((string) ($cfg['keyword'] ?? ''));
+            if ($kw !== '' && KeywordMatcher::matches($text, $kw, (string) ($cfg['match_type'] ?? 'contains'))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function isValidAnswer(string $answer, string $validation): bool
