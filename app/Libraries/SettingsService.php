@@ -195,6 +195,8 @@ class SettingsService
             }
             $this->set('meta_phone_number_id_parked', '', 'meta', false);
         }
+
+        $this->syncTenantPhoneRoute();
     }
 
     public function isCheerioProvider(): bool
@@ -282,6 +284,8 @@ class SettingsService
                 ]);
             }
         }
+
+        $this->syncTenantPhoneRoute();
     }
 
     /**
@@ -314,6 +318,7 @@ class SettingsService
         if ($display !== '' && $cheerioDisplay !== '' && hash_equals($cheerioDisplay, $display)) {
             if ($pnid !== '') {
                 $this->set('cheerio_phone_number_id', $pnid, 'cheerio', false);
+                $this->syncTenantPhoneRoute(); // later webhooks for this number route straight to this client
             }
 
             return self::PROVIDER_CHEERIO;
@@ -325,6 +330,7 @@ class SettingsService
             if ($display !== '') {
                 $this->set('cheerio_display_phone', $display, 'cheerio', false);
             }
+            $this->syncTenantPhoneRoute();
 
             return self::PROVIDER_CHEERIO;
         }
@@ -348,8 +354,12 @@ class SettingsService
 
         $apiKey = (string) $this->get('cheerio_api_key', '');
         // Legacy: some installs stored External key under meta_access_token before dual-provider.
+        // Never hand a real Meta access token (they start with "EAA") to the External API.
         if ($apiKey === '' && $this->isCheerioProvider()) {
-            $apiKey = (string) $this->get('meta_access_token', '');
+            $legacy = trim((string) $this->get('meta_access_token', ''));
+            if ($legacy !== '' && stripos($legacy, 'EAA') !== 0) {
+                $apiKey = $legacy;
+            }
         }
 
         $verify = (string) $this->get('cheerio_webhook_verify_token', '');
@@ -513,7 +523,7 @@ class SettingsService
     }
 
     /**
-     * Publish Meta phone_number_id → tenant map for shared-domain webhooks.
+     * Publish phone_number_id → tenant map for shared-domain webhooks (Meta and External numbers).
      */
     protected function syncTenantPhoneRoute(): void
     {
@@ -525,18 +535,64 @@ class SettingsService
             return;
         }
 
-        $meta = $this->getMetaConfig();
-        $pnid = trim((string) ($meta['phone_number_id'] ?? ''));
-        if ($pnid === '') {
-            return;
+        try {
+            $master = new MasterTenantRepository();
+            foreach ($this->phoneRoutesToPublish() as $route) {
+                // null = keep what the route already has (an empty value must not wipe a saved token).
+                $master->upsertPhoneRoute(
+                    $route['phone_number_id'],
+                    $tenantKey,
+                    $route['secret'] !== '' ? $route['secret'] : null,
+                    $route['verify_token'] !== '' ? $route['verify_token'] : null
+                );
+            }
+        } catch (\Throwable $e) {
+            log_message('error', 'SettingsService::syncTenantPhoneRoute failed for {key}: {msg}', [
+                'key' => $tenantKey,
+                'msg' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Number ids this client receives webhooks for, each with the secret and verify token of its provider.
+     * Without the External id here, External webhooks (messages and delivered / read statuses) that arrive on
+     * the shared host cannot be matched to a client and are dropped. When both providers use the same number
+     * id, the active provider's credentials are published.
+     *
+     * @return list<array{phone_number_id: string, secret: string, verify_token: string, provider: string}>
+     */
+    public function phoneRoutesToPublish(): array
+    {
+        $meta    = $this->getMetaConfig();
+        $cheerio = $this->getCheerioConfig();
+        $sets    = [
+            self::PROVIDER_META => [
+                'phone_number_id' => trim((string) ($meta['phone_number_id'] ?? '')),
+                'secret'          => (string) ($meta['app_secret'] ?? ''),
+                'verify_token'    => (string) ($meta['verify_token'] ?? ''),
+                'provider'        => self::PROVIDER_META,
+            ],
+            self::PROVIDER_CHEERIO => [
+                'phone_number_id' => trim((string) ($cheerio['phone_number_id'] ?? '')),
+                'secret'          => (string) ($cheerio['webhook_secret'] ?? ''),
+                'verify_token'    => (string) ($cheerio['verify_token'] ?? ''),
+                'provider'        => self::PROVIDER_CHEERIO,
+            ],
+        ];
+
+        $active = $this->getWhatsAppProvider();
+        $other  = $active === self::PROVIDER_META ? self::PROVIDER_CHEERIO : self::PROVIDER_META;
+        $routes = [];
+        foreach ([$active, $other] as $provider) {
+            $id = $sets[$provider]['phone_number_id'];
+            if ($id === '' || isset($routes[$id])) {
+                continue; // nothing to publish, or the active provider already owns this id
+            }
+            $routes[$id] = $sets[$provider];
         }
 
-        (new MasterTenantRepository())->upsertPhoneRoute(
-            $pnid,
-            $tenantKey,
-            (string) ($meta['app_secret'] ?? ''),
-            (string) ($meta['verify_token'] ?? '')
-        );
+        return array_values($routes);
     }
 
     public function isInstagramInboxEnabled(): bool

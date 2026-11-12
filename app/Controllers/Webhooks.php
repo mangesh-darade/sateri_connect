@@ -205,6 +205,11 @@ class Webhooks extends Controller
             $routed = false;
             if ($phoneNumberId !== '') {
                 $routed = $tenantConn->applyFromPhoneNumberId($phoneNumberId);
+                if (! $routed) {
+                    // External-only number: no route was ever published for it, match its display number once.
+                    $routed = (new \App\Libraries\WhatsAppWebhookTenantFinder())
+                        ->useTenantForDisplayPhone($this->extractDisplayPhone($shard));
+                }
             } else {
                 $pageId = $this->extractPageId($shard);
                 if ($pageId !== '') {
@@ -292,6 +297,25 @@ class Webhooks extends Controller
                 $meta = $value['metadata'] ?? null;
                 if (is_array($meta) && ! empty($meta['phone_number_id'])) {
                     return trim((string) $meta['phone_number_id']);
+                }
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Business display number (metadata.display_phone_number) of a WhatsApp webhook payload.
+     *
+     * @param array<string, mixed> $payload
+     */
+    protected function extractDisplayPhone(array $payload): string
+    {
+        foreach ((array) ($payload['entry'] ?? []) as $entry) {
+            foreach ((array) (is_array($entry) ? ($entry['changes'] ?? []) : []) as $change) {
+                $meta = is_array($change) && is_array($change['value'] ?? null) ? ($change['value']['metadata'] ?? null) : null;
+                if (is_array($meta) && ! empty($meta['display_phone_number'])) {
+                    return trim((string) $meta['display_phone_number']);
                 }
             }
         }
@@ -1139,7 +1163,8 @@ class Webhooks extends Controller
 
         // External (Cheerio) bulk campaigns return no per-message id, so the recipient row has no
         // wa_message_id yet. Link the first status of a message to the recipient's latest open campaign row.
-        if ($ccModel->where('wa_message_id', $waId)->countAllResults() === 0) {
+        // A status for a message we stored ourselves (chat, automation, API) is never a bulk campaign send.
+        if ($message === null && $ccModel->where('wa_message_id', $waId)->countAllResults() === 0) {
             try {
                 $recipient = normalize_phone((string) ($status['recipient_id'] ?? ''));
                 $contact   = $recipient !== '' ? model(ContactModel::class)->findByMobile($recipient) : null;
