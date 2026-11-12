@@ -54,6 +54,10 @@ class CheerioDirectAPI
         $url       = $this->buildUrl($endpoint);
         $attempts  = 0;
         $lastError = 'Unknown External API error';
+        // A send that timed out or returned 5xx may already have gone out: repeating it would message the
+        // customer twice. Only reads and media calls are repeated; 429 means "not accepted", so it is safe for all.
+        $repeatable = $method === 'GET'
+            || in_array(ltrim($endpoint, '/'), ['v1/whatsapp/media-id', 'v1/whatsapp/media'], true);
 
         while ($attempts <= $this->config->maxRetries) {
             $attempts++;
@@ -155,7 +159,8 @@ class CheerioDirectAPI
                     ]);
                 }
 
-                if (in_array($status, [429, 500, 502, 503, 504], true) && $attempts <= $this->config->maxRetries) {
+                if (($status === 429 || ($repeatable && in_array($status, [500, 502, 503, 504], true)))
+                    && $attempts <= $this->config->maxRetries) {
                     $delay = $this->config->retryDelaySeconds * (2 ** ($attempts - 1));
                     log_message('warning', 'CheerioDirectAPI retry {attempt} after {status}: {err}', [
                         'attempt' => $attempts,
@@ -171,14 +176,19 @@ class CheerioDirectAPI
                     'endpoint' => $endpoint,
                 ]);
 
-                throw new RuntimeException('External WhatsApp API error: ' . $lastError, $status);
-            } catch (RuntimeException $e) {
-                throw $e;
+                $apiError = new RuntimeException('External WhatsApp API error: ' . $lastError, $status);
+
+                throw $apiError;
             } catch (Throwable $e) {
+                // Our own "provider answered with an error" is final. Anything else is a transport failure
+                // (CodeIgniter's HTTPException is itself a RuntimeException, so it must not be matched by type).
+                if (isset($apiError) && $e === $apiError) {
+                    throw $e;
+                }
                 $lastError = $e->getMessage();
                 log_message('error', 'CheerioDirectAPI transport error: {msg}', ['msg' => $lastError]);
 
-                if ($attempts <= $this->config->maxRetries) {
+                if ($repeatable && $attempts <= $this->config->maxRetries) {
                     $delay = $this->config->retryDelaySeconds * (2 ** ($attempts - 1));
                     usleep((int) ($delay * 1_000_000));
                     continue;
@@ -246,14 +256,75 @@ class CheerioDirectAPI
 
         $lang = $language !== '' ? $language : 'en';
 
-        return $this->request('POST', 'v1/whatsapp/template/send', [
+        return $this->withMessageId($this->request('POST', 'v1/whatsapp/template/send', [
             'to'   => $phone,
             'data' => [
                 'name'       => $templateName,
                 'language'   => ['code' => $lang],
                 'components' => $this->prepareTemplateComponents($templateName, $lang, $components),
             ],
-        ]);
+        ]));
+    }
+
+    /**
+     * Callers read the sent message id from messages[0].id (Meta shape). External does not always put it
+     * there; without the id the message can never get its delivered / read ticks, so find it and add it.
+     *
+     * @param array<string, mixed> $result
+     *
+     * @return array<string, mixed>
+     */
+    public function withMessageId(array $result): array
+    {
+        // Stored with the message, so the status poll knows this send went through External.
+        $result['provider'] ??= 'cheerio';
+
+        if (is_string($result['messages'][0]['id'] ?? null) && $result['messages'][0]['id'] !== '') {
+            return $result;
+        }
+
+        $id = $this->findMessageId($result);
+        if ($id !== '') {
+            $result['messages'] = [['id' => $id]];
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param array<string, mixed> $result
+     */
+    public function findMessageId(array $result): string
+    {
+        $data  = is_array($result['data'] ?? null) ? $result['data'] : [];
+        $nodes = [$result, $data];
+        foreach (['response', 'data', 'result', 'message'] as $inner) {
+            if (is_array($data[$inner] ?? null)) {
+                $nodes[] = $data[$inner];
+            }
+        }
+
+        foreach ($nodes as $node) {
+            $first = $node['messages'][0]['id'] ?? null;
+            if (is_string($first) && $first !== '') {
+                return $first;
+            }
+            foreach (['wamid', 'messageId', 'message_id', 'wa_message_id', 'whatsappMessageId'] as $key) {
+                if (is_string($node[$key] ?? null) && $node[$key] !== '') {
+                    return $node[$key];
+                }
+            }
+        }
+
+        // Last resort: any value that looks like a WhatsApp message id.
+        $found = '';
+        array_walk_recursive($result, static function ($value) use (&$found): void {
+            if ($found === '' && is_string($value) && str_starts_with($value, 'wamid.')) {
+                $found = $value;
+            }
+        });
+
+        return $found;
     }
 
     /**
@@ -271,6 +342,9 @@ class CheerioDirectAPI
      * @return array{
      *     batches: int,
      *     recipient_count: int,
+     *     sent_count: int,
+     *     sent_phones: list<string>,
+     *     failed: array<string, string>,
      *     responses: list<array<string, mixed>>
      * }
      */
@@ -322,23 +396,47 @@ class CheerioDirectAPI
             throw new RuntimeException('No valid recipients for External bulk campaign.');
         }
 
-        $responses = [];
-        $chunks    = array_chunk($rows, $batchSize);
+        $responses  = [];
+        $sentPhones = [];
+        $failed     = [];
+        $lastError  = null;
+        $chunks     = array_chunk($rows, $batchSize);
 
+        // One batch failing must not hide the batches that were already accepted.
         foreach ($chunks as $chunk) {
-            $responses[] = $this->request('POST', 'v1/whatsapp/multiple', [
-                'campaignName' => $campaignName,
-                'template'     => [
-                    'name'     => $templateName,
-                    'language' => ['code' => $lang],
-                ],
-                'data'         => array_values($chunk),
-            ]);
+            $phones = array_column($chunk, 'to');
+            try {
+                $responses[] = $this->request('POST', 'v1/whatsapp/multiple', [
+                    'campaignName' => $campaignName,
+                    'template'     => [
+                        'name'     => $templateName,
+                        'language' => ['code' => $lang],
+                    ],
+                    'data'         => array_values($chunk),
+                ]);
+                foreach ($phones as $p) {
+                    $sentPhones[] = (string) $p;
+                }
+            } catch (Throwable $e) {
+                $lastError = $e;
+                foreach ($phones as $p) {
+                    $failed[(string) $p] = $e->getMessage();
+                }
+            }
+        }
+
+        if ($sentPhones === [] && $lastError !== null) {
+            throw $lastError instanceof RuntimeException
+                ? $lastError
+                : new RuntimeException($lastError->getMessage(), 0, $lastError);
         }
 
         return [
             'batches'         => count($chunks),
             'recipient_count' => count($rows),
+            'sent_count'      => count($sentPhones),
+            'sent_phones'     => $sentPhones,
+            'failed'          => $failed,
             'responses'       => $responses,
         ];
     }
@@ -1358,17 +1456,32 @@ class CheerioDirectAPI
      */
     public function normalizeMessageStatus(array $response): ?string
     {
-        $data  = is_array($response['data'] ?? null) ? $response['data'] : $response;
-        $times = is_array($data['status_updatedAt'] ?? null) ? $data['status_updatedAt'] : [];
+        $data = is_array($response['data'] ?? null) ? $response['data'] : $response;
+        // Some answers wrap the record once more, or return a one-item list.
+        if ($data !== [] && array_is_list($data) && is_array($data[0])) {
+            $data = $data[0];
+        } elseif (! isset($data['status_updatedAt']) && ! isset($data['status']) && is_array($data['data'] ?? null)) {
+            $data = $data['data'];
+        }
+        $times = [];
+        foreach (['status_updatedAt', 'statusUpdatedAt', 'status_updated_at', 'timestamps'] as $timesKey) {
+            if (is_array($data[$timesKey] ?? null)) {
+                $times = $data[$timesKey];
+                break;
+            }
+        }
 
         if ($times !== []) {
             // Higher rank wins on equal timestamps.
             $candidates = [
-                'failedAt'   => ['status' => 'failed', 'rank' => 1],
-                'queueAt'    => ['status' => 'sent', 'rank' => 2],
-                'sentAt'     => ['status' => 'sent', 'rank' => 3],
-                'deliveryAt' => ['status' => 'delivered', 'rank' => 4],
-                'readAt'     => ['status' => 'read', 'rank' => 5],
+                'failedAt'    => ['status' => 'failed', 'rank' => 1],
+                'queueAt'     => ['status' => 'sent', 'rank' => 2],
+                'queuedAt'    => ['status' => 'sent', 'rank' => 2],
+                'sentAt'      => ['status' => 'sent', 'rank' => 3],
+                'deliveryAt'  => ['status' => 'delivered', 'rank' => 4],
+                'deliveredAt' => ['status' => 'delivered', 'rank' => 4],
+                'readAt'      => ['status' => 'read', 'rank' => 5],
+                'seenAt'      => ['status' => 'read', 'rank' => 5],
             ];
 
             $bestStatus = null;
@@ -1400,17 +1513,16 @@ class CheerioDirectAPI
             }
         }
 
-        $raw = strtolower((string) ($data['status'] ?? ''));
-        if (in_array($raw, ['sent', 'delivered', 'read', 'failed'], true)) {
-            return $raw;
-        }
-
-        // Do not treat HTTP/wrapper numeric status (e.g. 200) as a delivery state.
-        $wrapper = $response['status'] ?? null;
-        if (is_string($wrapper)) {
-            $wrapper = strtolower($wrapper);
-            if (in_array($wrapper, ['sent', 'delivered', 'read', 'failed'], true)) {
-                return $wrapper;
+        // Do not treat HTTP/wrapper numeric status (e.g. 200) as a delivery state: strings only.
+        $words = [
+            'sent' => 'sent', 'queued' => 'sent', 'accepted' => 'sent',
+            'delivered' => 'delivered', 'delivery' => 'delivered',
+            'read' => 'read', 'seen' => 'read',
+            'failed' => 'failed', 'undelivered' => 'failed',
+        ];
+        foreach ([$data['status'] ?? null, $data['messageStatus'] ?? null, $data['message_status'] ?? null, $response['status'] ?? null] as $word) {
+            if (is_string($word) && isset($words[strtolower(trim($word))])) {
+                return $words[strtolower(trim($word))];
             }
         }
 
@@ -1426,7 +1538,25 @@ class CheerioDirectAPI
             return null;
         }
 
-        return $this->normalizeMessageStatus($this->getMessageStatus($wamid));
+        $response = $this->getMessageStatus($wamid);
+        $status   = $this->normalizeMessageStatus($response);
+
+        if ($status === null) {
+            // An answer we cannot read means ticks never move; record its shape (at most once an hour per message).
+            try {
+                $key = 'ext_status_shape_' . md5($wamid);
+                if (cache($key) === null) {
+                    cache()->save($key, 1, HOUR);
+                    log_message('warning', 'External status answer not recognised: {body}', [
+                        'body' => mb_substr((string) preg_replace('/\d{7,}/', '<num>', (string) json_encode($response)), 0, 600),
+                    ]);
+                }
+            } catch (Throwable $e) {
+                // Logging must never break the status poll.
+            }
+        }
+
+        return $status;
     }
 
     /**
@@ -1710,7 +1840,7 @@ class CheerioDirectAPI
             'to'             => $phone,
         ], $typePayload);
 
-        return $this->request('POST', 'v1/whatsapp/direct/send', $payload);
+        return $this->withMessageId($this->request('POST', 'v1/whatsapp/direct/send', $payload));
     }
 
     /**

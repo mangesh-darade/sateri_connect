@@ -528,10 +528,20 @@ class CampaignService
         try {
             $bulk = $api->sendBulkCampaign($campaignName, $templateName, $language, $recipients);
             $result['batches'] = (int) ($bulk['batches'] ?? 0);
-            $result['sent']    = (int) ($bulk['recipient_count'] ?? count($recipients));
+            $failedPhones      = is_array($bulk['failed'] ?? null) ? $bulk['failed'] : [];
+            $result['sent']    = count($contactByPhone) - count(array_intersect_key($failedPhones, $contactByPhone));
+            $result['failed'] += count($contactByPhone) - $result['sent'];
 
-            foreach ($contactByPhone as $contactId) {
-                $this->markCampaignContactStatus($campaignId, $contactId, 'sent');
+            // Only the batches the provider accepted are sent; a failed batch fails just its own recipients.
+            foreach ($contactByPhone as $phone => $contactId) {
+                if (isset($failedPhones[$phone])) {
+                    $this->markCampaignContactStatus($campaignId, $contactId, 'failed', (string) $failedPhones[$phone]);
+                } else {
+                    $this->markCampaignContactStatus($campaignId, $contactId, 'sent');
+                }
+            }
+            if ($failedPhones !== []) {
+                $result['flush_error'] = (string) reset($failedPhones);
             }
         } catch (\Throwable $e) {
             log_message('error', 'Campaign #{id} External bulk send failed: {msg}', [

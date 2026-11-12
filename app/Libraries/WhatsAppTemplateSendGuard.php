@@ -41,9 +41,6 @@ final class WhatsAppTemplateSendGuard
             }
         } elseif ($templateName !== null && trim($templateName) !== '') {
             $builder = $this->model->where('name', trim($templateName));
-            if ($language !== null && trim($language) !== '') {
-                $builder->where('language', trim($language));
-            }
             if ($wabaId !== '' && $this->model->db->fieldExists('waba_id', 'templates')) {
                 $builder->groupStart()
                     ->where('waba_id', $wabaId)
@@ -51,7 +48,21 @@ final class WhatsAppTemplateSendGuard
                     ->orWhere('waba_id', '')
                     ->groupEnd();
             }
-            $tpl = $builder->orderBy('synced_at', 'DESC')->first();
+            // "en" and "en_US" are the same template language for sending (External lists "en", Meta "en_US").
+            $rows = $builder->orderBy('synced_at', 'DESC')->findAll();
+            $tpl  = null;
+            if ($language === null || trim($language) === '') {
+                $tpl = $rows[0] ?? null;
+            } else {
+                foreach ($rows as $row) {
+                    if (self::sameLanguage((string) ($row['language'] ?? ''), $language)) {
+                        // An exact match wins over a family match.
+                        if ($tpl === null || strcasecmp(trim((string) $row['language']), trim($language)) === 0) {
+                            $tpl = $row;
+                        }
+                    }
+                }
+            }
             if ($tpl === null) {
                 throw new RuntimeException(
                     'Selected WhatsApp template was not found on this WhatsApp Business Account. Sync templates and try again.',
@@ -68,7 +79,7 @@ final class WhatsAppTemplateSendGuard
         if ($language !== null && trim($language) !== '') {
             $tplLang = strtolower(trim((string) ($tpl['language'] ?? '')));
             $reqLang = strtolower(trim($language));
-            if ($tplLang !== '' && $reqLang !== '' && $tplLang !== $reqLang) {
+            if ($tplLang !== '' && $reqLang !== '' && ! self::sameLanguage($tplLang, $reqLang)) {
                 throw new RuntimeException(
                     'Template language does not match. Expected "' . ($tpl['language'] ?? '') . '", got "' . $language . '".',
                     422
@@ -77,6 +88,18 @@ final class WhatsAppTemplateSendGuard
         }
 
         return $tpl;
+    }
+
+    /** True for the same code or the same language family: "en" = "en_US" = "en-us"; "en_US" != "en_GB". */
+    public static function sameLanguage(string $a, string $b): bool
+    {
+        $a = strtolower(str_replace('-', '_', trim($a)));
+        $b = strtolower(str_replace('-', '_', trim($b)));
+        if ($a === '' || $b === '') {
+            return false;
+        }
+
+        return $a === $b || str_starts_with($a, $b . '_') || str_starts_with($b, $a . '_');
     }
 
     /**
