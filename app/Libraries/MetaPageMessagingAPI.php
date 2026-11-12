@@ -60,7 +60,7 @@ class MetaPageMessagingAPI
         }
 
         return $this->request('GET', $leadId, [
-            'fields' => 'id,created_time,ad_id,ad_name,form_id,field_data,campaign_id,campaign_name',
+            'fields' => 'id,created_time,ad_id,ad_name,form_id,field_data,campaign_id,campaign_name,platform',
         ]);
     }
 

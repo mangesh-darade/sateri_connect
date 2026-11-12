@@ -205,6 +205,9 @@ class FacebookLeadService
         $campaignName = mb_substr(trim((string) ($lead['campaign_name'] ?? $value['campaign_name'] ?? '')), 0, 191);
         $adName       = mb_substr(trim((string) ($lead['ad_name'] ?? $value['ad_name'] ?? '')), 0, 191);
         $pageId       = mb_substr(trim((string) ($value['page_id'] ?? '')), 0, 64);
+        // Meta sends platform "ig" for a lead form filled on Instagram, "fb" for Facebook.
+        $platform     = strtolower(trim((string) ($lead['platform'] ?? $value['platform'] ?? '')));
+        $source       = in_array($platform, ['ig', 'instagram'], true) ? 'Instagram' : 'Facebook';
 
         $saved      = $this->saveContact(
             $phone,
@@ -215,7 +218,8 @@ class FacebookLeadService
             $campaignName,
             $adName,
             $formId,
-            $adId
+            $adId,
+            $source
         );
         $contactId  = (int) ($saved['contact_id'] ?? 0);
         $wasCreated = (bool) ($saved['was_created'] ?? false);
@@ -413,7 +417,8 @@ class FacebookLeadService
         string $campaignName = '',
         string $adName = '',
         string $formId = '',
-        string $adId = ''
+        string $adId = '',
+        string $source = 'Facebook'
     ): array {
         if ($phone === '' && $email === '') {
             return ['contact_id' => 0, 'was_created' => false];
@@ -502,6 +507,12 @@ class FacebookLeadService
                 // Limit value to 500 chars, strip dangerous control characters
                 $cleanValue = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', (string) $value) ?? (string) $value;
                 $custom[$attr] = mb_substr(trim($cleanValue), 0, 500);
+            }
+
+            // Source shown in the Contacts "All sources" filter: Facebook or Instagram.
+            // A contact that already has a source (ElintOM, External, ...) keeps it.
+            if ($source !== '' && trim((string) ($custom['source'] ?? '')) === '') {
+                $custom['source'] = $source;
             }
 
             if ($custom !== []) {
