@@ -1294,26 +1294,59 @@ class CheerioDirectAPI
     public function downloadMedia(string $mediaId): array
     {
         $meta = $this->getMediaUrl($mediaId);
-        $url  = (string) ($meta['url']
-            ?? $meta['data']['url']
-            ?? $meta['mediaUrl']
-            ?? $meta['download_url']
-            ?? '');
-        $mime = (string) ($meta['mime_type']
-            ?? $meta['mimeType']
-            ?? $meta['data']['mime_type']
-            ?? 'application/octet-stream');
+        $mime = $this->findMediaValue($meta, ['mime_type', 'mimeType', 'mimetype', 'content_type', 'contentType']) ?? '';
+
+        // The provider answered with the file itself (not JSON).
+        if (isset($meta['raw']) && is_string($meta['raw']) && $meta['raw'] !== '') {
+            return [
+                'content'   => $meta['raw'],
+                'mime_type' => $this->sniffMediaMime($meta['raw'], $mime),
+                'url'       => '',
+            ];
+        }
+
+        // The provider answered with the file as a byte list: {"type":"Buffer","data":[79,103,...]}.
+        $bytes = $this->findMediaBuffer($meta);
+        if ($bytes !== null) {
+            return [
+                'content'   => $bytes,
+                'mime_type' => $this->sniffMediaMime($bytes, $mime),
+                'url'       => '',
+            ];
+        }
+
+        $url = $this->findMediaValue(
+            $meta,
+            ['url', 'mediaUrl', 'media_url', 'download_url', 'downloadUrl', 'link', 'fileUrl', 'file_url'],
+            static fn (string $v): bool => preg_match('#^https?://#i', $v) === 1
+        ) ?? '';
 
         if ($url === '') {
-            // Some External responses nest binary or base64; try common keys.
-            $inline = $meta['content'] ?? $meta['data']['content'] ?? null;
-            if (is_string($inline) && $inline !== '') {
+            // File sent inline (plain or base64, sometimes as a data: URI).
+            $inline = $this->findMediaValue($meta, ['content', 'base64', 'file', 'media', 'data']);
+            if ($inline !== null) {
+                if (preg_match('#^data:([\w/+.-]+);base64,#i', $inline, $m) === 1) {
+                    $mime   = $mime !== '' ? $mime : $m[1];
+                    $inline = substr($inline, strlen($m[0]));
+                }
+                $decoded = base64_decode($inline, true);
+                $content = ($decoded !== false && $decoded !== '') ? $decoded : $inline;
+
                 return [
-                    'content'   => $inline,
-                    'mime_type' => $mime,
+                    'content'   => $content,
+                    'mime_type' => $this->sniffMediaMime($content, $mime),
                     'url'       => '',
                 ];
             }
+
+            // Field names only (no values), so an unknown response shape can be supported later.
+            $keys = array_keys($meta);
+            if (isset($meta['data']) && is_array($meta['data'])) {
+                $keys[] = 'data{' . implode(',', array_slice(array_keys($meta['data']), 0, 30)) . '}';
+            }
+            log_message('warning', 'External media response has no file or URL. Fields: {keys}', [
+                'keys' => implode(',', array_map('strval', $keys)),
+            ]);
 
             throw new RuntimeException('Media URL missing from External response for ID: ' . $mediaId);
         }
@@ -1331,11 +1364,99 @@ class CheerioDirectAPI
             throw new RuntimeException('Failed to download media. HTTP ' . $status);
         }
 
+        $content = (string) $response->getBody();
+        if ($mime === '') {
+            $mime = trim(explode(';', $response->getHeaderLine('Content-Type'))[0]);
+        }
+
         return [
-            'content'   => (string) $response->getBody(),
-            'mime_type' => $mime,
+            'content'   => $content,
+            'mime_type' => $this->sniffMediaMime($content, $mime),
             'url'       => $url,
         ];
+    }
+
+    /**
+     * First non-empty string stored under one of $keys, looking at the response and up to
+     * three levels of nested objects (providers wrap the media details differently).
+     *
+     * @param array<mixed>  $data
+     * @param list<string>  $keys
+     */
+    private function findMediaValue(array $data, array $keys, ?callable $accept = null, int $depth = 0): ?string
+    {
+        foreach ($keys as $key) {
+            $value = $data[$key] ?? null;
+            if (is_string($value) && trim($value) !== '' && ($accept === null || $accept(trim($value)))) {
+                return trim($value);
+            }
+        }
+        if ($depth >= 3) {
+            return null;
+        }
+        foreach ($data as $child) {
+            if (is_array($child)) {
+                $found = $this->findMediaValue($child, $keys, $accept, $depth + 1);
+                if ($found !== null) {
+                    return $found;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * File bytes from a {"type":"Buffer","data":[...]} object, at the top of the response
+     * or up to three levels inside it. Null when the response holds no such byte list.
+     *
+     * @param array<mixed> $data
+     */
+    private function findMediaBuffer(array $data, int $depth = 0): ?string
+    {
+        if (($data['type'] ?? null) === 'Buffer' && isset($data['data']) && is_array($data['data']) && $data['data'] !== []) {
+            $out = '';
+            foreach (array_chunk($data['data'], 8192) as $chunk) {
+                foreach ($chunk as $byte) {
+                    if (! is_int($byte) || $byte < 0 || $byte > 255) {
+                        return null;
+                    }
+                }
+                $out .= pack('C*', ...$chunk);
+            }
+
+            return $out;
+        }
+        if ($depth >= 3) {
+            return null;
+        }
+        foreach ($data as $child) {
+            if (is_array($child) && ! array_is_list($child)) {
+                $found = $this->findMediaBuffer($child, $depth + 1);
+                if ($found !== null) {
+                    return $found;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /** Keep the provider's file type when it gave one; otherwise detect it from the file bytes. */
+    private function sniffMediaMime(string $content, string $mime): string
+    {
+        $mime = strtolower(trim($mime));
+        if ($mime !== '' && $mime !== 'application/octet-stream') {
+            return $mime;
+        }
+        if ($content !== '' && class_exists(\finfo::class)) {
+            $detected = (new \finfo(FILEINFO_MIME_TYPE))->buffer($content);
+            if (is_string($detected) && $detected !== '') {
+                return $detected;
+            }
+        }
+
+        return 'application/octet-stream';
     }
 
     /**

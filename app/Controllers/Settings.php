@@ -832,7 +832,10 @@ class Settings extends BaseController
         }
 
         $name = trim((string) ($this->request->getPost('name') ?: 'External API Client'));
-        $userId = (int) (session('user_id') ?: 1);
+        $userId = $this->resolveApiTokenOwnerId();
+        if ($userId <= 0) {
+            return $this->jsonResponse(false, null, 'This client has no active admin user to own the API key. Add an active user first.', [], 422);
+        }
 
         $tokenModel = model(\App\Models\ApiTokenModel::class);
         $result = $tokenModel->createToken($userId, $name, ['*']);
@@ -847,6 +850,36 @@ class Settings extends BaseController
             'plain_text' => $result['plain_text'],
             'created_at' => date('Y-m-d H:i:s'),
         ], 'API Key generated successfully.');
+    }
+
+    /**
+     * The user in this client's database who owns a new API key. A platform admin has no
+     * user row in the client database, so the key goes to the client's main admin user
+     * (api_tokens.user_id must point at a real users row).
+     */
+    private function resolveApiTokenOwnerId(): int
+    {
+        $db = \Config\Database::connect();
+
+        if (! $this->platformMode) {
+            $sessionId = (int) session('user_id');
+            if ($sessionId > 0 && $db->table('users')->where('id', $sessionId)->where('deleted_at', null)->countAllResults() > 0) {
+                return $sessionId;
+            }
+        }
+
+        $row = $db->table('users u')
+            ->select('u.id')
+            ->join('roles r', 'r.id = u.role_id', 'left')
+            ->where('u.deleted_at', null)
+            ->where('u.status', 'active')
+            ->orderBy("FIELD(r.slug, 'super-admin', 'super_admin', 'admin') = 0", 'ASC', false)
+            ->orderBy("FIELD(r.slug, 'super-admin', 'super_admin', 'admin')", 'ASC', false)
+            ->orderBy('u.id', 'ASC')
+            ->get(1)
+            ->getRowArray();
+
+        return (int) ($row['id'] ?? 0);
     }
 
     /** Abandoned cart reminders (WooCommerce, Shopify): save the client's reminder settings. */
