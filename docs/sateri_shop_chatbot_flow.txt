@@ -1,0 +1,438 @@
+﻿On any keyword
+
+Hello! Welcome to Sateri Shop.
+Thank you for connecting with us.
+We offer premium Konkan Mango Pulp and Konkan Cashews.
+What are you interested in?
+1. Mango Pulp
+2. Cashew
+Please select 1 or 2 to explore our products.
+
+
+Option -1 
+
+First message 
+Thank you for your interest in Sateri Mango Pulp!
+Welcome to our Mango Pulp collection.
+We offer different varieties and pack sizes suitable for retailers, wholesalers, distributors, hotels, restaurants and food businesses.
+Please select the Mango Pulp product you would like to explore.
+
+Second message 
+
+
+🥭 OUR MANGO PULP COLLECTION
+1. Rasraj Pure Hapus Mango Pulp – 850 gm (MP-01)
+2. Rasraj Pure Hapus Mango Pulp – 3.1 kg (MP-02)
+3. MyKo Sweetened Mix Mango Pulp – 850 gm (MP-03)
+4. MyKo Sweetened Mix Mango Pulp – 3.1 kg (MP-04)
+5. MyKo Totapuri Mango Pulp – 3.1 kg (MP-05)
+Please reply with the product number to view complete product details and pricing.
+Example: MP-01 or 1 
+🥭 RASRAJ PURE HAPUS MANGO PULP
+Product Code: MP-01
+Product Details:
+• Pack Size: 850 gm
+• Case Pack: 12 tins
+• Net Case Weight: 10.2 kg
+• MRP: ₹550 per tin
+B2B Pricing:
+• 12 tins: ₹325 per tin
+• 120 tins: ₹275 per tin
+• Above 120 tins: ₹225 per tin
+GST: 5% applicable.
+Courier Charges: Extra as per delivery location.
+What would you like to do next?
+1. Place an Online Order or Request a Sample
+2. Wholesale / Bulk Enquiry
+3. Explore Other Mango Pulp Products
+Please select an option.
+
+
+OPTION 1: Place an Online Order or Request a Sample
+Bot Message:
+You can place your order online or request a product sample using our website.
+Place an Online Order: Request a Sample:
+[Insert E-commerce Website / Product Link]
+Sample Policy:
+Samples are chargeable and are not free. Once you place a bulk order, the sample charges can be adjusted against your next order by providing additional product of equivalent value, subject to confirmation.
+For assistance, contact our team:
+Call / WhatsApp: +91 89990 87682
+________________
+
+
+OPTION 2: Wholesale / Bulk Enquiry
+Bot Message:
+Thank you for your interest in our Mango Pulp products.
+Please find our wholesale pricing below:
+RASRAJ PURE HAPUS MANGO PULP
+MP-01 – 850 gm
+* 12 tins: ₹325/tin
+* 120 tins: ₹275/tin
+* Above 120 tins: ₹225/tin
+MP-02 – 3.1 kg
+* 6 tins: ₹800/tin
+* 60 tins: ₹700/tin
+* Above 60 tins: ₹600/tin
+MYKO SWEETENED MIX MANGO PULP
+MP-03 – 850 gm
+* 12 tins: ₹275/tin
+* 120 tins: ₹225/tin
+* Above 120 tins: ₹175/tin
+MP-04 – 3.1 kg
+* 6 tins: ₹800/tin
+* 60 tins: ₹600/tin
+* Above 60 tins: ₹500/tin
+MYKO TOTAPURI MANGO PULP
+MP-05 – 3.1 kg
+* 6 tins: ₹250/tin
+* 60 tins: ₹200/tin
+* Above 60 tins: ₹165/tin
+Additional Information:
+* GST: 5% extra
+* Courier charges: Extra, as per delivery location
+* Prices mentioned are per tin.
+For bulk orders, quotations or further assistance, contact our sales team.
+Call / WhatsApp: +91 89990 87682
+[Insert Product Catalogue Link]
+________________
+
+
+OPTION 3: Explore Other Mango Pulp Products
+Bot Message:
+🥭 OUR MANGO PULP COLLECTION
+1. Rasraj Pure Hapus Mango Pulp – 850 gm (MP-01)
+2. Rasraj Pure Hapus Mango Pulp – 3.1 kg (MP-02)
+3. MyKo Sweetened Mix Mango Pulp – 850 gm (MP-03)
+4. MyKo Sweetened Mix Mango Pulp – 3.1 kg (MP-04)
+5. MyKo Totapuri Mango Pulp – 3.1 kg (MP-05)
+Please reply with the product code to view complete product details and pricing.
+Example: MP-01
+
+
+
+
+
+
+
+
+
+SATERI SHOP – CASHEW CHATBOT FLOW
+ON ANY KEYWORD
+Bot Message:
+Hello! Welcome to Sateri Shop.
+Thank you for connecting with us.
+We offer premium Konkan Mango Pulp and Konkan Cashews.
+What are you interested in?
+1. Mango Pulp
+2. Cashew
+Please select 1 or 2 to explore our products.
+________________
+
+
+OPTION 2 – CASHEW
+FIRST MESSAGE
+Thank you for your interest in Sateri Cashews!
+Welcome to our Cashew collection.
+We offer different cashew grades suitable for retailers, wholesalers, distributors, supermarkets, hotels, restaurants and food businesses.
+Please select the cashew grade you would like to explore.
+SECOND MESSAGE
+🥜 OUR CASHEW COLLECTION
+1. W180
+2. W210
+3. W240
+4. W320
+5. W400
+6. Wmini Big
+7. Wmini Small
+8. Big Tukda
+9. Small Tukda
+10. Pakali
+11. Kani BB
+Please reply with the product grade or number to view complete product details and pricing.
+Examples: W320 or 4
+________________
+
+
+THIRD MESSAGE – SELECTED CASHEW PRODUCT DETAILS
+Example: Customer selects W320
+🥜 SATERI CASHEWS – W320
+Product Code: W320
+Product Details:
+* Cashew Grade: W320
+* Pack Size: [Insert Pack Size]
+* Case Pack: [Insert Case Quantity]
+* Net Weight: [Insert Net Weight]
+* MRP: [Insert MRP]
+B2B Pricing:
+* [Insert Minimum Order Quantity]: ₹[Price] per kg
+* [Insert Bulk Quantity]: ₹[Price] per kg
+* [Insert Higher Quantity]: ₹[Price] per kg
+GST: [Confirm GST].
+Courier Charges: Extra as per delivery location.
+What would you like to do next?
+1. Place an Online Order or Request a Sample
+2. Wholesale / Bulk Enquiry
+3. Explore Other Cashew Products
+Please select an option.
+________________
+
+
+OPTION 1: PLACE AN ONLINE ORDER OR REQUEST A SAMPLE
+Bot Message:
+You can place your order online or request a cashew sample using our website.
+Place an Online Order: Request a Sample: 
+[Insert E-commerce Website / Cashew Product Link]
+Sample Policy:
+Samples are chargeable and are not free.
+Once you place a bulk order, the sample charges can be adjusted against your next order by providing additional product of equivalent value, subject to confirmation.
+For assistance, contact our team:
+Call / WhatsApp: +91 89990 87682
+________________
+
+
+OPTION 2: WHOLESALE / BULK ENQUIRY
+Bot Message:
+Thank you for your interest in Sateri Cashews.
+We offer wholesale and bulk purchasing options across our cashew grades.
+Available Cashew Grades:
+1. W180
+2. W210
+3. W240
+4. W320
+5. W400
+6. Wmini Big
+7. Wmini Small
+8. Big Tukda
+9. Small Tukda
+10. Pakali
+11. Kani BB
+Please find our wholesale price list and product catalogue below.
+Product Catalogue:
+[Insert Product Catalogue Link]
+For bulk orders, customised quotations or further assistance, contact our sales team.
+Call / WhatsApp: +91 89990 87682
+________________
+
+
+OPTION 3: EXPLORE OTHER CASHEW PRODUCTS
+Bot Message:
+🥜 OUR CASHEW COLLECTION
+1. W180
+2. W210
+3. W240
+4. W320
+5. W400
+6. Wmini Big
+7. Wmini Small
+8. Big Tukda
+9. Small Tukda
+10. Pakali
+11. Kani BB
+Please reply with the product grade or number to view complete product details and pricing.
+Example: W320 or 4
+
+
+
+
+  
+
+TRIGGER: ON ANY KEYWORD / INCOMING MESSAGE
+Bot Message:
+Hello! Welcome to Sateri Shop.
+Thank you for connecting with us.
+We offer premium Konkan Mango Pulp and Konkan Cashews.
+What are you interested in?
+1. Mango Pulp
+2. Cashew
+Please select 1 or 2 to explore our products.
+        
+
+
+
+
+
+
+SATERI SHOP – WHATSAPP CHATBOT KEYWORDS
+1. MAIN WELCOME MESSAGE – ANY KEYWORD
+Trigger: Any incoming message or keyword.
+Examples:
+* Hi
+* Hello
+* Hey
+* Hii
+* Good morning
+* Good afternoon
+* Good evening
+* Start
+* Start shopping
+* Welcome
+* Menu
+* Main menu
+* Products
+* Product
+* Catalogue
+* Catalog
+* Price
+* Pricing
+* Enquiry
+* Inquiry
+* Order
+* Shopping
+* Buy
+* Sateri
+* Sateri Shop
+* Mango
+* Cashew
+* नमस्कार
+* हॅलो
+* नमस्ते
+Bot Action: Display the main welcome message with two options:
+1. Mango Pulp
+2. Cashew
+2. MANGO PULP KEYWORDS
+Trigger Keywords:
+* Mango
+* Mango Pulp
+* Mango Puree
+* Hapus
+* Alphonso
+* Alphonso Mango
+* Hapus Mango
+* Mango Tin
+* Mango Products
+* Mango Pulp Price
+* Mango Pulp Wholesale
+* Mango Pulp Bulk
+* Mango Pulp Catalogue
+* Rasraj
+* MyKo
+* Totapuri
+* Sweetened Mango Pulp
+* आम
+* आंबा
+* आंबा पल्प
+* हापूस
+* आंबा प्युरी
+Bot Action: Start the Mango Pulp welcome message and show all five mango pulp products.
+3. CASHEW KEYWORDS
+Trigger Keywords:
+* Cashew
+* Cashews
+* Kaju
+* Kaju Nuts
+* Cashew Nuts
+* Cashew Kernel
+* Cashew Products
+* Cashew Price
+* Cashew Wholesale
+* Cashew Bulk
+* Cashew Catalogue
+* W180
+* W210
+* W240
+* W320
+* W400
+* Wmini Big
+* Wmini Small
+* Big Tukda
+* Small Tukda
+* Pakali
+* Kani BB
+* काजू
+* काजू बी
+* काजू दर
+* काजू होलसेल
+Bot Action: Start the Cashew welcome message and show all eleven cashew grades.
+4. ONLINE ORDER KEYWORDS
+* Buy
+* Buy Online
+* Online Order
+* Place Order
+* Order Now
+* Purchase
+* Shopping
+* Website Order
+* ऑर्डर
+* ऑनलाइन ऑर्डर
+Bot Action: Share the e-commerce website or selected product link.
+5. SAMPLE REQUEST KEYWORDS
+* Sample
+* Request Sample
+* Product Sample
+* Sample Order
+* Sample Request
+* Trial Sample
+* Testing Sample
+* नमुना
+* सॅम्पल
+Bot Action: Share the sample request link and sample policy. Clearly mention that samples are chargeable, not free.
+6. WHOLESALE / BULK ENQUIRY KEYWORDS
+* Wholesale
+* Bulk
+* Bulk Order
+* Wholesale Price
+* B2B
+* Distributor
+* Distribution
+* Dealer
+* Retailer
+* Business Enquiry
+* Bulk Purchase
+* Bulk Pricing
+* Wholesale Catalogue
+* थोक
+* होलसेल
+* मोठी ऑर्डर
+Bot Action: Share the relevant wholesale price list or catalogue and contact details.
+7. SALES CONTACT KEYWORDS
+* Contact
+* Contact Us
+* Sales
+* Talk to Sales
+* Sales Team
+* Call
+* WhatsApp
+* Customer Support
+* Help
+* Assistance
+* Representative
+* सेल्स
+* संपर्क
+* मदत
+Bot Action:
+Call / WhatsApp: +91 89990 87682
+https://wa.me/918999087682
+8. OTHER PRODUCT KEYWORDS
+* Other Products
+* More Products
+* Explore Products
+* View Products
+* Product List
+* Change Product
+* Another Product
+* Back to Products
+Bot Action: Display the relevant category product list again.
+9. MENU / RESET KEYWORDS
+* MENU
+* Menu
+* Main Menu
+* Start Again
+* Restart
+* Home
+* Back
+* Go Back
+* Reset
+Bot Action: Return to the main welcome message.
+________________
+
+
+IMPORTANT CHATBOT CONFIGURATION
+1. The first incoming message should trigger the main welcome message.
+2. If the customer selects Mango Pulp, start the Mango Pulp flow.
+3. If the customer selects Cashew, start the Cashew flow.
+4. If a customer sends a product-specific keyword, route them to the relevant category and product selection.
+5. If the customer is already in an active flow, do not restart the welcome message for every reply.
+6. MENU or RESET should return the customer to the main menu.
+7. If the message is not recognised, show the main menu again.
+8. Match keywords without case sensitivity and support common spelling variations.
+Main Contact: +91 89990 87682
