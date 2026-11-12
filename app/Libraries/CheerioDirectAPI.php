@@ -1521,10 +1521,53 @@ class CheerioDirectAPI
             'name'       => $name,
             'language'   => (string) ($payload['language'] ?? 'en'),
             'category'   => strtoupper((string) ($payload['category'] ?? 'UTILITY')),
-            'components' => $payload['components'] ?? [],
+            'components' => $this->stripExampleLinkKey(is_array($payload['components'] ?? null) ? $payload['components'] : []),
         ];
 
         return $this->request('POST', 'v1/whatsapp/create-template', $body);
+    }
+
+    /**
+     * Shapes media header samples as the provider documents them: example.header_handle = [public URL] and
+     * nothing else ("link" is refused with #100 Unexpected key). Carousel cards are covered too.
+     *
+     * @param array<int|string, mixed> $components
+     *
+     * @return array<int|string, mixed>
+     */
+    protected function stripExampleLinkKey(array $components): array
+    {
+        foreach ($components as &$component) {
+            if (! is_array($component)) {
+                continue;
+            }
+            if (is_array($component['example'] ?? null)) {
+                // Documented format: the sample is only example.header_handle = [public URL]. Extra keys break it.
+                $handle = $component['example']['header_handle'] ?? null;
+                $handle = trim(is_array($handle) ? (string) ($handle[0] ?? '') : (string) ($handle ?? ''));
+                if ($handle === '') {
+                    $handle = trim((string) ($component['example']['header_url'] ?? $component['example']['link'] ?? ''));
+                }
+                $hadSample = array_key_exists('header_handle', $component['example'])
+                    || array_key_exists('header_url', $component['example'])
+                    || array_key_exists('link', $component['example']);
+                unset($component['example']['link'], $component['example']['header_url']);
+                if ($hadSample && $handle !== '') {
+                    $component['example']['header_handle'] = [$handle];
+                }
+            }
+            if (is_array($component['cards'] ?? null)) {
+                foreach ($component['cards'] as &$card) {
+                    if (is_array($card) && is_array($card['components'] ?? null)) {
+                        $card['components'] = $this->stripExampleLinkKey($card['components']);
+                    }
+                }
+                unset($card);
+            }
+        }
+        unset($component);
+
+        return $components;
     }
 
     /**

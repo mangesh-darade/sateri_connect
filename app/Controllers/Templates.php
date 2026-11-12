@@ -460,8 +460,13 @@ class Templates extends BaseController
         }
 
         $mime = (string) $file->getMimeType();
+        // WhatsApp accepts only JPG/PNG as an image header; a WEBP or GIF sample is refused as "missing sample".
+        if (in_array($mime, ['image/webp', 'image/gif'], true)) {
+            return $this->jsonResponse(false, null, 'WhatsApp header images must be JPG or PNG. Save this image as JPG or PNG and upload it again.', [], 422);
+        }
+
         $allowed = [
-            'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+            'image/jpeg', 'image/png',
             'application/pdf',
             'video/mp4', 'video/3gpp',
         ];
@@ -598,8 +603,9 @@ class Templates extends BaseController
         $components = [];
         $headerType = (string) ($input['header_type'] ?? 'none');
         $header     = (string) ($input['header'] ?? '');
-        $headerMediaSource = (string) ($input['header_media_source'] ?? '');
-        $headerMediaPreviewUrl = (string) ($input['header_media_preview_url'] ?? '');
+        // Uploaded samples sit behind a login (/media/serve); the provider needs a link it can fetch.
+        $headerMediaSource = \App\Libraries\LocalMediaUrl::signedSampleUrl((string) ($input['header_media_source'] ?? ''));
+        $headerMediaPreviewUrl = \App\Libraries\LocalMediaUrl::signedSampleUrl((string) ($input['header_media_preview_url'] ?? ''));
         $footer = (string) ($input['footer'] ?? '');
 
         if ($headerType === 'text' && $header !== '') {
@@ -663,8 +669,8 @@ class Templates extends BaseController
             }
 
             $mediaType = strtolower(trim((string) ($card['media_type'] ?? 'image')));
-            $mediaSource = trim((string) ($card['media_source'] ?? ''));
-            $mediaPreview = trim((string) ($card['media_preview_url'] ?? $mediaSource));
+            $mediaSource = \App\Libraries\LocalMediaUrl::signedSampleUrl(trim((string) ($card['media_source'] ?? '')));
+            $mediaPreview = \App\Libraries\LocalMediaUrl::signedSampleUrl(trim((string) ($card['media_preview_url'] ?? $mediaSource)));
             $cardBody = trim((string) ($card['body'] ?? ''));
             $handle = $this->resolveTemplateMediaHandle($mediaSource, $mediaPreview);
 

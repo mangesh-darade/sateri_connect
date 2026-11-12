@@ -100,6 +100,26 @@ class Media extends BaseController
         return $this->jsonResponse(true, $media, 'File uploaded.');
     }
 
+    /**
+     * Public, token-signed download of an uploaded template header sample, so the WhatsApp provider can fetch it.
+     * No session: the signed, expiring token is the only credential (see LocalMediaUrl::signedSampleUrl).
+     */
+    public function sample(string $token = ''): ResponseInterface
+    {
+        $filename = \App\Libraries\LocalMediaUrl::filenameFromSampleToken($token);
+        $path     = $filename !== null ? $this->uploadPath . $filename : '';
+        if ($filename === null || ! is_file($path)) {
+            return $this->response->setStatusCode(404)->setBody('Not found');
+        }
+
+        return $this->response
+            ->setHeader('Content-Type', (string) \App\Libraries\LocalMediaUrl::sampleMime($filename))
+            ->setHeader('Content-Length', (string) filesize($path))
+            ->setHeader('Cache-Control', 'private, no-store')
+            ->setHeader('X-Content-Type-Options', 'nosniff')
+            ->setBody(file_get_contents($path) ?: '');
+    }
+
     public function serve(string $filename): ResponseInterface
     {
         if ($denied = $this->requirePermission('chat.view')) {
