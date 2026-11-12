@@ -26,6 +26,23 @@ class ApiAuthFilter implements FilterInterface
      */
     private static ?array $apiKeyCaller = null;
 
+    /**
+     * Why a token was refused, by its shape only (never echoes the token): a login token, one of our own
+     * API keys, or something else pasted into the key field (most often the WhatsApp provider's key).
+     */
+    public static function invalidTokenMessage(string $rawToken): string
+    {
+        $rawToken = trim($rawToken);
+        if (str_starts_with($rawToken, 'sc_live_')) {
+            return 'API key not recognised: it was deleted, has expired, or belongs to another workspace. Create a new key under Developer REST API & Secret Keys.';
+        }
+        if (substr_count($rawToken, '.') === 2) {
+            return 'Invalid or expired API token / JWT.';
+        }
+
+        return 'This is not an API key of this app. Use a key created under Developer REST API & Secret Keys (it starts with "sc_live_"); the WhatsApp provider key does not work here.';
+    }
+
     public function before(RequestInterface $request, $arguments = null)
     {
         self::$apiKeyCaller = null;
@@ -233,7 +250,7 @@ class ApiAuthFilter implements FilterInterface
                 ->setJSON([
                     'status'  => 'error',
                     'success' => false,
-                    'message' => 'Invalid or expired API token / JWT.',
+                    'message' => self::invalidTokenMessage($rawToken),
                 ]);
         }
 
@@ -439,7 +456,7 @@ class ApiAuthFilter implements FilterInterface
         if (str_contains($uri, '/files')) {
             return $read ? 'chat.view' : 'chat.send'; // files that a message or workflow will send
         }
-        if (str_contains($uri, '/knowledge-base')) {
+        if (str_contains($uri, '/knowledge-base') || str_contains($uri, '/voice/')) {
             return 'ai.use';
         }
         if (str_contains($uri, '/email/identities')) {
@@ -519,6 +536,9 @@ class ApiAuthFilter implements FilterInterface
         }
         if (str_contains($uri, '/knowledge-base')) {
             return $method === 'GET' ? 'knowledge:read' : 'knowledge:write';
+        }
+        if (str_contains($uri, '/voice/')) {
+            return $method === 'GET' ? 'voice:read' : 'voice:write';
         }
         if (str_contains($uri, '/social/')) {
             return $method === 'GET' ? 'social:read' : 'social:write';

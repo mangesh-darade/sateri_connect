@@ -668,6 +668,10 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1', 'filter' => '
     $routes->post('automations/trigger', 'AutomationsController::trigger');
     $routes->get('automations/schema', 'AutomationsController::schema');
     $routes->post('automations/validate', 'AutomationsController::validateGraph');
+    // AI voice ordering (AVO) tools: menu and caller lookup backed by ElintOm POS
+    $routes->get('voice/menu', 'VoiceOrdersController::menu');
+    $routes->post('voice/customer', 'VoiceOrdersController::customer');
+    $routes->post('voice/order', 'VoiceOrdersController::order');
     $routes->get('files', 'FilesController::index');
     $routes->post('files', 'FilesController::upload');
     $routes->post('files/([a-f0-9]{40}\.[a-z0-9]+)/delete', 'FilesController::delete/$1');
