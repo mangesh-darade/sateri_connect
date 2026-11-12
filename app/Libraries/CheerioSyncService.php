@@ -92,10 +92,16 @@ class CheerioSyncService
             // Platform values win, but attributes set only in this app (e.g. elintom_lead_id) are not wiped.
             $custom  = array_merge($prevCf, $custom ?? []);
             $prevSrc = trim((string) ($prevCf['source'] ?? ''));
-            if ($prevSrc !== '') {
+            // Order: the contact's own source (ElintOM, panel, ...) is kept; else the source the
+            // External platform sent for it; else "External".
+            $platformSrc = is_scalar($row['customData']['source'] ?? null) ? trim((string) $row['customData']['source']) : '';
+            if ($platformSrc === '' && is_scalar($row['custom_fields']['source'] ?? null)) {
+                $platformSrc = trim((string) $row['custom_fields']['source']);
+            }
+            if ($prevSrc !== '' && $prevSrc !== 'External Platform') {
                 $custom['source'] = $prevSrc;
-            } elseif (trim((string) ($custom['source'] ?? '')) === '') {
-                $custom['source'] = 'External Platform';
+            } else {
+                $custom['source'] = $platformSrc !== '' ? $platformSrc : 'External';
             }
 
             $payload = [
