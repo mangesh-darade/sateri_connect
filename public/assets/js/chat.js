@@ -927,7 +927,7 @@
         Chat.editMode = withinEdit ? 'edit' : 'resend';
         $('#chatEditTitle').text(withinEdit ? 'Edit message' : 'Send again');
         $('#chatEditHint').text(withinEdit
-            ? 'WhatsApp updates this same message.'
+            ? 'If WhatsApp cannot change the sent message, this goes out as a new message.'
             : 'This is older than 15 minutes, so it will be sent as a new message.');
         $('#chatEditBar').removeClass('d-none');
         setComposerLocked(false);

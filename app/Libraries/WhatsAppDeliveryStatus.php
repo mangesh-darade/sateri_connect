@@ -41,6 +41,39 @@ class WhatsAppDeliveryStatus
     }
 
     /**
+     * True when a stored outbound payload is a Meta Cloud send, so the External status API must not be asked
+     * about it (it answers 404 for message ids it did not send).
+     *
+     * Stored shapes: the provider response itself (chat), {request, response} (queue, workflows, campaigns),
+     * {provider, response} (keyword bot), {..., response} (consent). External responses carry a "flag";
+     * Meta responses are flat {messaging_product, contacts, messages}. Unknown shapes are not Meta.
+     *
+     * @param mixed $payload decoded array, JSON string or null
+     */
+    public static function isMetaSendPayload(mixed $payload): bool
+    {
+        if (is_string($payload)) {
+            $payload = json_decode($payload, true);
+        }
+        if (! is_array($payload)) {
+            return false;
+        }
+
+        $response = is_array($payload['response'] ?? null) ? $payload['response'] : $payload;
+        foreach ([$payload['provider'] ?? null, $response['provider'] ?? null] as $provider) {
+            if (is_string($provider) && trim($provider) !== '') {
+                return strtolower(trim($provider)) === 'meta';
+            }
+        }
+
+        if (array_key_exists('flag', $response) || array_key_exists('flag', $payload)) {
+            return false;
+        }
+
+        return isset($response['messaging_product']);
+    }
+
+    /**
      * Latest status a customer should see, using the stored recipient row,
      * the outbound message row, and delivery timestamps.
      */

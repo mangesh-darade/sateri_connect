@@ -837,63 +837,46 @@ class Chat extends BaseController
             && $sentAt !== false
             && (time() - $sentAt) <= (15 * 60);
 
-        if ($canEditInPlace) {
-            try {
-                $api = service('whatsApp');
-                $to  = $api->normalizePhone((string) ($contact['mobile'] ?? $contact['external_id'] ?? ''));
-                $result = $api->editText($to, $waId, $content);
-                $returnedId = trim((string) ($result['messages'][0]['id'] ?? $result['message_id'] ?? $result['id'] ?? ''));
-                $replaced = $returnedId !== '' && $returnedId !== $waId;
-
-                if ($replaced) {
-                    return $this->storeResentMessage($contact, $content, $returnedId, $result);
-                }
-
-                model(MessageModel::class)->update($id, [
-                    'content'   => $content,
-                    'edited_at' => date('Y-m-d H:i:s'),
-                ]);
-
-                log_activity('update', 'chat', 'WhatsApp message edited', [
-                    'message_id' => $id,
-                    'contact_id' => (int) $contact['id'],
-                ]);
-
-                $fresh = model(MessageModel::class)->find($id);
-
-                return $this->jsonResponse(true, [
-                    'mode'    => 'edited',
-                    'message' => $fresh,
-                ], 'Message updated on WhatsApp.');
-            } catch (Throwable $e) {
-                log_message('error', 'Chat edit failed: {msg}', ['msg' => $e->getMessage()]);
-
-                return $this->jsonResponse(false, null, $e->getMessage(), [], 500);
-            }
-        }
-
-        if (! contact_within_24h_window($contact, true)) {
-            return $this->jsonResponse(
-                false,
-                null,
-                'WhatsApp only lets you edit a message for 15 minutes. The 24-hour window is closed, so it cannot be sent again. Use a template.',
-                [],
-                422
-            );
-        }
-
         try {
             $api = service('whatsApp');
             $to  = $api->normalizePhone((string) ($contact['mobile'] ?? $contact['external_id'] ?? ''));
-            $result = $api->sendText($to, $content);
-            $externalId = trim((string) ($result['messages'][0]['id'] ?? $result['message_id'] ?? ''));
-
-            return $this->storeResentMessage($contact, $content, $externalId, $result);
         } catch (Throwable $e) {
-            log_message('error', 'Chat resend failed: {msg}', ['msg' => $e->getMessage()]);
+            log_message('error', 'Chat edit setup failed: {msg}', ['msg' => $e->getMessage()]);
 
-            return $this->jsonResponse(false, null, $e->getMessage(), [], 500);
+            return $this->jsonResponse(false, null, 'WhatsApp is not ready. Check the WhatsApp settings.', [], 502);
         }
+
+        // Tries the provider edit first; when the provider cannot change a sent message it sends a new one.
+        $revised = (new \App\Libraries\WhatsAppMessageReviser())->revise(
+            $api,
+            $to,
+            $waId,
+            $content,
+            $canEditInPlace,
+            (bool) contact_within_24h_window($contact, true)
+        );
+        if (! $revised['ok']) {
+            return $this->jsonResponse(false, null, $revised['message'], [], $revised['status']);
+        }
+
+        if ($revised['data']['mode'] !== 'edited') {
+            return $this->storeResentMessage($contact, $content, $revised['data']['external_id'], $revised['data']['result']);
+        }
+
+        model(MessageModel::class)->update($id, [
+            'content'   => $content,
+            'edited_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        log_activity('update', 'chat', 'WhatsApp message edited', [
+            'message_id' => $id,
+            'contact_id' => (int) $contact['id'],
+        ]);
+
+        return $this->jsonResponse(true, [
+            'mode'    => 'edited',
+            'message' => model(MessageModel::class)->find($id),
+        ], 'Message updated on WhatsApp.');
     }
 
     /**
@@ -1308,13 +1291,8 @@ class Chat extends BaseController
                 }
 
                 // Skip Meta-era outbound rows — External status API 404s on foreign wamids.
-                $payload = $row['payload'] ?? null;
-                if (is_string($payload)) {
-                    $decoded = json_decode($payload, true);
-                    $payload = is_array($decoded) ? $decoded : null;
-                }
-                if (is_array($payload) && ! array_key_exists('flag', $payload) && empty($payload['provider'])) {
-                    // Meta Cloud send payloads are flat (contacts/messages only).
+                // Workflow, queue, campaign and consent sends store {request, response}; those are External too.
+                if (\App\Libraries\WhatsAppDeliveryStatus::isMetaSendPayload($row['payload'] ?? null)) {
                     continue;
                 }
 
