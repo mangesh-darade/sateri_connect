@@ -48,7 +48,7 @@
                         <?= csrf_field() ?>
                         <button type="submit" class="dropdown-item small py-2 d-flex align-items-center gap-2" id="btnSyncElintOmContacts">
                             <i class="fas fa-cash-register text-info"></i>
-                            <span>Sync ElintOm Customers</span>
+                            <span>Sync ElintOm Leads</span>
                         </button>
                     </form>
                 </li>

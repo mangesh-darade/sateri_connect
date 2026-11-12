@@ -209,7 +209,6 @@ class ElintOmCustomerSyncService
 
                 $name   = trim((string) ($row['name'] ?? ''));
                 $email  = trim((string) ($row['email'] ?? ''));
-                $source = trim((string) ($row['source'] ?? ''));
 
                 if ($existing === null) {
                     $id = $this->contacts->insert([
@@ -224,7 +223,7 @@ class ElintOmCustomerSyncService
                         'wa_opt_in'        => 1,
                         'wa_opt_in_at'     => date('Y-m-d H:i:s'),
                         'wa_opt_in_source' => 'elintom_lead',
-                        'custom_fields' => ['source' => $source !== '' ? $source : 'ElintOM', 'elintom_lead_id' => (int) ($row['id'] ?? 0)],
+                        'custom_fields' => ['source' => 'ElintOM', 'elintom_lead_id' => (int) ($row['id'] ?? 0)],
                     ]);
                     if (! $id) {
                         throw new RuntimeException(implode(' ', $this->contacts->errors() ?: ['Insert failed']));
@@ -242,11 +241,11 @@ class ElintOmCustomerSyncService
                     $upd['wa_opt_in_at']     = date('Y-m-d H:i:s');
                     $upd['wa_opt_in_source'] = 'elintom_lead';
                 }
-                // ElintOm is primary for an existing number: source follows ElintOm.
+                // A contact that came from an ElintOm lead always has source "ElintOM" (whatever the
+                // lead's own source is in ElintOm). A contact that started in this app keeps its source.
                 $curSource = (string) ($cf['source'] ?? '');
-                $newSource = $source !== '' ? $source : ($curSource === '' || $curSource === 'elintom_lead' ? 'ElintOM' : '');
-                if ($newSource !== '' && $newSource !== $curSource) {
-                    $upd['custom_fields'] = array_merge($cf, ['source' => $newSource]);
+                if ((! empty($cf['elintom_lead_id']) || $curSource === 'elintom_lead') && $curSource !== 'ElintOM') {
+                    $upd['custom_fields'] = array_merge($cf, ['source' => 'ElintOM']);
                 }
                 // mapped attributes (e.g. status) follow ElintOm
                 $cfNow = $upd['custom_fields'] ?? $cf;

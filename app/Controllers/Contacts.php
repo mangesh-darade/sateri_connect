@@ -1184,7 +1184,7 @@ class Contacts extends BaseController
     }
 
     /**
-     * Pull customers from ElintOm POS (sma_companies) into local contacts.
+     * ElintOm leads <-> contacts sync. ElintOm customers are not synced.
      */
     public function syncFromElintOm(): ResponseInterface
     {
@@ -1194,13 +1194,15 @@ class Contacts extends BaseController
 
         try {
             $stats = (new \App\Libraries\ElintOmCustomerSyncService())->sync();
-            $msg   = sprintf(
-                'ElintOm customers: %d created, %d updated%s%s%s.',
-                $stats['created'],
-                $stats['updated'],
-                $stats['skipped'] ? ', ' . $stats['skipped'] . ' skipped' : '',
-                $stats['deleted'] ? ', ' . $stats['deleted'] . ' deleted in app (not restored)' : '',
-                $stats['failed'] ? ', ' . $stats['failed'] . ' failed' : ''
+            $pulled = $stats['leads_pulled'] ?? [];
+            $pushed = $stats['leads_pushed'] ?? [];
+            $msg    = sprintf(
+                'ElintOm leads to contacts: %d created, %d updated%s. Contacts to ElintOm leads: %d created, %d updated.',
+                (int) ($pulled['created'] ?? 0),
+                (int) ($pulled['updated'] ?? 0),
+                ! empty($pulled['failed']) ? ', ' . (int) $pulled['failed'] . ' failed' : '',
+                (int) ($pushed['created'] ?? 0),
+                (int) ($pushed['updated'] ?? 0)
             );
 
             if ($this->request->isAJAX()) {

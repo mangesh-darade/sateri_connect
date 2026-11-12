@@ -1159,7 +1159,7 @@
                     APP.toast(msg, 'error');
                 })
                 .always(function () {
-                    $btn.prop('disabled', false).html($btn.data('html') || 'Sync ElintOm customers');
+                    $btn.prop('disabled', false).html($btn.data('html') || 'Sync ElintOm Leads');
                 });
         });
 

@@ -116,7 +116,7 @@ class ElintOmLeadPushService
                 'name'   => (string) ($contact['name'] ?? ''),
                 'mobile' => $mobile,
                 'email'  => (string) ($contact['email'] ?? ''),
-                'source' => is_array($custom) ? (string) ($custom['source'] ?? '') : '',
+                'source' => $this->leadSource($custom),
                 'fields' => json_encode($this->mappedFields(is_array($custom) ? $custom : [], $this->mapping())),
             ], 5);
             // Not retried here: the next ElintOm sync runs pushAll(), which sends this contact again.
@@ -156,7 +156,7 @@ class ElintOmLeadPushService
             if ($this->isPlaceholderMobile($mobile)) {
                 continue;
             }
-            $list[] = ['name' => (string) ($r['name'] ?? ''), 'mobile' => $mobile, 'email' => (string) ($r['email'] ?? ''), 'source' => is_array($custom) ? (string) ($custom['source'] ?? '') : '', 'fields' => $this->mappedFields(is_array($custom) ? $custom : [], $map)];
+            $list[] = ['name' => (string) ($r['name'] ?? ''), 'mobile' => $mobile, 'email' => (string) ($r['email'] ?? ''), 'source' => $this->leadSource($custom), 'fields' => $this->mappedFields(is_array($custom) ? $custom : [], $map)];
         }
 
         $out = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'failed' => 0];
@@ -173,6 +173,14 @@ class ElintOmLeadPushService
         }
 
         return $out;
+    }
+
+    /** Lead source sent to ElintOm: the contact's own source, or "Outreach" when it has none. */
+    protected function leadSource(mixed $custom): string
+    {
+        $source = is_array($custom) && is_scalar($custom['source'] ?? null) ? trim((string) $custom['source']) : '';
+
+        return $source !== '' ? $source : 'Outreach';
     }
 
     /** Empty or all-zero numbers (e.g. 0000000000) are not real mobiles. */
