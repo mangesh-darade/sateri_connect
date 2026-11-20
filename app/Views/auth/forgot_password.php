@@ -34,3 +34,18 @@
     <a href="<?= site_url('login') ?>"><i class="fas fa-arrow-left me-1"></i> Back to sign in</a>
 </div>
 <?= $this->endSection() ?>
+
+<?= $this->section('scripts') ?>
+<?php if (! empty($whatsappOtp)): ?>
+<script>
+$(function () {
+    $('input[name="method"]').on('change', function () {
+        var byWhatsapp = $('#methodWhatsapp').is(':checked');
+        $('.auth-desc').text(byWhatsapp
+            ? 'Enter your email and we’ll send a 6 digit code on WhatsApp.'
+            : 'Enter your email and we’ll send a reset link.');
+    });
+});
+</script>
+<?php endif; ?>
+<?= $this->endSection() ?>

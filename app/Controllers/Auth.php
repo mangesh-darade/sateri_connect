@@ -417,24 +417,48 @@ class Auth extends BaseController
         cache()->save($sentKey, $sent + 1, 86400);
 
         $otpService = new \App\Libraries\PlatformOtpService();
-        $user       = null;
-        if ($otpService->isConfigured() && $this->connectTenantForEmail($email)) {
-            $user = model(UserModel::class)->findByEmail($email);
+        if (! $otpService->isConfigured()) {
+            cache()->save($sentKey, $sent, 86400);
+
+            return redirect()->to('/forgot-password')->withInput()->with('error', 'The WhatsApp code is not available right now. Use the email option.');
         }
 
-        $mobile = $user !== null ? trim((string) ($user['phone'] ?? '')) : '';
-        if ($mobile !== '') {
-            $otp    = model(PasswordResetModel::class)->createOtp($email);
-            $result = $otpService->sendOtp($mobile, $otp);
-            if (! $result['ok']) {
-                log_message('error', 'Password reset OTP not sent: {msg}', ['msg' => $result['message']]);
-            }
-            cache()->delete('reset_otp_try_' . md5(strtolower($email)));
+        $user = $this->connectTenantForEmail($email) ? model(UserModel::class)->findByEmail($email) : null;
+        if ($user === null) {
+            // Unknown email: same answer as a sent code, so the form does not show which emails exist.
+            return redirect()->to('/reset-password/otp?email=' . rawurlencode($email))->with(
+                'success',
+                'If that account has a mobile number, a 6 digit code has been sent on WhatsApp.'
+            );
         }
+
+        // A failed send does not use up one of the 5 requests.
+        $mobile = trim((string) ($user['phone'] ?? ''));
+        if ($mobile === '') {
+            cache()->save($sentKey, $sent, 86400);
+
+            return redirect()->to('/forgot-password')->withInput()->with('error', 'No mobile number is saved on this account. Use the email option or ask your admin to add your number.');
+        }
+
+        $resets = model(PasswordResetModel::class);
+        $otp    = $resets->createOtp($email);
+        $result = $otpService->sendOtp($mobile, $otp);
+        if (! $result['ok']) {
+            $resets->deleteByEmail($email);
+            cache()->save($sentKey, $sent, 86400);
+            log_message('error', 'Password reset OTP not sent: {msg}', ['msg' => $result['message']]);
+
+            $message = $result['status'] === 422
+                ? 'The mobile number saved on your account is not valid. Use the email option or ask your admin to correct it.'
+                : 'We could not send the code on WhatsApp. Try again in a minute or use the email option.';
+
+            return redirect()->to('/forgot-password')->withInput()->with('error', $message);
+        }
+        cache()->delete('reset_otp_try_' . md5(strtolower($email)));
 
         return redirect()->to('/reset-password/otp?email=' . rawurlencode($email))->with(
             'success',
-            'If that account has a mobile number, a 6 digit code has been sent on WhatsApp.'
+            'A 6 digit code has been sent on WhatsApp to the number saved on your account.'
         );
     }
 
