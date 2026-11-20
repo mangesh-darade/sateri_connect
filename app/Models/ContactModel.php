@@ -72,6 +72,9 @@ class ContactModel extends Model
     /** Bulk syncs set this: one HTTP push per contact would make a few thousand rows take minutes (pushAll() sends them in batches). */
     public bool $skipElintOmPush = false;
 
+    /** Set by the contacts API when the API key has Customer Sync switched off: no lead is pushed to ElintOm (voice agent is not affected). */
+    public bool $skipLeadPush = false;
+
     /** Set when a contact is created by a system (store signup, checkout): it must not be phoned by the AI voice agent as a "new contact". */
     public bool $skipVoiceAgent = false;
 
@@ -83,7 +86,7 @@ class ContactModel extends Model
      */
     protected function pushToElintOm(array $data): array
     {
-        if ($this->skipElintOmPush) {
+        if ($this->skipElintOmPush || $this->skipLeadPush) {
             return $data;
         }
         $ids = $data['id'] ?? [];

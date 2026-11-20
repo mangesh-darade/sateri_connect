@@ -50,6 +50,12 @@ class ContactsController extends BaseV1Controller
         $contactModel = model(ContactModel::class);
         $wasCreated   = false;
 
+        // A contact added through an API key goes to ElintOm (LMS) only when that key has Customer Sync on.
+        $apiTokenId = (int) (session()->get('api_token_id') ?? 0);
+        if ($apiTokenId > 0) {
+            $contactModel->skipLeadPush = ! model(\App\Models\ApiTokenModel::class)->customerSyncEnabled($apiTokenId);
+        }
+
         $name   = trim(strip_tags((string) ($input['name'] ?? '')));
         $email  = trim((string) ($input['email'] ?? ''));
         $notes  = trim(strip_tags((string) ($input['notes'] ?? '')));
