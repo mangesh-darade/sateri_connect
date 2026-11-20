@@ -1604,6 +1604,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                         <th>Created</th>
                                         <th>Last Used</th>
                                         <th>Calls (30 days)</th>
+                                        <th title="Contacts added through this key are sent to ElintOm (LMS) only when this is on">Customer Sync</th>
                                         <th class="text-end">Actions</th>
                                     </tr>
                                 </thead>
@@ -1611,7 +1612,7 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                     <?php $tokens = $apiTokens ?? []; ?>
                                     <?php if (empty($tokens)): ?>
                                         <tr id="noApiTokensRow">
-                                            <td colspan="6" class="text-center py-4 text-muted">
+                                            <td colspan="7" class="text-center py-4 text-muted">
                                                 <i class="fas fa-key fs-4 d-block mb-1 text-secondary opacity-50"></i>
                                                 No API keys generated yet. Click "Generate Secret Key" above.
                                             </td>
@@ -1634,6 +1635,11 @@ $emailProviderLabel = $isSesEmail ? 'Amazon SES' : ($isSendGridEmail ? 'SendGrid
                                                     <?php else: ?>
                                                         <span class="text-muted">0</span>
                                                     <?php endif; ?>
+                                                </td>
+                                                <td>
+                                                    <div class="form-check form-switch m-0">
+                                                        <input class="form-check-input js-token-sync" type="checkbox" role="switch" data-id="<?= (int) $tk['id'] ?>" <?= (int) ($tk['customer_sync'] ?? 0) === 1 ? 'checked' : '' ?> <?= $canEditSettings ? '' : 'disabled' ?>>
+                                                    </div>
                                                 </td>
                                                 <td class="text-end">
                                                     <button type="button" class="btn btn-xs btn-outline-danger js-delete-api-token" data-id="<?= (int) $tk['id'] ?>">
@@ -2300,6 +2306,7 @@ $(function () {
                             '<td class="text-muted">Just now</td>' +
                             '<td><span class="text-muted">Never</span></td>' +
                             '<td><span class="text-muted">0</span></td>' +
+                            '<td><div class="form-check form-switch m-0"><input class="form-check-input js-token-sync" type="checkbox" role="switch" data-id="' + res.data.id + '"></div></td>' +
                             '<td class="text-end">' +
                                 '<button type="button" class="btn btn-xs btn-outline-danger js-delete-api-token" data-id="' + res.data.id + '">' +
                                     '<i class="fas fa-trash-alt me-1"></i> Revoke' +
@@ -2347,6 +2354,21 @@ $(function () {
         } else {
             APP.toast(url, 'info');
         }
+    });
+
+    $(document).on('change', '.js-token-sync', function () {
+        var $box = $(this);
+        var on = $box.is(':checked');
+        $box.prop('disabled', true);
+        APP.post(SETTINGS_API + '/api-tokens/' + $box.attr('data-id') + '/sync', { enabled: on ? 1 : 0 })
+            .done(function (res) {
+                APP.toast((res && res.message) || 'Saved', 'success');
+            })
+            .fail(function (xhr) {
+                $box.prop('checked', !on);
+                APP.toast((xhr.responseJSON && xhr.responseJSON.message) || 'Could not change customer sync', 'error');
+            })
+            .always(function () { $box.prop('disabled', false); });
     });
 
     $(document).on('click', '.js-delete-api-token', function () {

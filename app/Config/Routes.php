@@ -112,6 +112,7 @@ $routes->group('platform', ['filter' => 'platformAuth'], static function ($route
     $routes->post('clients/(:segment)/settings/cart-reminders/rotate', 'PlatformClients::clientSettingsAction/$1/cart-reminders-rotate', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/settings/api-tokens/generate', 'PlatformClients::clientSettingsAction/$1/api-tokens-generate', ['filter' => 'csrf']);
     $routes->post('clients/(:segment)/settings/api-tokens/(:num)/delete', 'PlatformClients::clientSettingsDeleteToken/$1/$2', ['filter' => 'csrf']);
+    $routes->post('clients/(:segment)/settings/api-tokens/(:num)/sync', 'PlatformClients::clientSettingsTokenSync/$1/$2', ['filter' => 'csrf']);
     $routes->get('clients/(:segment)/settings/mcp-server', 'PlatformClients::clientMcpServer/$1');
     // AI voice agent (main platform admin): connection, agent script and server settings
     $routes->get('voice-agent', 'PlatformVoiceAgent::index');
@@ -207,6 +208,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('settings/cart-reminders/rotate', 'Settings::rotateCartSecret', ['filter' => 'csrf']);
     $routes->post('settings/api-tokens/generate', 'Settings::generateApiToken', ['filter' => 'csrf']);
     $routes->post('settings/api-tokens/(:num)/delete', 'Settings::deleteApiToken/$1', ['filter' => 'csrf']);
+    $routes->post('settings/api-tokens/(:num)/sync', 'Settings::toggleApiTokenSync/$1', ['filter' => 'csrf']);
     $routes->get('settings/mcp-server', 'Settings::mcpServer');
     $routes->post('copilot/ask', 'AiCopilot::ask', ['filter' => 'csrf']);
     $routes->get('copilot/history', 'AiCopilot::history');

@@ -977,6 +977,15 @@ class PlatformClients extends BaseController
             : $this->response->setStatusCode(500)->setJSON(['success' => false, 'message' => 'Could not revoke API key.']);
     }
 
+    public function clientSettingsTokenSync(string $key, int $id): ResponseInterface
+    {
+        $result = $this->runClientSettings($key, 'toggleApiTokenSync', [$id]);
+
+        return $result instanceof ResponseInterface
+            ? $result
+            : $this->response->setStatusCode(500)->setJSON(['success' => false, 'message' => 'Could not change customer sync.']);
+    }
+
     public function clientSettingsCartSend(string $key, int $id): ResponseInterface
     {
         $result = $this->runClientSettings($key, 'sendCartReminder', [$id]);

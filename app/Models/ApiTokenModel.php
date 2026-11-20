@@ -22,6 +22,7 @@ class ApiTokenModel extends Model
         'name',
         'token_hash',
         'abilities',
+        'customer_sync',
         'last_used_at',
         'expires_at',
     ];
@@ -115,6 +116,13 @@ class ApiTokenModel extends Model
             'plain_text' => $plainText,
             'token'      => is_array($token) ? $token : null,
         ];
+    }
+
+    public function customerSyncEnabled(int $tokenId): bool
+    {
+        $row = $this->select('customer_sync')->where('id', $tokenId)->first();
+
+        return is_array($row) && (int) ($row['customer_sync'] ?? 0) === 1;
     }
 
     /**

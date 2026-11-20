@@ -966,6 +966,26 @@ class Settings extends BaseController
             ->setBody((string) file_get_contents($path));
     }
 
+    /** Customer Sync switch of one API key: contacts added through it go to ElintOm (LMS) only while it is on. */
+    public function toggleApiTokenSync(int $id): ResponseInterface
+    {
+        if ($denied = $this->guardSettings('settings.edit')) {
+            return $denied;
+        }
+
+        $tokenModel = model(\App\Models\ApiTokenModel::class);
+        if ($tokenModel->find($id) === null) {
+            return $this->jsonResponse(false, null, 'API key not found.', [], 404);
+        }
+
+        $enabled = (int) $this->request->getPost('enabled') === 1 ? 1 : 0;
+        $tokenModel->update($id, ['customer_sync' => $enabled]);
+
+        log_activity('update', 'api_tokens', 'API key customer sync ' . ($enabled === 1 ? 'on' : 'off'), ['token_id' => $id]);
+
+        return $this->jsonResponse(true, ['enabled' => $enabled], $enabled === 1 ? 'Customer sync is on for this key.' : 'Customer sync is off for this key.');
+    }
+
     public function deleteApiToken(int $id): ResponseInterface
     {
         if ($denied = $this->guardSettings('settings.edit')) {

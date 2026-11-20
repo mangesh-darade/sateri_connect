@@ -168,6 +168,7 @@ return array (
       'name' => 'varchar(150) COLLATE utf8mb4_general_ci NOT NULL',
       'token_hash' => 'varchar(191) COLLATE utf8mb4_general_ci NOT NULL',
       'abilities' => 'longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin',
+      'customer_sync' => 'tinyint unsigned NOT NULL DEFAULT \'0\'',
       'last_used_at' => 'datetime DEFAULT NULL',
       'expires_at' => 'datetime DEFAULT NULL',
       'created_at' => 'datetime DEFAULT NULL',
