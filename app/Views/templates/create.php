@@ -182,7 +182,27 @@ $categories = [
                                     <div class="form-text">Use a public URL if you do not want to upload a file now.</div>
                                 </div>
                             </div>
-                            <div class="col-12">
+                            <div class="col-12 d-none" id="templateOtpWrap">
+                                <div class="alert alert-info py-2 px-3 small mb-3">Authentication templates have a fixed text set by WhatsApp: <strong>{{1}} is your verification code.</strong> You can only choose the options below.</div>
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="templateOtpExpiryInput">Code expires after (minutes)</label>
+                                        <input type="number" name="otp_expiry" id="templateOtpExpiryInput" class="form-control" min="1" max="90" value="<?= esc(old('otp_expiry') ?? '10', 'attr') ?>">
+                                        <div class="form-text">1 to 90 minutes, shown in the footer.</div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="templateOtpButtonInput">Copy code button text</label>
+                                        <input type="text" name="otp_button_text" id="templateOtpButtonInput" class="form-control" maxlength="25" value="<?= esc(old('otp_button_text') ?? 'Copy code', 'attr') ?>">
+                                    </div>
+                                    <div class="col-md-4 d-flex align-items-end">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" name="otp_security" id="templateOtpSecurityInput" value="1" checked>
+                                            <label class="form-check-label" for="templateOtpSecurityInput">Add security recommendation</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12" id="templateBodyWrap">
                                 <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap mb-2">
                                     <label class="form-label mb-0">Body</label>
                                     <button type="button" class="btn btn-outline-secondary btn-sm" id="templateAddVariableBtn">Add variable</button>
@@ -1050,17 +1070,28 @@ $(function () {
         syncCarouselCardsInput();
     }
 
+    function isAuthentication() {
+        return !isCarousel() && $category.val() === 'AUTHENTICATION';
+    }
+
     function updateModeUi() {
         var carousel = isCarousel();
+        var auth = isAuthentication();
         $('#templateDefaultHeaderTypeWrap, #templateHeaderTextWrap, #templateHeaderMediaWrap, #templateDefaultFooterWrap, #templateDefaultCtaWrap, #templateDefaultCtaBuilderWrap')
-            .toggleClass('d-none', carousel);
+            .toggleClass('d-none', carousel || auth);
+        $('#templateBodyWrap').toggleClass('d-none', auth);
+        $('#templateOtpWrap').toggleClass('d-none', !auth);
+        $body.prop('required', !auth);
         $('#templateCarouselWrap').toggleClass('d-none', !carousel);
         if (carousel) {
             applyCategory('MARKETING');
             renderCarouselCards();
-        } else {
+        } else if (!auth) {
             updateHeaderFields();
             updateCtaFields();
+        }
+        if (auth) {
+            $('#templateExamplesWrap').addClass('d-none');
         }
     }
 
@@ -1070,6 +1101,20 @@ $(function () {
         var $previewHeader = $('#templatePreviewHeader');
         var $previewHeaderMeta = $('#templatePreviewHeaderMeta');
         var $previewButtons = $('#templatePreviewButtons');
+
+        if (isAuthentication()) {
+            var otpText = '123456 is your verification code.';
+            if ($('#templateOtpSecurityInput').is(':checked')) {
+                otpText += ' For your security, do not share this code.';
+            }
+            $('#templatePreviewBody').text(otpText);
+            $previewHeader.text('');
+            $previewHeaderMeta.text('').addClass('d-none');
+            $('#templatePreviewFooter').text('This code expires in ' + ($('#templateOtpExpiryInput').val() || '10') + ' minutes.');
+            var otpLabel = ($('#templateOtpButtonInput').val() || '').trim() || 'Copy code';
+            $previewButtons.html('<span class="template-preview-button"><i class="fas fa-copy me-1"></i>' + $('<div>').text(otpLabel).html() + '</span>').removeClass('d-none');
+            return;
+        }
 
         previewBody = previewBody.replace(/\{\{\s*(\d+)\s*\}\}/g, function (match, num) {
             var key = parseInt(num, 10);
@@ -1199,6 +1244,8 @@ $(function () {
 
     $('[data-category-card]').on('click', function () {
         applyCategory($(this).data('value'));
+        updateModeUi();
+        updatePreview();
     });
 
     $name.on('input', function () {
@@ -1456,7 +1503,7 @@ $(function () {
             syncCarouselCardsInput();
         }
 
-        var placeholders = getBodyPlaceholders();
+        var placeholders = isAuthentication() ? [] : getBodyPlaceholders();
         if (placeholders.length) {
             var map = getExampleMap();
             for (var i = 0; i < placeholders.length; i++) {
@@ -1511,6 +1558,8 @@ $(function () {
             });
     });
 
+    $('#templateOtpWrap').on('input change', 'input', updatePreview);
+    updateModeUi();
     $name.val(sanitizeName($name.val(), true));
     $('#templateNameCount').text($name.val().length);
     $('#templateBodyCount').text(String($body.val() || '').length);

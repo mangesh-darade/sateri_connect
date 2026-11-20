@@ -571,6 +571,14 @@ class Templates extends BaseController
         $body         = (string) ($input['body'] ?? '');
         $examplesCsv  = (string) ($input['body_examples'] ?? '');
 
+        if (($input['category'] ?? '') === 'AUTHENTICATION') {
+            return [
+                ['type' => 'BODY', 'add_security_recommendation' => (bool) ($input['otp_security'] ?? true)],
+                ['type' => 'FOOTER', 'code_expiration_minutes' => (int) ($input['otp_expiry'] ?? 10)],
+                ['type' => 'BUTTONS', 'buttons' => [['type' => 'OTP', 'otp_type' => 'COPY_CODE', 'text' => (string) ($input['otp_button_text'] ?? 'Copy code')]]],
+            ];
+        }
+
         $bodyComponent = [
             'type' => 'BODY',
             'text' => $body,
@@ -863,6 +871,11 @@ class Templates extends BaseController
             }
         }
 
+        // Authentication templates have no body of their own: WhatsApp writes the text, we only send the options.
+        if ($category === 'AUTHENTICATION') {
+            return $this->normalizeAuthenticationInput($name, $language, $templateType);
+        }
+
         if ($name === '' || $body === '') {
             return $this->invalidTemplateInput('Name and body are required.');
         }
@@ -965,6 +978,57 @@ class Templates extends BaseController
             'body_examples' => $examples,
             'template_buttons' => $templateButtons,
             'carousel_cards' => $carouselCards,
+        ];
+    }
+
+    /**
+     * One time password template: fixed text, optional security line, expiry footer and a Copy code button.
+     *
+     * @return array<string, mixed>
+     */
+    protected function normalizeAuthenticationInput(string $name, string $language, string $templateType): array
+    {
+        if ($name === '' || ! preg_match('/^[a-z0-9_]+$/', $name)) {
+            return $this->invalidTemplateInput('Name must be lowercase letters, numbers, and underscores only.');
+        }
+        if (! preg_match('/^[a-z]{2}(?:_[A-Z]{2})?$/', $language)) {
+            return $this->invalidTemplateInput('Language must be in `en` or `en_US` format.');
+        }
+        if ($templateType !== 'default') {
+            return $this->invalidTemplateInput('Authentication templates cannot be carousels.');
+        }
+
+        $expiry = (int) $this->request->getPost('otp_expiry');
+        if ($expiry < 1 || $expiry > 90) {
+            return $this->invalidTemplateInput('Code expiry must be between 1 and 90 minutes.');
+        }
+
+        $buttonText = trim((string) $this->request->getPost('otp_button_text'));
+        if ($buttonText === '') {
+            $buttonText = 'Copy code';
+        }
+        if (mb_strlen($buttonText) > 25) {
+            return $this->invalidTemplateInput('Button text cannot exceed 25 characters.');
+        }
+
+        return [
+            'error'         => null,
+            'name'          => $name,
+            'language'      => $language,
+            'category'      => 'AUTHENTICATION',
+            'template_type' => 'default',
+            'header_type'   => 'none',
+            'header'        => '',
+            'header_media_source'      => '',
+            'header_media_preview_url' => '',
+            'body'          => '',
+            'footer'        => '',
+            'body_examples' => '',
+            'template_buttons' => [],
+            'carousel_cards'   => [],
+            'otp_security'     => (string) $this->request->getPost('otp_security') === '1',
+            'otp_expiry'       => $expiry,
+            'otp_button_text'  => $buttonText,
         ];
     }
 
@@ -1349,12 +1413,16 @@ class Templates extends BaseController
                         ?? ($component['example']['header_handle'][0] ?? null);
                     break;
                 case 'BODY':
-                    $result['body'] = $component['text'] ?? null;
+                    $result['body'] = $component['text'] ?? (array_key_exists('add_security_recommendation', $component)
+                        ? '{{1}} is your verification code.' . (! empty($component['add_security_recommendation']) ? ' For your security, do not share this code.' : '')
+                        : null);
                     // Store placeholder identities, never provider example values.
                     $result['variables'] = \App\Libraries\WhatsAppTemplateVariables::identitiesFromComponents([$component]);
                     break;
                 case 'FOOTER':
-                    $result['footer'] = $component['text'] ?? null;
+                    $result['footer'] = $component['text'] ?? (isset($component['code_expiration_minutes'])
+                        ? 'This code expires in ' . (int) $component['code_expiration_minutes'] . ' minutes.'
+                        : null);
                     break;
                 case 'BUTTONS':
                     $result['buttons'] = $component['buttons'] ?? null;
