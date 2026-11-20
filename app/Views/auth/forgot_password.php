@@ -25,6 +25,7 @@
             <input class="form-check-input" type="radio" name="method" id="methodWhatsapp" value="whatsapp">
             <label class="form-check-label" for="methodWhatsapp">WhatsApp (6 digit code)</label>
         </div>
+        <div class="form-text">The code goes to the mobile number saved on your account.</div>
     </div>
     <?php endif; ?>
     <button type="submit" class="btn btn-wa auth-submit"><?= ! empty($whatsappOtp) ? 'Continue' : 'Send reset link' ?></button>
