@@ -14,7 +14,20 @@
             <input type="email" id="email" name="email" class="form-control" placeholder="you@company.com" value="<?= esc(old('email') ?? '') ?>" required autofocus>
         </div>
     </div>
-    <button type="submit" class="btn btn-wa auth-submit">Send reset link</button>
+    <?php if (! empty($whatsappOtp)): ?>
+    <div class="mb-3">
+        <div class="form-label">Send the reset to</div>
+        <div class="form-check">
+            <input class="form-check-input" type="radio" name="method" id="methodEmail" value="email" checked>
+            <label class="form-check-label" for="methodEmail">Email (reset link)</label>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input" type="radio" name="method" id="methodWhatsapp" value="whatsapp">
+            <label class="form-check-label" for="methodWhatsapp">WhatsApp (6 digit code)</label>
+        </div>
+    </div>
+    <?php endif; ?>
+    <button type="submit" class="btn btn-wa auth-submit"><?= ! empty($whatsappOtp) ? 'Continue' : 'Send reset link' ?></button>
 </form>
 <div class="auth-links">
     <a href="<?= site_url('login') ?>"><i class="fas fa-arrow-left me-1"></i> Back to sign in</a>

@@ -52,6 +52,22 @@ class PasswordResetModel extends Model
         return $token;
     }
 
+    /** 6 digit code for the WhatsApp reset; only its hash is stored, same row as a link token (one reset at a time). */
+    public function createOtp(string $email): string
+    {
+        $otp = (string) random_int(100000, 999999);
+
+        $this->db->table($this->table)->where('email', $email)->delete();
+
+        $this->db->table($this->table)->insert([
+            'email'      => $email,
+            'token'      => hash('sha256', $otp),
+            'created_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        return $otp;
+    }
+
     public function verifyToken(string $email, string $token, int $expiryMinutes = 60): bool
     {
         $row = $this->db->table($this->table)

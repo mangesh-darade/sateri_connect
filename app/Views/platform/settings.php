@@ -27,6 +27,9 @@ $brandInitial     = mb_strtoupper(mb_substr($siteName !== '' ? $siteName : 'S', 
     <button type="button" class="platform-tab" role="tab" data-tab="powered" aria-selected="false">
         <i class="fas fa-copyright" aria-hidden="true"></i> Powered by
     </button>
+    <button type="button" class="platform-tab" role="tab" data-tab="otp" aria-selected="false">
+        <i class="fab fa-whatsapp" aria-hidden="true"></i> Login OTP
+    </button>
     <button type="button" class="platform-tab" role="tab" data-tab="database-health" aria-selected="false">
         <i class="fas fa-database" aria-hidden="true"></i> Database
     </button>
@@ -155,6 +158,51 @@ $brandInitial     = mb_strtoupper(mb_substr($siteName !== '' ? $siteName : 'S', 
                         </a>
                     </div>
                 </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="platform-card platform-tab-panel" data-panel="otp" hidden>
+        <?php $otp = $otpWhatsApp ?? []; ?>
+        <h3 class="platform-section-title">WhatsApp OTP for password reset</h3>
+        <p class="platform-settings-lead">Users can choose WhatsApp on the Forgot password screen once all of these are saved. The code is sent from this number to the mobile saved on the user. Use an approved Authentication template with a copy code button.</p>
+        <div class="platform-form-grid">
+            <div>
+                <label class="platform-label" for="inputOtpProvider">Provider</label>
+                <select class="platform-input" name="otp_wa_provider" id="inputOtpProvider">
+                    <option value="meta" <?= ($otp['provider'] ?? 'meta') === 'meta' ? 'selected' : '' ?>>Meta Cloud API</option>
+                    <option value="external" <?= ($otp['provider'] ?? 'meta') === 'external' ? 'selected' : '' ?>>External (Cheerio Direct API)</option>
+                </select>
+                <div class="platform-help">Only the fields of the chosen provider are used.</div>
+            </div>
+            <div data-otp-provider="external">
+                <label class="platform-label" for="inputOtpApiKey">Cheerio API key (x-api-key)</label>
+                <input class="platform-input" type="password" name="otp_wa_api_key" id="inputOtpApiKey" value="" autocomplete="off" placeholder="<?= ! empty($otp['has_api_key']) ? 'Saved. Leave empty to keep it' : 'x-api-key from the Cheerio dashboard' ?>">
+                <div class="platform-help">Same key a client saves in Settings → WhatsApp → External.</div>
+            </div>
+            <div data-otp-provider="meta">
+                <label class="platform-label" for="inputOtpPhoneId">Phone number ID</label>
+                <input class="platform-input" type="text" name="otp_wa_phone_number_id" id="inputOtpPhoneId" value="<?= esc((string) ($otp['phone_number_id'] ?? '')) ?>" placeholder="From Meta WhatsApp Manager">
+            </div>
+            <div data-otp-provider="meta">
+                <label class="platform-label" for="inputOtpToken">Access token</label>
+                <input class="platform-input" type="password" name="otp_wa_token" id="inputOtpToken" value="" autocomplete="off" placeholder="<?= ! empty($otp['has_token']) ? 'Saved. Leave empty to keep it' : 'Permanent access token' ?>">
+            </div>
+            <div>
+                <label class="platform-label" for="inputOtpTemplate">Template name</label>
+                <input class="platform-input" type="text" name="otp_wa_template" id="inputOtpTemplate" value="<?= esc((string) ($otp['template'] ?? '')) ?>" placeholder="password_reset_otp">
+            </div>
+            <div>
+                <label class="platform-label" for="inputOtpLanguage">Template language</label>
+                <input class="platform-input" type="text" name="otp_wa_language" id="inputOtpLanguage" value="<?= esc((string) ($otp['language'] ?? 'en')) ?>" placeholder="en_US">
+                <div class="platform-help">Must match the approved template, for example en_US.</div>
+            </div>
+            <div>
+                <label class="platform-switch">
+                    <input type="checkbox" name="otp_wa_button" value="1" <?= ($otp['button'] ?? true) ? 'checked' : '' ?>>
+                    <span>Template has a Copy code button</span>
+                </label>
+                <div class="platform-help">On for an Authentication template. Off for a custom text template (Utility).</div>
             </div>
         </div>
     </section>
@@ -434,6 +482,17 @@ $brandInitial     = mb_strtoupper(mb_substr($siteName !== '' ? $siteName : 'S', 
         togglePB.addEventListener('change', function () {
             pbFields.classList.toggle('is-off', !this.checked);
         });
+    }
+
+    var otpProvider = document.getElementById('inputOtpProvider');
+    function showOtpProviderFields() {
+        document.querySelectorAll('[data-otp-provider]').forEach(function (el) {
+            el.hidden = el.getAttribute('data-otp-provider') !== otpProvider.value;
+        });
+    }
+    if (otpProvider) {
+        otpProvider.addEventListener('change', showOtpProviderFields);
+        showOtpProviderFields();
     }
 
     var section = document.getElementById('database-health');

@@ -373,6 +373,7 @@ class Auth extends BaseController
 
         return view('auth/forgot_password', [
             'pageTitle' => 'Forgot Password',
+            'whatsappOtp' => (new \App\Libraries\PlatformOtpService())->isConfigured(),
             'csrfName'  => csrf_token(),
             'csrfToken' => csrf_hash(),
         ]);
@@ -385,8 +386,10 @@ class Auth extends BaseController
         }
 
         $email = (string) $this->request->getPost('email');
-        $this->connectTenantForEmail($email);
-        $user  = model(UserModel::class)->findByEmail($email);
+        if ((string) $this->request->getPost('method') === 'whatsapp') {
+            return $this->sendResetOtp($email);
+        }
+        $user  = $this->connectTenantForEmail($email) ? model(UserModel::class)->findByEmail($email) : null;
 
         // Always show success to avoid email enumeration
         if ($user !== null) {
@@ -402,6 +405,80 @@ class Auth extends BaseController
         );
     }
 
+    /** WhatsApp option: a 6 digit OTP goes to the mobile saved on the user. The answer is the same whether or not the account exists. */
+    protected function sendResetOtp(string $email): ResponseInterface
+    {
+        // At most 5 codes per email in 24 hours. Counted for every email, so the answer does not show if the account exists.
+        $sentKey = 'reset_otp_sent_' . md5(strtolower($email));
+        $sent    = (int) cache($sentKey);
+        if ($sent >= 5) {
+            return redirect()->to('/forgot-password')->with('error', 'You can request a WhatsApp code only 5 times in 24 hours. Try again later or use email.');
+        }
+        cache()->save($sentKey, $sent + 1, 86400);
+
+        $otpService = new \App\Libraries\PlatformOtpService();
+        $user       = null;
+        if ($otpService->isConfigured() && $this->connectTenantForEmail($email)) {
+            $user = model(UserModel::class)->findByEmail($email);
+        }
+
+        $mobile = $user !== null ? trim((string) ($user['phone'] ?? '')) : '';
+        if ($mobile !== '') {
+            $otp    = model(PasswordResetModel::class)->createOtp($email);
+            $result = $otpService->sendOtp($mobile, $otp);
+            if (! $result['ok']) {
+                log_message('error', 'Password reset OTP not sent: {msg}', ['msg' => $result['message']]);
+            }
+            cache()->delete('reset_otp_try_' . md5(strtolower($email)));
+        }
+
+        return redirect()->to('/reset-password/otp?email=' . rawurlencode($email))->with(
+            'success',
+            'If that account has a mobile number, a 6 digit code has been sent on WhatsApp.'
+        );
+    }
+
+    public function resetPasswordOtp(): string|ResponseInterface
+    {
+        $email = trim((string) ($this->request->getGet('email') ?? $this->request->getPost('email') ?? ''));
+
+        if (strtolower($this->request->getMethod()) !== 'post') {
+            return view('auth/reset_otp', [
+                'pageTitle' => 'Enter OTP',
+                'email'     => $email,
+            ]);
+        }
+
+        $otp = trim((string) $this->request->getPost('otp'));
+        if (! $this->validate(['email' => 'required|valid_email']) || preg_match('/^\d{6}$/', $otp) !== 1) {
+            return redirect()->back()->withInput()->with('error', 'Enter your email and the 6 digit code.');
+        }
+
+        // 5 wrong codes in 10 minutes and the code is burned: a 6 digit code must not be guessable.
+        $tryKey = 'reset_otp_try_' . md5(strtolower($email));
+        $tries  = (int) cache($tryKey);
+        if ($tries >= 5) {
+            if ($this->connectTenantForEmail($email)) {
+                model(PasswordResetModel::class)->deleteByEmail($email);
+            }
+
+            return redirect()->to('/forgot-password')->with('error', 'Too many wrong codes. Request a new code.');
+        }
+
+        $connected = $this->connectTenantForEmail($email);
+        $resets    = model(PasswordResetModel::class);
+        if (! $connected || ! $resets->verifyToken($email, $otp, 10)) {
+            cache()->save($tryKey, $tries + 1, 600);
+
+            return redirect()->back()->withInput()->with('error', 'Invalid or expired code.');
+        }
+
+        cache()->delete($tryKey);
+        $token = $resets->createToken($email);
+
+        return redirect()->to('/reset-password/' . $token . '?email=' . rawurlencode($email));
+    }
+
     public function resetPassword(string $token): string|ResponseInterface
     {
         $email = (string) ($this->request->getGet('email') ?? $this->request->getPost('email') ?? '');
@@ -410,8 +487,7 @@ class Auth extends BaseController
             return $this->processReset($token);
         }
 
-        $this->connectTenantForEmail($email);
-        $valid = $email !== '' && model(PasswordResetModel::class)->verifyToken($email, $token);
+        $valid = $this->connectTenantForEmail($email) && model(PasswordResetModel::class)->verifyToken($email, $token);
 
         return view('auth/reset_password', [
             'pageTitle' => 'Reset Password',
@@ -436,10 +512,10 @@ class Auth extends BaseController
         }
 
         $email = (string) $this->request->getPost('email');
-        $this->connectTenantForEmail($email);
-        $resets = model(PasswordResetModel::class);
+        $connected = $this->connectTenantForEmail($email);
+        $resets    = model(PasswordResetModel::class);
 
-        if (! $resets->verifyToken($email, $token)) {
+        if (! $connected || ! $resets->verifyToken($email, $token)) {
             return redirect()->to('/forgot-password')->with('error', 'Invalid or expired reset token.');
         }
 
@@ -466,16 +542,22 @@ class Auth extends BaseController
     /**
      * Portal multi-client: password reset must run against the user's workspace DB, not the default.
      */
-    protected function connectTenantForEmail(string $email): void
+    /** False when the email belongs to no client: the default connection has no database then, so the caller must not query it. */
+    protected function connectTenantForEmail(string $email): bool
     {
-        if ($email === '' || ! \App\Libraries\MasterTenantRepository::masterConfigured()) {
-            return;
+        if ($email === '') {
+            return false;
+        }
+        if (! \App\Libraries\MasterTenantRepository::masterConfigured()) {
+            return true;
         }
 
         $tenantKey = (new \App\Libraries\MasterTenantRepository())->findTenantKeyByEmail($email);
-        if ($tenantKey !== null) {
-            (new \App\Libraries\TenantConnection())->apply($tenantKey, 'login');
+        if ($tenantKey === null) {
+            return false;
         }
+
+        return (new \App\Libraries\TenantConnection())->apply($tenantKey, 'login');
     }
 
     protected function sendPasswordResetEmail(string $email, string $name, string $link): void

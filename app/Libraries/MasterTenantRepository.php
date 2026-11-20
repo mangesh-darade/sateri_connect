@@ -1146,6 +1146,12 @@ class MasterTenantRepository
         }
     }
 
+    /** A platform setting saved with encrypt = true, returned in plain text. */
+    public function getPlatformSecret(string $key): string
+    {
+        return $this->decryptSecret($this->getPlatformSetting($key));
+    }
+
     public function setPlatformSetting(string $key, string $value, bool $encrypt = false): void
     {
         $key = trim($key);

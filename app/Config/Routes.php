@@ -33,6 +33,7 @@ $routes->get('verify-email/(:segment)', 'Auth::verifyEmail/$1');
 $routes->match(['get', 'post'], 'resend-verification', 'Auth::resendVerification', ['filter' => ['csrf', 'rateLimit:20,600']]);
 $routes->match(['get', 'post'], 'logout', 'Auth::logout');
 $routes->match(['get', 'post'], 'forgot-password', 'Auth::forgotPassword', ['filter' => ['csrf', 'rateLimit:20,600']]);
+$routes->match(['get', 'post'], 'reset-password/otp', 'Auth::resetPasswordOtp', ['filter' => ['csrf', 'rateLimit:20,600']]);
 $routes->match(['get', 'post'], 'reset-password/(:segment)', 'Auth::resetPassword/$1', ['filter' => 'csrf']);
 
 /*

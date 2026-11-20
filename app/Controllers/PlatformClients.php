@@ -773,6 +773,15 @@ class PlatformClients extends BaseController
             'pageTitle'        => 'Platform Settings',
             'navActive'        => 'settings',
             'branding'         => $branding,
+            'otpWhatsApp'      => [
+                'provider'        => $repo->getPlatformSetting('otp_wa_provider', 'meta') === 'external' ? 'external' : 'meta',
+                'button'          => $repo->getPlatformSetting('otp_wa_button', '1') === '1',
+                'has_api_key'     => $repo->getPlatformSecret('otp_wa_api_key') !== '',
+                'phone_number_id' => $repo->getPlatformSetting('otp_wa_phone_number_id'),
+                'template'        => $repo->getPlatformSetting('otp_wa_template'),
+                'language'        => $repo->getPlatformSetting('otp_wa_language', 'en'),
+                'has_token'       => $repo->getPlatformSecret('otp_wa_token') !== '',
+            ],
             'platformName'     => (string) session('platform_admin_name'),
             'schemaClients'    => $repo->listActiveTenants($this->platformAdminId()),
             'schemaTableCount' => count(SchemaRepairService::snapshot()),
@@ -811,6 +820,22 @@ class PlatformClients extends BaseController
 
         $poweredByUrl = trim((string) $this->request->getPost('powered_by_url'));
         $repo->setPlatformSetting('platform_powered_by_url', $poweredByUrl !== '' ? $poweredByUrl : 'https://sateritechnologies.com');
+
+        // WhatsApp OTP sender for password reset (the access token is kept when the field is left empty)
+        $repo->setPlatformSetting('otp_wa_phone_number_id', preg_replace('/\D+/', '', (string) $this->request->getPost('otp_wa_phone_number_id')) ?? '');
+        $repo->setPlatformSetting('otp_wa_template', preg_replace('/[^a-z0-9_]/', '', strtolower(trim((string) $this->request->getPost('otp_wa_template')))) ?? '');
+        $otpLanguage = preg_replace('/[^A-Za-z_]/', '', trim((string) $this->request->getPost('otp_wa_language'))) ?? '';
+        $repo->setPlatformSetting('otp_wa_language', $otpLanguage !== '' ? $otpLanguage : 'en');
+        $repo->setPlatformSetting('otp_wa_provider', (string) $this->request->getPost('otp_wa_provider') === 'external' ? 'external' : 'meta');
+        $repo->setPlatformSetting('otp_wa_button', (string) $this->request->getPost('otp_wa_button') === '1' ? '1' : '0');
+        $otpApiKey = trim((string) $this->request->getPost('otp_wa_api_key'));
+        if ($otpApiKey !== '') {
+            $repo->setPlatformSetting('otp_wa_api_key', $otpApiKey, true);
+        }
+        $otpToken = trim((string) $this->request->getPost('otp_wa_token'));
+        if ($otpToken !== '') {
+            $repo->setPlatformSetting('otp_wa_token', $otpToken, true);
+        }
 
         // Remove logo / favicon / powered_by_logo if requested
         if ((string) $this->request->getPost('remove_logo') === '1') {
