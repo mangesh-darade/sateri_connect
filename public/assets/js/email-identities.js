@@ -22,6 +22,9 @@
   var dirty = false;
   var currentDomain = '';
 
+  // Modals inside the page wrapper sit under the Bootstrap backdrop (screen greys out, popup unusable).
+  $('#sesAddDomainModal, #sesAddSenderModal, #sesDnsModal').appendTo('body');
+
   function url(path) {
     return base + '/' + path.replace(/^\//, '');
   }

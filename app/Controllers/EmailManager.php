@@ -196,6 +196,50 @@ class EmailManager extends BaseController
         }
     }
 
+    /**
+     * Saves an image for use inside email HTML and returns its public link for the img src.
+     */
+    public function uploadImage(): ResponseInterface
+    {
+        if ($denied = $this->requirePermission('emails.send')) {
+            return $denied;
+        }
+
+        $file = $this->request->getFile('image');
+        if ($file === null || ! $file->isValid() || $file->hasMoved()) {
+            return $this->jsonResponse(false, null, 'No valid image uploaded.', [], 422);
+        }
+
+        if ($file->getSize() > 2 * 1024 * 1024) {
+            return $this->jsonResponse(false, null, 'Image exceeds the 2MB limit.', [], 422);
+        }
+
+        $ext = strtolower($file->getClientExtension());
+        $mime = (string) $file->getMimeType();
+        if (! in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true)
+            || ! in_array($mime, ['image/jpeg', 'image/png', 'image/gif', 'image/webp'], true)) {
+            return $this->jsonResponse(false, null, 'Only JPG, PNG, GIF or WEBP images are allowed.', [], 422);
+        }
+
+        $targetDir = FCPATH . 'uploads/emails/images/';
+        if (! is_dir($targetDir)) {
+            mkdir($targetDir, 0755, true);
+        }
+
+        $newName = $file->getRandomName();
+        try {
+            $file->move($targetDir, $newName);
+        } catch (\Throwable $e) {
+            log_message('error', 'Email image upload failed: {msg}', ['msg' => $e->getMessage()]);
+
+            return $this->jsonResponse(false, null, 'Upload failed. Please try again.', [], 500);
+        }
+
+        (new ActivityLogger())->log('email_image_upload', 'emails', 'Uploaded email image', ['file' => $newName]);
+
+        return $this->jsonResponse(true, ['url' => base_url('uploads/emails/images/' . $newName)], 'Image uploaded.');
+    }
+
     public function deleteBuilder(int $id): ResponseInterface
     {
         if ($denied = $this->requirePermission('emails.delete')) {

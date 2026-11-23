@@ -137,13 +137,35 @@
             toolbar: TOOLBAR,
             placeholder: options.placeholder || el.getAttribute('data-editor-placeholder') || 'Write your email…',
             disableDragAndDrop: true,
+            dialogsInBody: true,
             callbacks: {
                 onChange: function (contents) { syncFromEditor(el, contents); },
                 onChangeCodeview: function (contents) { syncFromEditor(el, contents); },
                 onBlur: function () { $(el).summernote('editor.saveRange'); },
-                onImageUpload: function () {
-                    var msg = 'Uploaded images are not delivered in email. Use "Image URL" with a public https link.';
-                    if (APP.toast) APP.toast(msg, 'warning'); else window.alert(msg);
+                onImageUpload: function (files) {
+                    // Images are hosted on this server and inserted by public link, never as base64 (not delivered in email).
+                    var $editor = $(el);
+                    $.each(files, function (i, file) {
+                        var fd = new FormData();
+                        fd.append('image', file);
+                        $.ajax({
+                            url: (APP.baseUrl || '').replace(/\/$/, '') + '/email-manager/upload-image',
+                            type: 'POST',
+                            data: fd,
+                            processData: false,
+                            contentType: false,
+                            dataType: 'json'
+                        }).done(function (res) {
+                            if (res && res.success && res.data && res.data.url) {
+                                $editor.summernote('insertImage', res.data.url);
+                                toast('Image added. Link: ' + res.data.url, 'success');
+                            } else {
+                                toast((res && res.message) || 'Image upload failed.', 'error');
+                            }
+                        }).fail(function (xhr) {
+                            toast((xhr.responseJSON && xhr.responseJSON.message) || 'Image upload failed.', 'error');
+                        });
+                    });
                 }
             }
         });

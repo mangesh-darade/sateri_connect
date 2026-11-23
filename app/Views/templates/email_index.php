@@ -139,7 +139,11 @@ $statusCounts = $statusCounts ?? ['total' => 0, 'active' => 0, 'draft' => 0, 'ar
                                             </div>
                                             <div>
                                                 <div class="fw-semibold text-dark"><?= esc($tName) ?></div>
-                                                <div class="small text-muted">ID: #<?= $tId ?></div>
+                                                <div class="small text-muted">ID: #<?= $tId ?>
+                                                    <?php if (! empty($t['attachment_name'])): ?>
+                                                        <span class="ms-1" title="<?= esc((string) $t['attachment_name']) ?>"><i class="fas fa-paperclip text-primary"></i> <?= esc((string) $t['attachment_name']) ?></span>
+                                                    <?php endif; ?>
+                                                </div>
                                             </div>
                                         </div>
                                     </td>
@@ -178,6 +182,7 @@ $statusCounts = $statusCounts ?? ['total' => 0, 'active' => 0, 'draft' => 0, 'ar
                                                         data-subject="<?= esc($tSubject) ?>"
                                                         data-status="<?= esc($tStatus) ?>"
                                                         data-cheerio="<?= esc($tCheerio) ?>"
+                                                        data-attachment="<?= esc((string) ($t['attachment_name'] ?? '')) ?>"
                                                         data-html="<?= esc($tHtml) ?>"
                                                         title="Edit Template">
                                                     <i class="fas fa-pen text-primary"></i>
@@ -265,6 +270,20 @@ $statusCounts = $statusCounts ?? ['total' => 0, 'active' => 0, 'draft' => 0, 'ar
                         </div>
                         <textarea name="html_content" id="tpl_html" class="form-control form-control-sm font-monospace" rows="12" placeholder="<div style='font-family:sans-serif;'>&#10;  <h2>Hello {{name}},</h2>&#10;  <p>Thank you for choosing us.</p>&#10;</div>" required data-email-editor data-email-subject="#tpl_subject" data-editor-height="300"></textarea>
                     </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold mb-1">
+                            <i class="fas fa-paperclip text-primary me-1"></i> Default Attachment
+                            <span class="text-muted fw-normal small">(PDF, image, XLSX, CSV, DOCX - max 5MB)</span>
+                        </label>
+                        <input type="file" name="attachment" id="tpl_attachment" class="form-control form-control-sm"
+                               accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx">
+                        <div id="tpl_current_attachment" class="d-none mt-2 p-2 rounded-2 bg-light border small d-flex align-items-center justify-content-between">
+                            <span class="text-truncate me-2"><i class="fas fa-paperclip text-primary me-1"></i> <strong id="tpl_att_name"></strong></span>
+                            <button type="button" class="btn btn-sm btn-outline-danger" id="tpl_remove_att_btn" title="Remove attachment"><i class="fas fa-times"></i></button>
+                        </div>
+                        <input type="hidden" name="remove_attachment" id="tpl_remove_attachment" value="0">
+                        <div class="form-text">Campaigns using this template send this file with the email.</div>
+                    </div>
                     <div class="alert alert-danger py-2 small d-none mb-0" id="tplModalError"></div>
                 </div>
                 <div class="modal-footer py-2">
@@ -289,8 +308,21 @@ $(function () {
     var editModal = new bootstrap.Modal(document.getElementById('editEmailTemplateModal'));
     var prevModal = new bootstrap.Modal(document.getElementById('previewEmailTemplateModal'));
 
+    function setTplAttachment(name) {
+        $('#tpl_attachment').val('');
+        $('#tpl_remove_attachment').val('0');
+        $('#tpl_att_name').text(name || '');
+        $('#tpl_current_attachment').toggleClass('d-none', !name);
+    }
+
+    $('#tpl_remove_att_btn').on('click', function () {
+        $('#tpl_remove_attachment').val('1');
+        $('#tpl_current_attachment').addClass('d-none');
+    });
+
     // Open Create Modal
     $('#btnCreateEmailTemplate, #btnEmptyCreateTemplate').on('click', function () {
+        setTplAttachment('');
         $('#tplModalTitle').html('<i class="fas fa-plus-circle text-primary me-2"></i>Create Email Template');
         $('#tpl_id').val('');
         $('#tpl_name').val('');
@@ -310,6 +342,7 @@ $(function () {
         $('#tpl_subject').val($btn.data('subject'));
         $('#tpl_status').val($btn.data('status') || 'active');
         $('#tpl_html').val($btn.data('html') || '');
+        setTplAttachment($btn.data('attachment') || '');
         $('#tplModalError').addClass('d-none').text('');
         editModal.show();
     });
@@ -322,6 +355,7 @@ $(function () {
         $('#tpl_name').val($btn.data('name'));
         $('#tpl_subject').val($btn.data('subject'));
         $('#tpl_status').val('draft');
+        setTplAttachment('');
         $('#tpl_html').val($btn.data('html') || '');
         $('#tplModalError').addClass('d-none').text('');
         editModal.show();
@@ -360,7 +394,17 @@ $(function () {
             html_content: $('#tpl_html').val()
         };
 
-        APP.post(APP.baseUrl + '/email-manager/builders', payload).done(function (res) {
+        var formData = new FormData(this);
+        formData.set('html_content', payload.html_content);
+
+        $.ajax({
+            url: APP.baseUrl + '/email-manager/builders',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            dataType: 'json'
+        }).done(function (res) {
             APP.toast(res.message || 'Template saved successfully', 'success');
             editModal.hide();
             try { sessionStorage.setItem('emailTplPreview', JSON.stringify({ name: payload.name, subject: payload.subject, html: payload.html_content })); } catch (e) {}

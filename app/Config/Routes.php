@@ -294,6 +294,7 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->get('email-verifier', static fn () => redirect()->to(site_url('email-manager?tab=verifier')));
     $routes->get('email-manager/group-emails/(:num)', 'EmailManager::getGroupEmails/$1');
     $routes->post('email-manager/builders', 'EmailManager::saveBuilder', ['filter' => 'csrf']);
+    $routes->post('email-manager/upload-image', 'EmailManager::uploadImage', ['filter' => 'csrf']);
     $routes->post('email-manager/builders/(:num)/delete', 'EmailManager::deleteBuilder/$1', ['filter' => 'csrf']);
     $routes->post('email-manager/drips', 'EmailManager::saveDrip', ['filter' => 'csrf']);
     $routes->post('email-manager/drips/(:num)/delete', 'EmailManager::deleteDrip/$1', ['filter' => 'csrf']);
