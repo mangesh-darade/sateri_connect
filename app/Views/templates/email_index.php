@@ -277,7 +277,7 @@ $statusCounts = $statusCounts ?? ['total' => 0, 'active' => 0, 'draft' => 0, 'ar
                         </label>
                         <input type="file" name="attachment" id="tpl_attachment" class="form-control form-control-sm"
                                accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx">
-                        <div id="tpl_current_attachment" class="d-none mt-2 p-2 rounded-2 bg-light border small d-flex align-items-center justify-content-between">
+                        <div id="tpl_current_attachment" class="d-none mt-2 p-2 rounded-2 bg-light border small align-items-center justify-content-between">
                             <span class="text-truncate me-2"><i class="fas fa-paperclip text-primary me-1"></i> <strong id="tpl_att_name"></strong></span>
                             <button type="button" class="btn btn-sm btn-outline-danger" id="tpl_remove_att_btn" title="Remove attachment"><i class="fas fa-times"></i></button>
                         </div>
@@ -312,12 +312,12 @@ $(function () {
         $('#tpl_attachment').val('');
         $('#tpl_remove_attachment').val('0');
         $('#tpl_att_name').text(name || '');
-        $('#tpl_current_attachment').toggleClass('d-none', !name);
+        $('#tpl_current_attachment').toggleClass('d-none', !name).toggleClass('d-flex', !!name);
     }
 
     $('#tpl_remove_att_btn').on('click', function () {
         $('#tpl_remove_attachment').val('1');
-        $('#tpl_current_attachment').addClass('d-none');
+        $('#tpl_current_attachment').addClass('d-none').removeClass('d-flex');
     });
 
     // Open Create Modal

@@ -221,7 +221,7 @@ class EmailManager extends BaseController
             return $this->jsonResponse(false, null, 'Only JPG, PNG, GIF or WEBP images are allowed.', [], 422);
         }
 
-        $targetDir = FCPATH . 'uploads/emails/images/';
+        $targetDir = WRITEPATH . 'uploads/email_images/';
         if (! is_dir($targetDir)) {
             mkdir($targetDir, 0755, true);
         }
@@ -237,7 +237,7 @@ class EmailManager extends BaseController
 
         (new ActivityLogger())->log('email_image_upload', 'emails', 'Uploaded email image', ['file' => $newName]);
 
-        return $this->jsonResponse(true, ['url' => base_url('uploads/emails/images/' . $newName)], 'Image uploaded.');
+        return $this->jsonResponse(true, ['url' => site_url('email-image/' . $newName)], 'Image uploaded.');
     }
 
     public function deleteBuilder(int $id): ResponseInterface

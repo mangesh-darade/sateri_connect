@@ -120,6 +120,28 @@ class Media extends BaseController
             ->setBody(file_get_contents($path) ?: '');
     }
 
+    /**
+     * Public image used inside email HTML (img src). No session: mail clients fetch it.
+     * Only files saved by EmailManager::uploadImage with a random name are served.
+     */
+    public function emailImage(string $filename = ''): ResponseInterface
+    {
+        $types = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'gif' => 'image/gif', 'webp' => 'image/webp'];
+        $ext   = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        $path  = WRITEPATH . 'uploads/email_images/' . $filename;
+
+        if (preg_match('/^[A-Za-z0-9_]+\.[a-z]+$/', $filename) !== 1 || ! isset($types[$ext]) || ! is_file($path)) {
+            return $this->response->setStatusCode(404)->setBody('Not found');
+        }
+
+        return $this->response
+            ->setHeader('Content-Type', $types[$ext])
+            ->setHeader('Content-Length', (string) filesize($path))
+            ->setHeader('Cache-Control', 'public, max-age=31536000')
+            ->setHeader('X-Content-Type-Options', 'nosniff')
+            ->setBody(file_get_contents($path) ?: '');
+    }
+
     public function serve(string $filename): ResponseInterface
     {
         if ($denied = $this->requirePermission('chat.view')) {

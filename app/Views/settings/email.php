@@ -362,6 +362,7 @@ $steps = [
         </div>
     </div>
 </div>
+</div>
 
 <?php if ($canSetup): ?>
 <!-- Add domain -->
@@ -463,7 +464,6 @@ $steps = [
 <?php endif; ?>
 
 <?= view('partials/ses_dns_modal', ['canManage' => $canManage && $isSes]) ?>
-</div>
 <?= $this->endSection() ?>
 
 <?= $this->section('styles') ?>

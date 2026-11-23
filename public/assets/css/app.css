@@ -2963,6 +2963,16 @@ body.layout-fixed .main-sidebar > .sidebar {
 .modal-backdrop.show {
     opacity: 0.5 !important;
 }
+/* Summernote-lite image/link dialogs (own backdrop, not Bootstrap) must sit above Bootstrap modals. */
+.note-modal-backdrop { z-index: 1090 !important; }
+.note-modal { z-index: 1095 !important; }
+/* AdminLTE (BS4) loads after Bootstrap 5 and can put the backdrop over the dialog (whole screen greys out). */
+.modal-backdrop {
+    z-index: 1050;
+}
+.modal {
+    z-index: 1055;
+}
 .emoji-picker button {
     border: 0;
     background: transparent;
