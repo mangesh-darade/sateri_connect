@@ -120,27 +120,14 @@
         });
     }
 
-    /** Keeps the public link of the last uploaded image visible under the editor, with a Copy button. */
-    function showImageLink(el, url) {
-        if (!el._emailImgLink) {
-            el._emailImgLink = $('<div class="mt-2">' +
-                '<div class="input-group input-group-sm"><span class="input-group-text">Image link</span>' +
-                '<input type="text" class="form-control js-email-img-url" readonly>' +
-                '<button type="button" class="btn btn-outline-secondary js-email-img-copy">Copy</button></div>' +
-                '<div class="input-group input-group-sm mt-1"><span class="input-group-text">Image tag</span>' +
-                '<input type="text" class="form-control js-email-img-tag" readonly>' +
-                '<button type="button" class="btn btn-outline-secondary js-email-img-copy">Copy</button></div></div>');
-            el._emailEditor.$bar.after(el._emailImgLink);
-            el._emailImgLink.on('click', 'input', function () { this.select(); });
-            el._emailImgLink.on('click', '.js-email-img-copy', function () {
-                var input = $(this).siblings('input')[0];
-                input.select();
-                try { document.execCommand('copy'); toast('Copied', 'success'); } catch (e) {}
-            });
-        }
-        el._emailImgLink.find('.js-email-img-url').val(url);
-        el._emailImgLink.find('.js-email-img-tag').val('<div style="text-align:center"><img src="' + url + '" alt="" width="420" style="width:420px;max-width:100%;height:auto;border:0"></div>');
-    }
+    // Image/link dialogs live in <body>; when the editor sits inside another modal, lift the dialog above it.
+    $(document).on('show.bs.modal', '.note-modal', function () {
+        var $dialog = $(this).css('z-index', 1090);
+        setTimeout(function () {
+            $('.modal-backdrop').last().css('z-index', 1085);
+            $dialog.css('z-index', 1090);
+        }, 0);
+    });
 
     function init(el, options) {
         el = el && el.jquery ? el[0] : el;
@@ -160,12 +147,6 @@
             placeholder: options.placeholder || el.getAttribute('data-editor-placeholder') || 'Write your email…',
             disableDragAndDrop: true,
             dialogsInBody: true,
-            popover: {
-                image: [
-                    ['resize', ['resizeFull', 'resizeHalf', 'resizeQuarter', 'resizeNone']],
-                    ['remove', ['removeMedia']]
-                ]
-            },
             callbacks: {
                 onChange: function (contents) { syncFromEditor(el, contents); },
                 onChangeCodeview: function (contents) { syncFromEditor(el, contents); },
@@ -185,13 +166,8 @@
                             dataType: 'json'
                         }).done(function (res) {
                             if (res && res.success && res.data && res.data.url) {
-                                // Inline image with a fixed width: the toolbar's Left / Center / Right align moves it, and it cannot collapse in a table cell.
-                                $editor.summernote('insertImage', res.data.url, function ($img) {
-                                    var natural = $img[0].naturalWidth || 420;
-                                    $img.attr('alt', '').css({ width: Math.min(natural, 420) + 'px', height: 'auto', border: 0 });
-                                });
-                                toast('Image uploaded. Link shown below the editor.', 'success');
-                                showImageLink(el, res.data.url);
+                                $editor.summernote('insertImage', res.data.url);
+                                toast('Image added. Link: ' + res.data.url, 'success');
                             } else {
                                 toast((res && res.message) || 'Image upload failed.', 'error');
                             }
