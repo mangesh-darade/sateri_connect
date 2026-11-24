@@ -93,20 +93,29 @@ $inboxSubtitle = (string) ($inboxSubtitle ?? 'WABA Number');
                             <button type="button" class="dropdown-item" data-scope="unread">Unread</button>
                         </div>
                     </div>
-                    <label class="chat-unread-toggle">
-                        <span id="chatSidebarUnreadCount">Unread 0</span>
-                        <input type="checkbox" id="chatUnreadToggle">
-                        <span class="chat-unread-toggle-ui"></span>
-                    </label>
+                    <div class="d-flex align-items-center gap-2">
+                        <select id="chatLimitSelect" class="form-select form-select-sm chat-limit-select" title="Chats to show" aria-label="Chats limit">
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                            <option value="500">500</option>
+                            <option value="1000">1000</option>
+                            <option value="all">All</option>
+                        </select>
+                        <label class="chat-unread-toggle">
+                            <span id="chatSidebarUnreadCount">Unread 0</span>
+                            <input type="checkbox" id="chatUnreadToggle">
+                            <span class="chat-unread-toggle-ui"></span>
+                        </label>
+                    </div>
                 </div>
             </div>
         </div>
         <div class="chat-inbox-filters">
-            <button type="button" class="btn btn-sm btn-wa chat-status-filter active" data-status="open">Open</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary chat-status-filter" data-status="open">Open</button>
             <button type="button" class="btn btn-sm btn-outline-secondary chat-status-filter" data-status="pending">Pending</button>
             <button type="button" class="btn btn-sm btn-outline-secondary chat-status-filter" data-status="chatbot">Bot</button>
             <button type="button" class="btn btn-sm btn-outline-secondary chat-status-filter" data-status="resolved">Resolved</button>
-            <button type="button" class="btn btn-sm btn-outline-secondary chat-status-filter" data-status="all">All</button>
+            <button type="button" class="btn btn-sm btn-wa chat-status-filter active" data-status="all">All</button>
         </div>
         <div class="chat-conv-list" id="chatConvList">
             <div class="p-3 text-muted text-center">Loading…</div>

@@ -656,13 +656,14 @@
         } else if (Chat.assigneeFilter === 'unassigned') {
             assignedTo = 'unassigned';
         }
-        var status = Chat.inboxStatus || 'open';
+        var status = Chat.inboxStatus || 'all';
         var filter = '';
         var composite = ['active', 'expired', 'frt_exceeded', 'ctwa', 'unassigned', 'assigned', 'unread'];
         if (composite.indexOf(status) !== -1) {
             filter = status;
             status = 'all';
         }
+        var limit = Chat.limit || 50;
         return APP.get(base() + '/chat/conversations', {
             q: q || '',
             status: status,
@@ -670,6 +671,7 @@
             channel: Chat.channel || 'all',
             unread_only: Chat.unreadOnly ? 1 : 0,
             assigned_to: assignedTo,
+            limit: limit,
             tag_id: (Chat.extraFilters || {}).tag_id || '',
             attr_key: (Chat.extraFilters || {}).attr_key || '',
             attr_op: (Chat.extraFilters || {}).attr_op || '',
@@ -1126,6 +1128,28 @@
         Chat.pageTitle = document.title;
         Chat.channel = ($('#chatLayout').attr('data-channel') || 'whatsapp').toLowerCase();
         Chat.currentUserId = $('#chatLayout').attr('data-current-user-id') || null;
+        Chat.inboxStatus = 'all';
+        Chat.scopeFilter = 'all';
+
+        try {
+            var savedLimit = localStorage.getItem('chat_limit');
+            if (savedLimit === 'all' || [50, 100, 500, 1000].indexOf(parseInt(savedLimit, 10)) !== -1) {
+                Chat.limit = savedLimit === 'all' ? 'all' : parseInt(savedLimit, 10);
+            } else {
+                Chat.limit = 50;
+            }
+        } catch (e) {
+            Chat.limit = 50;
+        }
+        $('#chatLimitSelect').val(String(Chat.limit));
+        $('#chatLimitSelect').on('change', function () {
+            var val = $(this).val();
+            Chat.limit = val === 'all' ? 'all' : (parseInt(val, 10) || 50);
+            try { localStorage.setItem('chat_limit', String(Chat.limit)); } catch (e) {}
+            Chat._convSig = '';
+            Chat.loadConversations($('#chatSearch').val());
+        });
+
         Chat.loadConversations();
         Chat.startPoll();
 
@@ -1168,7 +1192,11 @@
         $('.chat-status-filter').on('click', function () {
             $('.chat-status-filter').removeClass('active btn-wa').addClass('btn-outline-secondary');
             $(this).addClass('active btn-wa').removeClass('btn-outline-secondary');
-            Chat.inboxStatus = $(this).data('status') || 'open';
+            var status = String($(this).data('status') || 'all');
+            Chat.inboxStatus = status;
+            Chat.scopeFilter = status;
+            $('.chat-scope-dropdown .dropdown-item').removeClass('active');
+            $('.chat-scope-dropdown .dropdown-item[data-scope="' + status + '"]').addClass('active');
             Chat._convSig = '';
             Chat.loadConversations($('#chatSearch').val());
         });

@@ -222,8 +222,10 @@ class Chat extends BaseController
                     $assignedTo = (int) $assignedToRaw;
                 }
             }
-            $limit  = max(1, min(100, (int) ($this->request->getGet('limit') ?? 50)));
-            $offset = max(0, (int) ($this->request->getGet('offset') ?? 0));
+            $limitRaw = $this->request->getGet('limit');
+            $isAll    = strtolower(trim((string) $limitRaw)) === 'all';
+            $limit    = $isAll ? 0 : max(1, min(1000, (int) ($limitRaw ?? 50)));
+            $offset   = max(0, (int) ($this->request->getGet('offset') ?? 0));
 
             $db = db_connect();
             $hasConvChannel    = $db->fieldExists('channel', 'conversations');
@@ -309,9 +311,11 @@ class Chat extends BaseController
                 $builder->groupEnd();
             }
 
+            $builder->orderBy('cv.last_message_at', 'DESC');
+            if ($limit > 0) {
+                $builder->limit($limit, $offset);
+            }
             $rows = $builder
-                ->orderBy('cv.last_message_at', 'DESC')
-                ->limit($limit, $offset)
                 ->get()
                 ->getResultArray();
 
